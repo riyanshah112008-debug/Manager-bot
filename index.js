@@ -1,27 +1,62 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 
-// The heartbeat to keep Render awake
+// ==========================================
+// 1. RENDER HEARTBEAT SERVER
+// ==========================================
+// This tiny web server gives UptimeRobot a URL to ping every 5 minutes.
 const app = express();
-app.get('/', (req, res) => res.send('Manager Bot is awake!'));
-app.listen(process.env.PORT || 3000);
+app.get('/', (req, res) => res.send('Manager Bot is awake and running 24/7!'));
 
-// Initialize the single connection
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🌐 Web server listening on port ${PORT}`);
+});
+
+// ==========================================
+// 2. DISCORD CLIENT INITIALIZATION
+// ==========================================
+// We combine all the intents needed for your VC, Automod, and Premium bots here.
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates 
+        GatewayIntentBits.GuildVoiceStates // Absolutely required for DisTube/VC to work
     ] 
 });
 
-// Load your 3 puzzle pieces
-require('./vc.js')(client);
-require('./automod.js')(client);
-require('./premium.js')(client);
+// ==========================================
+// 3. LOAD YOUR MODULES
+// ==========================================
+// This passes the single Discord connection to your individual bot files.
+try {
+    require('./vc.js')(client);
+    console.log('✅ VC Module Loaded');
+} catch (err) {
+    console.error('❌ Failed to load VC Module:', err);
+}
 
-// Log in
-client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
+try {
+    require('./automod.js')(client);
+    console.log('✅ Automod Module Loaded');
+} catch (err) {
+    console.error('❌ Failed to load Automod Module:', err);
+}
+
+try {
+    require('./premium.js')(client);
+    console.log('✅ Premium Module Loaded');
+} catch (err) {
+    console.error('❌ Failed to load Premium Module:', err);
+}
+
+// ==========================================
+// 4. LOGIN TO DISCORD
+// ==========================================
+client.once('ready', () => {
+    console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+});
+
+// Uses the DISCORD_TOKEN environment variable you set in Render
 client.login(process.env.DISCORD_TOKEN);
-  
