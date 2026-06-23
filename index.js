@@ -34,12 +34,6 @@ const client = new Client({
 // 3. LOAD YOUR MODULES
 // ==========================================
 // This passes the single Discord connection to your individual bot files.
-try {
-    require('./vc.js')(client);
-    console.log('✅ VC Module Loaded');
-} catch (err) {
-    console.error('❌ Failed to load VC Module:', err);
-}
 
 try {
     require('./automod.js')(client);
