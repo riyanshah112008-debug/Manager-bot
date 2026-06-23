@@ -24,10 +24,11 @@ const client = new Client({
     ],
     ws: {
         properties: {
-            os: 'windows' // Tricks Discord into a stable IPv4 handshake
+            os: 'windows' 
         }
     }
 });
+
 
 // ==========================================
 // 3. LOAD YOUR MODULES
