@@ -57,6 +57,7 @@ try {
 client.once('ready', () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 });
+client.options.ws.properties.os = 'windows'; // Sometimes tricks Discord into a stable IPv4 handshake
 
 // Uses the DISCORD_TOKEN environment variable you set in Render
 client.login(process.env.DISCORD_TOKEN);
