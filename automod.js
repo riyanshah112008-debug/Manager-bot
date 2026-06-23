@@ -27,13 +27,9 @@ module.exports = (client) => {
   }
 
   client.on("messageCreate", async (message) => {
-      client.on("messageCreate", async (message) => {
-    // Add this exact line right here:
-    console.log(`[DEBUG] Saw a message from ${message.author.username}: "${message.content}"`);
+    // Debug tracker
+    console.log(`[DEBUG] Saw a message from ${message.author?.username}: "${message.content}"`);
 
-    if (message.author.bot || !message.guild) return;
-    // ... rest of the code stays the same
-        
     if (message.author.bot || !message.guild) return;
 
     const content = message.content.toLowerCase();
@@ -122,20 +118,17 @@ module.exports = (client) => {
     const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
 
     if (isLinkSpam || isEmojiSpam) {
-      // Step 1: Delete the message (Works for everyone)
       try {
         await message.delete();
       } catch (err) {
         console.log("Lacked permissions to delete message.");
       }
 
-      // Step 2: Attempt the timeout and warning
       if (isLinkSpam) {
         try {
           await message.member.timeout(5 * 60 * 1000, "Automod: Link Spam");
           await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 5 minutes for link spam.`);
         } catch (error) {
-          // This catches the Admin rejection and still sends the warning
           await message.channel.send(`⚠️ I deleted a spam link from ${message.author.toString()}, but I cannot time them out because they are an Admin.`);
         }
       } else if (isEmojiSpam) {
@@ -149,4 +142,3 @@ module.exports = (client) => {
     }
   });
 };
-                                                                           
