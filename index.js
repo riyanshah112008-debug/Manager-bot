@@ -12,18 +12,21 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🌐 Web server listening on port ${PORT}`);
 });
-
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
-// We combine all the intents needed for your VC, Automod, and Premium bots here.
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates // Absolutely required for DisTube/VC to work
-    ] 
+        GatewayIntentBits.GuildVoiceStates 
+    ],
+    ws: {
+        properties: {
+            os: 'windows' // Tricks Discord into a stable IPv4 handshake
+        }
+    }
 });
 
 // ==========================================
@@ -57,7 +60,6 @@ try {
 client.once('ready', () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 });
-client.options.ws.properties.os = 'windows'; // Sometimes tricks Discord into a stable IPv4 handshake
 
 // Uses the DISCORD_TOKEN environment variable you set in Render
 client.login(process.env.DISCORD_TOKEN);
