@@ -1,3 +1,7 @@
+const fs = require('fs');
+const path = require('path');
+const filePath = path.join(__dirname, './ignoredChannels.json');
+
 module.exports = (client) => {
   // Regex patterns
   const linkPattern = /https?:\/\/\S+/g;
@@ -7,11 +11,16 @@ module.exports = (client) => {
   client.on("messageCreate", async (message) => {
     if (message.author.bot || !message.guild) return;
 
+    // Load ignored channels settings
+    const settingsFile = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, 'utf-8')) : {};
+    const channelSettings = settingsFile[message.channel.id] || { links: false, emojis: false };
+
     const links = message.content.match(linkPattern) || [];
     const emojis = message.content.match(emojiPattern) || [];
 
-    const isLinkSpam = links.length >= 1;
-    const isEmojiSpam = emojis.length >= 5;
+    // Only flag as spam if that filter is NOT ignored for this channel
+    const isLinkSpam = !channelSettings.links && links.length >= 1;
+    const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
 
     if (isLinkSpam || isEmojiSpam) {
       try {
@@ -34,5 +43,4 @@ module.exports = (client) => {
   });
 };
 
-    
     
