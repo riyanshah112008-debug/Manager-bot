@@ -6,7 +6,6 @@ module.exports = (client) => {
   const linkPattern = /https?:\/\/\S+/g;
   const emojiPattern = /<a?:[a-zA-Z0-9_]+:[0-9]+>|[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
 
-  // Helper functions to manage the save file safely
   function readSettings() {
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify({}));
@@ -21,27 +20,28 @@ module.exports = (client) => {
   client.on("messageCreate", async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // Convert message to lowercase to prevent mobile auto-capitalize bugs (e.g., .Ignore)
     const content = message.content.toLowerCase();
+    
+    // Check if the message is either an ignore or unignore command
+    const isIgnoreCmd = content.startsWith('.ignore');
+    const isUnignoreCmd = content.startsWith('.unignore');
 
     // ==========================================
-    // 1. THE .IGNORE COMMAND
+    // 1. THE .IGNORE AND .UNIGNORE COMMANDS
     // ==========================================
-    if (content.startsWith('.ignore')) {
+    if (isIgnoreCmd || isUnignoreCmd) {
       try {
-        // Fetch the member securely to prevent "null cache" crashes
         const member = message.member || await message.guild.members.fetch(message.author.id);
         
         if (!member.permissions.has('Administrator')) {
           return message.reply('❌ You need Administrator permissions to use this command.');
         }
 
-        // Split securely ignoring double-spaces
         const args = message.content.split(/\s+/).slice(1); 
         const type = args[0]?.toLowerCase();
 
         if (!type || !['links', 'emojis', 'all', 'status'].includes(type)) {
-          return message.reply('🔹 **Usage:** `.ignore <links/emojis/all/status> [#channel]`');
+          return message.reply(`🔹 **Usage:** \`${isIgnoreCmd ? '.ignore' : '.unignore'} <links/emojis/all/status> [#channel]\``);
         }
 
         const channel = message.mentions.channels.first() || message.channel;
@@ -58,41 +58,40 @@ module.exports = (client) => {
           return message.reply(`📢 **Automod Status for <#${channelId}>:**\n🔗 Links: ${linkStatus}\n😀 Emojis: ${emojiStatus}`);
         }
 
+        // targetState: true means it IS ignored (filter disabled), false means it IS NOT ignored (filter active)
+        const targetState = isIgnoreCmd ? true : false;
+
         if (type === 'links') {
-          settings[channelId].links = !settings[channelId].links;
+          settings[channelId].links = targetState;
           saveSettings(settings);
-          return message.reply(`${settings[channelId].links ? '🚫' : '✅'} Automod **links** filter is now **${settings[channelId].links ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.`);
+          return message.reply(`${targetState ? '🚫' : '✅'} Automod **links** filter is now **${targetState ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.`);
         }
 
         if (type === 'emojis') {
-          settings[channelId].emojis = !settings[channelId].emojis;
+          settings[channelId].emojis = targetState;
           saveSettings(settings);
-          return message.reply(`${settings[channelId].emojis ? '🚫' : '✅'} Automod **emojis** filter is now **${settings[channelId].emojis ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.`);
+          return message.reply(`${targetState ? '🚫' : '✅'} Automod **emojis** filter is now **${targetState ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.`);
         }
 
         if (type === 'all') {
-          const currentState = !(settings[channelId].links && settings[channelId].emojis);
-          settings[channelId].links = currentState;
-          settings[channelId].emojis = currentState;
+          settings[channelId].links = targetState;
+          settings[channelId].emojis = targetState;
           saveSettings(settings);
-          return message.reply(`${currentState ? '🚫' : '✅'} **All** Automod filters are now **${currentState ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.`);
+          return message.reply(`${targetState ? '🚫' : '✅'} **All** Automod filters are now **${targetState ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.`);
         }
       } catch (err) {
-        // If it crashes, it will print exactly why in Discord now
-        console.error("IGNORE COMMAND ERROR:", err);
+        console.error("IGNORE/UNIGNORE COMMAND ERROR:", err);
         return message.reply(`❌ An error occurred: \`${err.message}\``);
       }
-      return; // Stops execution so the command doesn't trigger automod
+      return; 
     }
 
     // ==========================================
     // 2. THE AUTOMOD FILTER
     // ==========================================
     
-    // Ignore all other commands (like .play) so they don't get caught
     if (content.startsWith('.')) return;
 
-    // Load current channel settings safely
     let channelSettings = { links: false, emojis: false };
     try {
         const settings = readSettings();
@@ -126,4 +125,4 @@ module.exports = (client) => {
     }
   });
 };
-        
+            
