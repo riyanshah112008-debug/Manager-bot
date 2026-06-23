@@ -27,6 +27,13 @@ module.exports = (client) => {
   }
 
   client.on("messageCreate", async (message) => {
+      client.on("messageCreate", async (message) => {
+    // Add this exact line right here:
+    console.log(`[DEBUG] Saw a message from ${message.author.username}: "${message.content}"`);
+
+    if (message.author.bot || !message.guild) return;
+    // ... rest of the code stays the same
+        
     if (message.author.bot || !message.guild) return;
 
     const content = message.content.toLowerCase();
