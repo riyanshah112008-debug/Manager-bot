@@ -12,6 +12,9 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🌐 Web server listening on port ${PORT}`);
 });
+const translator = require('./translator.js'); // Adjust path if it's inside a folder
+translator(client); 
+
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
