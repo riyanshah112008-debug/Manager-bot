@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { translate } = require('@vitalets/google-translate-api');
+const translate = require('google-translate-api-x');
 
 // Map common typed language names to their API language codes
 const languageMap = {
@@ -35,7 +35,7 @@ module.exports = (client) => {
                 return message.reply('❌ **Error:** Please specify a language. Example: `.translate english` or `.translate es`');
             }
 
-            // 3. Convert the typed name to a language code (or use what they typed if it's already a code)
+            // 3. Convert the typed name to a language code
             const targetCode = languageMap[requestedLang] || requestedLang;
 
             try {
@@ -46,7 +46,7 @@ module.exports = (client) => {
                     return message.reply("❌ That message doesn't contain any text to translate.");
                 }
 
-                // Let the user know the bot is working (translation can take a second)
+                // Show typing indicator while the API does its work
                 await message.channel.sendTyping();
 
                 // 5. Run the translation API
@@ -66,10 +66,10 @@ module.exports = (client) => {
                 await message.reply({ embeds: [embed] });
 
             } catch (error) {
-                console.error('Translation Command Error:', error.message);
+                console.error('Translation Command Error:', error);
                 
-                // If the error is about a bad language code, give a specific warning
-                if (error.message.includes('not supported')) {
+                // Provide a specific error if the user typed a language that doesn't exist
+                if (error.message && error.message.includes('not supported')) {
                     return message.reply(`❌ **Error:** "${requestedLang}" is not a recognized language or code.`);
                 }
                 
@@ -78,4 +78,4 @@ module.exports = (client) => {
         }
     });
 };
-            
+        
