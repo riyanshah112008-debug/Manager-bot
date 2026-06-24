@@ -29,12 +29,9 @@ const client = new Client({
         }
     }
 });
-
 // ==========================================
 // 3. LOAD YOUR MODULES
 // ==========================================
-// This passes the single Discord connection to your individual bot files.
-
 try {
     require('./automod.js')(client);
     console.log('✅ Automod Module Loaded');
@@ -49,15 +46,15 @@ try {
     console.error('❌ Failed to load Premium Module:', err);
 }
 
-// Added the Translator module here!
+// 🔴 THE NEW API CONNECTION
 try {
-    require('./translator.js')(client);
-    console.log('✅ Translator Module Loaded');
+    const translatorAPI = require('./translator.js');
+    translatorAPI(app); // Passing 'app' (Express) instead of 'client' (Discord.js)
+    console.log('✅ Translator API Endpoint Loaded');
 } catch (err) {
-    console.error('❌ Failed to load Translator Module:', err);
+    console.error('❌ Failed to load Translator API:', err);
 }
 
-// ==========================================
 // 4. LOGIN TO DISCORD
 // ==========================================
 client.once('ready', () => {
