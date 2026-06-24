@@ -54,6 +54,22 @@ try {
 } catch (err) {
     console.error('❌ Failed to load Translator API:', err);
 }
+// Canva and reaction roles
+
+try {
+    require('./reactionRoles.js')(client);
+    console.log('✅ Reaction Roles Module Loaded');
+} catch (err) {
+    console.error('❌ Failed to load Reaction Roles:', err);
+}
+
+try {
+    require('./imageGen.js')(client);
+    console.log('✅ Canvas Image Gen Module Loaded');
+} catch (err) {
+    console.error('❌ Failed to load Canvas Image Gen:', err);
+}
+
 
 // 4. LOGIN TO DISCORD
 // ==========================================
