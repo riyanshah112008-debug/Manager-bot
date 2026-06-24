@@ -115,7 +115,16 @@ module.exports = (client) => {
         console.error("Error loading automod settings:", e);
     }
 
-    const links = message.content.match(linkPattern) || [];
+    // --- NEW: Filter out GIF URLs from the matched links ---
+    const rawLinks = message.content.match(linkPattern) || [];
+    const links = rawLinks.filter(link => {
+        const url = link.toLowerCase();
+        // Ignore links from common GIF sites or links that end directly in .gif
+        return !url.includes('tenor.com') && 
+               !url.includes('giphy.com') && 
+               !url.endsWith('.gif');
+    });
+
     const emojis = message.content.match(emojiPattern) || [];
 
     // Check if spam exists AND if the filter is currently active for this channel
@@ -152,4 +161,4 @@ module.exports = (client) => {
     }
   });
 };
-            
+    
