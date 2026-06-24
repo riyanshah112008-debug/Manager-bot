@@ -1,91 +1,81 @@
 const { EmbedBuilder } = require('discord.js');
 const { translate } = require('@vitalets/google-translate-api');
 
-// ==========================================
-// FULL GLOBAL FLAG TO LANGUAGE MAP (~197 COUNTRIES)
-// ==========================================
-const flagMap = {
-    // 🌎 North & Central America
-    '🇨🇦': 'en', '🇺🇸': 'en', '🇲🇽': 'es', '🇬🇹': 'es', '🇧🇿': 'en', 
-    '🇸🇻': 'es', '🇭🇳': 'es', '🇳🇮': 'es', '🇨🇷': 'es', '🇵🇦': 'es',
-
-    // 🏝️ Caribbean
-    '🇨🇺': 'es', '🇯🇲': 'en', '🇭🇹': 'ht', '🇩🇴': 'es', '🇵🇷': 'es', 
-    '🇧🇸': 'en', '🇹🇹': 'en', '🇧🇧': 'en', '🇱🇨': 'en', '🇻🇨': 'en', 
-    '🇬🇩': 'en', '🇦🇬': 'en', '🇩🇲': 'en', '🇰🇳': 'en',
-
-    // 🌎 South America
-    '🇨🇴': 'es', '🇻🇪': 'es', '🇬🇾': 'en', '🇸🇷': 'nl', '🇪🇨': 'es', 
-    '🇵🇪': 'es', '🇧🇷': 'pt', '🇧🇴': 'es', '🇵🇾': 'es', '🇨🇱': 'es', 
-    '🇦🇷': 'es', '🇺🇾': 'es',
-
-    // 🌍 Europe (West & North)
-    '🇬🇧': 'en', '🇮🇪': 'en', '🇮🇸': 'is', '🇳🇴': 'no', '🇸🇪': 'sv', 
-    '🇫🇮': 'fi', '🇩🇰': 'da', '🇳🇱': 'nl', '🇧🇪': 'fr', '🇱🇺': 'lb', 
-    '🇩🇪': 'de', '🇫🇷': 'fr', '🇨🇭': 'de', '🇦🇹': 'de', '🇮🇹': 'it', 
-    '🇪🇸': 'es', '🇵🇹': 'pt', '🇦🇩': 'ca', '🇲🇨': 'fr', '🇱🇮': 'de', 
-    '🇸🇲': 'it', '🇻🇦': 'it', '🇲🇹': 'mt',
-
-    // 🌍 Europe (East & South)
-    '🇬🇷': 'el', '🇨🇾': 'el', '🇹🇷': 'tr', '🇧🇬': 'bg', '🇷🇴': 'ro', 
-    '🇲🇩': 'ro', '🇷🇸': 'sr', '🇲🇪': 'sr', '🇽🇰': 'sq', '🇦🇱': 'sq', 
-    '🇲🇰': 'mk', '🇧🇦': 'bs', '🇭🇷': 'hr', '🇸🇮': 'sl', '🇭🇺': 'hu', 
-    '🇸🇰': 'sk', '🇨🇿': 'cs', '🇵🇱': 'pl', '🇱🇹': 'lt', '🇱🇻': 'lv', 
-    '🇪🇪': 'et', '🇧🇾': 'be', '🇺🇦': 'uk', '🇷🇺': 'ru',
-
-    // 🌏 Middle East & Caucasus
-    '🇬🇪': 'ka', '🇦🇲': 'hy', '🇦🇿': 'az', '🇸🇾': 'ar', '🇱🇧': 'ar', 
-    '🇮🇱': 'he', '🇵🇸': 'ar', '🇯🇴': 'ar', '🇮🇶': 'ar', '🇰🇼': 'ar', 
-    '🇸🇦': 'ar', '🇧🇭': 'ar', '🇶🇦': 'ar', '🇦🇪': 'ar', '🇴🇲': 'ar', 
-    '🇾🇪': 'ar', '🇮🇷': 'fa',
-
-    // 🌏 Central & South Asia
-    '🇰🇿': 'kk', '🇺🇿': 'uz', '🇹🇲': 'tk', '🇰🇬': 'ky', '🇹🇯': 'tg', 
-    '🇦🇫': 'ps', '🇵🇰': 'ur', '🇮🇳': 'hi', '🇳🇵': 'ne', '🇧🇹': 'dz', 
-    '🇧🇩': 'bn', '🇱🇰': 'si', '🇲🇻': 'dv',
-
-    // 🌏 East & Southeast Asia
-    '🇨🇳': 'zh-cn', '🇹🇼': 'zh-tw', '🇭🇰': 'zh-tw', '🇲🇴': 'zh-tw', 
-    '🇰🇵': 'ko', '🇰🇷': 'ko', '🇯🇵': 'ja', '🇲🇳': 'mn', '🇲🇲': 'my', 
-    '🇹🇭': 'th', '🇱🇦': 'lo', '🇻🇳': 'vi', '🇰🇭': 'km', '🇲🇾': 'ms', 
-    '🇸🇬': 'en', '🇮🇩': 'id', '🇧🇳': 'ms', '🇵🇭': 'tl', '🇹🇱': 'pt',
-
-    // 🌊 Oceania
-    '🇦🇺': 'en', '🇳🇿': 'en', '🇵🇬': 'en', '🇸🇧': 'en', '🇻🇺': 'en', 
-    '🇫🇯': 'en', '🇼🇸': 'sm', '🇹🇴': 'en', '🇹🇻': 'en', '🇰🇮': 'en', 
-    '🇲🇭': 'en', '🇫🇲': 'en', '🇵🇼': 'en', '🇳🇷': 'en',
-
-    // 🌍 Africa (North & West)
-    '🇪🇬': 'ar', '🇱🇾': 'ar', '🇹🇳': 'ar', '🇩🇿': 'ar', '🇲🇦': 'ar', 
-    '🇲🇷': 'ar', '🇲🇱': 'fr', '🇳🇪': 'fr', '🇹🇩': 'fr', '🇸🇳': 'fr', 
-    '🇬🇲': 'en', '🇬🇼': 'pt', '🇬🇳': 'fr', '🇸🇱': 'en', '🇱🇷': 'en', 
-    '🇨🇮': 'fr', '🇧🇫': 'fr', '🇬🇭': 'en', '🇹🇬': 'fr', '🇧🇯': 'fr', 
-    '🇳🇬': 'en', '🇨🇻': 'pt',
-
-    // 🌍 Africa (Central & East)
-    '🇨🇲': 'fr', '🇨🇫': 'fr', '🇬🇶': 'es', '🇸🇹': 'pt', '🇬🇦': 'fr', 
-    '🇨🇬': 'fr', '🇨🇩': 'fr', '🇦🇴': 'pt', '🇸🇩': 'ar', '🇸🇸': 'en', 
-    '🇪🇷': 'ti', '🇩🇯': 'fr', '🇪🇹': 'am', '🇸🇴': 'so', '🇰🇪': 'sw', 
-    '🇺🇬': 'en', '🇷🇼': 'rw', '🇧🇮': 'fr', '🇹🇿': 'sw', '🇲🇿': 'pt', 
-    '🇲🇼': 'ny', '🇿🇲': 'en', '🇿🇼': 'en', '🇲🇬': 'mg', '🇰🇲': 'ar', 
-    '🇸🇨': 'fr', '🇲🇺': 'en',
-
-    // 🌍 Africa (South)
-    '🇳🇦': 'en', '🇧🇼': 'en', '🇿🇦': 'en', '🇱🇸': 'st', '🇸🇿': 'en'
+// Map common typed language names to their API language codes
+const languageMap = {
+    'english': 'en', 'spanish': 'es', 'french': 'fr', 'german': 'de',
+    'italian': 'it', 'portuguese': 'pt', 'russian': 'ru', 'japanese': 'ja',
+    'korean': 'ko', 'chinese': 'zh-cn', 'hindi': 'hi', 'arabic': 'ar',
+    'dutch': 'nl', 'turkish': 'tr', 'polish': 'pl', 'ukrainian': 'uk',
+    'vietnamese': 'vi', 'thai': 'th', 'indonesian': 'id', 'greek': 'el',
+    'swedish': 'sv', 'danish': 'da', 'finnish': 'fi', 'norwegian': 'no',
+    'czech': 'cs', 'romanian': 'ro', 'hungarian': 'hu', 'hebrew': 'he'
 };
 
-    if (user.bot) return;
+module.exports = (client) => {
+    client.on('messageCreate', async (message) => {
+        // Ignore bot messages and DMs
+        if (message.author.bot || !message.guild) return;
 
-    // 2. Resolve partials (for messages sent before the bot started)
-    try {
-      if (reaction.partial) await reaction.fetch();
-      if (reaction.message.partial) await reaction.message.fetch();
-    } catch (error) {
-      console.error('Error fetching partial message/reaction:', error);
-      return;
-    }
+        const content = message.content.toLowerCase();
 
-    const message = reaction.message;
+        // Check if the message starts with the command
+        if (content.startsWith('.translate')) {
+            
+            // 1. Check if the user is actually replying to a message
+            if (!message.reference) {
+                return message.reply('❌ **Usage:** You must reply to the message you want to translate and type `.translate <language>`.');
+            }
 
-    //
-                                         
+            // 2. Extract the requested language from the command
+            const args = content.split(/\s+/);
+            const requestedLang = args[1];
+
+            if (!requestedLang) {
+                return message.reply('❌ **Error:** Please specify a language. Example: `.translate english` or `.translate es`');
+            }
+
+            // 3. Convert the typed name to a language code (or use what they typed if it's already a code)
+            const targetCode = languageMap[requestedLang] || requestedLang;
+
+            try {
+                // 4. Fetch the original message that the user replied to
+                const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+
+                if (!repliedMessage.content) {
+                    return message.reply("❌ That message doesn't contain any text to translate.");
+                }
+
+                // Let the user know the bot is working (translation can take a second)
+                await message.channel.sendTyping();
+
+                // 5. Run the translation API
+                const result = await translate(repliedMessage.content, { to: targetCode });
+
+                // 6. Build a beautiful embed for the output
+                const embed = new EmbedBuilder()
+                    .setColor('Blue')
+                    .setAuthor({ 
+                        name: `${repliedMessage.author.username} said:`, 
+                        iconURL: repliedMessage.author.displayAvatarURL({ dynamic: true }) 
+                    })
+                    .setDescription(result.text)
+                    .setFooter({ text: `Translated from ${result.raw.src.toUpperCase()} to ${targetCode.toUpperCase()}` });
+
+                // 7. Send the translation!
+                await message.reply({ embeds: [embed] });
+
+            } catch (error) {
+                console.error('Translation Command Error:', error.message);
+                
+                // If the error is about a bad language code, give a specific warning
+                if (error.message.includes('not supported')) {
+                    return message.reply(`❌ **Error:** "${requestedLang}" is not a recognized language or code.`);
+                }
+                
+                return message.reply('❌ **Error:** I could not translate that message right now. The API might be rate-limiting.');
+            }
+        }
+    });
+};
+            
