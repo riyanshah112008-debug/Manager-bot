@@ -3,9 +3,11 @@ const path = require('path');
 const filePath = path.join(__dirname, 'ignoredChannels.json');
 
 module.exports = (client) => {
+  // Regex patterns
   const linkPattern = /https?:\/\/\S+/g;
   const emojiPattern = /<a?:[a-zA-Z0-9_]+:[0-9]+>|[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
 
+  // Helper functions for JSON storage
   function readSettings() {
     try {
       if (!fs.existsSync(filePath)) {
@@ -27,13 +29,10 @@ module.exports = (client) => {
   }
 
   client.on("messageCreate", async (message) => {
-    // Debug tracker
-    console.log(`[DEBUG] Saw a message from ${message.author?.username}: "${message.content}"`);
-
+    // Ignore bots and messages outside of guilds
     if (message.author.bot || !message.guild) return;
 
     const content = message.content.toLowerCase();
-    
     const isIgnoreCmd = content.startsWith('.ignore');
     const isUnignoreCmd = content.startsWith('.unignore');
 
@@ -44,6 +43,7 @@ module.exports = (client) => {
       try {
         const member = message.member || await message.guild.members.fetch(message.author.id);
         
+        // Security Check: Only Admins can modify automod
         if (!member.permissions.has('Administrator')) {
           return message.reply('❌ You need Administrator permissions to use this command.');
         }
@@ -59,6 +59,7 @@ module.exports = (client) => {
         const channelId = channel.id;
         const settings = readSettings();
 
+        // Initialize channel if it doesn't exist in the JSON
         if (!settings[channelId]) {
           settings[channelId] = { links: false, emojis: false };
         }
@@ -69,6 +70,7 @@ module.exports = (client) => {
           return message.reply(`📢 **Automod Status for <#${channelId}>:**\n🔗 Links: ${linkStatus}\n😀 Emojis: ${emojiStatus}`);
         }
 
+        // Determine if we are disabling (ignore = true) or enabling (unignore = false)
         const targetState = isIgnoreCmd ? true : false;
 
         if (type === 'links') {
@@ -93,12 +95,14 @@ module.exports = (client) => {
         console.error("Command Error:", err);
         return message.reply(`❌ Command Error: \`${err.message}\``);
       }
-      return; 
+      return; // Stop processing so the command itself doesn't trigger the filter
     }
 
     // ==========================================
     // 2. THE AUTOMOD FILTER
     // ==========================================
+    
+    // Safety check: Completely ignore ANY command (messages starting with a dot) 
     if (content.startsWith('.')) return;
 
     let channelSettings = { links: false, emojis: false };
@@ -114,31 +118,38 @@ module.exports = (client) => {
     const links = message.content.match(linkPattern) || [];
     const emojis = message.content.match(emojiPattern) || [];
 
+    // Check if spam exists AND if the filter is currently active for this channel
+    // channelSettings.links === true means it is IGNORED.
     const isLinkSpam = !channelSettings.links && links.length >= 1;
     const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
 
     if (isLinkSpam || isEmojiSpam) {
+      // 1. Attempt to delete the message
       try {
         await message.delete();
       } catch (err) {
-        console.log("Lacked permissions to delete message.");
+        console.warn("Automod lacked permissions to delete message.");
       }
 
+      // 2. Apply punishments based on the violation
       if (isLinkSpam) {
         try {
-          await message.member.timeout(5 * 60 * 1000, "Automod: Link Spam");
-          await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 5 minutes for link spam.`);
+          // Timeout for 10 minutes (600,000 ms)
+          await message.member.timeout(10 * 60 * 1000, "Automod: Link Spam");
+          await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 10 minutes for link spam.`);
         } catch (error) {
-          await message.channel.send(`⚠️ I deleted a spam link from ${message.author.toString()}, but I cannot time them out because they are an Admin.`);
+          await message.channel.send(`⚠️ I deleted a spam link from ${message.author.toString()}, but I cannot time them out because they possess Admin/Moderation powers.`);
         }
       } else if (isEmojiSpam) {
         try {
+          // Timeout for 2 minutes (120,000 ms)
           await message.member.timeout(2 * 60 * 1000, "Automod: Emoji Spam");
           await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 2 minutes for emoji spam.`);
         } catch (error) {
-          await message.channel.send(`⚠️ I deleted emoji spam from ${message.author.toString()}, but I cannot time them out because they are an Admin.`);
+          await message.channel.send(`⚠️ I deleted emoji spam from ${message.author.toString()}, but I cannot time them out because they possess Admin/Moderation powers.`);
         }
       }
     }
   });
 };
+            
