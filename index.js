@@ -12,8 +12,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🌐 Web server listening on port ${PORT}`);
 });
-const translator = require('./translator.js'); // Adjust path if it's inside a folder
-translator(client); 
 
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
@@ -32,7 +30,6 @@ const client = new Client({
     }
 });
 
-
 // ==========================================
 // 3. LOAD YOUR MODULES
 // ==========================================
@@ -50,6 +47,14 @@ try {
     console.log('✅ Premium Module Loaded');
 } catch (err) {
     console.error('❌ Failed to load Premium Module:', err);
+}
+
+// Added the Translator module here!
+try {
+    require('./translator.js')(client);
+    console.log('✅ Translator Module Loaded');
+} catch (err) {
+    console.error('❌ Failed to load Translator Module:', err);
 }
 
 // ==========================================
