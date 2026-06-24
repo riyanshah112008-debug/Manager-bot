@@ -16,9 +16,13 @@ module.exports = (client) => {
 
         const content = message.content.toLowerCase().trim();
 
+        // 🛑 DIAGNOSTIC TEST: Type .tt in your chat to see if the bot is listening
+        if (content === '.tt') {
+            return message.reply('✅ I am awake and I can read your messages!');
+        }
+
         // 2. Listen specifically for the command
         if (content.startsWith('.translate')) {
-            console.log(`[DEBUG] Received command from ${message.author.username}: ${message.content}`);
             
             // REQUIREMENT: The user MUST reply to a message
             if (!message.reference || !message.reference.messageId) {
@@ -33,19 +37,19 @@ module.exports = (client) => {
                 return message.reply('❌ **Error:** Please specify a language. Example: `.translate english`');
             }
 
-            // Convert the typed name to a language code
             const targetCode = languageMap[requestedLang] || requestedLang;
+
+            // 🔴 CRITICAL STEP: Send a status message immediately!
+            // If the bot sends this, but doesn't finish, Google is blocking Render's IP.
+            const statusMsg = await message.reply('⏳ **Translating...** *(Talking to Google API...)*');
 
             try {
                 // 3. Fetch the EXACT message the user replied to
                 const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
 
                 if (!repliedMessage.content) {
-                    return message.reply("❌ The message you replied to doesn't contain any text.");
+                    return statusMsg.edit("❌ The message you replied to doesn't contain any text.");
                 }
-
-                console.log(`[DEBUG] Fetching translation for text: "${repliedMessage.content}"`);
-                await message.channel.sendTyping();
 
                 // 4. Translate the content of the replied message
                 const result = await translate(repliedMessage.content, { to: targetCode });
@@ -60,20 +64,19 @@ module.exports = (client) => {
                     .setDescription(result.text)
                     .setFooter({ text: `Translated to ${targetCode.toUpperCase()}` });
 
-                // 6. Send the translation back to the chat!
-                await message.reply({ embeds: [embed] });
-                console.log(`[DEBUG] Translation sent successfully.`);
+                // 6. Edit the "Translating..." message to show the final result
+                await statusMsg.edit({ content: '✅ Translation complete:', embeds: [embed] });
 
             } catch (error) {
                 console.error('[ERROR] Translation failed:', error);
                 
+                let errorText = '❌ **Error:** I could not translate that right now. Google might be blocking Render\'s IP address.';
                 if (error.message && error.message.includes('not supported')) {
-                    return message.reply(`❌ **Error:** "${requestedLang}" is not a recognized language or code.`);
+                    errorText = `❌ **Error:** "${requestedLang}" is not a recognized language or code.`;
                 }
                 
-                return message.reply('❌ **Error:** I could not translate that right now. The API might be rate-limiting.');
+                await statusMsg.edit(errorText);
             }
         }
     });
 };
-                
