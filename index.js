@@ -1,5 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
+const { fork } = require('child_process'); // ❗ ADDED FOR MUSIC BOT
+const path = require('path'); // ❗ ADDED FOR MUSIC BOT
 
 // ==========================================
 // 1. RENDER HEARTBEAT SERVER
@@ -30,6 +32,7 @@ const client = new Client({
         }
     }
 });
+
 // ==========================================
 // 3. LOAD YOUR MODULES
 // ==========================================
@@ -55,8 +58,8 @@ try {
 } catch (err) {
     console.error('❌ Failed to load Translator API:', err);
 }
-// Canva and reaction roles
 
+// Canva and reaction roles
 try {
     require('./reactionRoles.js')(client);
     console.log('✅ Reaction Roles Module Loaded');
@@ -71,7 +74,22 @@ try {
     console.error('❌ Failed to load Canvas Image Gen:', err);
 }
 
+// ==========================================
+// 🎶 LAUNCH MUSIC BOT SUB-PROCESS
+// ==========================================
+try {
+    const musicBotPath = path.join(__dirname, 'music-bot', 'index.js');
+    console.log('🎶 Launching Music Bot Process...');
+    const musicBot = fork(musicBotPath);
 
+    musicBot.on('close', (code) => {
+        console.log(`❌ Music Bot stopped. Exit code: ${code}`);
+    });
+} catch (err) {
+    console.error('❌ Failed to launch Music Bot:', err);
+}
+
+// ==========================================
 // 4. LOGIN TO DISCORD
 // ==========================================
 client.once('ready', () => {
