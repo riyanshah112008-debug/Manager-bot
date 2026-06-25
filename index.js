@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 
@@ -19,8 +20,8 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent, // ❗ Needed for .play
-        GatewayIntentBits.GuildVoiceStates, // ❗ Needed for voice channels
+        GatewayIntentBits.MessageContent, 
+        GatewayIntentBits.GuildVoiceStates, 
         GatewayIntentBits.GuildMembers 
     ],
     ws: {
@@ -36,46 +37,34 @@ const client = new Client({
 try {
     require('./automod.js')(client);
     console.log('✅ Automod Module Loaded');
-} catch (err) {
-    console.error('❌ Failed to load Automod Module:', err);
-}
+} catch (err) { console.error('❌ Failed to load Automod:', err); }
 
 try {
     require('./premium.js')(client);
     console.log('✅ Premium Module Loaded');
-} catch (err) {
-    console.error('❌ Failed to load Premium Module:', err);
-}
+} catch (err) { console.error('❌ Failed to load Premium:', err); }
 
 try {
     const translatorAPI = require('./translator.js');
     translatorAPI(app); 
     console.log('✅ Translator API Endpoint Loaded');
-} catch (err) {
-    console.error('❌ Failed to load Translator API:', err);
-}
+} catch (err) { console.error('❌ Failed to load Translator:', err); }
 
 try {
     require('./reactionRoles.js')(client);
     console.log('✅ Reaction Roles Module Loaded');
-} catch (err) {
-    console.error('❌ Failed to load Reaction Roles:', err);
-}
+} catch (err) { console.error('❌ Failed to load Reaction Roles:', err); }
 
 try {
     require('./imageGen.js')(client);
     console.log('✅ Canvas Image Gen Module Loaded');
-} catch (err) {
-    console.error('❌ Failed to load Canvas Image Gen:', err);
-}
+} catch (err) { console.error('❌ Failed to load Canvas:', err); }
 
-// 🎶 LOAD THE NEW MUSIC MODULE
+// 🎶 NEW: LOAD THE MUSIC MODULE
 try {
     require('./music.js')(client);
     console.log('✅ Music Module Loaded');
-} catch (err) {
-    console.error('❌ Failed to load Music Module:', err);
-}
+} catch (err) { console.error('❌ Failed to load Music:', err); }
 
 // ==========================================
 // ANTI-CRASH SYSTEM
@@ -95,4 +84,4 @@ client.once('ready', () => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                                  
+        
