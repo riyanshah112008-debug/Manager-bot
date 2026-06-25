@@ -1,21 +1,21 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { Player } = require('discord-player');
-const { DefaultExtractors } = require('@discord-player/extractor');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMessages, // ❗ Required to see messages in channels
-        GatewayIntentBits.MessageContent // ❗ Required to read what the message says
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent 
     ]
 });
 
 const player = new Player(client);
-player.extractors.loadMulti(DefaultExtractors);
 
-client.on('ready', () => {
+client.on('ready', async () => {
+    // ❗ FIXED: This is the new, correct way to load extractors in v6+
+    await player.extractors.loadDefault();
     console.log(`🎶 Music Bot fully online as ${client.user.tag}`);
 });
 
@@ -23,11 +23,9 @@ client.on('ready', () => {
 // 1. PREFIX COMMAND (.play)
 // ==========================================
 client.on('messageCreate', async (message) => {
-    // Ignore other bots and DMs
     if (message.author.bot || !message.guild) return;
 
     if (message.content.toLowerCase().startsWith('.play')) {
-        // Extract the song name after ".play "
         const query = message.content.slice(5).trim();
         const channel = message.member.voice.channel;
 
@@ -47,7 +45,7 @@ client.on('messageCreate', async (message) => {
             return waitMessage.edit(`✅ Playing: **${track.title}**`);
         } catch (error) {
             console.error(error);
-            return waitMessage.edit('❌ Failed to play song.');
+            return waitMessage.edit('❌ Failed to play song. Make sure I have permissions to join!');
         }
     }
 });
@@ -79,21 +77,15 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-client.login(process.env.MUSIC_TOKEN);
-
 // ==========================================
-// ANTI-CRASH SYSTEM
+// 3. ANTI-CRASH SYSTEM
 // ==========================================
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
-
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
 });
 
-process.on('uncaughtExceptionMonitor', (err, origin) => {
-    console.error('Uncaught Exception Monitor:', err, origin);
-});
-
-    
+client.login(process.env.DISCORD_TOKEN);
+                          
