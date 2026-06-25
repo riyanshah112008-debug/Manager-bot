@@ -80,4 +80,20 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(process.env.MUSIC_TOKEN);
+
+// ==========================================
+// ANTI-CRASH SYSTEM
+// ==========================================
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('uncaughtExceptionMonitor', (err, origin) => {
+    console.error('Uncaught Exception Monitor:', err, origin);
+});
+
     
