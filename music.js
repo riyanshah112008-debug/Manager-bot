@@ -1,17 +1,13 @@
 const { Player } = require('discord-player');
 
 module.exports = (client) => {
-    // 1. Initialize the music player using Starry's existing client
     const player = new Player(client);
     
-    // 2. Load the extractors safely
     player.extractors.loadDefault().then(() => {
         console.log('🎶 Audio extractors loaded for Starry!');
     }).catch(err => console.error('Failed to load extractors:', err));
 
-    // ==========================================
     // PREFIX COMMAND (.play)
-    // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
@@ -19,12 +15,8 @@ module.exports = (client) => {
             const query = message.content.slice(5).trim();
             const channel = message.member.voice.channel;
 
-            if (!channel) {
-                return message.reply('❌ Join a voice channel first!');
-            }
-            if (!query) {
-                return message.reply('❌ Please provide a song! Example: `.play blinding lights`');
-            }
+            if (!channel) return message.reply('❌ Join a voice channel first!');
+            if (!query) return message.reply('❌ Please provide a song! Example: `.play blinding lights`');
 
             const waitMessage = await message.reply('🔍 Searching...');
 
@@ -35,14 +27,12 @@ module.exports = (client) => {
                 return waitMessage.edit(`✅ Playing: **${track.title}**`);
             } catch (error) {
                 console.error(error);
-                return waitMessage.edit('❌ Failed to play song. Make sure I have permissions to join!');
+                return waitMessage.edit('❌ Failed to play song. Make sure I have permissions!');
             }
         }
     });
 
-    // ==========================================
     // SLASH COMMAND (/play)
-    // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName !== 'play') return;
@@ -50,9 +40,7 @@ module.exports = (client) => {
         const query = interaction.options.getString('song');
         const channel = interaction.member.voice.channel;
 
-        if (!channel) {
-            return interaction.reply({ content: '❌ Join a voice channel first!', ephemeral: true });
-        }
+        if (!channel) return interaction.reply({ content: '❌ Join a voice channel first!', ephemeral: true });
 
         await interaction.deferReply();
 
@@ -67,4 +55,4 @@ module.exports = (client) => {
         }
     });
 };
-      
+        
