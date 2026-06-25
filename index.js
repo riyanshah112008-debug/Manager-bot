@@ -1,12 +1,9 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
-const { fork } = require('child_process'); // ❗ ADDED FOR MUSIC BOT
-const path = require('path'); // ❗ ADDED FOR MUSIC BOT
 
 // ==========================================
 // 1. RENDER HEARTBEAT SERVER
 // ==========================================
-// This tiny web server gives UptimeRobot a URL to ping every 5 minutes.
 const app = express();
 app.get('/', (req, res) => res.send('Manager Bot is awake and running 24/7!'));
 
@@ -22,9 +19,9 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMembers // ❗ ADDED THIS FOR REACTION ROLES TO WORK
+        GatewayIntentBits.MessageContent, // ❗ Needed for .play
+        GatewayIntentBits.GuildVoiceStates, // ❗ Needed for voice channels
+        GatewayIntentBits.GuildMembers 
     ],
     ws: {
         properties: {
@@ -50,16 +47,14 @@ try {
     console.error('❌ Failed to load Premium Module:', err);
 }
 
-// 🔴 THE NEW API CONNECTION
 try {
     const translatorAPI = require('./translator.js');
-    translatorAPI(app); // Passing 'app' (Express) instead of 'client' (Discord.js)
+    translatorAPI(app); 
     console.log('✅ Translator API Endpoint Loaded');
 } catch (err) {
     console.error('❌ Failed to load Translator API:', err);
 }
 
-// Canva and reaction roles
 try {
     require('./reactionRoles.js')(client);
     console.log('✅ Reaction Roles Module Loaded');
@@ -74,20 +69,23 @@ try {
     console.error('❌ Failed to load Canvas Image Gen:', err);
 }
 
-// ==========================================
-// 🎶 LAUNCH MUSIC BOT SUB-PROCESS
-// ==========================================
+// 🎶 LOAD THE NEW MUSIC MODULE
 try {
-    const musicBotPath = path.join(__dirname, 'music-bot', 'index.js');
-    console.log('🎶 Launching Music Bot Process...');
-    const musicBot = fork(musicBotPath);
-
-    musicBot.on('close', (code) => {
-        console.log(`❌ Music Bot stopped. Exit code: ${code}`);
-    });
+    require('./music.js')(client);
+    console.log('✅ Music Module Loaded');
 } catch (err) {
-    console.error('❌ Failed to launch Music Bot:', err);
+    console.error('❌ Failed to load Music Module:', err);
 }
+
+// ==========================================
+// ANTI-CRASH SYSTEM
+// ==========================================
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
 
 // ==========================================
 // 4. LOGIN TO DISCORD
@@ -96,5 +94,5 @@ client.once('ready', () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 });
 
-// Uses the DISCORD_TOKEN environment variable you set in Render
 client.login(process.env.DISCORD_TOKEN);
+                                  
