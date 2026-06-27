@@ -82,39 +82,7 @@ process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
 });
 
-// ==========================================
-// TEMPORARY MODERATION TEST COMMANDS
-// ==========================================
-client.on('messageCreate', async (message) => {
-    // Ignore messages from bots
-    if (message.author.bot) return;
 
-    // Test Kick
-    if (message.content.startsWith('.testkick')) {
-        const target = message.mentions.members.first();
-        if (!target) return message.reply("Please mention someone to kick. Example: `.testkick @user`");
-
-        const success = await client.autoKick(target, "Testing autokick feature");
-        if (success) {
-            message.reply(`✅ Successfully kicked ${target.user.tag}`);
-        } else {
-            message.reply("❌ Failed to kick. Check my permissions and role hierarchy!");
-        }
-    }
-
-    // Test Ban
-    if (message.content.startsWith('.testban')) {
-        const target = message.mentions.members.first();
-        if (!target) return message.reply("Please mention someone to ban. Example: `.testban @user`");
-
-        const success = await client.autoBan(target, "Testing autoban feature");
-        if (success) {
-            message.reply(`✅ Successfully banned ${target.user.tag}`);
-        } else {
-            message.reply("❌ Failed to ban. Check my permissions and role hierarchy!");
-        }
-    }
-});
 
 // ==========================================
 // 4. LOGIN TO DISCORD
