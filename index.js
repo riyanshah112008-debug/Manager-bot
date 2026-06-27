@@ -34,6 +34,13 @@ const client = new Client({
 // ==========================================
 // 3. LOAD YOUR MODULES
 // ==========================================
+
+// 🛡️ NEW: LOAD THE MODERATION MODULE
+try {
+    require('./moderation.js')(client);
+    console.log('✅ Moderation Module Loaded');
+} catch (err) { console.error('❌ Failed to load Moderation:', err); }
+
 try {
     require('./automod.js')(client);
     console.log('✅ Automod Module Loaded');
@@ -60,7 +67,6 @@ try {
     console.log('✅ Canvas Image Gen Module Loaded');
 } catch (err) { console.error('❌ Failed to load Canvas:', err); }
 
-// 🎶 NEW: LOAD THE MUSIC MODULE
 try {
     require('./music.js')(client);
     console.log('✅ Music Module Loaded');
@@ -84,4 +90,4 @@ client.once('ready', () => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-        
+    
