@@ -52,6 +52,7 @@ try {
 } catch (err) { console.error('❌ Failed to load Premium:', err); }
 
 try {
+    // We must pass both 'client' (for Discord) and 'app' (for the web server)
     require('./translator.js')(client, app);
     console.log('✅ Translator Module Loaded');
 } catch (err) { console.error('❌ Failed to load Translator:', err); }
