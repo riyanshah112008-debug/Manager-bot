@@ -1,8 +1,10 @@
-const { REST, Routes, EmbedBuilder } = require('discord.js');
+const { REST, Routes, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const Database = require('better-sqlite3');
 
 // Initialize the SQLite database
 const db = new Database('leveling.db');
+
+// 1. Users table for tracking XP
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
         user_id TEXT,
@@ -13,15 +15,30 @@ db.exec(`
     )
 `);
 
+// 2. Settings table for tracking if leveling is enabled per server
+db.exec(`
+    CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        leveling_enabled INTEGER DEFAULT 1
+    )
+`);
+
 const getUser = db.prepare('SELECT xp, level FROM users WHERE user_id = ? AND guild_id = ?');
 const insertUser = db.prepare('INSERT INTO users (user_id, guild_id, xp, level) VALUES (?, ?, ?, ?)');
 const updateUser = db.prepare('UPDATE users SET xp = ?, level = ? WHERE user_id = ? AND guild_id = ?');
+
+const getSettings = db.prepare('SELECT leveling_enabled FROM guild_settings WHERE guild_id = ?');
+// UPSERT: Inserts a new row, or updates the existing one if the guild_id already exists
+const setSettings = db.prepare(`
+    INSERT INTO guild_settings (guild_id, leveling_enabled) 
+    VALUES (?, ?) 
+    ON CONFLICT(guild_id) DO UPDATE SET leveling_enabled = ?
+`);
 
 function calculateLevel(xp) {
     return Math.floor(0.1 * Math.sqrt(xp));
 }
 
-// Function to calculate XP needed for the next level
 function xpForNextLevel(currentLevel) {
     return Math.pow((currentLevel + 1) / 0.1, 2);
 }
@@ -34,43 +51,64 @@ module.exports = (client) => {
         try {
             await rest.put(
                 Routes.applicationCommands(client.user.id),
-                { body: [{
-                    name: 'rank',
-                    description: 'Check your current server rank, level, and XP',
-                    options: [
-                        {
-                            name: 'target',
-                            description: 'The user whose rank you want to view',
-                            type: 6, 
-                            required: false
-                        }
-                    ]
-                }] },
+                { body: [
+                    {
+                        name: 'rank',
+                        description: 'Check your current server rank, level, and XP',
+                        options: [
+                            {
+                                name: 'target',
+                                description: 'The user whose rank you want to view',
+                                type: 6, 
+                                required: false
+                            }
+                        ]
+                    },
+                    {
+                        name: 'toggleleveling',
+                        description: 'Enable or disable the leveling system for this server',
+                        default_member_permissions: '8' // '8' is the Administrator flag in Discord API
+                    }
+                ] },
             );
         } catch (error) {
             console.error('❌ Failed to sync leveling slash commands:', error);
         }
     });
 
-    // Handle messages for XP and Prefix Command
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.guild) return;
 
         const userId = message.author.id;
         const guildId = message.guild.id;
 
-        // --- TRIGGER COMMAND LOGIC ---
+        // --- PREFIX COMMAND LOGIC ---
         if (message.content.startsWith(PREFIX)) {
             const args = message.content.slice(PREFIX.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
 
+            // TOGGLE COMMAND
+            if (command === 'toggleleveling') {
+                if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                    return message.reply('❌ You need **Administrator** permissions to use this command.');
+                }
+
+                const currentSetting = getSettings.get(guildId);
+                const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1; // Default is 1 (enabled)
+                const newSetting = isEnabled ? 0 : 1; // Flip the bit
+
+                setSettings.run(guildId, newSetting, newSetting);
+
+                return message.reply(`⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`);
+            }
+
+            // RANK COMMAND
             if (command === 'rank') {
                 const targetUser = message.mentions.users.first() || message.author;
-                const member = message.guild.members.cache.get(targetUser.id) || await message.guild.members.fetch(targetUser.id);
                 const userData = getUser.get(targetUser.id, guildId);
 
                 if (!userData) {
-                    return message.reply(`❌ **${targetUser.username}** hasn't chatting activity recorded yet.`);
+                    return message.reply(`❌ **${targetUser.username}** has no chatting activity recorded yet.`);
                 }
 
                 const nextLevelXp = xpForNextLevel(userData.level);
@@ -91,7 +129,14 @@ module.exports = (client) => {
 
                 return message.reply({ embeds: [rankEmbed] });
             }
-            return; 
+            return; // Stop processing further so command usage doesn't grant XP
+        }
+
+        // --- XP GENERATION GUARD ---
+        // Check if leveling is disabled before granting XP
+        const currentSetting = getSettings.get(guildId);
+        if (currentSetting && currentSetting.leveling_enabled === 0) {
+            return; // Exit silently if disabled
         }
 
         // --- XP & LEVELING LOGIC ---
@@ -120,9 +165,19 @@ module.exports = (client) => {
         }
     });
 
-    // Handle Slash Command
+    // --- SLASH COMMAND LOGIC ---
     client.on('interactionCreate', async interaction => {
         if (!interaction.isChatInputCommand()) return;
+
+        if (interaction.commandName === 'toggleleveling') {
+            const currentSetting = getSettings.get(interaction.guildId);
+            const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1;
+            const newSetting = isEnabled ? 0 : 1;
+
+            setSettings.run(interaction.guildId, newSetting, newSetting);
+
+            return interaction.reply({ content: `⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true });
+        }
 
         if (interaction.commandName === 'rank') {
             const targetUser = interaction.options.getUser('target') || interaction.user;
@@ -152,3 +207,4 @@ module.exports = (client) => {
         }
     });
 };
+        
