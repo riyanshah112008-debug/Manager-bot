@@ -52,9 +52,8 @@ try {
 } catch (err) { console.error('❌ Failed to load Premium:', err); }
 
 try {
-    const translatorAPI = require('./translator.js');
-    translatorAPI(app); 
-    console.log('✅ Translator API Endpoint Loaded');
+    require('./translator.js')(client, app);
+    console.log('✅ Translator Module Loaded');
 } catch (err) { console.error('❌ Failed to load Translator:', err); }
 
 try {
