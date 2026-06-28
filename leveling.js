@@ -45,36 +45,36 @@ function xpForNextLevel(currentLevel) {
 
 module.exports = (client) => {
     const PREFIX = '.';
-
-    client.on('ready', async () => {
-        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    // ==========================================
+    // 1. DISCORD SLASH COMMAND SYNC (MODULAR)
+    // ==========================================
+    client.on('clientReady', async () => {
         try {
-            await rest.put(
-                Routes.applicationCommands(client.user.id),
-                { body: [
+            await client.application.commands.create({
+                name: 'rank',
+                description: 'Check your current server rank, level, and XP',
+                options: [
                     {
-                        name: 'rank',
-                        description: 'Check your current server rank, level, and XP',
-                        options: [
-                            {
-                                name: 'target',
-                                description: 'The user whose rank you want to view',
-                                type: 6, 
-                                required: false
-                            }
-                        ]
-                    },
-                    {
-                        name: 'toggleleveling',
-                        description: 'Enable or disable the leveling system for this server',
-                        default_member_permissions: '8' // '8' is the Administrator flag in Discord API
+                        name: 'target',
+                        description: 'The user whose rank you want to view',
+                        type: 6, 
+                        required: false
                     }
-                ] },
-            );
+                ]
+            });
+
+            await client.application.commands.create({
+                name: 'toggleleveling',
+                description: 'Enable or disable the leveling system for this server',
+                default_member_permissions: '8' 
+            });
+
+            console.log('✅ Leveling Slash Commands Added');
         } catch (error) {
-            console.error('❌ Failed to sync leveling slash commands:', error);
+            console.error('❌ Failed to add leveling slash commands:', error);
         }
     });
+
 
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.guild) return;
