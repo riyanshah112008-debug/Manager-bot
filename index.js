@@ -72,6 +72,11 @@ try {
     console.log('✅ Music Module Loaded');
 } catch (err) { console.error('❌ Failed to load Music:', err); }
 
+try {
+    require('./help.js')(client);
+    console.log('✅ Help Module Loaded');
+} catch (err) { console.error('❌ Failed to load Help:', err); }
+
 // ==========================================
 // ANTI-CRASH SYSTEM
 // ==========================================
