@@ -1,6 +1,6 @@
 const translate = require('google-translate-api-x');
+const { EmbedBuilder, REST, Routes } = require('discord.js');
 
-// Map common typed language names to their API language codes
 const languageMap = {
     'english': 'en', 'spanish': 'es', 'french': 'fr', 'german': 'de',
     'italian': 'it', 'portuguese': 'pt', 'russian': 'ru', 'japanese': 'ja',
@@ -8,33 +8,119 @@ const languageMap = {
     'dutch': 'nl', 'turkish': 'tr', 'polish': 'pl', 'ukrainian': 'uk'
 };
 
-module.exports = (app) => {
-    // This creates a web endpoint your BDFD bot can talk to
-    app.get('/api/translate', async (req, res) => {
-        const text = req.query.text;
-        const requestedLang = req.query.to || 'en';
+module.exports = (client, app) => {
+    const PREFIX = '.';
 
-        // 1. Check if the BDFD bot actually sent text
-        if (!text) {
-            return res.status(400).json({ error: 'No text provided' });
+    // ==========================================
+    // 1. EXPRESS WEB API (Kept for external bots)
+    // ==========================================
+    if (app) {
+        app.get('/api/translate', async (req, res) => {
+            const text = req.query.text;
+            const requestedLang = req.query.to || 'en';
+            if (!text) return res.status(400).json({ error: 'No text provided' });
+            
+            const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
+            try {
+                const result = await translate(text, { to: targetCode });
+                res.json({ success: true, translatedText: result.text, sourceLanguage: result.raw.src });
+            } catch (error) {
+                res.status(500).json({ error: 'Google API rate limit or error' });
+            }
+        });
+    }
+
+    // ==========================================
+    // 2. DISCORD SLASH COMMAND SYNC
+    // ==========================================
+    client.on('ready', async () => {
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+        try {
+            await rest.put(
+                Routes.applicationCommands(client.user.id),
+                { body: [{
+                    name: 'translate',
+                    description: 'Translate text to another language',
+                    options: [
+                        { name: 'language', description: 'Language to translate to (e.g., german)', type: 3, required: true },
+                        { name: 'text', description: 'The text to translate', type: 3, required: true }
+                    ]
+                }] },
+            );
+        } catch (error) {
+            console.error('❌ Failed to sync translator slash commands:', error);
         }
+    });
 
+    // ==========================================
+    // 3. DISCORD PREFIX COMMAND (.translate)
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.guild) return;
+
+        if (message.content.toLowerCase().startsWith(PREFIX + 'translate')) {
+            // Split the command into arguments
+            const args = message.content.slice(PREFIX.length + 9).trim().split(/ +/);
+            const requestedLang = args.shift(); // First word is language
+            const text = args.join(' '); // Everything else is the text
+
+            // Check if they forgot the language or the text
+            if (!requestedLang || !text) {
+                return message.reply('❌ **Usage:** `.translate <language> <text>`\nExample: `.translate german Hello how are you?`');
+            }
+
+            const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
+            const waitMessage = await message.reply('🔄 Translating...');
+
+            try {
+                const result = await translate(text, { to: targetCode });
+                
+                const embed = new EmbedBuilder()
+                    .setColor('#7289DA')
+                    .setTitle('🌐 Translation')
+                    .addFields(
+                        { name: `To ${requestedLang.charAt(0).toUpperCase() + requestedLang.slice(1)}`, value: result.text },
+                        { name: 'Original', value: text }
+                    )
+                    .setFooter({ text: 'Powered by Google Translate' });
+
+                await waitMessage.edit({ content: null, embeds: [embed] });
+            } catch (error) {
+                console.error('Translation error:', error);
+                await waitMessage.edit('❌ Failed to translate. Please ensure the language name is correct.');
+            }
+        }
+    });
+
+    // ==========================================
+    // 4. DISCORD SLASH COMMAND (/translate)
+    // ==========================================
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand()) return;
+        if (interaction.commandName !== 'translate') return;
+
+        const requestedLang = interaction.options.getString('language');
+        const text = interaction.options.getString('text');
         const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
 
+        await interaction.deferReply();
+
         try {
-            // 2. Translate the text
             const result = await translate(text, { to: targetCode });
+            
+            const embed = new EmbedBuilder()
+                .setColor('#7289DA')
+                .setTitle('🌐 Translation')
+                .addFields(
+                    { name: `To ${requestedLang.charAt(0).toUpperCase() + requestedLang.slice(1)}`, value: result.text },
+                    { name: 'Original', value: text }
+                )
+                .setFooter({ text: 'Powered by Google Translate' });
 
-            // 3. Send the successful translation back to BDFD as JSON
-            res.json({
-                success: true,
-                translatedText: result.text,
-                sourceLanguage: result.raw.src
-            });
-
+            await interaction.followUp({ embeds: [embed] });
         } catch (error) {
-            console.error('[API Error] Translation failed:', error);
-            res.status(500).json({ error: 'Google API rate limit or error' });
+            console.error('Translation error:', error);
+            await interaction.followUp('❌ Failed to translate. Please ensure the language name is correct.');
         }
     });
 };
