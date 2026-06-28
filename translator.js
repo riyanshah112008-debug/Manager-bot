@@ -31,27 +31,25 @@ module.exports = (client, app) => {
     }
 
     // ==========================================
-    // 2. DISCORD SLASH COMMAND SYNC
+    // ==========================================
+    // 2. DISCORD SLASH COMMAND SYNC (MODULAR)
     // ==========================================
     client.on('clientReady', async () => {
-        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
         try {
-            await rest.put(
-                Routes.applicationCommands(client.user.id),
-                { body: [{
-                    name: 'translate',
-                    description: 'Translate text to another language',
-                    options: [
-                        { name: 'language', description: 'Language to translate to (e.g., german)', type: 3, required: true },
-                        { name: 'text', description: 'The text to translate', type: 3, required: true }
-                    ]
-                }] },
-            );
-            console.log('✅ Translator Slash Commands Synced');
+            await client.application.commands.create({
+                name: 'translate',
+                description: 'Translate text to another language',
+                options: [
+                    { name: 'language', description: 'Language to translate to (e.g., german)', type: 3, required: true },
+                    { name: 'text', description: 'The text to translate', type: 3, required: true }
+                ]
+            });
+            console.log('✅ Translator Slash Commands Added');
         } catch (error) {
-            console.error('❌ Failed to sync translator slash commands:', error);
+            console.error('❌ Failed to add translator slash commands:', error);
         }
     });
+
 
     // ==========================================
     // 3. DISCORD PREFIX COMMAND (.translate)
