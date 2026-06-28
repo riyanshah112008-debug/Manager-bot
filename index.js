@@ -82,6 +82,13 @@ process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
 });
 
+// ==========================================
+// 4. LEVELING UP SYSTEM
+// ==========================================
+try {
+    require('./leveling.js')(client);
+    console.log('✅ Leveling Module Loaded');
+} catch (err) { console.error('❌ Failed to load Leveling:', err); }
 
 
 // ==========================================
