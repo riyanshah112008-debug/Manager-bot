@@ -1,11 +1,16 @@
 const { Player } = require('discord-player');
+const { YoutubeiExtractor } = require('discord-player-youtubei'); // Import the stable extractor
 
 module.exports = (client) => {
     const player = new Player(client);
     
-    player.extractors.loadDefault().then(() => {
-        console.log('🎶 Audio extractors loaded for Starry!');
-    }).catch(err => console.error('Failed to load extractors:', err));
+    // Register the stable plugin and filter out the old YouTubeExtractor
+    player.extractors.register(YoutubeiExtractor, {})
+        .then(() => player.extractors.loadDefault((ext) => ext !== 'YouTubeExtractor'))
+        .then(() => {
+            console.log('🎶 Audio extractors loaded for Starry!');
+        })
+        .catch(err => console.error('Failed to load extractors:', err));
 
     // PREFIX COMMAND (.play)
     client.on('messageCreate', async (message) => {
@@ -55,4 +60,4 @@ module.exports = (client) => {
         }
     });
 };
-        
+            
