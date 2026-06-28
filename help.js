@@ -66,18 +66,19 @@ module.exports = (client) => {
     // ==========================================
     // 3. DISCORD SLASH COMMAND SYNC (MODULAR)
     // ==========================================
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'help',
-                description: 'Shows all available commands and bot info'
-            });
-            console.log('✅ Help Slash Command Added');
-        } catch (error) {
-            console.error('❌ Failed to add help slash command:', error);
+        // ==========================================
+    // 3. PREFIX COMMAND (.help)
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.guild) return;
+
+        // Added .trim() to catch mobile ghost spaces!
+        if (message.content.trim().toLowerCase() === PREFIX + 'help') {
+            const helpEmbed = buildHelpEmbed(message.author, message.guild);
+            return message.reply({ embeds: [helpEmbed] });
         }
     });
-
+    
     // ==========================================
     // 4. SLASH COMMAND (/help)
     // ==========================================
