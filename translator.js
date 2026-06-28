@@ -31,9 +31,9 @@ module.exports = (client, app) => {
     }
 
     // ==========================================
-    // 2. DISCORD SLASH COMMAND SYNC
+    // 2. DISCORD SLASH COMMAND SYNC (Updated to clientReady)
     // ==========================================
-    client.on('ready', async () => {
+    client.on('clientReady', async () => {
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
         try {
             await rest.put(
@@ -47,6 +47,7 @@ module.exports = (client, app) => {
                     ]
                 }] },
             );
+            console.log('✅ Translator Slash Commands Synced');
         } catch (error) {
             console.error('❌ Failed to sync translator slash commands:', error);
         }
@@ -58,20 +59,24 @@ module.exports = (client, app) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        if (message.content.toLowerCase().startsWith(PREFIX + 'translate')) {
-            const args = message.content.slice(PREFIX.length + 9).trim().split(/ +/);
+        // Clean up the input and split by spaces
+        const args = message.content.trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+
+        if (command === PREFIX + 'translate') {
+            console.log(`[Translator Context] Executing command from ${message.author.username}`);
+
             const requestedLang = args.shift(); 
-            let text = args.join(' '); // Use 'let' because we might change this if it's a reply
+            let text = args.join(' '); 
 
             // If they didn't even provide a language
             if (!requestedLang) {
                 return message.reply('❌ **Usage:** `.translate <language> <text>`\n💡 *Tip: You can also reply to someone else\'s message with* `.translate <language>`');
             }
 
-            // 🌟 THE NEW LOGIC: If no text was typed, check if they replied to a message
+            // If no text was typed, check if they replied to a message
             if (!text && message.reference) {
                 try {
-                    // Fetch the message they replied to
                     const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
                     text = repliedMessage.content;
                 } catch (err) {
@@ -79,9 +84,9 @@ module.exports = (client, app) => {
                 }
             }
 
-            // If there is STILL no text (they didn't type any and didn't reply to anyone)
+            // If there is STILL no text (none typed and not a reply)
             if (!text) {
-                return message.reply('❌ You forgot to tell me what to translate! Either type the text after the language, or reply to a message.');
+                return message.reply('❌ You forgot to tell me what to translate! Either type text after the language or reply to a message.');
             }
 
             const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
@@ -95,13 +100,13 @@ module.exports = (client, app) => {
                     .setTitle('🌐 Translation')
                     .addFields(
                         { name: `To ${requestedLang.charAt(0).toUpperCase() + requestedLang.slice(1)}`, value: result.text },
-                        { name: 'Original', value: text.length > 1024 ? text.substring(0, 1020) + '...' : text } // Prevent Discord limits from crashing embed
+                        { name: 'Original', value: text.length > 1024 ? text.substring(0, 1020) + '...' : text }
                     )
                     .setFooter({ text: 'Powered by Google Translate' });
 
                 await waitMessage.edit({ content: null, embeds: [embed] });
             } catch (error) {
-                console.error('Translation error:', error);
+                console.error('[Translator Error]', error);
                 await waitMessage.edit('❌ Failed to translate. Please ensure the language name is correct.');
             }
         }
@@ -134,9 +139,9 @@ module.exports = (client, app) => {
 
             await interaction.followUp({ embeds: [embed] });
         } catch (error) {
-            console.error('Translation error:', error);
+            console.error('[Translator Slash Error]', error);
             await interaction.followUp('❌ Failed to translate. Please ensure the language name is correct.');
         }
     });
 };
-                        
+    
