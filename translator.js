@@ -12,7 +12,7 @@ module.exports = (client, app) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. EXPRESS WEB API (For external bots)
+    // 1. EXPRESS WEB API
     // ==========================================
     if (app) {
         app.get('/api/translate', async (req, res) => {
@@ -22,16 +22,16 @@ module.exports = (client, app) => {
             
             const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
             try {
-                const result = await translate(text, { to: targetCode });
+                const result = await translate(text, { to: targetCode, client: 'gtx' });
                 res.json({ success: true, translatedText: result.text, sourceLanguage: result.raw.src });
             } catch (error) {
-                res.status(500).json({ error: 'Google API rate limit or error' });
+                res.status(500).json({ error: error.message });
             }
         });
     }
 
     // ==========================================
-    // 2. DISCORD SLASH COMMAND SYNC (Updated to clientReady)
+    // 2. DISCORD SLASH COMMAND SYNC
     // ==========================================
     client.on('clientReady', async () => {
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -59,22 +59,17 @@ module.exports = (client, app) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        // Clean up the input and split by spaces
         const args = message.content.trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
         if (command === PREFIX + 'translate') {
-            console.log(`[Translator Context] Executing command from ${message.author.username}`);
-
             const requestedLang = args.shift(); 
             let text = args.join(' '); 
 
-            // If they didn't even provide a language
             if (!requestedLang) {
                 return message.reply('❌ **Usage:** `.translate <language> <text>`\n💡 *Tip: You can also reply to someone else\'s message with* `.translate <language>`');
             }
 
-            // If no text was typed, check if they replied to a message
             if (!text && message.reference) {
                 try {
                     const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
@@ -84,7 +79,6 @@ module.exports = (client, app) => {
                 }
             }
 
-            // If there is STILL no text (none typed and not a reply)
             if (!text) {
                 return message.reply('❌ You forgot to tell me what to translate! Either type text after the language or reply to a message.');
             }
@@ -93,7 +87,8 @@ module.exports = (client, app) => {
             const waitMessage = await message.reply('🔄 Translating...');
 
             try {
-                const result = await translate(text, { to: targetCode });
+                // client: 'gtx' helps bypass Google 403 Forbidden blocks
+                const result = await translate(text, { to: targetCode, client: 'gtx' });
                 
                 const embed = new EmbedBuilder()
                     .setColor('#7289DA')
@@ -107,7 +102,8 @@ module.exports = (client, app) => {
                 await waitMessage.edit({ content: null, embeds: [embed] });
             } catch (error) {
                 console.error('[Translator Error]', error);
-                await waitMessage.edit('❌ Failed to translate. Please ensure the language name is correct.');
+                // Print the exact error so we can read it
+                await waitMessage.edit(`❌ Translation Failed: \`${error.message || 'Unknown API Error'}\``);
             }
         }
     });
@@ -126,7 +122,7 @@ module.exports = (client, app) => {
         await interaction.deferReply();
 
         try {
-            const result = await translate(text, { to: targetCode });
+            const result = await translate(text, { to: targetCode, client: 'gtx' });
             
             const embed = new EmbedBuilder()
                 .setColor('#7289DA')
@@ -140,8 +136,8 @@ module.exports = (client, app) => {
             await interaction.followUp({ embeds: [embed] });
         } catch (error) {
             console.error('[Translator Slash Error]', error);
-            await interaction.followUp('❌ Failed to translate. Please ensure the language name is correct.');
+            await interaction.followUp(`❌ Translation Failed: \`${error.message || 'Unknown API Error'}\``);
         }
     });
 };
-    
+                    
