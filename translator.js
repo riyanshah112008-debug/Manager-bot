@@ -12,7 +12,7 @@ module.exports = (client, app) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. EXPRESS WEB API (Kept for external bots)
+    // 1. EXPRESS WEB API (For external bots)
     // ==========================================
     if (app) {
         app.get('/api/translate', async (req, res) => {
@@ -59,14 +59,29 @@ module.exports = (client, app) => {
         if (message.author.bot || !message.guild) return;
 
         if (message.content.toLowerCase().startsWith(PREFIX + 'translate')) {
-            // Split the command into arguments
             const args = message.content.slice(PREFIX.length + 9).trim().split(/ +/);
-            const requestedLang = args.shift(); // First word is language
-            const text = args.join(' '); // Everything else is the text
+            const requestedLang = args.shift(); 
+            let text = args.join(' '); // Use 'let' because we might change this if it's a reply
 
-            // Check if they forgot the language or the text
-            if (!requestedLang || !text) {
-                return message.reply('❌ **Usage:** `.translate <language> <text>`\nExample: `.translate german Hello how are you?`');
+            // If they didn't even provide a language
+            if (!requestedLang) {
+                return message.reply('❌ **Usage:** `.translate <language> <text>`\n💡 *Tip: You can also reply to someone else\'s message with* `.translate <language>`');
+            }
+
+            // 🌟 THE NEW LOGIC: If no text was typed, check if they replied to a message
+            if (!text && message.reference) {
+                try {
+                    // Fetch the message they replied to
+                    const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+                    text = repliedMessage.content;
+                } catch (err) {
+                    return message.reply('❌ I could not read the message you replied to.');
+                }
+            }
+
+            // If there is STILL no text (they didn't type any and didn't reply to anyone)
+            if (!text) {
+                return message.reply('❌ You forgot to tell me what to translate! Either type the text after the language, or reply to a message.');
             }
 
             const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
@@ -80,7 +95,7 @@ module.exports = (client, app) => {
                     .setTitle('🌐 Translation')
                     .addFields(
                         { name: `To ${requestedLang.charAt(0).toUpperCase() + requestedLang.slice(1)}`, value: result.text },
-                        { name: 'Original', value: text }
+                        { name: 'Original', value: text.length > 1024 ? text.substring(0, 1020) + '...' : text } // Prevent Discord limits from crashing embed
                     )
                     .setFooter({ text: 'Powered by Google Translate' });
 
@@ -124,3 +139,4 @@ module.exports = (client, app) => {
         }
     });
 };
+                        
