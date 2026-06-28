@@ -35,11 +35,12 @@ module.exports = (client) => {
     const content = message.content.toLowerCase();
     const isIgnoreCmd = content.startsWith('.ignore');
     const isUnignoreCmd = content.startsWith('.unignore');
+    const isAutomodCmd = content.startsWith('.automod');
 
     // ==========================================
-    // 1. THE .IGNORE AND .UNIGNORE COMMANDS
+    // 1. COMMANDS: .AUTOMOD, .IGNORE, .UNIGNORE
     // ==========================================
-    if (isIgnoreCmd || isUnignoreCmd) {
+    if (isIgnoreCmd || isUnignoreCmd || isAutomodCmd) {
       try {
         const member = message.member || await message.guild.members.fetch(message.author.id);
         
@@ -49,6 +50,42 @@ module.exports = (client) => {
         }
 
         const args = message.content.split(/\s+/).slice(1); 
+        const settings = readSettings();
+        const guildId = message.guild.id;
+
+        // --- NEW: SERVER-WIDE TOGGLE (.automod) ---
+        if (isAutomodCmd) {
+          const action = args[0]?.toLowerCase();
+
+          if (!action || !['enable', 'disable', 'status'].includes(action)) {
+            return message.reply('🔹 **Usage:** `.automod <enable/disable/status>`');
+          }
+
+          // Initialize guild configuration if it doesn't exist
+          if (!settings[guildId]) {
+            settings[guildId] = { automodEnabled: true };
+          }
+
+          if (action === 'status') {
+            const isEnabled = settings[guildId].automodEnabled !== false; // Defaults to true
+            return message.reply(`📢 **Server-Wide Automod Status:** ${isEnabled ? '🟢 Enabled' : '🔴 Disabled'}`);
+          }
+
+          if (action === 'enable') {
+            settings[guildId].automodEnabled = true;
+            saveSettings(settings);
+            return message.reply('✅ Automod has been **ENABLED** for this entire server.');
+          }
+
+          if (action === 'disable') {
+            settings[guildId].automodEnabled = false;
+            saveSettings(settings);
+            return message.reply('🚫 Automod has been **DISABLED** for this entire server.');
+          }
+          return;
+        }
+
+        // --- EXISTING: CHANNEL TOGGLES (.ignore / .unignore) ---
         const type = args[0]?.toLowerCase();
 
         if (!type || !['links', 'emojis', 'all', 'status'].includes(type)) {
@@ -57,7 +94,6 @@ module.exports = (client) => {
 
         const channel = message.mentions.channels.first() || message.channel;
         const channelId = channel.id;
-        const settings = readSettings();
 
         // Initialize channel if it doesn't exist in the JSON
         if (!settings[channelId]) {
@@ -106,8 +142,17 @@ module.exports = (client) => {
     if (content.startsWith('.')) return;
 
     let channelSettings = { links: false, emojis: false };
+    let isServerEnabled = true; // Default behavior is enabled
+
     try {
         const settings = readSettings();
+        
+        // Check the new Server-Wide status
+        if (settings[message.guild.id] && settings[message.guild.id].automodEnabled === false) {
+            isServerEnabled = false;
+        }
+
+        // Load channel specific settings
         if (settings[message.channel.id]) {
             channelSettings = settings[message.channel.id];
         }
@@ -115,7 +160,10 @@ module.exports = (client) => {
         console.error("Error loading automod settings:", e);
     }
 
-    // --- NEW: Filter out GIF URLs from the matched links ---
+    // 🛑 THE NEW GUARD: Stop execution immediately if the entire server is disabled
+    if (!isServerEnabled) return;
+
+    // --- Filter out GIF URLs from the matched links ---
     const rawLinks = message.content.match(linkPattern) || [];
     const links = rawLinks.filter(link => {
         const url = link.toLowerCase();
@@ -161,4 +209,3 @@ module.exports = (client) => {
     }
   });
 };
-    
