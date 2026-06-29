@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const filePath = path.join(__dirname, 'ignoredChannels.json');
 
+// 👑 YOUR MASTER KEY: Paste your exact Discord User ID inside the quotes below
+const OWNER_ID = '1465049039153135639'; 
+
 module.exports = (client) => {
   // Regex patterns
   const linkPattern = /https?:\/\/\S+/g;
@@ -32,7 +35,8 @@ module.exports = (client) => {
     // Ignore bots and messages outside of guilds
     if (message.author.bot || !message.guild) return;
 
-    const content = message.content.toLowerCase();
+    // Added .trim() to prevent mobile ghost spaces from breaking commands
+    const content = message.content.trim().toLowerCase();
     const isIgnoreCmd = content.startsWith('.ignore');
     const isUnignoreCmd = content.startsWith('.unignore');
     const isAutomodCmd = content.startsWith('.automod');
@@ -46,34 +50,17 @@ module.exports = (client) => {
         
         // 👑 THE MASTER KEY GUARD
         const isAdmin = member.permissions.has('Administrator');
-        const isOwner = message.author.id === '1465049039153135639'; // <-- Keep the single quotes!
+        const isOwner = message.author.id === OWNER_ID;
 
         if (!isAdmin && !isOwner) {
           return message.reply('❌ You need **Administrator** permissions to use this command.');
         }
 
-        const args = message.content.split(/\s+/).slice(1); 
+        const args = message.content.trim().split(/\s+/).slice(1); 
         const settings = readSettings();
         const guildId = message.guild.id;
 
-        // ... rest of the code ...
-
-    
-    
-    if (isIgnoreCmd || isUnignoreCmd || isAutomodCmd) {
-      try {
-        const member = message.member || await message.guild.members.fetch(message.author.id);
-        
-        // Security Check: Only Admins can modify automod
-        if (!member.permissions.has('Administrator')) {
-          return message.reply('❌ You need Administrator permissions to use this command.');
-        }
-
-        const args = message.content.split(/\s+/).slice(1); 
-        const settings = readSettings();
-        const guildId = message.guild.id;
-
-        // --- NEW: SERVER-WIDE TOGGLE (.automod) ---
+        // --- SERVER-WIDE TOGGLE (.automod) ---
         if (isAutomodCmd) {
           const action = args[0]?.toLowerCase();
 
@@ -81,13 +68,12 @@ module.exports = (client) => {
             return message.reply('🔹 **Usage:** `.automod <enable/disable/status>`');
           }
 
-          // Initialize guild configuration if it doesn't exist
           if (!settings[guildId]) {
             settings[guildId] = { automodEnabled: true };
           }
 
           if (action === 'status') {
-            const isEnabled = settings[guildId].automodEnabled !== false; // Defaults to true
+            const isEnabled = settings[guildId].automodEnabled !== false;
             return message.reply(`📢 **Server-Wide Automod Status:** ${isEnabled ? '🟢 Enabled' : '🔴 Disabled'}`);
           }
 
@@ -105,7 +91,7 @@ module.exports = (client) => {
           return;
         }
 
-        // --- EXISTING: CHANNEL TOGGLES (.ignore / .unignore) ---
+        // --- CHANNEL TOGGLES (.ignore / .unignore) ---
         const type = args[0]?.toLowerCase();
 
         if (!type || !['links', 'emojis', 'all', 'status'].includes(type)) {
@@ -115,7 +101,6 @@ module.exports = (client) => {
         const channel = message.mentions.channels.first() || message.channel;
         const channelId = channel.id;
 
-        // Initialize channel if it doesn't exist in the JSON
         if (!settings[channelId]) {
           settings[channelId] = { links: false, emojis: false };
         }
@@ -126,7 +111,6 @@ module.exports = (client) => {
           return message.reply(`📢 **Automod Status for <#${channelId}>:**\n🔗 Links: ${linkStatus}\n😀 Emojis: ${emojiStatus}`);
         }
 
-        // Determine if we are disabling (ignore = true) or enabling (unignore = false)
         const targetState = isIgnoreCmd ? true : false;
 
         if (type === 'links') {
@@ -151,28 +135,22 @@ module.exports = (client) => {
         console.error("Command Error:", err);
         return message.reply(`❌ Command Error: \`${err.message}\``);
       }
-      return; // Stop processing so the command itself doesn't trigger the filter
+      return; 
     }
 
     // ==========================================
     // 2. THE AUTOMOD FILTER
     // ==========================================
-    
-    // Safety check: Completely ignore ANY command (messages starting with a dot) 
     if (content.startsWith('.')) return;
 
     let channelSettings = { links: false, emojis: false };
-    let isServerEnabled = true; // Default behavior is enabled
+    let isServerEnabled = true; 
 
     try {
         const settings = readSettings();
-        
-        // Check the new Server-Wide status
         if (settings[message.guild.id] && settings[message.guild.id].automodEnabled === false) {
             isServerEnabled = false;
         }
-
-        // Load channel specific settings
         if (settings[message.channel.id]) {
             channelSettings = settings[message.channel.id];
         }
@@ -180,38 +158,30 @@ module.exports = (client) => {
         console.error("Error loading automod settings:", e);
     }
 
-    // 🛑 THE NEW GUARD: Stop execution immediately if the entire server is disabled
+    // 🛑 THE NEW GUARD
     if (!isServerEnabled) return;
 
-    // --- Filter out GIF URLs from the matched links ---
     const rawLinks = message.content.match(linkPattern) || [];
     const links = rawLinks.filter(link => {
         const url = link.toLowerCase();
-        // Ignore links from common GIF sites or links that end directly in .gif
         return !url.includes('tenor.com') && 
                !url.includes('giphy.com') && 
                !url.endsWith('.gif');
     });
 
     const emojis = message.content.match(emojiPattern) || [];
-
-    // Check if spam exists AND if the filter is currently active for this channel
-    // channelSettings.links === true means it is IGNORED.
     const isLinkSpam = !channelSettings.links && links.length >= 1;
     const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
 
     if (isLinkSpam || isEmojiSpam) {
-      // 1. Attempt to delete the message
       try {
         await message.delete();
       } catch (err) {
         console.warn("Automod lacked permissions to delete message.");
       }
 
-      // 2. Apply punishments based on the violation
       if (isLinkSpam) {
         try {
-          // Timeout for 10 minutes (600,000 ms)
           await message.member.timeout(10 * 60 * 1000, "Automod: Link Spam");
           await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 10 minutes for link spam.`);
         } catch (error) {
@@ -219,7 +189,6 @@ module.exports = (client) => {
         }
       } else if (isEmojiSpam) {
         try {
-          // Timeout for 2 minutes (120,000 ms)
           await message.member.timeout(2 * 60 * 1000, "Automod: Emoji Spam");
           await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 2 minutes for emoji spam.`);
         } catch (error) {
@@ -229,3 +198,4 @@ module.exports = (client) => {
     }
   });
 };
+                       
