@@ -4,21 +4,17 @@ module.exports = (client) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. DISCORD SLASH COMMAND SYNC
+    // 1. DISCORD SLASH COMMAND SYNC (MODULAR)
     // ==========================================
     client.on('clientReady', async () => {
-        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
         try {
-            await rest.put(
-                Routes.applicationCommands(client.user.id),
-                { body: [{
-                    name: 'help',
-                    description: 'Shows all available commands and bot info'
-                }] },
-            );
-            console.log('✅ Help Slash Command Synced');
+            await client.application.commands.create({
+                name: 'help',
+                description: 'Shows all available commands and bot info'
+            });
+            console.log('✅ Help Slash Command Added');
         } catch (error) {
-            console.error('❌ Failed to sync help slash command:', error);
+            console.error('❌ Failed to add help slash command:', error);
         }
     });
 
@@ -27,7 +23,7 @@ module.exports = (client) => {
     // ==========================================
     const buildHelpEmbed = (user, guild) => {
         return new EmbedBuilder()
-            .setColor('#2b2d31') // Clean, dark Discord theme color
+            .setColor('#2b2d31') 
             .setTitle('🤖 Manager Bot | Command List')
             .setDescription(`Prefix for this server is \`${PREFIX}\`\nYou can also use **Slash Commands (/)** for most features!`)
             .setThumbnail(client.user.displayAvatarURL({ dynamic: true, size: 256 }))
@@ -49,7 +45,7 @@ module.exports = (client) => {
                 },
                 { 
                     name: '🛡️ Moderation & Automod', 
-                    value: 'General server protection, reaction roles, and automated moderation features are actively running in the background.', 
+                    value: '**Automod Controls (Admin Only):**\n`.automod <enable/disable/status>` - Server-wide master switch\n`.ignore <links/emojis/all/status> [#channel]` - Disable channel filters\n`.unignore <links/emojis/all/status> [#channel]` - Enable channel filters\n\n**Auto-Punish Controls (Admin Only):**\n`.autokick <enable/disable/status>` - Toggle auto-kick for new accounts\n`.autoban <enable/disable/status>` - Toggle auto-ban for scam profiles', 
                     inline: false 
                 },
                 { 
@@ -62,23 +58,18 @@ module.exports = (client) => {
             .setTimestamp();
     };
 
-        
     // ==========================================
-    // 3. DISCORD SLASH COMMAND SYNC (MODULAR)
-    // ==========================================
-        // ==========================================
     // 3. PREFIX COMMAND (.help)
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        // Added .trim() to catch mobile ghost spaces!
         if (message.content.trim().toLowerCase() === PREFIX + 'help') {
             const helpEmbed = buildHelpEmbed(message.author, message.guild);
             return message.reply({ embeds: [helpEmbed] });
         }
     });
-    
+
     // ==========================================
     // 4. SLASH COMMAND (/help)
     // ==========================================
@@ -90,4 +81,4 @@ module.exports = (client) => {
         await interaction.reply({ embeds: [helpEmbed] });
     });
 };
-              
+                        
