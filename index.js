@@ -49,6 +49,7 @@ loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
 loadModule('Reaction Roles', './reactionroles.js');
 loadModule('Canvas Image Gen', './canvasimagegen.js');
+
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
 loadModule('AI', './ai.js');
