@@ -7,96 +7,102 @@ const serverSettings = new Map();
 
 module.exports = (client) => {
     // ==========================================
-    // 1. REGISTER THE SLASH COMMAND
+    // 1. REGISTER THE SLASH COMMAND (INSTANT GUILD SYNC)
     // ==========================================
     client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'moderate',
-                description: 'Core security and moderation control panel',
-                options: [
-                    {
-                        name: 'toggle',
-                        description: 'Toggle advanced security and bot emulation modules',
-                        type: 1, // SUB_COMMAND
-                        options: [
-                            {
-                                name: 'module',
-                                description: 'Select the security protection module',
-                                type: 3, // STRING
-                                required: true,
-                                choices: [
-                                    { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
-                                    { name: 'Beemo (Anti-Raid Mass Join Defense)', value: 'beemo' },
-                                    { name: 'AltDentifier (Verification Gatekeeper)', value: 'altdentifier' },
-                                    { name: 'Dyno/Carl (Chat Filters & AutoMod)', value: 'dyno' }
-                                ]
-                            },
-                            {
-                                name: 'status',
-                                description: 'Enable or disable this module',
-                                type: 5, // BOOLEAN
-                                required: true
-                            }
-                        ]
-                    },
-                    {
-                        name: 'autokick',
-                        description: 'Configure native automated kicking rules',
-                        type: 1, // SUB_COMMAND
-                        options: [
-                            {
-                                name: 'enabled',
-                                description: 'Toggle Auto-Kick engine',
-                                type: 5, // BOOLEAN
-                                required: true
-                            },
-                            {
-                                name: 'account_age',
-                                description: 'Minimum account age in days before triggering kick',
-                                type: 4, // INTEGER
-                                required: false
-                            }
-                        ]
-                    },
-                    {
-                        name: 'autoban',
-                        description: 'Configure native automated banning filters',
-                        type: 1, // SUB_COMMAND
-                        options: [
-                            {
-                                name: 'enabled',
-                                description: 'Toggle Auto-Ban engine',
-                                type: 5, // BOOLEAN
-                                required: true
-                            },
-                            {
-                                name: 'phrase_match',
-                                description: 'Ban users sending messages matching this regex/phrase',
-                                type: 3, // STRING
-                                required: false
-                            }
-                        ]
-                    },
-                    {
-                        name: 'ownerbypass',
-                        description: 'Manage Owner Bypass settings for automod actions',
-                        type: 1, // SUB_COMMAND
-                        options: [
-                            {
-                                name: 'bypass',
-                                description: 'Should server owners bypass security restrictions?',
-                                type: 5, // BOOLEAN
-                                required: true
-                            }
-                        ]
-                    }
-                ]
-            });
-            console.log('✅ Moderate Slash Command Added');
-        } catch (error) {
-            console.error('❌ Failed to add moderate slash command:', error);
-        }
+        const commandData = {
+            name: 'moderate',
+            description: 'Core security and moderation control panel',
+            options: [
+                {
+                    name: 'toggle',
+                    description: 'Toggle advanced security and bot emulation modules',
+                    type: 1, // SUB_COMMAND
+                    options: [
+                        {
+                            name: 'module',
+                            description: 'Select the security protection module',
+                            type: 3, // STRING
+                            required: true,
+                            choices: [
+                                { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
+                                { name: 'Beemo (Anti-Raid Mass Join Defense)', value: 'beemo' },
+                                { name: 'AltDentifier (Verification Gatekeeper)', value: 'altdentifier' },
+                                { name: 'Dyno/Carl (Chat Filters & AutoMod)', value: 'dyno' }
+                            ]
+                        },
+                        {
+                            name: 'status',
+                            description: 'Enable or disable this module',
+                            type: 5, // BOOLEAN
+                            required: true
+                        }
+                    ]
+                },
+                {
+                    name: 'autokick',
+                    description: 'Configure native automated kicking rules',
+                    type: 1, // SUB_COMMAND
+                    options: [
+                        {
+                            name: 'enabled',
+                            description: 'Toggle Auto-Kick engine',
+                            type: 5, // BOOLEAN
+                            required: true
+                        },
+                        {
+                            name: 'account_age',
+                            description: 'Minimum account age in days before triggering kick',
+                            type: 4, // INTEGER
+                            required: false
+                        }
+                    ]
+                },
+                {
+                    name: 'autoban',
+                    description: 'Configure native automated banning filters',
+                    type: 1, // SUB_COMMAND
+                    options: [
+                        {
+                            name: 'enabled',
+                            description: 'Toggle Auto-Ban engine',
+                            type: 5, // BOOLEAN
+                            required: true
+                        },
+                        {
+                            name: 'phrase_match',
+                            description: 'Ban users sending messages matching this regex/phrase',
+                            type: 3, // STRING
+                            required: false
+                        }
+                    ]
+                },
+                {
+                    name: 'ownerbypass',
+                    description: 'Manage Owner Bypass settings for automod actions',
+                    type: 1, // SUB_COMMAND
+                    options: [
+                        {
+                            name: 'bypass',
+                            description: 'Should server owners bypass security restrictions?',
+                            type: 5, // BOOLEAN
+                            required: true
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // Loop through every server the bot is in and forcefully inject the command locally
+        client.guilds.cache.forEach(async (guild) => {
+            try {
+                await guild.commands.create(commandData);
+            } catch (error) {
+                console.error(`❌ Failed to inject moderate slash command in ${guild.name}:`, error.message);
+            }
+        });
+        
+        console.log('✅ Moderate Slash Command Injected into Guilds');
     });
 
     // ==========================================
@@ -175,4 +181,4 @@ module.exports = (client) => {
         }
     });
 };
-                                
+                            
