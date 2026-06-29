@@ -13,8 +13,9 @@ module.exports = (client) => {
 
         const content = message.content;
 
-        // Listen for the "jarvis" trigger word
-        if (content.toLowerCase().startsWith('jarvis, ')) {
+        // Listen for the "starry" trigger word
+        if (content.toLowerCase().startsWith('starry, ')) {
+            // 'starry, ' is exactly 8 characters long, so we slice from index 8
             const args = content.slice(8).trim().split(/ +/);
             const command = args.shift().toLowerCase();
             const text = args.join(' ');
@@ -23,7 +24,7 @@ module.exports = (client) => {
                 // ==========================================
                 // 🗣️ 1. ECHO COMMAND (Make the bot speak)
                 // ==========================================
-                // Usage: jarvis, say Hello everyone!
+                // Usage: starry, say Hello everyone!
                 if (command === 'say') {
                     await message.delete(); // Silently delete your trigger message
                     return message.channel.send(text);
@@ -32,7 +33,7 @@ module.exports = (client) => {
                 // ==========================================
                 // 🎮 2. STATUS COMMAND (Change bot activity)
                 // ==========================================
-                // Usage: jarvis, setstatus Watching over the server
+                // Usage: starry, setstatus Watching over the server
                 if (command === 'setstatus') {
                     client.user.setActivity(text);
                     return message.reply(`✅ System activity updated to: **${text}**`);
@@ -41,9 +42,9 @@ module.exports = (client) => {
                 // ==========================================
                 // 💻 3. EVAL COMMAND (Absolute God Mode)
                 // ==========================================
-                // Usage: jarvis, eval message.channel.send('I am alive!')
+                // Usage: starry, eval message.channel.send('I am alive!')
                 if (command === 'eval') {
-                    if (!text) return message.reply('❌ Awaiting instructions, sir.');
+                    if (!text) return message.reply('❌ Awaiting instructions, boss.');
                     
                     // Evaluate the raw javascript code
                     let evaled = eval(text);
@@ -58,8 +59,8 @@ module.exports = (client) => {
 
                     // Format the output cleanly
                     const embed = new EmbedBuilder()
-                        .setColor('#00FF00')
-                        .setTitle('💻 Jarvis System Terminal')
+                        .setColor('#5865F2')
+                        .setTitle('🌟 Starry System Terminal')
                         .addFields(
                             { name: '📥 Input', value: `\`\`\`js\n${text}\n\`\`\`` },
                             { name: '📤 Output', value: `\`\`\`js\n${evaled.substring(0, 1000)}\n\`\`\`` }
@@ -70,9 +71,10 @@ module.exports = (client) => {
                 }
 
             } catch (err) {
-                // If your code fails, Jarvis tells you what went wrong
+                // If your code fails, Starry tells you what went wrong
                 return message.reply(`❌ **System Malfunction:** \`${err.message}\``);
             }
         }
     });
 };
+              
