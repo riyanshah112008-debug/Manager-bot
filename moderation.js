@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
+// 👑 THE MASTER KEY: Paste your personal Discord User ID here
+const OWNER_ID = '1465049039153135639'; 
+
 // Simulated database/memory storage for feature toggles
 const serverSettings = new Map();
 
@@ -7,7 +10,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('moderate')
         .setDescription('Core security and moderation control panel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // Requires Admin permissions
+        // 🔓 Removed setDefaultMemberPermissions so the command is visible to you everywhere!
         .addSubcommand(subc =>
             subc.setName('toggle')
                 .setDescription('Toggle advanced security and bot emulation modules')
@@ -67,10 +70,17 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        // 👑 THE GUARD: Verify if they have Admin OR are the Bot Creator
+        const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        const isOwner = interaction.user.id === OWNER_ID;
+
+        if (!isAdmin && !isOwner) {
+            return interaction.reply({ content: '❌ You need **Administrator** permissions to use this command.', ephemeral: true });
+        }
+
         const subcommand = interaction.options.getSubcommand();
         const guildId = interaction.guild.id;
 
-        // Initialize guild settings if they do not exist
         if (!serverSettings.has(guildId)) {
             serverSettings.set(guildId, {
                 wick: false,
@@ -87,7 +97,6 @@ module.exports = {
         const settings = serverSettings.get(guildId);
         const embed = new EmbedBuilder().setColor('#5865F2').setTimestamp();
 
-        // 1. Handle Module Toggles (Wick, Beemo, AltDentifier, Dyno)
         if (subcommand === 'toggle') {
             const moduleName = interaction.options.getString('module');
             const status = interaction.options.getBoolean('status');
@@ -108,7 +117,6 @@ module.exports = {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // 2. Handle Autokick Configuration
         if (subcommand === 'autokick') {
             const enabled = interaction.options.getBoolean('enabled');
             const age = interaction.options.getInteger('account_age') || 0;
@@ -123,7 +131,6 @@ module.exports = {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // 3. Handle Autoban Configuration
         if (subcommand === 'autoban') {
             const enabled = interaction.options.getBoolean('enabled');
             settings.autoban = enabled;
@@ -135,7 +142,6 @@ module.exports = {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // 4. Handle Owner Bypass System
         if (subcommand === 'ownerbypass') {
             const bypass = interaction.options.getBoolean('bypass');
             settings.ownerBypass = bypass;
