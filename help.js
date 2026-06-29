@@ -1,4 +1,4 @@
-const { EmbedBuilder, REST, Routes } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 module.exports = (client) => {
     const PREFIX = '.';
@@ -35,7 +35,7 @@ module.exports = (client) => {
                 },
                 { 
                     name: '📈 Leveling System', 
-                    value: '`rank` - Check your XP and Level\n`rank @user` - Check someone else\'s stats\n`toggleleveling` - Enable/Disable XP (Admin)', 
+                    value: '`rank` - Check your XP and Level\n`rank @user` - Check someone else\'s stats\n`toggleleveling` - Enable/Disable XP (Admin/Developer Bypass)', 
                     inline: false 
                 },
                 { 
@@ -45,12 +45,12 @@ module.exports = (client) => {
                 },
                 { 
                     name: '🛡️ Moderation & Automod', 
-                    value: '**Unified Slash Controls (Admin Only):**\n' +
+                    value: '**Unified Slash Controls (Admin / Developer Only):**\n' +
                           '`/moderate toggle <module> <status>` - Toggle specialized engines (Wick, Beemo, AltDentifier, Dyno)\n' +
                           '`/moderate autokick <enabled> [account_age]` - Configure dynamic auto-kick thresholds\n' +
                           '`/moderate autoban <enabled> [phrase_match]` - Manage automated ban protocols\n' +
                           '`/moderate ownerbypass <bypass>` - Control security immunity for owners\n\n' +
-                          '**Legacy Commands (Admin Only):**\n' +
+                          '**Legacy Commands (Admin / Developer Only):**\n' +
                           '`.automod <enable/disable/status>` - Server-wide master switch\n' +
                           '`.ignore <links/emojis/all/status> [#channel]` - Disable channel filters\n' +
                           '`.unignore <links/emojis/all/status> [#channel]` - Enable channel filters\n' +
@@ -91,4 +91,4 @@ module.exports = (client) => {
         await interaction.reply({ embeds: [helpEmbed] });
     });
 };
-                        
+              
