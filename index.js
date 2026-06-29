@@ -1,80 +1,61 @@
-const { EmbedBuilder } = require('discord.js');
+require('dotenv').config();
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const express = require('express');
 
-// 👑 THE MASTER LOCK: Only your exact Discord ID can trigger this file
-const OWNER_ID = '1465049039153135639'; 
+// ==========================================
+// 1. WEB SERVER (KEEPS RENDER ALIVE)
+// ==========================================
+const app = express();
+app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
+app.listen(10000, () => console.log('🌐 Web server listening on port 10000'));
 
-module.exports = (client) => {
-    client.on('messageCreate', async (message) => {
-        // Ignore other bots and DMs
-        if (message.author.bot || !message.guild) return;
+// ==========================================
+// 2. DISCORD CLIENT INITIALIZATION
+// ==========================================
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates // Required for your Music module
+    ],
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+});
 
-        // 🛑 THE ULTIMATE GUARD: If the message isn't from you, stop immediately
-        if (message.author.id !== OWNER_ID) return;
+// ==========================================
+// 3. BOT READY EVENT
+// ==========================================
+client.once('ready', () => {
+    console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+});
 
-        const content = message.content;
-
-        // Listen for the "starry" trigger word
-        if (content.toLowerCase().startsWith('starry, ')) {
-            // 'starry, ' is exactly 8 characters long, so we slice from index 8
-            const args = content.slice(8).trim().split(/ +/);
-            const command = args.shift().toLowerCase();
-            const text = args.join(' ');
-
-            try {
-                // ==========================================
-                // 🗣️ 1. ECHO COMMAND (Make the bot speak)
-                // ==========================================
-                // Usage: starry, say Hello everyone!
-                if (command === 'say') {
-                    await message.delete(); // Silently delete your trigger message
-                    return message.channel.send(text);
-                }
-
-                // ==========================================
-                // 🎮 2. STATUS COMMAND (Change bot activity)
-                // ==========================================
-                // Usage: starry, setstatus Watching over the server
-                if (command === 'setstatus') {
-                    client.user.setActivity(text);
-                    return message.reply(`✅ System activity updated to: **${text}**`);
-                }
-
-                // ==========================================
-                // 💻 3. EVAL COMMAND (Absolute God Mode)
-                // ==========================================
-                // Usage: starry, eval message.channel.send('I am alive!')
-                if (command === 'eval') {
-                    if (!text) return message.reply('❌ Awaiting instructions, boss.');
-                    
-                    // Evaluate the raw javascript code
-                    let evaled = eval(text);
-                    
-                    // If the code returns a promise, await it
-                    if (evaled instanceof Promise) evaled = await evaled;
-                    
-                    // Convert object outputs to readable strings
-                    if (typeof evaled !== 'string') {
-                        evaled = require('util').inspect(evaled, { depth: 0 });
-                    }
-
-                    // Format the output cleanly
-                    const embed = new EmbedBuilder()
-                        .setColor('#5865F2')
-                        .setTitle('🌟 Starry System Terminal')
-                        .addFields(
-                            { name: '📥 Input', value: `\`\`\`js\n${text}\n\`\`\`` },
-                            { name: '📤 Output', value: `\`\`\`js\n${evaled.substring(0, 1000)}\n\`\`\`` }
-                        )
-                        .setTimestamp();
-                    
-                    return message.reply({ embeds: [embed] });
-                }
-
-            } catch (err) {
-                // If your code fails, Starry tells you what went wrong
-                return message.reply(`❌ **System Malfunction:** \`${err.message}\``);
-            }
-        }
-    });
+// ==========================================
+// 4. MODULE LOADERS (Based on your system logs)
+// ==========================================
+const loadModule = (name, path) => {
+    try {
+        require(path)(client);
+        console.log(`✅ ${name} Module Loaded`);
+    } catch (err) {
+        console.error(`❌ Failed to load ${name}:`, err);
+    }
 };
-              
+
+// Loading all features in the exact order from your previous successful boots
+loadModule('Moderation', './moderation.js');
+loadModule('Automod', './automod.js');
+loadModule('Premium', './premium.js');
+loadModule('Translator', './translator.js');
+loadModule('Reaction Roles', './reactionroles.js');
+loadModule('Canvas Image Gen', './canvasimagegen.js');
+loadModule('Music', './music.js');
+loadModule('Help', './help.js');
+loadModule('AI', './ai.js');
+loadModule('Leveling', './leveling.js');
+loadModule('Starry Protocol', './starry.js'); // The new developer terminal!
+
+// ==========================================
+// 5. LOGIN TO DISCORD
+// ==========================================
+client.login(process.env.TOKEN);
