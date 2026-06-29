@@ -2,10 +2,11 @@ const { PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-// A JSON file to save the toggle states so they survive Render restarts
+// 👑 THE MASTER KEY: Paste your personal Discord User ID here
+const OWNER_ID = '1465049039153135639'; 
+
 const settingsPath = path.join(__dirname, 'punishmentSettings.json');
 
-// Helper functions to read and write settings
 function readPunishSettings() {
     try {
         if (!fs.existsSync(settingsPath)) {
@@ -30,11 +31,10 @@ module.exports = (client) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. MODERATION ACTIONS (Your original functions)
+    // 1. MODERATION ACTIONS
     // ==========================================
     client.autoKick = async function(member, reason = "Automated Kick") {
         if (!member.kickable) return false;
-        
         try {
             await member.kick(reason);
             console.log(`[AutoMod] Kicked ${member.user.tag}: ${reason}`);
@@ -47,7 +47,6 @@ module.exports = (client) => {
 
     client.autoBan = async function(member, reason = "Automated Ban") {
         if (!member.bannable) return false;
-        
         try {
             await member.ban({ reason: reason });
             console.log(`[AutoMod] Banned ${member.user.tag}: ${reason}`);
@@ -59,19 +58,19 @@ module.exports = (client) => {
     };
 
     // ==========================================
-    // 2. DISCORD SLASH COMMAND SYNC (MODULAR)
+    // 2. DISCORD SLASH COMMAND SYNC
     // ==========================================
     client.on('clientReady', async () => {
         try {
             await client.application.commands.create({
                 name: 'autokick',
                 description: 'Enable or disable the autokick system for this server',
-                default_member_permissions: '8', // Admin only
+                // Removed default_member_permissions so the Owner can always see it
                 options: [
                     {
                         name: 'action',
                         description: 'Enable, disable, or check status',
-                        type: 3, // STRING
+                        type: 3, 
                         required: true,
                         choices: [
                             { name: 'Enable', value: 'enable' },
@@ -85,12 +84,12 @@ module.exports = (client) => {
             await client.application.commands.create({
                 name: 'autoban',
                 description: 'Enable or disable the autoban system for this server',
-                default_member_permissions: '8', // Admin only
+                // Removed default_member_permissions so the Owner can always see it
                 options: [
                     {
                         name: 'action',
                         description: 'Enable, disable, or check status',
-                        type: 3, // STRING
+                        type: 3, 
                         required: true,
                         choices: [
                             { name: 'Enable', value: 'enable' },
@@ -100,22 +99,31 @@ module.exports = (client) => {
                     }
                 ]
             });
-            console.log('✅ Autokick/Autoban Slash Commands Added');
+            console.log('✅ Autokick/Autoban Slash Commands Added (Owner Bypass Enabled)');
         } catch (error) {
             console.error('❌ Failed to add punish slash commands:', error);
         }
     });
 
     // ==========================================
-    // 3. SLASH COMMAND LOGIC
+    // 3. SLASH COMMAND LOGIC (With Master Key)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
         if (interaction.commandName === 'autokick' || interaction.commandName === 'autoban') {
+            
+            // 👑 THE GUARD: Check if the user is an Admin OR the Bot Owner
+            const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+            const isOwner = interaction.user.id === OWNER_ID;
+
+            if (!isAdmin && !isOwner) {
+                return interaction.reply({ content: '❌ You need **Administrator** permissions to use this command.', ephemeral: true });
+            }
+
             const action = interaction.options.getString('action');
             const guildId = interaction.guildId;
-            const type = interaction.commandName; // 'autokick' or 'autoban'
+            const type = interaction.commandName; 
             
             const settings = readPunishSettings();
             if (!settings[guildId]) settings[guildId] = { autokick: false, autoban: false };
@@ -134,7 +142,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 4. PREFIX COMMAND LOGIC
+    // 4. PREFIX COMMAND LOGIC (With Master Key)
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
@@ -144,12 +152,17 @@ module.exports = (client) => {
         const guildId = message.guild.id;
 
         if (command === PREFIX + 'autokick' || command === PREFIX + 'autoban') {
-            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            
+            // 👑 THE GUARD: Check if the user is an Admin OR the Bot Owner
+            const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+            const isOwner = message.author.id === OWNER_ID;
+
+            if (!isAdmin && !isOwner) {
                 return message.reply('❌ You need **Administrator** permissions to use this command.');
             }
 
             const action = args[0]?.toLowerCase();
-            const type = command.replace(PREFIX, ''); // Gets 'autokick' or 'autoban'
+            const type = command.replace(PREFIX, ''); 
 
             if (!action || !['enable', 'disable', 'status'].includes(action)) {
                 return message.reply(`🔹 **Usage:** \`${command} <enable/disable/status>\``);
@@ -172,42 +185,31 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 5. SUS PROFILE DETECTION (WITH SYSTEM GUARDS)
+    // 5. SUS PROFILE DETECTION
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
         const guildId = member.guild.id;
         
-        // 🛑 Read current server settings
         const settings = readPunishSettings();
         const isAutobanEnabled = settings[guildId] ? settings[guildId].autoban : false;
         const isAutokickEnabled = settings[guildId] ? settings[guildId].autokick : false;
 
-        // If both systems are completely disabled, stop processing immediately to save memory
         if (!isAutobanEnabled && !isAutokickEnabled) return;
 
-        // 1. Calculate how many days old the account is
         const accountAgeMs = Date.now() - member.user.createdAt.getTime();
         const accountAgeDays = accountAgeMs / (1000 * 60 * 60 * 24);
-
-        // 2. Check if they have a custom avatar
         const hasNoAvatar = member.user.avatarURL() === null;
-
-        // 3. Check for scam keywords in their name
         const susKeywords = ["nitro", "free", "gift", "scam", "steam", "promo"];
         const lowerCaseName = member.user.username.toLowerCase();
         const hasSusName = susKeywords.some(keyword => lowerCaseName.includes(keyword));
 
-        // --- THE PUNISHMENT LOGIC ---
-        
-        // BAN TRIGGER: Name has scam keywords OR (account is less than 1 day old AND has no avatar)
         if (isAutobanEnabled) {
             if (hasSusName || (accountAgeDays < 1 && hasNoAvatar)) {
                 await client.autoBan(member, "Auto-Banned: Suspicious profile detected (Anti-Scam/Raid)");
-                return; // Stop here so we don't also try to kick them
+                return; 
             }
         }
 
-        // KICK TRIGGER: Account is just really new (under 3 days old)
         if (isAutokickEnabled) {
             if (accountAgeDays < 3) {
                 await client.autoKick(member, "Auto-Kicked: Account is too new. Please try joining again in a few days.");
@@ -216,4 +218,4 @@ module.exports = (client) => {
         }
     });
 };
-                           
+            
