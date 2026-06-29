@@ -19,6 +19,8 @@
     "libsodium-wrappers": "^0.7.13",
     "@distube/ytdl-core": "latest",
     "better-sqlite3": "^11.0.0",
-    "discord-player-youtubei":"^1.2.2"
+    "discord-player-youtubei":"^1.2.2",
+    "@google/generative-ai": "latest"
+    
   }
 }
