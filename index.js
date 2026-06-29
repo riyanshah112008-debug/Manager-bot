@@ -81,6 +81,12 @@ try {
     require('./ai.js')(client);
     console.log('✅ AI Module Loaded');
 } catch (err) { console.error('❌ Failed to load AI:', err); }
+try {
+    require('./jarvis.js')(client);
+    console.log('✅ Jarvis Protocol Loaded');
+} catch (err) { 
+    console.error('❌ Failed to load Jarvis:', err); 
+}
 
 // ==========================================
 // ANTI-CRASH SYSTEM
