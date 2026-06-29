@@ -76,7 +76,12 @@ try {
     require('./help.js')(client);
     console.log('✅ Help Module Loaded');
 } catch (err) { console.error('❌ Failed to load Help:', err); }
-        
+
+try {
+    require('./ai.js')(client);
+    console.log('✅ AI Module Loaded');
+} catch (err) { console.error('❌ Failed to load AI:', err); }
+
 // ==========================================
 // ANTI-CRASH SYSTEM
 // ==========================================
