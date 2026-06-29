@@ -45,7 +45,17 @@ module.exports = (client) => {
                 },
                 { 
                     name: '🛡️ Moderation & Automod', 
-                    value: '**Automod Controls (Admin Only):**\n`.automod <enable/disable/status>` - Server-wide master switch\n`.ignore <links/emojis/all/status> [#channel]` - Disable channel filters\n`.unignore <links/emojis/all/status> [#channel]` - Enable channel filters\n\n**Auto-Punish Controls (Admin Only):**\n`.autokick <enable/disable/status>` - Toggle auto-kick for new accounts\n`.autoban <enable/disable/status>` - Toggle auto-ban for scam profiles', 
+                    value: '**Unified Slash Controls (Admin Only):**\n' +
+                          '`/moderate toggle <module> <status>` - Toggle specialized engines (Wick, Beemo, AltDentifier, Dyno)\n' +
+                          '`/moderate autokick <enabled> [account_age]` - Configure dynamic auto-kick thresholds\n' +
+                          '`/moderate autoban <enabled> [phrase_match]` - Manage automated ban protocols\n' +
+                          '`/moderate ownerbypass <bypass>` - Control security immunity for owners\n\n' +
+                          '**Legacy Commands (Admin Only):**\n' +
+                          '`.automod <enable/disable/status>` - Server-wide master switch\n' +
+                          '`.ignore <links/emojis/all/status> [#channel]` - Disable channel filters\n' +
+                          '`.unignore <links/emojis/all/status> [#channel]` - Enable channel filters\n' +
+                          '`.autokick <enable/disable/status>` - Toggle baseline auto-kick\n' +
+                          '`.autoban <enable/disable/status>` - Toggle baseline auto-ban', 
                     inline: false 
                 },
                 { 
