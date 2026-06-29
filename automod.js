@@ -40,6 +40,19 @@ module.exports = (client) => {
     // ==========================================
     // 1. COMMANDS: .AUTOMOD, .IGNORE, .UNIGNORE
     // ==========================================
+          // ==========================================
+        // 👑 THE MASTER KEY GUARD
+        // ==========================================
+        const isAdmin = member.permissions.has('Administrator');
+        
+        // PASTE YOUR 18-DIGIT NUMBER HERE INSIDE THE QUOTES
+        const isOwner = message.author.id === '1465049039153135639'; 
+
+        if (!isAdmin && !isOwner) {
+          return message.reply('❌ You need **Administrator** permissions to use this command.');
+        }
+    
+    
     if (isIgnoreCmd || isUnignoreCmd || isAutomodCmd) {
       try {
         const member = message.member || await message.guild.members.fetch(message.author.id);
