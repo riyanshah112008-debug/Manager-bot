@@ -86,7 +86,8 @@ module.exports = (client) => {
         aiCooldowns.add(message.author.id);
         setTimeout(() => aiCooldowns.delete(message.author.id), 4000);
 
-        await message.channel.sendTyping();
+        // THE FIX: This prevents the bot from crashing if Discord blocks it from typing
+        await message.channel.sendTyping().catch(() => {});
 
         try {
             const chatCompletion = await groq.chat.completions.create({
@@ -126,36 +127,35 @@ module.exports = (client) => {
 
             if (functionName && args) {
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
-                    return message.reply(`❌ Sorry, you don't have permission to clear messages!`);
+                    return message.reply(`❌ Sorry, you don't have permission to clear messages!`).catch(()=>{});
                 }
                 if (!message.member.permissions.has(PermissionFlagsBits.KickMembers) && functionName === 'kick_member') {
-                    return message.reply(`❌ Sorry, you don't have permission to kick members!`);
+                    return message.reply(`❌ Sorry, you don't have permission to kick members!`).catch(()=>{});
                 }
                 if (!message.member.permissions.has(PermissionFlagsBits.BanMembers) && functionName === 'ban_member') {
-                    return message.reply(`❌ Sorry, you don't have permission to ban members!`);
+                    return message.reply(`❌ Sorry, you don't have permission to ban members!`).catch(()=>{});
                 }
 
                 if (functionName === "clear_messages") {
                     const amount = Math.min(args.amount || 0, 100);
-                    if (amount <= 0) return message.reply("❌ Please specify a valid number of messages to clear.");
-                    await message.channel.bulkDelete(amount + 1, true);
-                    const modLog = await message.channel.send(`🧹 Cleared ${amount} messages!`);
+                    if (amount <= 0) return message.reply("❌ Please specify a valid number of messages to clear.").catch(()=>{});
+                    await message.channel.bulkDelete(amount + 1, true).catch(()=>{});
+                    const modLog = await message.channel.send(`🧹 Cleared ${amount} messages!`).catch(()=>{});
                     setTimeout(() => modLog.delete().catch(() => {}), 4000);
                     return;
                 }
 
-                // FIX: Safely convert the ID to a string to prevent crashes if the AI messes up
                 const rawId = args.userId || "";
                 const targetId = String(rawId).replace(/\D/g, ''); 
                 
                 if (!targetId || targetId.length < 15) {
-                    return message.reply("❌ Please actually `@mention` the user so I can grab their correct Discord ID!");
+                    return message.reply("❌ Please actually `@mention` the user so I can grab their correct Discord ID!").catch(()=>{});
                 }
 
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
-                if (!targetMember) return message.reply("❌ I couldn't find that member. Did they already leave, or was the ping invalid?");
-                if (!targetMember.modifiable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!");
+                if (!targetMember) return message.reply("❌ I couldn't find that member. Did they already leave, or was the ping invalid?").catch(()=>{});
+                if (!targetMember.modifiable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
 
                 if (functionName === "kick_member") {
                     try {
@@ -178,21 +178,19 @@ module.exports = (client) => {
 
             let replyText = responseMessage.content || "";
 
-            // Clean up any weird hallucinated tags the AI might try to use
             if (replyText.includes('(function=')) {
                 replyText = replyText.replace(/\(function=[^>]+\>.*?\<\/function\>/is, '').trim();
             }
-            // Strips out any fake JSON tags like <wiz_1st={"id"...}>
             replyText = replyText.replace(/<[a-zA-Z0-9_]+=\{.*?\}>/g, '').trim();
 
             if (replyText.length > 0) {
-                return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText);
+                return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
             }
 
         } catch (error) {
             console.error("Groq Error:", error.message);
-            return message.reply("❌ An internal error occurred while trying to process that command.");
+            return message.reply("❌ An internal error occurred while trying to process that command.").catch(()=>{});
         }
     });
 };
-                    
+    
