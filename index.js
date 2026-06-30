@@ -1,6 +1,8 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
@@ -27,20 +29,26 @@ const client = new Client({
 client.commands = new Collection();
 
 // ==========================================
-// 3. LOAD COMMANDS & EVENTS FROM "Logs"
+// 3. AUTOMATIC CASE-INSENSITIVE LOGS MODULE LOADER
 // ==========================================
+// This logic checks whether your folder is named lowercase 'logs' or uppercase 'Logs'
+let logsDir = './Logs';
+if (!fs.existsSync(path.join(__dirname, 'Logs'))) {
+    if (fs.existsSync(path.join(__dirname, 'logs'))) {
+        logsDir = './logs';
+    }
+}
+
 try {
-    // Import the command and add it to our collection
-    const logsCommand = require('./Logs/logs.js');
+    const logsCommand = require(`${logsDir}/logs.js`);
     client.commands.set(logsCommand.data.name, logsCommand);
 
-    // Import the event and attach it to the client
-    const messageDeleteEvent = require('./Logs/messageDelete.js');
+    const messageDeleteEvent = require(`${logsDir}/messageDelete.js`);
     client.on(messageDeleteEvent.name, (...args) => messageDeleteEvent.execute(...args));
     
-    console.log('✅ Logs Command & Event Loaded');
+    console.log('✅ Logs Command & Event Loaded Successfully');
 } catch (error) {
-    console.error('❌ Failed to load Logs module:', error);
+    console.error('❌ Failed to load Logs module:', error.message);
 }
 
 // ==========================================
@@ -51,13 +59,8 @@ client.once(Events.ClientReady, async () => {
 
     try {
         console.log('⏳ Pushing slash commands to Discord...');
-        
-        // Grab the JSON data from all commands in our collection
         const commandsData = client.commands.map(cmd => cmd.data.toJSON());
-        
-        // Push the commands to Discord globally
         await client.application.commands.set(commandsData);
-        
         console.log('✅ Slash commands registered successfully!');
     } catch (error) {
         console.error('❌ Failed to register commands:', error);
@@ -68,20 +71,16 @@ client.once(Events.ClientReady, async () => {
 // 5. INTERACTION LISTENER (RUNS THE COMMANDS)
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
-    // If it's not a slash command, ignore it
     if (!interaction.isChatInputCommand()) return;
 
-    // Find the command in our collection
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
     try {
-        // Run the execute function inside logs.js
         await command.execute(interaction);
     } catch (error) {
         console.error(error);
         const replyPayload = { content: 'There was an error executing this command!', ephemeral: true };
-        
         if (interaction.replied || interaction.deferred) {
             await interaction.followUp(replyPayload);
         } else {
@@ -91,23 +90,25 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // ==========================================
-// 6. MODULE LOADERS (Based on your system logs)
+// 6. MODULE LOADERS
 // ==========================================
-const loadModule = (name, path) => {
+const loadModule = (name, filePath) => {
     try {
-        require(path)(client);
+        require(filePath)(client);
         console.log(`✅ ${name} Module Loaded`);
     } catch (err) {
-        console.error(`❌ Failed to load ${name}:`, err);
+        console.error(`❌ Failed to load ${name}:`, err.message);
     }
 };
 
-// Loading all features in the exact order from your previous successful boots
+// Loading all features in the exact order
 loadModule('Moderation', './moderation.js');
 loadModule('Automod', './automod.js');
 loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
-loadModule('Reaction Roles', './reactionroles.js');
+
+// WARNING: Check casing on GitHub for these files!
+loadModule('Reaction Roles', './reactionroles.js'); 
 loadModule('Canvas Image Gen', './canvasimagegen.js');
 
 loadModule('Music', './music.js');
@@ -120,3 +121,4 @@ loadModule('Starry Protocol', './starry.js');
 // 7. LOGIN TO DISCORD
 // ==========================================
 client.login(process.env.TOKEN);
+    
