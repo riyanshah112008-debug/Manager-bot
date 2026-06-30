@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
 
 // ==========================================
@@ -23,15 +23,75 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+// Create a collection to store our Slash Commands
+client.commands = new Collection();
+
 // ==========================================
-// 3. BOT READY EVENT
+// 3. LOAD COMMANDS & EVENTS FROM "Logs"
 // ==========================================
-client.once('ready', () => {
+try {
+    // Import the command and add it to our collection
+    const logsCommand = require('./Logs/logs.js');
+    client.commands.set(logsCommand.data.name, logsCommand);
+
+    // Import the event and attach it to the client
+    const messageDeleteEvent = require('./Logs/messageDelete.js');
+    client.on(messageDeleteEvent.name, (...args) => messageDeleteEvent.execute(...args));
+    
+    console.log('✅ Logs Command & Event Loaded');
+} catch (error) {
+    console.error('❌ Failed to load Logs module:', error);
+}
+
+// ==========================================
+// 4. BOT READY & DEPLOY COMMANDS
+// ==========================================
+client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+
+    try {
+        console.log('⏳ Pushing slash commands to Discord...');
+        
+        // Grab the JSON data from all commands in our collection
+        const commandsData = client.commands.map(cmd => cmd.data.toJSON());
+        
+        // Push the commands to Discord globally
+        await client.application.commands.set(commandsData);
+        
+        console.log('✅ Slash commands registered successfully!');
+    } catch (error) {
+        console.error('❌ Failed to register commands:', error);
+    }
 });
 
 // ==========================================
-// 4. MODULE LOADERS (Based on your system logs)
+// 5. INTERACTION LISTENER (RUNS THE COMMANDS)
+// ==========================================
+client.on(Events.InteractionCreate, async interaction => {
+    // If it's not a slash command, ignore it
+    if (!interaction.isChatInputCommand()) return;
+
+    // Find the command in our collection
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
+
+    try {
+        // Run the execute function inside logs.js
+        await command.execute(interaction);
+    } catch (error) {
+        console.error(error);
+        const replyPayload = { content: 'There was an error executing this command!', ephemeral: true };
+        
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(replyPayload);
+        } else {
+            await interaction.reply(replyPayload);
+        }
+    }
+});
+
+// ==========================================
+// 6. MODULE LOADERS (Based on your system logs)
 // ==========================================
 const loadModule = (name, path) => {
     try {
@@ -54,9 +114,9 @@ loadModule('Music', './music.js');
 loadModule('Help', './help.js');
 loadModule('AI', './ai.js');
 loadModule('Leveling', './leveling.js');
-loadModule('Starry Protocol', './starry.js'); // The new developer terminal!
+loadModule('Starry Protocol', './starry.js');
 
 // ==========================================
-// 5. LOGIN TO DISCORD
+// 7. LOGIN TO DISCORD
 // ==========================================
 client.login(process.env.TOKEN);
