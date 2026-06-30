@@ -81,7 +81,7 @@ module.exports = (client) => {
           }
 
           if (!settings[guildId]) {
-            settings[guildId] = { automodEnabled: true };
+            settings[guildId] = { automodEnabled: false };
           }
 
           if (action === 'status') {
