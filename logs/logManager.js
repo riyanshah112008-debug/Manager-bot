@@ -1,26 +1,33 @@
 const fs = require('fs');
 const path = require('path');
 
-// __dirname dynamically grabs the current folder (your Logs folder)
 const configPath = path.join(__dirname, 'logConfig.json');
 
-// Read the current configuration
 function getConfig() {
-    // If the file doesn't exist yet, create a blank one automatically
+    // If file doesn't exist, create it with empty braces
     if (!fs.existsSync(configPath)) {
         fs.writeFileSync(configPath, JSON.stringify({}));
     }
     
-    // Read and parse the JSON data
-    const data = fs.readFileSync(configPath, 'utf8');
-    return JSON.parse(data);
+    let data = fs.readFileSync(configPath, 'utf8').trim();
+    
+    // FIX: If the file exists but is completely empty, default to '{}' to prevent crashing
+    if (!data) {
+        data = '{}';
+        fs.writeFileSync(configPath, data);
+    }
+    
+    try {
+        return JSON.parse(data);
+    } catch (e) {
+        // If JSON is corrupted, reset it safely
+        fs.writeFileSync(configPath, JSON.stringify({}));
+        return {};
+    }
 }
 
-// Save updates to the configuration
 function saveConfig(config) {
-    // The 'null, 4' arguments format the JSON to be readable with 4 spaces of indentation
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
 }
 
-// Export the functions so your other files can use them
 module.exports = { getConfig, saveConfig };
