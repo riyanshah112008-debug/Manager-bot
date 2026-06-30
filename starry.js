@@ -56,7 +56,6 @@ const moderationTools = [
 
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
-        // Ignore other bots and empty messages
         if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
@@ -82,12 +81,9 @@ module.exports = (client) => {
         // ==========================================
         // 2. OMNIPRESENT TEXT & MODERATION
         // ==========================================
-        
-        // Silent Cooldown to prevent API spam without flooding the chat
         if (aiCooldowns.has(message.author.id)) return;
 
         aiCooldowns.add(message.author.id);
-        // Wait 4 seconds before this user can trigger the bot again
         setTimeout(() => aiCooldowns.delete(message.author.id), 4000);
 
         await message.channel.sendTyping();
@@ -95,7 +91,7 @@ module.exports = (client) => {
         try {
             const chatCompletion = await groq.chat.completions.create({
                 messages: [
-                    { role: "system", content: "You are Starry, a helpful, friendly Discord bot. You are currently in a public chat room reading everyone's messages. Keep your replies very short, conversational, and natural. You have access to moderation tools. If a user explicitly asks you to kick, ban, or clear messages, use the tool." },
+                    { role: "system", content: "You are Starry, a helpful Discord bot. You are reading a public chat room. Keep replies short and natural. You have moderation tools. If explicitly asked to kick, ban, or clear messages, you must use the tool call. Do not write the tool call as text." },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
                 model: "llama-3.1-8b-instant",
@@ -105,12 +101,31 @@ module.exports = (client) => {
 
             const responseMessage = chatCompletion.choices[0].message;
 
-            // Check if the AI decided to execute a moderation tool
-            if (responseMessage.tool_calls) {
-                const toolCall = responseMessage.tool_calls[0];
-                const args = JSON.parse(toolCall.function.arguments);
-                const functionName = toolCall.function.name;
+            let functionName = null;
+            let args = null;
 
+            // CHECK 1: Official Tool Calls (How it's supposed to work)
+            if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+                const toolCall = responseMessage.tool_calls[0];
+                functionName = toolCall.function.name;
+                args = JSON.parse(toolCall.function.arguments);
+            }
+            // CHECK 2: Fallback Parser (Catches the weird text leak in your screenshot)
+            else if (responseMessage.content && responseMessage.content.includes('(function=')) {
+                // Extracts the function name and JSON from the ugly text string
+                const match = responseMessage.content.match(/\(function=([^>]+)>(.*?)\)<\/function>/is);
+                if (match) {
+                    functionName = match[1];
+                    try {
+                        args = JSON.parse(match[2]);
+                    } catch (e) {
+                        console.error("JSON Parse Error on Fallback:", e);
+                    }
+                }
+            }
+
+            // If a moderation tool was triggered either way, execute it!
+            if (functionName && args) {
                 // 🛡️ SECURITY CHECK
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
                     return message.reply(`❌ Sorry, you don't have permission to clear messages!`);
@@ -122,7 +137,7 @@ module.exports = (client) => {
                     return message.reply(`❌ Sorry, you don't have permission to ban members!`);
                 }
 
-                // Execute Tools
+                // Execute: Clear Messages
                 if (functionName === "clear_messages") {
                     const amount = Math.min(args.amount, 100);
                     await message.channel.bulkDelete(amount + 1, true);
@@ -131,6 +146,7 @@ module.exports = (client) => {
                     return;
                 }
 
+                // Execute: Kick or Ban
                 const targetId = args.userId.replace(/[<@!>]/g, '');
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
@@ -148,15 +164,23 @@ module.exports = (client) => {
                 }
             }
 
-            // Standard text reply (USING message.reply to ping the user)
-            const replyText = responseMessage.content || "Hmm...";
-            return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText);
+            // Standard text reply logic
+            let replyText = responseMessage.content || "Hmm...";
+
+            // Clean up the reply so it doesn't print the weird code if the fallback parser caught it
+            if (replyText.includes('(function=')) {
+                replyText = replyText.replace(/\(function=[^>]+\>.*?\<\/function\>/is, '').trim();
+            }
+
+            // Only reply if there's actual text left to say!
+            if (replyText.length > 0) {
+                return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText);
+            }
 
         } catch (error) {
             console.error("Groq Error:", error.message);
-            // Silently fail so it doesn't spam errors into the chat
             return;
         }
     });
 };
-                        
+                            
