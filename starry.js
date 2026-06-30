@@ -91,7 +91,7 @@ module.exports = (client) => {
         try {
             const chatCompletion = await groq.chat.completions.create({
                 messages: [
-                    { role: "system", content: "You are Starry, a helpful Discord bot. You are reading a public chat room. Keep replies short and natural. You have moderation tools. If explicitly asked to kick, ban, or clear messages, you must use the tool call. Do not write the tool call as text." },
+                    { role: "system", content: "You are Starry, a helpful Discord bot. You are reading a public chat room. Keep replies short and natural. You have moderation tools. If explicitly asked to kick, ban, or clear messages, you must use the tool call. Always extract the numerical Discord ID from the user mention for your tool call." },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
                 model: "llama-3.1-8b-instant",
@@ -104,29 +104,24 @@ module.exports = (client) => {
             let functionName = null;
             let args = null;
 
-            // CHECK 1: Official Tool Calls (How it's supposed to work)
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
                 const toolCall = responseMessage.tool_calls[0];
                 functionName = toolCall.function.name;
                 args = JSON.parse(toolCall.function.arguments);
             }
-            // CHECK 2: Fallback Parser (Catches the weird text leak in your screenshot)
             else if (responseMessage.content && responseMessage.content.includes('(function=')) {
-                // Extracts the function name and JSON from the ugly text string
                 const match = responseMessage.content.match(/\(function=([^>]+)>(.*?)\)<\/function>/is);
                 if (match) {
                     functionName = match[1];
                     try {
                         args = JSON.parse(match[2]);
                     } catch (e) {
-                        console.error("JSON Parse Error on Fallback:", e);
+                        console.error("JSON Parse Error:", e);
                     }
                 }
             }
 
-            // If a moderation tool was triggered either way, execute it!
             if (functionName && args) {
-                // 🛡️ SECURITY CHECK
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
                     return message.reply(`❌ Sorry, you don't have permission to clear messages!`);
                 }
@@ -137,7 +132,6 @@ module.exports = (client) => {
                     return message.reply(`❌ Sorry, you don't have permission to ban members!`);
                 }
 
-                // Execute: Clear Messages
                 if (functionName === "clear_messages") {
                     const amount = Math.min(args.amount, 100);
                     await message.channel.bulkDelete(amount + 1, true);
@@ -146,41 +140,53 @@ module.exports = (client) => {
                     return;
                 }
 
-                // Execute: Kick or Ban
-                const targetId = args.userId.replace(/[<@!>]/g, '');
+                // FIX 1: Extract ONLY numbers from the AI's output. If it's empty, tell the user!
+                const targetId = args.userId.replace(/\D/g, ''); 
+                if (!targetId || targetId.length < 15) {
+                    return message.reply("❌ Please actually `@mention` the user so I can grab their correct Discord ID!");
+                }
+
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
-                if (!targetMember) return message.reply("❌ I couldn't find that member in this server.");
+                if (!targetMember) return message.reply("❌ I couldn't find that member. Did they already leave, or was the ping invalid?");
                 if (!targetMember.modifiable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!");
 
                 if (functionName === "kick_member") {
-                    await targetMember.kick(args.reason || "Kicked by Starry AI");
-                    return message.reply(`✅ Successfully kicked **${targetMember.user.tag}**.`);
+                    // FIX 2: Safely try to kick so it doesn't crash if Discord blocks it
+                    try {
+                        await targetMember.kick(args.reason || "Kicked by Starry AI");
+                        return message.reply(`✅ Successfully kicked **${targetMember.user.tag}**.`);
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the kick! Please check if I have the 'Kick Members' permission.");
+                    }
                 }
 
                 if (functionName === "ban_member") {
-                    await targetMember.ban({ reason: args.reason || "Banned by Starry AI" });
-                    return message.reply(`✅ Successfully banned **${targetMember.user.tag}**.`);
+                    // FIX 3: Safely try to ban
+                    try {
+                        await targetMember.ban({ reason: args.reason || "Banned by Starry AI" });
+                        return message.reply(`✅ Successfully banned **${targetMember.user.tag}**.`);
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the ban! Please check if I have the 'Ban Members' permission.");
+                    }
                 }
             }
 
-            // Standard text reply logic
-            let replyText = responseMessage.content || "Hmm...";
+            let replyText = responseMessage.content || "";
 
-            // Clean up the reply so it doesn't print the weird code if the fallback parser caught it
             if (replyText.includes('(function=')) {
                 replyText = replyText.replace(/\(function=[^>]+\>.*?\<\/function\>/is, '').trim();
             }
 
-            // Only reply if there's actual text left to say!
             if (replyText.length > 0) {
                 return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText);
             }
 
         } catch (error) {
             console.error("Groq Error:", error.message);
-            return;
+            // FIX 4: Actually tell you if a general crash happens instead of just typing forever
+            return message.reply("❌ An internal error occurred while trying to process that command.");
         }
     });
 };
-                            
+        
