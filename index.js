@@ -114,7 +114,7 @@ loadModule('Canvas Image Gen', './exactlyHowItIsSpelledOnGitHub.js');
 
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
-loadModule('AI', './ai.js');  <-- Added slashes to disable it!
+//loadModule('AI', './ai.js');  <-- Added slashes to disable it!
 loadModule('Leveling', './leveling.js');
 
 loadModule('Starry Protocol', './starry.js');
