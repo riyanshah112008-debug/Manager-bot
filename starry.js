@@ -141,8 +141,10 @@ module.exports = (client) => {
                     if (amount <= 0) return message.reply("❌ Please specify a valid number of messages to clear.").catch(()=>{});
                     await message.channel.bulkDelete(amount + 1, true).catch(()=>{});
                     const modLog = await message.channel.send(`🧹 Cleared ${amount} messages!`).catch(()=>{});
-                    setTimeout(() => modLog.delete().catch(() => {}), 4000);
-                    return;
+if (modLog) {
+    setTimeout(() => modLog.delete().catch(() => {}), 4000);
+}
+
                 }
 
                 const rawId = args.userId || "";
