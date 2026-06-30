@@ -107,9 +107,9 @@ loadModule('Automod', './automod.js');
 loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
 
-// WARNING: Check casing on GitHub for these files!
-loadModule('Reaction Roles', './reactionroles.js'); 
-loadModule('Canvas Image Gen', './canvasimagegen.js');
+// FIX: Match these paths EXACTLY to your filenames on GitHub (Check for Capital Letters!)
+loadModule('Reaction Roles', './reactionRoles.js'); 
+loadModule('Canvas Image Gen', './canvasImageGen.js');
 
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
