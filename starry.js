@@ -57,13 +57,13 @@ module.exports = (client) => {
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            // We removed the strict 'tools' array. Now we just tell her the secret codes.
             const chatCompletion = await groq.chat.completions.create({
                 messages: [
                     { 
                         role: "system", 
                         content: `You are Starry, a helpful Discord bot. Talk naturally. 
-                        CRITICAL RULE: You have moderation powers. If a user explicitly asks you to kick, ban, or clear messages, you MUST output a secret command block exactly like these examples:
+                        CRITICAL RULE: You have moderation powers. If a user explicitly asks you to kick, ban, or clear messages, you MUST output a secret command block. 
+                        Format it EXACTLY like these examples (NO extra letters, spaces, or words inside the brackets):
                         [CMD:KICK|ID:123456789012345678|REASON:spam]
                         [CMD:BAN|ID:123456789012345678|REASON:rules]
                         [CMD:CLEAR|AMOUNT:10]
@@ -78,8 +78,8 @@ module.exports = (client) => {
             let functionName = null;
             let args = {};
 
-            // Intercept the secret text codes
-            const cmdMatch = replyText.match(/\[CMD:(KICK|BAN|CLEAR)\|(.*?)\]/i);
+            // FIX: Added .*? inside the regex to catch random AI typos like "[k CMD:"
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|CLEAR)\|(.*?)\]/i);
             
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
@@ -97,11 +97,9 @@ module.exports = (client) => {
                     args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
                 }
                 
-                // Erase the ugly code block from her text reply so the users don't see it!
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 
-            // Execute the moderation logic if a command was caught
             if (functionName) {
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
                     return message.reply(`❌ Sorry, you don't have permission to clear messages!`).catch(()=>{});
@@ -157,7 +155,6 @@ module.exports = (client) => {
                 }
             }
 
-            // Finally, send whatever conversational text is left over
             if (replyText.length > 0) {
                 return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
             }
