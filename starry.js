@@ -58,8 +58,9 @@ module.exports = (client) => {
                 messages: [
                     { role: "system", content: "You are Starry, a helpful, friendly, and concise Discord bot. Talk like a normal person in a chat room." },
                     { role: "user", content: prompt }
-                ],model: "llama3-8b-8192", 
-
+                ],
+                model: "llama-3.1-8b-instant",
+                
             });
 
             const replyText = chatCompletion.choices[0]?.message?.content || "I'm drawing a blank right now.";
