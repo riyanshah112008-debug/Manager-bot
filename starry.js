@@ -7,68 +7,19 @@ const groq = new Groq({
 
 const aiCooldowns = new Set();
 
-const moderationTools = [
-    {
-        type: "function",
-        function: {
-            name: "clear_messages",
-            description: "Deletes a specific number of messages from the channel.",
-            parameters: {
-                type: "object",
-                properties: {
-                    amount: { type: "number", description: "The number of messages to clear (1-100)." }
-                },
-                required: ["amount"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "kick_member",
-            description: "Kicks a member from the server.",
-            parameters: {
-                type: "object",
-                properties: {
-                    userId: { type: "string", description: "The mention or ID of the user to kick." },
-                    reason: { type: "string", description: "The reason for the kick." }
-                },
-                required: ["userId"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "ban_member",
-            description: "Bans a member from the server.",
-            parameters: {
-                type: "object",
-                properties: {
-                    userId: { type: "string", description: "The mention or ID of the user to ban." },
-                    reason: { type: "string", description: "The reason for the ban." }
-                },
-                required: ["userId"]
-            }
-        }
-    }
-];
-
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
-        // 1. Ignore bots and empty messages
         if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
 
         // ==========================================
-        // IMAGE GENERATOR (.imagine)
+        // 1. IMAGE GENERATOR (.imagine)
         // ==========================================
         if (text.startsWith('.imagine ')) {
             const imagePrompt = message.content.slice(9).trim();
             if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(()=>{});
 
-            // Safety net: Stops crashing if Discord blocks the bot in this channel
             const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
             if (!replyMsg) return; 
 
@@ -84,10 +35,8 @@ module.exports = (client) => {
         }
 
         // ==========================================
-        // TEXT & MODERATION CONVERSATION
+        // 2. TEXT CONVERSATION & CUSTOM MODERATION
         // ==========================================
-        
-        // SMART TRIGGERS: Check if someone is actually talking to Starry
         const mentionsBot = message.mentions.has(client.user.id);
         const containsName = text.includes('starry');
         
@@ -99,52 +48,61 @@ module.exports = (client) => {
             } catch (err) {}
         }
 
-        // If no one said "Starry", pinged her, or replied to her... stay quiet!
         if (!mentionsBot && !containsName && !isReplyToBot) return;
 
-        // Cooldowns
         if (aiCooldowns.has(message.author.id)) return;
         aiCooldowns.add(message.author.id);
         setTimeout(() => aiCooldowns.delete(message.author.id), 4000);
 
-        // Send typing indicator safely
         await message.channel.sendTyping().catch(() => {});
 
         try {
+            // We removed the strict 'tools' array. Now we just tell her the secret codes.
             const chatCompletion = await groq.chat.completions.create({
                 messages: [
                     { 
                         role: "system", 
-                        content: "You are Starry, a helpful and friendly Discord bot. Talk naturally and conversationally like a human. DO NOT use JSON, tags, or code in your regular replies. ONLY use your moderation tools if the user explicitly asks you to kick, ban, or clear messages." 
+                        content: `You are Starry, a helpful Discord bot. Talk naturally. 
+                        CRITICAL RULE: You have moderation powers. If a user explicitly asks you to kick, ban, or clear messages, you MUST output a secret command block exactly like these examples:
+                        [CMD:KICK|ID:123456789012345678|REASON:spam]
+                        [CMD:BAN|ID:123456789012345678|REASON:rules]
+                        [CMD:CLEAR|AMOUNT:10]
+                        Always extract the raw numerical Discord ID from their mention.` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
-                model: "llama-3.1-8b-instant",
-                tools: moderationTools,
-                tool_choice: "auto"
+                model: "llama-3.1-8b-instant"
             });
 
-            const responseMessage = chatCompletion.choices[0].message;
-
+            let replyText = chatCompletion.choices[0].message.content || "";
             let functionName = null;
-            let args = null;
+            let args = {};
 
-            if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-                const toolCall = responseMessage.tool_calls[0];
-                functionName = toolCall.function.name;
-                args = JSON.parse(toolCall.function.arguments);
-            }
-            else if (responseMessage.content && responseMessage.content.includes('(function=')) {
-                const match = responseMessage.content.match(/\(function=([^>]+)>(.*?)\)<\/function>/is);
-                if (match) {
-                    functionName = match[1];
-                    try {
-                        args = JSON.parse(match[2]);
-                    } catch (e) {}
+            // Intercept the secret text codes
+            const cmdMatch = replyText.match(/\[CMD:(KICK|BAN|CLEAR)\|(.*?)\]/i);
+            
+            if (cmdMatch) {
+                const action = cmdMatch[1].toUpperCase();
+                const params = cmdMatch[2].split('|');
+                
+                if (action === 'CLEAR') {
+                    functionName = 'clear_messages';
+                    const amtMatch = params[0].match(/AMOUNT:(\d+)/i);
+                    args.amount = amtMatch ? parseInt(amtMatch[1]) : 0;
+                } else if (action === 'KICK' || action === 'BAN') {
+                    functionName = action === 'KICK' ? 'kick_member' : 'ban_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    const reasonMatch = params.find(p => p.toUpperCase().startsWith('REASON:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                    args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
                 }
+                
+                // Erase the ugly code block from her text reply so the users don't see it!
+                replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 
-            if (functionName && args) {
+            // Execute the moderation logic if a command was caught
+            if (functionName) {
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
                     return message.reply(`❌ Sorry, you don't have permission to clear messages!`).catch(()=>{});
                 }
@@ -182,7 +140,7 @@ module.exports = (client) => {
 
                 if (functionName === "kick_member") {
                     try {
-                        await targetMember.kick(args.reason || "Kicked by Starry AI");
+                        await targetMember.kick(args.reason);
                         return message.reply(`✅ Successfully kicked **${targetMember.user.tag}**.`);
                     } catch (err) {
                         return message.reply("❌ Discord blocked the kick! Check my permissions.").catch(()=>{});
@@ -191,7 +149,7 @@ module.exports = (client) => {
 
                 if (functionName === "ban_member") {
                     try {
-                        await targetMember.ban({ reason: args.reason || "Banned by Starry AI" });
+                        await targetMember.ban({ reason: args.reason });
                         return message.reply(`✅ Successfully banned **${targetMember.user.tag}**.`);
                     } catch (err) {
                         return message.reply("❌ Discord blocked the ban! Check my permissions.").catch(()=>{});
@@ -199,14 +157,7 @@ module.exports = (client) => {
                 }
             }
 
-            let replyText = responseMessage.content || "";
-
-            // Clean up hallucinated tags
-            if (replyText.includes('(function=')) {
-                replyText = replyText.replace(/\(function=[^>]+\>.*?\<\/function\>/is, '').trim();
-            }
-            replyText = replyText.replace(/<[a-zA-Z0-9_]+=\{.*?\}>/g, '').trim();
-
+            // Finally, send whatever conversational text is left over
             if (replyText.length > 0) {
                 return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
             }
@@ -217,4 +168,3 @@ module.exports = (client) => {
         }
     });
 };
-        
