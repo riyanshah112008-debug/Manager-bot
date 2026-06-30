@@ -109,7 +109,8 @@ loadModule('Translator', './translator.js');
 
 // FIX: Match these paths EXACTLY to your filenames on GitHub (Check for Capital Letters!)
 loadModule('Reaction Roles', './reactionRoles.js'); 
-loadModule('Canvas Image Gen', './canvasImageGen.js');
+loadModule('Canvas Image Gen', './exactlyHowItIsSpelledOnGitHub.js');
+
 
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
