@@ -1,68 +1,76 @@
-const { EmbedBuilder } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { Groq } = require('groq-sdk');
 
-// 👑 THE MASTER LOCK
-const OWNER_ID = '1465049039153135639'; 
+// Initialize Groq with your API key from the .env file
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+});
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Memory Variables
-let isAwake = false; // Starry starts asleep so she doesn't spam your server
-let chatSession = null; 
+// Create a simple cooldown tracker to prevent spam
+const aiCooldowns = new Set();
 
 module.exports = (client) => {
+    // Listen for any new messages
     client.on('messageCreate', async (message) => {
-        // Ignore other bots and DMs
-        if (message.author.bot || !message.guild) return;
+        // Ignore other bots to prevent infinite loops
+        if (message.author.bot || !message.content) return;
 
-        // 🛑 THE ULTIMATE GUARD: If the message isn't from you, stop immediately
-        if (message.author.id !== OWNER_ID) return;
-
-        const content = message.content.trim();
-
-        // Ignore standard prefix commands (so she doesn't reply when you type .help)
-        if (content.startsWith('.') || content.startsWith('/')) return;
-
-        const args = content.split(/ +/);
-        const command = args.shift()?.toLowerCase();
-        const text = args.join(' ');
-
-        try {
-            // ==========================================
-            // 💻 1. TERMINAL OVERRIDES (Always Active)
-            // ==========================================
-            // You can use these whether Starry is awake or asleep
-            if (command === 'say') {
-                await message.delete();
-                return message.channel.send(text);
-            }
-            if (command === 'setstatus') {
-                client.user.setActivity(text);
-                return message.reply(`✅ System activity updated to: **${text}**`);
-            }
-            if (command === 'eval') {
-                if (!text) return message.reply('❌ Awaiting instructions.');
-                let evaled = eval(text);
-                if (evaled instanceof Promise) evaled = await evaled;
-                if (typeof evaled !== 'string') evaled = require('util').inspect(evaled, { depth: 0 });
-
-                const embed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setTitle('🌟 Starry System Terminal')
-                    .addFields(
-                        { name: '📥 Input', value: `\`\`\`js\n${text}\n\`\`\`` },
-                        { name: '📤 Output', value: `\`\`\`js\n${evaled.substring(0, 1000)}\n\`\`\`` }
-                    )
-                    .setTimestamp();
-                return message.reply({ embeds: [embed] });
+        // Trigger the AI ONLY when the bot is @mentioned
+        if (message.mentions.has(client.user.id)) {
+            
+            // 1. Check Cooldown
+            if (aiCooldowns.has(message.author.id)) {
+                return message.reply('⏳ Please wait 5 seconds before asking me another question!');
             }
 
-            // ==========================================
-            // 🎙️ 2. VOICE ACTIVATION CONTROLS
-            // ==========================================
-            if (content.toLowerCase() === 'wake up') {
-                isAwake = true;
-                
+            // Clean the prompt (remove the bot mention from the text)
+            const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+            
+            if (!prompt) {
+                return message.reply("Hi there! What can I help you with today?");
+            }
+
+            // 2. Add user to cooldown for 5 seconds
+            aiCooldowns.add(message.author.id);
+            setTimeout(() => aiCooldowns.delete(message.author.id), 5000);
+
+            // Send a typing indicator so the user knows Starry is thinking
+            await message.channel.sendTyping();
+
+            try {
+                // 3. Call the Groq API
+                const chatCompletion = await groq.chat.completions.create({
+                    messages: [
+                        // The system prompt tells the bot how to act
+                        { role: "system", content: "You are Starry, a helpful, friendly, and concise Discord bot." },
+                        { role: "user", content: prompt }
+                    ],
+                    // Llama 3 8B is blazing fast and has massive free rate limits
+                    model: "llama3-8b-8192", 
+                });
+
+                const replyText = chatCompletion.choices[0]?.message?.content || "I couldn't think of anything to say.";
+
+                // Discord limits messages to 2000 characters. Slice it if it's too long.
+                if (replyText.length > 2000) {
+                    return message.reply(replyText.slice(0, 1995) + "...");
+                }
+
+                // Send the final response
+                return message.reply(replyText);
+
+            } catch (error) {
+                console.error("Groq AI Error:", error.message);
+
+                // Clean Error Handling (No ugly logs for users!)
+                if (error.status === 429) {
+                    return message.reply('⏳ **Whoa, slow down!** Even I have limits. Please wait a minute and try again.');
+                }
+
+                return message.reply('❌ **System Malfunction:** I am having trouble connecting to my AI brain right now.');
+            }
+        }
+    });
+};
                 // Initialize the AI with a conversational memory bank
                 const systemInstruction = "You are Starry, a highly advanced and loyal Discord AI assistant. You were created by Riyan. Act as his personal digital butler. Keep responses conversational, natural, and directly address him.";
                 const model = genAI.getGenerativeModel({ 
