@@ -10,6 +10,18 @@ module.exports = (client) => {
   const linkPattern = /https?:\/\/\S+/g;
   const emojiPattern = /<a?:[a-zA-Z0-9_]+:[0-9]+>|[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
 
+  // 🛡️ THE GIF/MEDIA WHITELIST
+  // Automod will ignore links if they come from these safe websites
+  const allowedDomains = [
+      'tenor.com',
+      'giphy.com',
+      'discord.com',
+      'discordapp.com',
+      'discordapp.net',
+      'media.discordapp.net',
+      'cdn.discordapp.com'
+  ];
+
   // Helper functions for JSON storage
   function readSettings() {
     try {
@@ -161,15 +173,24 @@ module.exports = (client) => {
     // 🛑 THE NEW GUARD
     if (!isServerEnabled) return;
 
+    // Grab all links from the message
     const rawLinks = message.content.match(linkPattern) || [];
+    
+    // Filter out the safe domains (GIFs, Discord media, etc.)
     const links = rawLinks.filter(link => {
         const url = link.toLowerCase();
-        return !url.includes('tenor.com') && 
-               !url.includes('giphy.com') && 
-               !url.endsWith('.gif');
+        
+        // Check if any of our safe domains are inside the URL
+        const isSafeDomain = allowedDomains.some(domain => url.includes(domain));
+        const isGifFile = url.endsWith('.gif');
+        
+        // If it is NOT safe, keep it in the list of illegal links to be punished
+        return !isSafeDomain && !isGifFile;
     });
 
     const emojis = message.content.match(emojiPattern) || [];
+    
+    // Trigger spam flags based on remaining illegal content
     const isLinkSpam = !channelSettings.links && links.length >= 1;
     const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
 
@@ -198,4 +219,4 @@ module.exports = (client) => {
     }
   });
 };
-                       
+            
