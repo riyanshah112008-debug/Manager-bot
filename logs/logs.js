@@ -5,4 +5,5 @@ const { getConfig, saveConfig } = require('./logManager');
 module.exports = {
     data: new SlashCommandBuilder()
         // ... (rest of the command remains exactly the same)
-  
+},
+    };
