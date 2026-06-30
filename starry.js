@@ -91,7 +91,10 @@ module.exports = (client) => {
         try {
             const chatCompletion = await groq.chat.completions.create({
                 messages: [
-                    { role: "system", content: "You are Starry, a helpful Discord bot. You are reading a public chat room. Keep replies short and natural. You have moderation tools. If explicitly asked to kick, ban, or clear messages, you must use the tool call. Always extract the numerical Discord ID from the user mention for your tool call." },
+                    { 
+                        role: "system", 
+                        content: "You are Starry, a helpful and friendly Discord bot. Talk naturally and conversationally like a human. DO NOT use JSON, tags, or code in your regular replies. ONLY use your moderation tools if the user explicitly asks you to kick, ban, or clear messages." 
+                    },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
                 model: "llama-3.1-8b-instant",
@@ -133,15 +136,18 @@ module.exports = (client) => {
                 }
 
                 if (functionName === "clear_messages") {
-                    const amount = Math.min(args.amount, 100);
+                    const amount = Math.min(args.amount || 0, 100);
+                    if (amount <= 0) return message.reply("❌ Please specify a valid number of messages to clear.");
                     await message.channel.bulkDelete(amount + 1, true);
                     const modLog = await message.channel.send(`🧹 Cleared ${amount} messages!`);
                     setTimeout(() => modLog.delete().catch(() => {}), 4000);
                     return;
                 }
 
-                // FIX 1: Extract ONLY numbers from the AI's output. If it's empty, tell the user!
-                const targetId = args.userId.replace(/\D/g, ''); 
+                // FIX: Safely convert the ID to a string to prevent crashes if the AI messes up
+                const rawId = args.userId || "";
+                const targetId = String(rawId).replace(/\D/g, ''); 
+                
                 if (!targetId || targetId.length < 15) {
                     return message.reply("❌ Please actually `@mention` the user so I can grab their correct Discord ID!");
                 }
@@ -152,7 +158,6 @@ module.exports = (client) => {
                 if (!targetMember.modifiable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!");
 
                 if (functionName === "kick_member") {
-                    // FIX 2: Safely try to kick so it doesn't crash if Discord blocks it
                     try {
                         await targetMember.kick(args.reason || "Kicked by Starry AI");
                         return message.reply(`✅ Successfully kicked **${targetMember.user.tag}**.`);
@@ -162,7 +167,6 @@ module.exports = (client) => {
                 }
 
                 if (functionName === "ban_member") {
-                    // FIX 3: Safely try to ban
                     try {
                         await targetMember.ban({ reason: args.reason || "Banned by Starry AI" });
                         return message.reply(`✅ Successfully banned **${targetMember.user.tag}**.`);
@@ -174,9 +178,12 @@ module.exports = (client) => {
 
             let replyText = responseMessage.content || "";
 
+            // Clean up any weird hallucinated tags the AI might try to use
             if (replyText.includes('(function=')) {
                 replyText = replyText.replace(/\(function=[^>]+\>.*?\<\/function\>/is, '').trim();
             }
+            // Strips out any fake JSON tags like <wiz_1st={"id"...}>
+            replyText = replyText.replace(/<[a-zA-Z0-9_]+=\{.*?\}>/g, '').trim();
 
             if (replyText.length > 0) {
                 return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText);
@@ -184,9 +191,8 @@ module.exports = (client) => {
 
         } catch (error) {
             console.error("Groq Error:", error.message);
-            // FIX 4: Actually tell you if a general crash happens instead of just typing forever
             return message.reply("❌ An internal error occurred while trying to process that command.");
         }
     });
 };
-        
+                    
