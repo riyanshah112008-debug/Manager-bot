@@ -63,3 +63,4 @@ module.exports = {
         }
     }
 }; // <-- This is the single, clean closing bracket that fixes your crash!
+};
