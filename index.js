@@ -1,8 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
@@ -25,65 +23,32 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// Create a collection to store our Slash Commands
+// 🛑 THE FIX: Increase Max Listeners to prevent memory leak crashes!
+client.setMaxListeners(30);
+
+// Create a collection to store older Slash Commands (just in case legacy modules use it)
 client.commands = new Collection();
 
 // ==========================================
-// 3. AUTOMATIC CASE-INSENSITIVE LOGS MODULE LOADER
-// ==========================================
-let logsDir = './Logs';
-if (!fs.existsSync(path.join(__dirname, 'Logs'))) {
-    if (fs.existsSync(path.join(__dirname, 'logs'))) {
-        logsDir = './logs';
-    }
-}
-
-try {
-    const logsCommand = require(`${logsDir}/logs.js`);
-    client.commands.set(logsCommand.data.name, logsCommand);
-    console.log(`✅ Loaded main logs command.`);
-
-    // Safely load all event listeners and FORCE it to tell us if it worked!
-    const loadLogEvent = (fileName) => {
-        const filePath = path.join(__dirname, logsDir, fileName);
-        if (fs.existsSync(filePath)) {
-            const event = require(`${logsDir}/${fileName}`);
-            client.on(event.name, (...args) => event.execute(...args));
-            console.log(`✅ Log Event Connected: ${fileName}`);
-        } else {
-            console.log(`❌ WARNING: Could not find exactly '${fileName}' in your logs folder! Check your spelling/capital letters on GitHub.`);
-        }
-    };
-
-    loadLogEvent('messageDelete.js');
-    loadLogEvent('messageUpdate.js');
-    loadLogEvent('guildMemberUpdate.js');
-    loadLogEvent('guildMemberAdd.js');
-    loadLogEvent('guildMemberRemove.js');
-
-    console.log('✅ Logs Framework Booted Up');
-} catch (error) {
-    console.error('❌ Failed to load Logs module:', error.message);
-}
-
-// ==========================================
-// 4. BOT READY & DEPLOY COMMANDS
+// 3. BOT READY & DEPLOY COMMANDS
 // ==========================================
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 
     try {
-        console.log('⏳ Pushing slash commands to Discord...');
-        const commandsData = client.commands.map(cmd => cmd.data.toJSON());
-        await client.application.commands.set(commandsData);
-        console.log('✅ Slash commands registered successfully!');
+        if (client.commands.size > 0) {
+            console.log('⏳ Pushing legacy slash commands to Discord...');
+            const commandsData = client.commands.map(cmd => cmd.data.toJSON());
+            await client.application.commands.set(commandsData);
+            console.log('✅ Legacy slash commands registered successfully!');
+        }
     } catch (error) {
         console.error('❌ Failed to register commands:', error);
     }
 });
 
 // ==========================================
-// 5. INTERACTION LISTENER (RUNS THE COMMANDS)
+// 4. INTERACTION LISTENER (FOR LEGACY COMMANDS)
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
@@ -105,7 +70,7 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // ==========================================
-// 6. MODULE LOADERS
+// 5. MASTER MODULE LOADER
 // ==========================================
 const loadModule = (name, filePath) => {
     try {
@@ -116,13 +81,12 @@ const loadModule = (name, filePath) => {
     }
 };
 
-// Loading all features in the exact order
+// Loading all features in the exact, clean order
 loadModule('Moderation', './moderation.js');
 loadModule('Automod', './automod.js');
 loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
 
-// Matches exact GitHub filenames
 loadModule('Reaction Roles', './reactionRoles.js'); 
 loadModule('Canvas Image Gen', './imageGen.js'); 
 
@@ -139,13 +103,15 @@ loadModule('Invite Tracker', './inviteTracker.js');
 loadModule('Sus Account Detector', './susAccount.js');
 loadModule('Whois Lookup', './whois.js');
 loadModule('Emoji Blocker', './emojiBlocker.js');
-loadModule('Staff Application', './modApply.js');
 loadModule('Message Purger', './clear.js');
 loadModule('Bump Tracker', './bumpTracker.js');
 loadModule('Server Stats', './serverStats.js');
 loadModule('AFK System', './afk.js');
-loadModule('Server Logs', './logs.js');
+
+// The NEW single-file advanced logs we just built
+loadModule('Server Logs', './logs.js'); 
+
 // ==========================================
-// 7. LOGIN TO DISCORD
+// 6. LOGIN TO DISCORD
 // ==========================================
 client.login(process.env.TOKEN);
