@@ -1,10 +1,8 @@
 const { REST, Routes, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const Database = require('better-sqlite3');
 
-// Initialize the SQLite database
 const db = new Database('leveling.db');
 
-// 1. Users table for tracking XP
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
         user_id TEXT,
@@ -15,7 +13,6 @@ db.exec(`
     )
 `);
 
-// 2. Settings table for tracking if leveling is enabled per server
 db.exec(`
     CREATE TABLE IF NOT EXISTS guild_settings (
         guild_id TEXT PRIMARY KEY,
@@ -28,7 +25,6 @@ const insertUser = db.prepare('INSERT INTO users (user_id, guild_id, xp, level) 
 const updateUser = db.prepare('UPDATE users SET xp = ?, level = ? WHERE user_id = ? AND guild_id = ?');
 
 const getSettings = db.prepare('SELECT leveling_enabled FROM guild_settings WHERE guild_id = ?');
-// UPSERT: Inserts a new row, or updates the existing one if the guild_id already exists
 const setSettings = db.prepare(`
     INSERT INTO guild_settings (guild_id, leveling_enabled) 
     VALUES (?, ?) 
@@ -45,9 +41,7 @@ function xpForNextLevel(currentLevel) {
 
 module.exports = (client) => {
     const PREFIX = '.';
-    // ==========================================
-    // 1. DISCORD SLASH COMMAND SYNC (MODULAR)
-    // ==========================================
+
     client.on('clientReady', async () => {
         try {
             await client.application.commands.create({
@@ -81,35 +75,28 @@ module.exports = (client) => {
         const userId = message.author.id;
         const guildId = message.guild.id;
 
-        // --- PREFIX COMMAND LOGIC ---
         if (message.content.startsWith(PREFIX)) {
             const args = message.content.slice(PREFIX.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
 
-            // TOGGLE COMMAND
             if (command === 'toggleleveling') {
                 if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                    // FIX: Added catch to prevent crash if it can't reply
                     return message.reply('❌ You need **Administrator** permissions to use this command.').catch(() => {});
                 }
 
                 const currentSetting = getSettings.get(guildId);
-                const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1; // Default is 1 (enabled)
-                const newSetting = isEnabled ? 0 : 1; // Flip the bit
+                const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1; 
+                const newSetting = isEnabled ? 0 : 1; 
 
                 setSettings.run(guildId, newSetting, newSetting);
-
-                // FIX: Added catch
                 return message.reply(`⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`).catch(() => {});
             }
 
-            // RANK COMMAND
             if (command === 'rank') {
                 const targetUser = message.mentions.users.first() || message.author;
                 const userData = getUser.get(targetUser.id, guildId);
 
                 if (!userData) {
-                    // FIX: Added catch
                     return message.reply(`❌ **${targetUser.username}** has no chatting activity recorded yet.`).catch(() => {});
                 }
 
@@ -129,20 +116,16 @@ module.exports = (client) => {
                     .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() })
                     .setTimestamp();
 
-                // FIX: Added catch
                 return message.reply({ embeds: [rankEmbed] }).catch(() => {});
             }
-            return; // Stop processing further so command usage doesn't grant XP
+            return; 
         }
 
-        // --- XP GENERATION GUARD ---
-        // Check if leveling is disabled before granting XP
         const currentSetting = getSettings.get(guildId);
         if (currentSetting && currentSetting.leveling_enabled === 0) {
-            return; // Exit silently if disabled
+            return; 
         }
 
-        // --- XP & LEVELING LOGIC ---
         const xpToAdd = 15;
         let userData = getUser.get(userId, guildId);
 
@@ -163,13 +146,15 @@ module.exports = (client) => {
                     .setDescription(`🎉 Congrats <@${userId}>! You've advanced to **Level ${newLevel}**!`)
                     .setTimestamp();
 
-                // FIX: Added the vital safety net to stop the Missing Permissions crash!
-                message.channel.send({ content: `<@${userId}>`, embeds: [levelUpEmbed] }).catch(() => {});
+                // FIX: Added the actual announcement text to the content so it never ghost-pings again!
+                message.channel.send({ 
+                    content: `🎉 Congrats <@${userId}>, you just advanced to **Level ${newLevel}**!`, 
+                    embeds: [levelUpEmbed] 
+                }).catch(() => {});
             }
         }
     });
 
-    // --- SLASH COMMAND LOGIC ---
     client.on('interactionCreate', async interaction => {
         if (!interaction.isChatInputCommand()) return;
 
@@ -179,7 +164,6 @@ module.exports = (client) => {
             const newSetting = isEnabled ? 0 : 1;
 
             setSettings.run(interaction.guildId, newSetting, newSetting);
-
             return interaction.reply({ content: `⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true }).catch(() => {});
         }
 
