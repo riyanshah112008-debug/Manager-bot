@@ -144,7 +144,7 @@ loadModule('Message Purger', './clear.js');
 loadModule('Bump Tracker', './bumpTracker.js');
 loadModule('Server Stats', './serverStats.js');
 loadModule('AFK System', './afk.js');
-
+loadModule('Server Logs', './logs.js');
 // ==========================================
 // 7. LOGIN TO DISCORD
 // ==========================================
