@@ -35,7 +35,7 @@ module.exports = (client) => {
                 },
                 { 
                     name: '📈 Leveling System', 
-                    value: '`rank` - Check your XP and Level\n`rank @user` - Check someone else\'s stats\n`toggleleveling` - Enable/Disable XP (Admin/Developer Bypass)', 
+                    value: '`/rank` or `rank` - Check your XP and Level\n`/toggleleveling` - Enable/Disable XP (Admin/Developer Bypass)', 
                     inline: false 
                 },
                 { 
@@ -49,13 +49,25 @@ module.exports = (client) => {
                           '`/moderate toggle <module> <status>` - Toggle specialized engines (Wick, Beemo, AltDentifier, Dyno)\n' +
                           '`/moderate autokick <enabled> [account_age]` - Configure dynamic auto-kick thresholds\n' +
                           '`/moderate autoban <enabled> [phrase_match]` - Manage automated ban protocols\n' +
-                          '`/moderate ownerbypass <bypass>` - Control security immunity for owners\n\n' +
+                          '`/moderate ownerbypass <bypass>` - Control security immunity for owners\n' +
+                          '`/warn <user> <reason>` - Officially warn a user\n' +
+                          '`/warnings <user>` - Check warning records\n\n' +
                           '**Legacy Commands (Admin / Developer Only):**\n' +
                           '`.automod <enable/disable/status>` - Server-wide master switch\n' +
                           '`.ignore <links/emojis/all/status> [#channel]` - Disable channel filters\n' +
                           '`.unignore <links/emojis/all/status> [#channel]` - Enable channel filters\n' +
-                          '`.autokick <enable/disable/status>` - Toggle baseline auto-kick\n' +
-                          '`.autoban <enable/disable/status>` - Toggle baseline auto-ban', 
+                          '`.autokick` / `.autoban` - Toggle baseline auto-kick & ban\n\n' +
+                          '**Passive Security Active:** Link Blocker, Emoji Spam Blocker, Sus Account Detector', 
+                    inline: false 
+                },
+                { 
+                    name: '🎫 Support Tickets', 
+                    value: '`/ticketsetup` - Spawn the support ticket panel (Admin)\n*Features: Private channels, Claim, Close, & Auto-Transcripts*', 
+                    inline: false 
+                },
+                { 
+                    name: '📊 Utility & Fun', 
+                    value: '`/whois` - Pull up a detailed ID card for any user\n`/tod` - Play Truth or Dare\n**Passive Tracking:** Advanced Server Logs, Invite Tracker', 
                     inline: false 
                 },
                 { 
@@ -76,7 +88,7 @@ module.exports = (client) => {
 
         if (message.content.trim().toLowerCase() === PREFIX + 'help') {
             const helpEmbed = buildHelpEmbed(message.author, message.guild);
-            return message.reply({ embeds: [helpEmbed] });
+            return message.reply({ embeds: [helpEmbed] }).catch(() => {});
         }
     });
 
@@ -88,7 +100,6 @@ module.exports = (client) => {
         if (interaction.commandName !== 'help') return;
 
         const helpEmbed = buildHelpEmbed(interaction.user, interaction.guild);
-        await interaction.reply({ embeds: [helpEmbed] });
+        await interaction.reply({ embeds: [helpEmbed] }).catch(() => {});
     });
 };
-              
