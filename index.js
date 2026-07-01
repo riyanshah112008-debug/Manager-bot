@@ -122,13 +122,12 @@ loadModule('Automod', './automod.js');
 loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
 
-// FIX: Match these paths EXACTLY to your filenames on GitHub (Check for Capital Letters!)
+// Matches exact GitHub filenames
 loadModule('Reaction Roles', './reactionRoles.js'); 
 loadModule('Canvas Image Gen', './imageGen.js'); 
 
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
-//loadModule('AI', './ai.js');  <-- Added slashes to disable it!
 loadModule('Leveling', './leveling.js');
 
 loadModule('Starry Protocol', './starry.js');
