@@ -206,7 +206,7 @@ module.exports = (client) => {
           await message.member.timeout(10 * 60 * 1000, "Automod: Link Spam");
           await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 10 minutes for link spam.`);
         } catch (error) {
-          await message.channel.send(`⚠️ I deleted a spam link from ${message.author.toString()}, but I cannot time them out because they possess Admin/Moderation powers.`);
+          await message.channel.send(`⚠️ I deleted a spam link from ${message.author.toString()}, but I cannot time them out because they possess Admin/Moderation powers.`).catch(() => {});
         }
       } else if (isEmojiSpam) {
         try {
