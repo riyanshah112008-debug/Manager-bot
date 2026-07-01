@@ -45,29 +45,29 @@ module.exports = (client) => {
                 },
                 { 
                     name: '🛡️ Moderation & Automod', 
-                    value: '**Unified Slash Controls (Admin / Developer Only):**\n' +
-                          '`/moderate toggle <module> <status>` - Toggle specialized engines (Wick, Beemo, AltDentifier, Dyno)\n' +
-                          '`/moderate autokick <enabled> [account_age]` - Configure dynamic auto-kick thresholds\n' +
-                          '`/moderate autoban <enabled> [phrase_match]` - Manage automated ban protocols\n' +
-                          '`/moderate ownerbypass <bypass>` - Control security immunity for owners\n' +
+                    value: '**Unified Slash Controls:**\n' +
+                          '`/moderate toggle <module> <status>` - Toggle specialized engines (Wick, Beemo, etc.)\n' +
+                          '`/moderate autokick / autoban` - Configure thresholds & protocols\n' +
+                          '`/moderate ownerbypass <bypass>` - Control security immunity\n' +
                           '`/warn <user> <reason>` - Officially warn a user\n' +
-                          '`/warnings <user>` - Check warning records\n\n' +
-                          '**Legacy Commands (Admin / Developer Only):**\n' +
+                          '`/warnings <user>` - Check warning records\n' +
+                          '`/clear <amount>` - Bulk delete up to 100 recent messages\n' +
+                          '`/mediaonly` or `.mediaonly` - Toggle Media-Only rules for a channel\n\n' +
+                          '**Legacy Commands:**\n' +
                           '`.automod <enable/disable/status>` - Server-wide master switch\n' +
-                          '`.ignore <links/emojis/all/status> [#channel]` - Disable channel filters\n' +
-                          '`.unignore <links/emojis/all/status> [#channel]` - Enable channel filters\n' +
+                          '`.ignore` / `.unignore` - Toggle channel filters (links/emojis/all)\n' +
                           '`.autokick` / `.autoban` - Toggle baseline auto-kick & ban\n\n' +
-                          '**Passive Security Active:** Link Blocker, Emoji Spam Blocker, Sus Account Detector', 
+                          '**Passive Security:** Link Blocker, Emoji Spam Blocker, Sus Account Detector, Anti-Abuse (Bad Words & Rapid Spam)', 
                     inline: false 
                 },
                 { 
-                    name: '🎫 Support Tickets', 
-                    value: '`/ticketsetup` - Spawn the support ticket panel (Admin)\n*Features: Private channels, Claim, Close, & Auto-Transcripts*', 
+                    name: '🎫 Support & Applications', 
+                    value: '`/ticketsetup` - Spawn the Support Ticket panel (Admin)\n`/applysetup` - Spawn the Staff & Partner App dashboard (Admin)\n*Features: Private channels, Claim, Close, & Auto-Transcripts*', 
                     inline: false 
                 },
                 { 
-                    name: '📊 Utility & Fun', 
-                    value: '`/whois` - Pull up a detailed ID card for any user\n`/tod` - Play Truth or Dare\n**Passive Tracking:** Advanced Server Logs, Invite Tracker', 
+                    name: '📊 Utility, Setup & Fun', 
+                    value: '`/afk` or `.afk <reason>` - Set an AFK status to warn users who ping you\n`/whois` - Pull up a detailed ID card for any user\n`/tod` - Play Truth or Dare\n`/setupstats` - Create live server member & bot count voice channels (Admin)\n`/setupcount` - Set the current channel as the Counting Game channel (Admin)\n\n**Passive Tracking:** Advanced Server Logs, Invite Tracker, Bump Tracker', 
                     inline: false 
                 },
                 { 
