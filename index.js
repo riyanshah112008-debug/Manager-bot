@@ -131,6 +131,7 @@ loadModule('Help', './help.js');
 loadModule('Leveling', './leveling.js');
 
 loadModule('Starry Protocol', './starry.js');
+loadModule('Link Blocker', './linkBlocker.js');
 
 // ==========================================
 // 7. LOGIN TO DISCORD
