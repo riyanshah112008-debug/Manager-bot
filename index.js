@@ -139,6 +139,9 @@ loadModule('Invite Tracker', './inviteTracker.js');
 loadModule('Sus Account Detector', './susAccount.js');
 loadModule('Whois Lookup', './whois.js');
 loadModule('Emoji Blocker', './emojiBlocker.js');
+loadModule('Staff Application', './modApply.js');
+loadModule('Message Purger', './clear.js');
+loadModule('Bump Tracker', './bumpTracker.js');
 
 // ==========================================
 // 7. LOGIN TO DISCORD
