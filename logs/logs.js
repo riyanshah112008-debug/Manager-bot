@@ -26,17 +26,14 @@ module.exports = {
         const subcommand = interaction.options.getSubcommand();
         const guildId = interaction.guild.id;
         
-        // Load the current configuration
         let config = getConfig();
         if (!config[guildId]) {
             config[guildId] = {};
         }
 
-        // Handle the "/logs set" command
         if (subcommand === 'set') {
             const channel = interaction.options.getChannel('channel');
             
-            // Save the chosen channel ID to your logManager
             config[guildId].logChannel = channel.id;
             saveConfig(config);
 
@@ -48,9 +45,7 @@ module.exports = {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // Handle the "/logs disable" command
         if (subcommand === 'disable') {
-            // Remove the channel ID to stop logging
             config[guildId].logChannel = null;
             saveConfig(config);
 
@@ -62,5 +57,4 @@ module.exports = {
             return interaction.reply({ embeds: [embed] });
         }
     }
-}; // <-- This is the single, clean closing bracket that fixes your crash!
 };
