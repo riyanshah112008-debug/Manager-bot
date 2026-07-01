@@ -136,6 +136,9 @@ loadModule('Truth or Dare', './truthOrDare.js');
 loadModule('Support Tickets', './tickets.js');
 loadModule('Warnings DB', './warnings.js');
 loadModule('Invite Tracker', './inviteTracker.js');
+loadModule('Sus Account Detector', './susAccount.js');
+loadModule('Whois Lookup', './whois.js');
+loadModule('Emoji Blocker', './emojiBlocker.js');
 
 // ==========================================
 // 7. LOGIN TO DISCORD
