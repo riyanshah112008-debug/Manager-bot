@@ -75,7 +75,6 @@ module.exports = (client) => {
         }
     });
 
-
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.guild) return;
 
@@ -90,7 +89,8 @@ module.exports = (client) => {
             // TOGGLE COMMAND
             if (command === 'toggleleveling') {
                 if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                    return message.reply('❌ You need **Administrator** permissions to use this command.');
+                    // FIX: Added catch to prevent crash if it can't reply
+                    return message.reply('❌ You need **Administrator** permissions to use this command.').catch(() => {});
                 }
 
                 const currentSetting = getSettings.get(guildId);
@@ -99,7 +99,8 @@ module.exports = (client) => {
 
                 setSettings.run(guildId, newSetting, newSetting);
 
-                return message.reply(`⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`);
+                // FIX: Added catch
+                return message.reply(`⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`).catch(() => {});
             }
 
             // RANK COMMAND
@@ -108,7 +109,8 @@ module.exports = (client) => {
                 const userData = getUser.get(targetUser.id, guildId);
 
                 if (!userData) {
-                    return message.reply(`❌ **${targetUser.username}** has no chatting activity recorded yet.`);
+                    // FIX: Added catch
+                    return message.reply(`❌ **${targetUser.username}** has no chatting activity recorded yet.`).catch(() => {});
                 }
 
                 const nextLevelXp = xpForNextLevel(userData.level);
@@ -127,7 +129,8 @@ module.exports = (client) => {
                     .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() })
                     .setTimestamp();
 
-                return message.reply({ embeds: [rankEmbed] });
+                // FIX: Added catch
+                return message.reply({ embeds: [rankEmbed] }).catch(() => {});
             }
             return; // Stop processing further so command usage doesn't grant XP
         }
@@ -160,7 +163,8 @@ module.exports = (client) => {
                     .setDescription(`🎉 Congrats <@${userId}>! You've advanced to **Level ${newLevel}**!`)
                     .setTimestamp();
 
-                message.channel.send({ content: `<@${userId}>`, embeds: [levelUpEmbed] });
+                // FIX: Added the vital safety net to stop the Missing Permissions crash!
+                message.channel.send({ content: `<@${userId}>`, embeds: [levelUpEmbed] }).catch(() => {});
             }
         }
     });
@@ -176,7 +180,7 @@ module.exports = (client) => {
 
             setSettings.run(interaction.guildId, newSetting, newSetting);
 
-            return interaction.reply({ content: `⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true });
+            return interaction.reply({ content: `⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true }).catch(() => {});
         }
 
         if (interaction.commandName === 'rank') {
@@ -184,7 +188,7 @@ module.exports = (client) => {
             const userData = getUser.get(targetUser.id, interaction.guildId);
 
             if (!userData) {
-                return interaction.reply({ content: `❌ **${targetUser.username}** hasn't earned any XP yet.`, ephemeral: true });
+                return interaction.reply({ content: `❌ **${targetUser.username}** hasn't earned any XP yet.`, ephemeral: true }).catch(() => {});
             }
 
             const nextLevelXp = xpForNextLevel(userData.level);
@@ -203,8 +207,7 @@ module.exports = (client) => {
                 .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL() })
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [rankEmbed] });
+            await interaction.reply({ embeds: [rankEmbed] }).catch(() => {});
         }
     });
 };
-        
