@@ -31,7 +31,6 @@ client.commands = new Collection();
 // ==========================================
 // 3. AUTOMATIC CASE-INSENSITIVE LOGS MODULE LOADER
 // ==========================================
-// This logic checks whether your folder is named lowercase 'logs' or uppercase 'Logs'
 let logsDir = './Logs';
 if (!fs.existsSync(path.join(__dirname, 'Logs'))) {
     if (fs.existsSync(path.join(__dirname, 'logs'))) {
@@ -40,13 +39,26 @@ if (!fs.existsSync(path.join(__dirname, 'Logs'))) {
 }
 
 try {
+    // Load the main /logs command
     const logsCommand = require(`${logsDir}/logs.js`);
     client.commands.set(logsCommand.data.name, logsCommand);
 
-    const messageDeleteEvent = require(`${logsDir}/messageDelete.js`);
-    client.on(messageDeleteEvent.name, (...args) => messageDeleteEvent.execute(...args));
-    
-    console.log('✅ Logs Command & Event Loaded Successfully');
+    // Safely load all event listeners for the logs
+    const loadLogEvent = (fileName) => {
+        const filePath = path.join(__dirname, logsDir, fileName);
+        if (fs.existsSync(filePath)) {
+            const event = require(`${logsDir}/${fileName}`);
+            client.on(event.name, (...args) => event.execute(...args));
+        }
+    };
+
+    loadLogEvent('messageDelete.js');
+    loadLogEvent('messageUpdate.js');
+    loadLogEvent('guildMemberUpdate.js');
+    loadLogEvent('guildMemberAdd.js');
+    loadLogEvent('guildMemberRemove.js');
+
+    console.log('✅ Logs Command & Events Loaded Successfully');
 } catch (error) {
     console.error('❌ Failed to load Logs module:', error.message);
 }
@@ -122,4 +134,3 @@ loadModule('Starry Protocol', './starry.js');
 // 7. LOGIN TO DISCORD
 // ==========================================
 client.login(process.env.TOKEN);
-    
