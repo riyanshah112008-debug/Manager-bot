@@ -142,6 +142,8 @@ loadModule('Emoji Blocker', './emojiBlocker.js');
 loadModule('Staff Application', './modApply.js');
 loadModule('Message Purger', './clear.js');
 loadModule('Bump Tracker', './bumpTracker.js');
+loadModule('Server Stats', './serverStats.js');
+loadModule('AFK System', './afk.js');
 
 // ==========================================
 // 7. LOGIN TO DISCORD
