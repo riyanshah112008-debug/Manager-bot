@@ -39,16 +39,19 @@ if (!fs.existsSync(path.join(__dirname, 'Logs'))) {
 }
 
 try {
-    // Load the main /logs command
     const logsCommand = require(`${logsDir}/logs.js`);
     client.commands.set(logsCommand.data.name, logsCommand);
+    console.log(`✅ Loaded main logs command.`);
 
-    // Safely load all event listeners for the logs
+    // Safely load all event listeners and FORCE it to tell us if it worked!
     const loadLogEvent = (fileName) => {
         const filePath = path.join(__dirname, logsDir, fileName);
         if (fs.existsSync(filePath)) {
             const event = require(`${logsDir}/${fileName}`);
             client.on(event.name, (...args) => event.execute(...args));
+            console.log(`✅ Log Event Connected: ${fileName}`);
+        } else {
+            console.log(`❌ WARNING: Could not find exactly '${fileName}' in your logs folder! Check your spelling/capital letters on GitHub.`);
         }
     };
 
@@ -58,7 +61,7 @@ try {
     loadLogEvent('guildMemberAdd.js');
     loadLogEvent('guildMemberRemove.js');
 
-    console.log('✅ Logs Command & Events Loaded Successfully');
+    console.log('✅ Logs Framework Booted Up');
 } catch (error) {
     console.error('❌ Failed to load Logs module:', error.message);
 }
