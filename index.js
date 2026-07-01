@@ -132,6 +132,10 @@ loadModule('Leveling', './leveling.js');
 
 loadModule('Starry Protocol', './starry.js');
 loadModule('Link Blocker', './linkBlocker.js');
+loadModule('Truth or Dare', './truthOrDare.js');
+loadModule('Support Tickets', './tickets.js');
+loadModule('Warnings DB', './warnings.js');
+loadModule('Invite Tracker', './inviteTracker.js');
 
 // ==========================================
 // 7. LOGIN TO DISCORD
