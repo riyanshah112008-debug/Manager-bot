@@ -114,6 +114,7 @@ loadModule('Voice Channel Manager', './voiceManager.js');
 loadModule('Emoji Stealer', './steal.js');
 loadModule('Welcome System', './welcome.js');
 loadModule('User Protection', './protect.js');
+loadModule('Goodbye System', './goodbye.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
