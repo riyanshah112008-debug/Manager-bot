@@ -115,10 +115,14 @@ loadModule('Voice Channel Manager', './voiceManager.js');
 // ==========================================
 // 6. LOGIN TO DISCORD
 // ==========================================
-// Check if Render successfully passed the token before trying to log in
 if (!process.env.TOKEN) {
     console.error("🛑 CRITICAL ERROR: The TOKEN is missing from the Environment Variables!");
     process.exit(1);
 }
+
+// --- DIAGNOSTIC CHECK ---
+console.log(`🔍 TOKEN DEBUG: The first 5 characters Render sees are: "${process.env.TOKEN.substring(0, 5)}"`);
+console.log(`🔍 TOKEN DEBUG: Total length of the token string is: ${process.env.TOKEN.length} characters`);
+// ------------------------
 
 client.login(process.env.TOKEN);
