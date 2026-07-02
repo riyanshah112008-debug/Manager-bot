@@ -112,6 +112,7 @@ loadModule('AFK System', './afk.js');
 loadModule('Server Logs', './logs.js'); 
 
 loadModule('Giveaway', './giveaway.js'); 
+loadModule('Counting Game', './count.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
