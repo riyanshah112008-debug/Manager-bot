@@ -35,7 +35,7 @@ module.exports = (client) => {
                 },
                 { 
                     name: '📈 Leveling System', 
-                    value: '`/rank` or `rank` - Check your XP and Level\n`/toggleleveling` - Enable/Disable XP (Admin/Developer Bypass)', 
+                    value: '`/rank` or `.rank` - Check your XP and Level\n`/toggleleveling` or `.toggleleveling <on/off>` - Enable/Disable XP (Admin)', 
                     inline: false 
                 },
                 { 
@@ -71,8 +71,8 @@ module.exports = (client) => {
                     inline: false 
                 },
                 { 
-                    name: '🎨 Extras', 
-                    value: 'Image Generation and Premium features are enabled.', 
+                    name: '✨ Starry AI & Extras', 
+                    value: '`.imagine <prompt>` - Generate stunning AI images\n`@Starry <message>` - Chat naturally with the AI (can kick/ban/clear if authorized by Admin)\n\n*Premium features are active on this server.*', 
                     inline: false 
                 }
             )
