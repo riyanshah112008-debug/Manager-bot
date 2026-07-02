@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
 
@@ -23,17 +22,13 @@ const client = new Client({
         GatewayIntentBits.GuildMessageReactions
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
-}); // ⬅️ This is the exact piece that was missing or broken!
+}); 
 
-// 🛑 THE FIX: Increase Max Listeners to prevent memory leak crashes!
+// Increase Max Listeners to prevent memory leak crashes
 client.setMaxListeners(30);
 
 // Create a collection to store older Slash Commands 
 client.commands = new Collection(); 
-
-// ==========================================
-// 3. BOT READY & DEPLOY COMMANDS
-// ==========================================
 
 // ==========================================
 // 3. BOT READY & DEPLOY COMMANDS
@@ -92,13 +87,10 @@ loadModule('Moderation', './moderation.js');
 loadModule('Automod', './automod.js');
 loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
-
 loadModule('Reaction Roles', './reactionRoles.js'); 
-
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
 loadModule('Leveling', './leveling.js');
-
 loadModule('Starry Protocol', './starry.js');
 loadModule('Link Blocker', './linkBlocker.js');
 loadModule('Truth or Dare', './truthOrDare.js');
@@ -112,10 +104,7 @@ loadModule('Message Purger', './clear.js');
 loadModule('Bump Tracker', './bumpTracker.js');
 loadModule('Server Stats', './serverStats.js');
 loadModule('AFK System', './afk.js');
-
-// The NEW single-file advanced logs we just built
 loadModule('Server Logs', './logs.js'); 
-
 loadModule('Giveaway', './giveaway.js'); 
 loadModule('Counting Game', './count.js');
 loadModule('Advanced Mod & Security', './advancedMod.js');
@@ -126,4 +115,10 @@ loadModule('Voice Channel Manager', './voiceManager.js');
 // ==========================================
 // 6. LOGIN TO DISCORD
 // ==========================================
+// Check if Render successfully passed the token before trying to log in
+if (!process.env.TOKEN) {
+    console.error("🛑 CRITICAL ERROR: The TOKEN is missing from the Environment Variables!");
+    process.exit(1);
+}
+
 client.login(process.env.TOKEN);
