@@ -94,7 +94,6 @@ loadModule('Premium', './premium.js');
 loadModule('Translator', './translator.js');
 
 loadModule('Reaction Roles', './reactionRoles.js'); 
-loadModule('Canvas Image Gen', './imageGen.js'); 
 
 loadModule('Music', './music.js');
 loadModule('Help', './help.js');
