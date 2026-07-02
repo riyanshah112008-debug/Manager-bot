@@ -28,6 +28,13 @@ const client = new Client({
 // 🛑 THE FIX: Increase Max Listeners to prevent memory leak crashes!
 client.setMaxListeners(30);
 
+// Create a collection to store older Slash Commands 
+client.commands = new Collection(); 
+
+// ==========================================
+// 3. BOT READY & DEPLOY COMMANDS
+// ==========================================
+
 // ==========================================
 // 3. BOT READY & DEPLOY COMMANDS
 // ==========================================
