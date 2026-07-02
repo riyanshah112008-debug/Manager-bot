@@ -113,6 +113,7 @@ loadModule('Reputation System', './rep.js');
 loadModule('Voice Channel Manager', './voiceManager.js');
 loadModule('Emoji Stealer', './steal.js');
 loadModule('Welcome System', './welcome.js');
+loadModule('User Protection', './protect.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
