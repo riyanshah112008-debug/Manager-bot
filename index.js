@@ -20,15 +20,13 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildModeration,
-     GatewayIntentBits.GuildMessageReactions // 🛑 NEW: Required to see users clicking emojis!
+        GatewayIntentBits.GuildMessageReactions
     ],
-        partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
+}); // ⬅️ This is the exact piece that was missing or broken!
 
 // 🛑 THE FIX: Increase Max Listeners to prevent memory leak crashes!
 client.setMaxListeners(30);
-
-// Create a collection to store older Slash Commands (just in case legacy modules use it)
-client.commands = new Collection();
 
 // ==========================================
 // 3. BOT READY & DEPLOY COMMANDS
