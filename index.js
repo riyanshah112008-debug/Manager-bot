@@ -112,6 +112,7 @@ loadModule('Interactive Mod Panel', './modPanel.js');
 loadModule('Reputation System', './rep.js');
 loadModule('Voice Channel Manager', './voiceManager.js');
 loadModule('Emoji Stealer', './steal.js');
+loadModule('Welcome System', './welcome.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
