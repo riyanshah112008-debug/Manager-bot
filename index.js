@@ -111,6 +111,8 @@ loadModule('AFK System', './afk.js');
 // The NEW single-file advanced logs we just built
 loadModule('Server Logs', './logs.js'); 
 
+loadModule('Giveaway', './giveaway.js'); 
+
 // ==========================================
 // 6. LOGIN TO DISCORD
 // ==========================================
