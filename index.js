@@ -22,9 +22,7 @@ const client = new Client({
         GatewayIntentBits.GuildModeration,
      GatewayIntentBits.GuildMessageReactions // 🛑 NEW: Required to see users clicking emojis!
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.Reaction]
-});
-
+        partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
 
 // 🛑 THE FIX: Increase Max Listeners to prevent memory leak crashes!
 client.setMaxListeners(30);
