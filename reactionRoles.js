@@ -1,81 +1,105 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { PermissionsBitField, EmbedBuilder } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const dbPath = path.join(__dirname, 'rrData.json');
 
 module.exports = (client) => {
-    // 1. Listen for the dynamic setup command
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.guild) return;
+    const PREFIX = '.';
 
-        // Command: .setup-role @RoleName
-        if (message.content.startsWith('.setup-role')) {
-            
-            // Protect this command so only Admins can spawn panels
-            if (!message.member.permissions.has('Administrator')) {
-                return message.reply('❌ You need Administrator permissions to use this.');
-            }
+    function getRRData() {
+        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([]));
+        return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+    }
 
-            // Grab the role they mentioned in the command
-            const role = message.mentions.roles.first();
-            
-            if (!role) {
-                return message.reply('❌ **Usage:** `.setup-role @RoleName`\nPlease tag the role you want to create a button for!');
-            }
+    function saveRRData(data) {
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    }
 
-            // Safety Check: Ensure the bot is physically allowed to give this role
-            if (message.guild.members.me.roles.highest.position <= role.position) {
-                return message.reply(`❌ I cannot give out the **${role.name}** role because it is higher than (or equal to) my own bot role! Move my role higher in the server settings.`);
-            }
-
-            // Create the Button, hiding the role.id directly inside the customId!
-            const button = new ButtonBuilder()
-                .setCustomId(`rr_${role.id}`) // e.g., 'rr_123456789'
-                .setLabel(`Get ${role.name}`)
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('✨');
-
-            const row = new ActionRowBuilder().addComponents(button);
-
-            // Send the panel to the chat
-            await message.channel.send({
-                content: `**Role Menu**\nClick the button below to get or remove the <@&${role.id}> role!`,
-                components: [row]
+    // ==========================================
+    // 1. SETUP COMMAND (Slash & Prefix)
+    // ==========================================
+    client.on('ready', async () => {
+        try {
+            await client.application.commands.create({
+                name: 'rrsetup',
+                description: 'Create a Reaction Role message (Admin Only)',
+                default_member_permissions: '8',
+                options: [
+                    { name: 'channel', description: 'Where to send the message', type: 7, required: true },
+                    { name: 'role', description: 'The role to give', type: 8, required: true },
+                    { name: 'emoji', description: 'The emoji to react with (e.g. 🍎)', type: 3, required: true },
+                    { name: 'text', description: 'The message text', type: 3, required: true }
+                ]
             });
-            
-            // Delete the Admin's setup message to keep the channel clean
-            await message.delete().catch(() => {});
+            console.log('✅ Reaction Roles Module Loaded');
+        } catch (err) {}
+    });
+
+    async function createReactionRole(channel, role, emoji, text) {
+        try {
+            const embed = new EmbedBuilder()
+                .setColor('Blurple')
+                .setTitle('Self-Assign Role')
+                .setDescription(`${text}\n\nReact with ${emoji} to get the <@&${role.id}> role!`);
+
+            const msg = await channel.send({ embeds: [embed] });
+            await msg.react(emoji);
+
+            const rrData = getRRData();
+            rrData.push({
+                messageId: msg.id,
+                channelId: channel.id,
+                guildId: channel.guild.id,
+                roleId: role.id,
+                emoji: emoji
+            });
+            saveRRData(rrData);
+            return '✅ Reaction Role created successfully!';
+        } catch (err) {
+            return `❌ Failed to create reaction role. Make sure my role is HIGHER than the role I am trying to give, and the emoji is valid.`;
+        }
+    }
+
+    // Slash Command
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'rrsetup') return;
+        const channel = interaction.options.getChannel('channel');
+        const role = interaction.options.getRole('role');
+        const emoji = interaction.options.getString('emoji');
+        const text = interaction.options.getString('text');
+
+        const response = await createReactionRole(channel, role, emoji, text);
+        await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
+    });
+
+    // ==========================================
+    // 2. ASSIGN / REMOVE ROLES ON REACTION
+    // ==========================================
+    client.on('messageReactionAdd', async (reaction, user) => {
+        if (user.bot) return;
+        if (reaction.partial) await reaction.fetch().catch(() => {});
+        if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
+
+        const rrData = getRRData();
+        const rr = rrData.find(r => r.messageId === reaction.message.id && (r.emoji === reaction.emoji.name || r.emoji === `<:${reaction.emoji.name}:${reaction.emoji.id}>`));
+        
+        if (rr) {
+            const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+            if (member) await member.roles.add(rr.roleId).catch(() => {});
         }
     });
 
-    // 2. Listen for button clicks dynamically
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isButton()) return;
+    client.on('messageReactionRemove', async (reaction, user) => {
+        if (user.bot) return;
+        if (reaction.partial) await reaction.fetch().catch(() => {});
+        if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
-        // Check if the button they clicked is one of our dynamic Reaction Roles ('rr_')
-        if (interaction.customId.startsWith('rr_')) {
-            
-            // Extract the role ID from the hidden customId (rr_123456789 -> 123456789)
-            const roleId = interaction.customId.split('_')[1];
-            const member = interaction.member;
-            const role = interaction.guild.roles.cache.get(roleId);
-
-            // If an admin deleted the role from the server, but the button still exists
-            if (!role) {
-                return interaction.reply({ content: '❌ This role no longer exists in the server!', ephemeral: true });
-            }
-
-            try {
-                // Toggle the role
-                if (member.roles.cache.has(roleId)) {
-                    await member.roles.remove(roleId);
-                    await interaction.reply({ content: `❌ I have removed the **${role.name}** role from you!`, ephemeral: true });
-                } else {
-                    await member.roles.add(roleId);
-                    await interaction.reply({ content: `✅ I have given you the **${role.name}** role!`, ephemeral: true });
-                }
-            } catch (error) {
-                console.error('Role Toggle Error:', error);
-                await interaction.reply({ content: '❌ I failed to update your roles. Please check my permissions!', ephemeral: true });
-            }
+        const rrData = getRRData();
+        const rr = rrData.find(r => r.messageId === reaction.message.id && (r.emoji === reaction.emoji.name || r.emoji === `<:${reaction.emoji.name}:${reaction.emoji.id}>`));
+        
+        if (rr) {
+            const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+            if (member) await member.roles.remove(rr.roleId).catch(() => {});
         }
     });
 };
-              
