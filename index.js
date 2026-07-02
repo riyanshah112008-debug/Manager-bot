@@ -18,10 +18,12 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates // Required for your Music module
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildModeration // 🛑 NEW: Required to read Audit Logs & track other bots!
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
+
 
 // 🛑 THE FIX: Increase Max Listeners to prevent memory leak crashes!
 client.setMaxListeners(30);
