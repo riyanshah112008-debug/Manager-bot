@@ -115,6 +115,7 @@ loadModule('Server Logs', './logs.js');
 
 loadModule('Giveaway', './giveaway.js'); 
 loadModule('Counting Game', './count.js');
+loadModule('Advanced Mod & Security', './advancedMod.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
