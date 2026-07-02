@@ -19,7 +19,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildModeration // 🛑 NEW: Required to read Audit Logs & track other bots!
+        GatewayIntentBits.GuildModeration,
+     GatewayIntentBits.GuildMessageReactions // 🛑 NEW: Required to see users clicking emojis!
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
