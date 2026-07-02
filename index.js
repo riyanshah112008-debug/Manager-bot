@@ -111,6 +111,7 @@ loadModule('Advanced Mod & Security', './advancedMod.js');
 loadModule('Interactive Mod Panel', './modPanel.js');
 loadModule('Reputation System', './rep.js');
 loadModule('Voice Channel Manager', './voiceManager.js');
+loadModule('Emoji Stealer', './steal.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
