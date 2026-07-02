@@ -121,6 +121,8 @@ loadModule('Giveaway', './giveaway.js');
 loadModule('Counting Game', './count.js');
 loadModule('Advanced Mod & Security', './advancedMod.js');
 loadModule('Interactive Mod Panel', './modPanel.js');
+loadModule('Reputation System', './rep.js');
+loadModule('Voice Channel Manager', './voiceManager.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
