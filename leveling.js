@@ -86,7 +86,24 @@ module.exports = (client) => {
 
                 const currentSetting = getSettings.get(guildId);
                 const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1; 
-                const newSetting = isEnabled ? 0 : 1; 
+                
+                let newSetting;
+                const requestedState = args[0] ? args[0].toLowerCase() : null;
+
+                // Force the state based on what the user actually typed!
+                if (requestedState === 'on') {
+                    newSetting = 1;
+                } else if (requestedState === 'off') {
+                    newSetting = 0;
+                } else {
+                    // If they just type ".toggleleveling" with no words, flip it like a light switch
+                    newSetting = isEnabled ? 0 : 1; 
+                }
+
+                // If it's already in the requested state, let them know!
+                if (newSetting === isEnabled && requestedState) {
+                    return message.reply(`⚠️ The leveling system is already **${newSetting ? 'ENABLED' : 'DISABLED'}**!`).catch(() => {});
+                }
 
                 setSettings.run(guildId, newSetting, newSetting);
                 return message.reply(`⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`).catch(() => {});
@@ -146,7 +163,6 @@ module.exports = (client) => {
                     .setDescription(`🎉 Congrats <@${userId}>! You've advanced to **Level ${newLevel}**!`)
                     .setTimestamp();
 
-                // FIX: Added the actual announcement text to the content so it never ghost-pings again!
                 message.channel.send({ 
                     content: `🎉 Congrats <@${userId}>, you just advanced to **Level ${newLevel}**!`, 
                     embeds: [levelUpEmbed] 
@@ -161,7 +177,21 @@ module.exports = (client) => {
         if (interaction.commandName === 'toggleleveling') {
             const currentSetting = getSettings.get(interaction.guildId);
             const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1;
-            const newSetting = isEnabled ? 0 : 1;
+            
+            const requestedState = interaction.options ? interaction.options.getString('state') : null; // In case you add a slash command option later
+            let newSetting;
+
+            if (requestedState === 'on') {
+                newSetting = 1;
+            } else if (requestedState === 'off') {
+                newSetting = 0;
+            } else {
+                newSetting = isEnabled ? 0 : 1;
+            }
+
+            if (newSetting === isEnabled && requestedState) {
+                return interaction.reply({ content: `⚠️ The leveling system is already **${newSetting ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true }).catch(() => {});
+            }
 
             setSettings.run(interaction.guildId, newSetting, newSetting);
             return interaction.reply({ content: `⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true }).catch(() => {});
