@@ -4,8 +4,6 @@ const path = require('path');
 const dbPath = path.join(__dirname, 'rrData.json');
 
 module.exports = (client) => {
-    const PREFIX = '.';
-
     function getRRData() {
         if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([]));
         return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
@@ -16,90 +14,144 @@ module.exports = (client) => {
     }
 
     // ==========================================
-    // 1. SETUP COMMAND (Slash & Prefix)
+    // 1. REGISTER MULTI-ROLE SETUP COMMAND
     // ==========================================
     client.on('ready', async () => {
         try {
             await client.application.commands.create({
                 name: 'rrsetup',
-                description: 'Create a Reaction Role message (Admin Only)',
+                description: 'Create a Reaction Role embed with up to 5 roles (Admin Only)',
                 default_member_permissions: '8',
                 options: [
                     { name: 'channel', description: 'Where to send the message', type: 7, required: true },
-                    { name: 'role', description: 'The role to give', type: 8, required: true },
-                    { name: 'emoji', description: 'The emoji to react with (e.g. 🍎)', type: 3, required: true },
-                    { name: 'text', description: 'The message text', type: 3, required: true }
+                    { name: 'title', description: 'The title of the embed', type: 3, required: true },
+                    { name: 'text', description: 'The main message text', type: 3, required: true },
+                    { name: 'role1', description: 'First role', type: 8, required: true },
+                    { name: 'emoji1', description: 'First emoji (e.g. 🍎)', type: 3, required: true },
+                    // Optional extra roles
+                    { name: 'role2', description: 'Second role (Optional)', type: 8, required: false },
+                    { name: 'emoji2', description: 'Second emoji (Optional)', type: 3, required: false },
+                    { name: 'role3', description: 'Third role (Optional)', type: 8, required: false },
+                    { name: 'emoji3', description: 'Third emoji (Optional)', type: 3, required: false },
+                    { name: 'role4', description: 'Fourth role (Optional)', type: 8, required: false },
+                    { name: 'emoji4', description: 'Fourth emoji (Optional)', type: 3, required: false },
+                    { name: 'role5', description: 'Fifth role (Optional)', type: 8, required: false },
+                    { name: 'emoji5', description: 'Fifth emoji (Optional)', type: 3, required: false }
                 ]
             });
-            console.log('✅ Reaction Roles Module Loaded');
+            console.log('✅ Multi-Reaction Roles Module Loaded');
         } catch (err) {}
     });
 
-    async function createReactionRole(channel, role, emoji, text) {
+    // ==========================================
+    // 2. CREATE THE EMBED & ADD REACTIONS
+    // ==========================================
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'rrsetup') return;
+        
+        const channel = interaction.options.getChannel('channel');
+        const title = interaction.options.getString('title');
+        const text = interaction.options.getString('text');
+
+        // Extract all the paired roles and emojis the user provided
+        const pairs = [];
+        for (let i = 1; i <= 5; i++) {
+            const role = interaction.options.getRole(`role${i}`);
+            const emoji = interaction.options.getString(`emoji${i}`);
+            if (role && emoji) {
+                pairs.push({ role, emoji: emoji.trim() });
+            }
+        }
+
+        // Build the embed description automatically
+        let embedDescription = `${text}\n\n`;
+        pairs.forEach(pair => {
+            embedDescription += `${pair.emoji} ━ <@&${pair.role.id}>\n\n`;
+        });
+
         try {
             const embed = new EmbedBuilder()
                 .setColor('Blurple')
-                .setTitle('Self-Assign Role')
-                .setDescription(`${text}\n\nReact with ${emoji} to get the <@&${role.id}> role!`);
+                .setTitle(title)
+                .setDescription(embedDescription)
+                .setFooter({ text: 'Click a reaction below to get your role!' });
 
             const msg = await channel.send({ embeds: [embed] });
-            await msg.react(emoji);
 
+            // React to the message and save to database
             const rrData = getRRData();
-            rrData.push({
-                messageId: msg.id,
-                channelId: channel.id,
-                guildId: channel.guild.id,
-                roleId: role.id,
-                emoji: emoji
-            });
+            
+            for (const pair of pairs) {
+                await msg.react(pair.emoji).catch(() => console.log(`Failed to react with ${pair.emoji}`));
+                
+                rrData.push({
+                    messageId: msg.id,
+                    channelId: channel.id,
+                    guildId: channel.guild.id,
+                    roleId: pair.role.id,
+                    emoji: pair.emoji
+                });
+            }
+            
             saveRRData(rrData);
-            return '✅ Reaction Role created successfully!';
+            await interaction.reply({ content: '✅ Multi-Role Embed created successfully!', ephemeral: true }).catch(() => {});
         } catch (err) {
-            return `❌ Failed to create reaction role. Make sure my role is HIGHER than the role I am trying to give, and the emoji is valid.`;
+            await interaction.reply({ content: `❌ Failed! Make sure you are using actual emojis (not text like :smile:) and that I have permissions in that channel.`, ephemeral: true }).catch(() => {});
         }
-    }
-
-    // Slash Command
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'rrsetup') return;
-        const channel = interaction.options.getChannel('channel');
-        const role = interaction.options.getRole('role');
-        const emoji = interaction.options.getString('emoji');
-        const text = interaction.options.getString('text');
-
-        const response = await createReactionRole(channel, role, emoji, text);
-        await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
     });
 
     // ==========================================
-    // 2. ASSIGN / REMOVE ROLES ON REACTION
+    // 3. ASSIGN ROLE ON REACTION
     // ==========================================
     client.on('messageReactionAdd', async (reaction, user) => {
         if (user.bot) return;
+
         if (reaction.partial) await reaction.fetch().catch(() => {});
         if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
         const rrData = getRRData();
-        const rr = rrData.find(r => r.messageId === reaction.message.id && (r.emoji === reaction.emoji.name || r.emoji === `<:${reaction.emoji.name}:${reaction.emoji.id}>`));
+        const rr = rrData.find(r => 
+            r.messageId === reaction.message.id && 
+            (r.emoji === reaction.emoji.name || r.emoji === reaction.emoji.toString())
+        );
         
         if (rr) {
             const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
-            if (member) await member.roles.add(rr.roleId).catch(() => {});
+            if (member) {
+                try {
+                    await member.roles.add(rr.roleId);
+                } catch (err) {
+                    const errorMsg = await reaction.message.channel.send(`❌ <@${user.id}>, Discord blocked me from giving you the role! My "Starry" role must be placed **ABOVE** the role you selected in Server Settings.`);
+                    setTimeout(() => errorMsg.delete().catch(() => {}), 8000);
+                }
+            }
         }
     });
 
+    // ==========================================
+    // 4. REMOVE ROLE ON UN-REACT
+    // ==========================================
     client.on('messageReactionRemove', async (reaction, user) => {
         if (user.bot) return;
+
         if (reaction.partial) await reaction.fetch().catch(() => {});
         if (reaction.message.partial) await reaction.message.fetch().catch(() => {});
 
         const rrData = getRRData();
-        const rr = rrData.find(r => r.messageId === reaction.message.id && (r.emoji === reaction.emoji.name || r.emoji === `<:${reaction.emoji.name}:${reaction.emoji.id}>`));
+        const rr = rrData.find(r => 
+            r.messageId === reaction.message.id && 
+            (r.emoji === reaction.emoji.name || r.emoji === reaction.emoji.toString())
+        );
         
         if (rr) {
             const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
-            if (member) await member.roles.remove(rr.roleId).catch(() => {});
+            if (member) {
+                try {
+                    await member.roles.remove(rr.roleId);
+                } catch (err) {
+                    console.log("Role Remove Error:", err.message);
+                }
+            }
         }
     });
 };
