@@ -78,7 +78,8 @@ module.exports = (client) => {
                 { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!`, inline: true },
                 { name: '📅 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
             )
-            .setImage('https://i.imgur.com/jXkXbK6.gif') // You can replace this URL with your server's custom banner!
+            // Updated with your specific image URL
+            .setImage('https://cdn.discordapp.com/attachments/1508799648154779772/1515357119564742847/lv_0_20260519173542.jpg?ex=6a47c24b&is=6a4670cb&hm=309e462cd4c198ffe6667d605b32750ef439d0f81e86393c9a5448c69602087d&') 
             .setFooter({ text: 'Enjoy your stay!', iconURL: member.guild.iconURL() })
             .setTimestamp();
 
