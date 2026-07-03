@@ -70,14 +70,15 @@ module.exports = (client) => {
                 messages: [
                     { 
                         role: "system", 
-                        content: `You are Starry, a helpful Discord bot with DIRECT moderation powers. NEVER say you cannot perform an action or that you don't have direct access. If a user explicitly asks you to kick, ban, clear messages, timeout/mute, or remove a timeout for a user, you MUST output a secret command block. 
+                        content: `You are Starry, a helpful Discord bot with DIRECT moderation powers. NEVER say you cannot perform an action or that you don't have direct access. If a user explicitly asks you to kick, ban, unban, clear messages, timeout/mute, or remove a timeout for a user, you MUST output a secret command block. 
                         Format it EXACTLY like these examples (NO extra letters, spaces, or words inside the brackets):
                         [CMD:KICK|ID:123456789012345678|REASON:spam]
                         [CMD:BAN|ID:123456789012345678|REASON:rules]
+                        [CMD:UNBAN|ID:123456789012345678]
                         [CMD:CLEAR|AMOUNT:10]
                         [CMD:TIMEOUT|ID:123456789012345678|MINUTES:1|REASON:spam]
                         [CMD:UNTIMEOUT|ID:123456789012345678]
-                        Always extract the raw numerical Discord ID from their mention.` 
+                        Always extract the raw numerical Discord ID from their mention or message.` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
@@ -88,8 +89,8 @@ module.exports = (client) => {
             let functionName = null;
             let args = {};
 
-            // Added UNTIMEOUT to the regex matcher
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|CLEAR|TIMEOUT|UNTIMEOUT)\|(.*?)\]/i);
+            // Added UNBAN to the regex matcher
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT)\|(.*?)\]/i);
 
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
@@ -108,8 +109,11 @@ module.exports = (client) => {
                     args.minutes = minMatch ? parseInt(minMatch.substring(8).trim()) : 1;
                     args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
                 } else if (action === 'UNTIMEOUT') {
-                    // Handling the new UNTIMEOUT command
                     functionName = 'untimeout_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                } else if (action === 'UNBAN') {
+                    functionName = 'unban_member';
                     const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
                     args.userId = idMatch ? idMatch.substring(3).trim() : "";
                 } else if (action === 'KICK' || action === 'BAN') {
@@ -131,8 +135,8 @@ module.exports = (client) => {
                 if (!message.member.permissions.has(PermissionFlagsBits.KickMembers) && functionName === 'kick_member') {
                     return message.reply(`❌ Sorry, you don't have permission to kick members!`).catch(()=>{});
                 }
-                if (!message.member.permissions.has(PermissionFlagsBits.BanMembers) && functionName === 'ban_member') {
-                    return message.reply(`❌ Sorry, you don't have permission to ban members!`).catch(()=>{});
+                if (!message.member.permissions.has(PermissionFlagsBits.BanMembers) && (functionName === 'ban_member' || functionName === 'unban_member')) {
+                    return message.reply(`❌ Sorry, you don't have permission to manage bans!`).catch(()=>{});
                 }
                 if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers) && (functionName === 'timeout_member' || functionName === 'untimeout_member')) {
                     return message.reply(`❌ Sorry, you don't have permission to manage timeouts!`).catch(()=>{});
@@ -155,12 +159,23 @@ module.exports = (client) => {
                 const targetId = String(rawId).replace(/\D/g, ''); 
 
                 if (!targetId || targetId.length < 15) {
-                    return message.reply("❌ Please actually `@mention` the user so I can grab their correct Discord ID!").catch(()=>{});
+                    return message.reply("❌ Please provide a valid Discord ID!").catch(()=>{});
                 }
 
+                // UNBAN LOGIC (Handled separately because banned users are not in the server!)
+                if (functionName === "unban_member") {
+                    try {
+                        await message.guild.members.unban(targetId);
+                        return message.reply(`✅ Successfully unbanned the user with ID **${targetId}**.`).catch(()=>{});
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the unban! Are you sure they are actually banned?").catch(()=>{});
+                    }
+                }
+
+                // For Kick, Ban, Timeout, and Untimeout - they must be in the server to fetch them
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
-                if (!targetMember) return message.reply("❌ I couldn't find that member. Did they already leave, or was the ping invalid?").catch(()=>{});
+                if (!targetMember) return message.reply("❌ I couldn't find that member in the server. Did they already leave, or was the ping invalid?").catch(()=>{});
                 if (!targetMember.manageable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
 
                 if (functionName === "timeout_member") {
@@ -175,7 +190,6 @@ module.exports = (client) => {
 
                 if (functionName === "untimeout_member") {
                     try {
-                        // Passing null as the duration completely removes the timeout in Discord.js
                         await targetMember.timeout(null, "Timeout removed by Starry AI");
                         return message.reply(`✅ Successfully removed the timeout for **${targetMember.user.tag}**.`).catch(()=>{});
                     } catch (err) {
