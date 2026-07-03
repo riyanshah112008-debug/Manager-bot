@@ -99,6 +99,8 @@ module.exports = (client) => {
         const prize = interaction.options.getString('prize');
 
         const response = await startGiveaway(interaction.channel, interaction.user, duration, winners, prize);
+        
+        // Replies ephemerally (only you can see it) so it doesn't clutter chat
         await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
     });
 
@@ -112,15 +114,21 @@ module.exports = (client) => {
             }
 
             const args = message.content.slice(PREFIX.length + 8).trim().split(/ +/);
-            if (args.length < 3) {
-                return message.reply('🔹 **Usage:** `.giveaway <duration> <winners> <prize>`\n*Example:* `.giveaway 10m 1 VIP Role`').catch(() => {});
+            if (args.length < 2) {
+                return message.reply('🔹 **Usage:** `.giveaway <duration> [winners] <prize>`\n*Example:* `.giveaway 10m 1 VIP Role`').catch(() => {});
             }
 
             const duration = args[0];
-            const winners = parseInt(args[1]);
-            const prize = args.slice(2).join(' ');
+            let winners = parseInt(args[1]);
+            let prize;
 
-            if (isNaN(winners)) return message.reply('❌ The number of winners must be a valid number!').catch(() => {});
+            // AI COMPATIBILITY FIX: If Starry (or a user) forgets to type the number of winners, default it to 1 automatically!
+            if (isNaN(winners)) {
+                winners = 1;
+                prize = args.slice(1).join(' ');
+            } else {
+                prize = args.slice(2).join(' ');
+            }
 
             const response = await startGiveaway(message.channel, message.author, duration, winners, prize);
             if (response.includes('❌')) {
@@ -149,7 +157,7 @@ module.exports = (client) => {
             try {
                 const guild = client.guilds.cache.get(giveaway.guildId);
                 if (!guild) continue;
-                
+
                 const channel = guild.channels.cache.get(giveaway.channelId);
                 if (!channel) continue;
 
@@ -169,7 +177,7 @@ module.exports = (client) => {
                         .setColor('DarkButNotBlack')
                         .setTitle(`🎉 GIVEAWAY ENDED: ${giveaway.prize} 🎉`)
                         .setDescription(`Nobody entered the giveaway! 😢\n**Hosted by:** <@${giveaway.hostId}>`);
-                    
+
                     await message.edit({ embeds: [failEmbed] }).catch(() => {});
                     await channel.send(`The giveaway for **${giveaway.prize}** has ended, but nobody entered!`).catch(() => {});
                     continue;
@@ -190,7 +198,7 @@ module.exports = (client) => {
                     .setColor('Green')
                     .setTitle(`🎉 GIVEAWAY ENDED: ${giveaway.prize} 🎉`)
                     .setDescription(`**Winners:** ${winnersText}\n**Hosted by:** <@${giveaway.hostId}>`);
-                
+
                 await message.edit({ embeds: [winEmbed] }).catch(() => {});
                 await channel.send(`Congratulations ${winnersText}! You won the **${giveaway.prize}**! 🎉`).catch(() => {});
 
