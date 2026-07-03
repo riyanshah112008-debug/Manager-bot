@@ -69,12 +69,13 @@ module.exports = (client) => {
                 messages: [
                     { 
                         role: "system", 
-                        content: `You are Starry, a helpful Discord bot. Talk naturally. 
-                        CRITICAL RULE: You have moderation powers. If a user explicitly asks you to kick, ban, or clear messages, you MUST output a secret command block. 
+                        // UPDATED: Strict instructions so it never says "I can't do that"
+                        content: `You are Starry, a helpful Discord bot with DIRECT moderation powers. NEVER say you cannot perform an action or that you don't have direct access. If a user explicitly asks you to kick, ban, clear messages, or timeout/mute a user, you MUST output a secret command block. 
                         Format it EXACTLY like these examples (NO extra letters, spaces, or words inside the brackets):
                         [CMD:KICK|ID:123456789012345678|REASON:spam]
                         [CMD:BAN|ID:123456789012345678|REASON:rules]
                         [CMD:CLEAR|AMOUNT:10]
+                        [CMD:TIMEOUT|ID:123456789012345678|MINUTES:1|REASON:spam]
                         Always extract the raw numerical Discord ID from their mention.` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
@@ -86,8 +87,8 @@ module.exports = (client) => {
             let functionName = null;
             let args = {};
 
-            // FIX: Added .*? inside the regex to catch random AI typos like "[k CMD:"
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|CLEAR)\|(.*?)\]/i);
+            // UPDATED: Added TIMEOUT to the regex matcher
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|CLEAR|TIMEOUT)\|(.*?)\]/i);
 
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
@@ -97,6 +98,15 @@ module.exports = (client) => {
                     functionName = 'clear_messages';
                     const amtMatch = params[0].match(/AMOUNT:(\d+)/i);
                     args.amount = amtMatch ? parseInt(amtMatch[1]) : 0;
+                } else if (action === 'TIMEOUT') {
+                    // NEW: Parse Timeout arguments
+                    functionName = 'timeout_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    const minMatch = params.find(p => p.toUpperCase().startsWith('MINUTES:'));
+                    const reasonMatch = params.find(p => p.toUpperCase().startsWith('REASON:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                    args.minutes = minMatch ? parseInt(minMatch.substring(8).trim()) : 1;
+                    args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
                 } else if (action === 'KICK' || action === 'BAN') {
                     functionName = action === 'KICK' ? 'kick_member' : 'ban_member';
                     const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
@@ -109,6 +119,7 @@ module.exports = (client) => {
             }
 
             if (functionName) {
+                // Permission checks
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
                     return message.reply(`❌ Sorry, you don't have permission to clear messages!`).catch(()=>{});
                 }
@@ -117,6 +128,9 @@ module.exports = (client) => {
                 }
                 if (!message.member.permissions.has(PermissionFlagsBits.BanMembers) && functionName === 'ban_member') {
                     return message.reply(`❌ Sorry, you don't have permission to ban members!`).catch(()=>{});
+                }
+                if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers) && functionName === 'timeout_member') {
+                    return message.reply(`❌ Sorry, you don't have permission to timeout members!`).catch(()=>{});
                 }
 
                 if (functionName === "clear_messages") {
@@ -143,6 +157,17 @@ module.exports = (client) => {
 
                 if (!targetMember) return message.reply("❌ I couldn't find that member. Did they already leave, or was the ping invalid?").catch(()=>{});
                 if (!targetMember.modifiable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
+
+                // NEW: Execute the Timeout
+                if (functionName === "timeout_member") {
+                    try {
+                        const durationMs = (args.minutes || 1) * 60 * 1000; // Convert minutes to milliseconds
+                        await targetMember.timeout(durationMs, args.reason);
+                        return message.reply(`✅ Successfully timed out **${targetMember.user.tag}** for ${args.minutes} minute(s).`);
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the timeout! Check my permissions.").catch(()=>{});
+                    }
+                }
 
                 if (functionName === "kick_member") {
                     try {
