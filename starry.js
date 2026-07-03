@@ -12,7 +12,7 @@ module.exports = (client) => {
         if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
-        
+
         // ==========================================
         // 1. IMAGE GENERATOR (.imagine)
         // ==========================================
@@ -42,7 +42,7 @@ module.exports = (client) => {
                 return replyMsg.edit('❌ Trouble drawing that.').catch(() => {});
             }
         }
-        
+
         // ==========================================
         // 2. TEXT CONVERSATION & CUSTOM MODERATION
         // ==========================================
@@ -154,7 +154,9 @@ module.exports = (client) => {
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
                 if (!targetMember) return message.reply("❌ I couldn't find that member. Did they already leave, or was the ping invalid?").catch(()=>{});
-                if (!targetMember.modifiable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
+                
+                // FIXED: Changed modifiable to manageable
+                if (!targetMember.manageable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
 
                 if (functionName === "timeout_member") {
                     try {
