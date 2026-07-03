@@ -80,10 +80,14 @@ module.exports = (client) => {
                         [CMD:UNTIMEOUT|ID:123456789012345678]
                         Always extract the raw numerical Discord ID from their mention.
 
-                        RULE 2 (Universal Commands): If the user asks you to do ANYTHING ELSE that a bot can do (like play music, start a giveaway, view a profile, lock a channel, etc.), you MUST output a RUN block using the '.' prefix. 
-                        Format: [RUN:.commandname parameters]
-                        Examples: [RUN:.play despacito], [RUN:.giveaway start 1h], [RUN:.lockdown]
-                        ` 
+                        RULE 2 (Universal Commands): If the user asks you to do ANYTHING ELSE that a bot can do, you MUST output a RUN block.
+                        Here is your specific Command Cheat Sheet. Use EXACTLY these formats (with a '.' prefix):
+                        - Giveaways: [RUN:.gstart <time> <prize>] (Example: [RUN:.gstart 1m Discord Nitro])
+                        - Lock Channel: [RUN:.lock]
+                        - Unlock Channel: [RUN:.unlock]
+                        - Truth or Dare: [RUN:.truth] or [RUN:.dare]
+                        - Play Music: [RUN:.play <song name>]
+                        If a user asks for a command not on this list, make your best guess using a '.' prefix (e.g., [RUN:.ping]).` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
@@ -99,15 +103,16 @@ module.exports = (client) => {
             // ==========================================
             const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
             if (runMatch) {
-                const simulatedCommand = runMatch[1].trim(); // Grabs something like ".play despacito"
+                const simulatedCommand = runMatch[1].trim(); 
+                
+                // NEW: This logs the AI's guess to your Render console so you can see why it failed!
+                console.log(`🤖 AI attempted to execute: ${simulatedCommand}`); 
+                
                 replyText = replyText.replace(runMatch[0], '').trim();
                 
-                // This tricks your bot into thinking the user directly typed the command
-                // It passes the message back to your main bot command handler!
                 message.content = simulatedCommand;
                 client.emit('messageCreate', message);
                 
-                // If the AI only outputted the run command and nothing else, stop here so it doesn't send an empty message.
                 if (replyText.length === 0) return;
             }
 
