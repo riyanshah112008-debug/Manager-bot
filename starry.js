@@ -1,4 +1,4 @@
-const { PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { Groq } = require('groq-sdk');
 
 const groq = new Groq({
@@ -9,6 +9,25 @@ const aiCooldowns = new Set();
 
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
+        
+        // ==========================================
+        // 0. DISBOARD BUMP TRACKER
+        // ==========================================
+        // We must check this BEFORE the "ignore bots" rule!
+        if (message.author.id === '302050872383242240') { // Disboard's exact Discord ID
+            if (message.embeds.length > 0 && message.embeds[0].description && message.embeds[0].description.includes('Bump done')) {
+                const bumpEmbed = new EmbedBuilder()
+                    .setColor('#3BA55C') // A nice green color
+                    .setTitle('📈 Server Bumped!')
+                    .setDescription('Thank you for bumping the server! You can bump us again in 2 hours.');
+                
+                return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
+            }
+        }
+
+        // ==========================================
+        // Ignore ALL OTHER bots or empty messages
+        // ==========================================
         if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
