@@ -81,7 +81,7 @@ module.exports = (client) => {
 
                         RULE 2 (Server Commands): If the user asks for real server actions, you MUST output a RUN block.
                         Specific Cheat Sheet:
-                        - Giveaways: [RUN:.gstart 10m Discord Nitro] (You MUST replace 10m and Discord Nitro with the exact time and prize the user asked for)
+                        - Giveaways: [RUN:.giveaway 10m Discord Nitro] (You MUST replace 10m and Discord Nitro with the exact time and prize the user asked for)
                         - Lock Channel: [RUN:.lock]
                         - Unlock Channel: [RUN:.unlock]
                         - Truth or Dare: [RUN:.truth] or [RUN:.dare]
@@ -107,10 +107,10 @@ module.exports = (client) => {
                 const simulatedCommand = runMatch[1].trim(); 
                 console.log(`🤖 AI attempted to execute: ${simulatedCommand}`); 
                 replyText = replyText.replace(runMatch[0], '').trim();
-                
+
                 message.content = simulatedCommand;
                 client.emit('messageCreate', message);
-                
+
                 if (replyText.length === 0) return;
             }
 
