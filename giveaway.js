@@ -18,7 +18,6 @@ module.exports = (client) => {
         fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
     }
 
-    // Converts strings like "10m" or "2d" into milliseconds
     function parseTime(timeStr) {
         const match = timeStr.match(/^(\d+)(s|m|h|d)$/);
         if (!match) return null;
@@ -49,8 +48,7 @@ module.exports = (client) => {
             console.log('✅ Giveaway Module Loaded');
         } catch (err) {}
 
-        // Start the background checker to end giveaways on time
-        setInterval(checkGiveaways, 10000); // Checks every 10 seconds
+        setInterval(checkGiveaways, 10000); 
     });
 
     // ==========================================
@@ -99,12 +97,10 @@ module.exports = (client) => {
         const prize = interaction.options.getString('prize');
 
         const response = await startGiveaway(interaction.channel, interaction.user, duration, winners, prize);
-        
-        // Replies ephemerally (only you can see it) so it doesn't clutter chat
         await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
     });
 
-    // Prefix Command Logic (.giveaway 10m 1 Free Nitro)
+    // Prefix Command Logic (.giveaway)
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
@@ -122,7 +118,6 @@ module.exports = (client) => {
             let winners = parseInt(args[1]);
             let prize;
 
-            // AI COMPATIBILITY FIX: If Starry (or a user) forgets to type the number of winners, default it to 1 automatically!
             if (isNaN(winners)) {
                 winners = 1;
                 prize = args.slice(1).join(' ');
@@ -134,7 +129,7 @@ module.exports = (client) => {
             if (response.includes('❌')) {
                 return message.reply(response).catch(() => {});
             } else {
-                await message.delete().catch(() => {}); // Delete their command message to keep chat clean
+                await message.delete().catch(() => {});
             }
         }
     });
@@ -146,12 +141,10 @@ module.exports = (client) => {
         let giveaways = getGiveaways();
         const now = Date.now();
 
-        // Find giveaways that are past their end time
         const ended = giveaways.filter(g => g.endsAt <= now);
-        // Keep the ones that are still running
         const active = giveaways.filter(g => g.endsAt > now);
 
-        if (ended.length > 0) saveGiveaways(active); // Save the active ones back to the DB immediately
+        if (ended.length > 0) saveGiveaways(active);
 
         for (const giveaway of ended) {
             try {
@@ -167,9 +160,7 @@ module.exports = (client) => {
                 const reaction = message.reactions.cache.get('🎉');
                 if (!reaction) continue;
 
-                // Fetch all users who reacted
                 const users = await reaction.users.fetch();
-                // Filter out bots (including Starry herself)
                 const validUsers = users.filter(u => !u.bot).map(u => u.id);
 
                 if (validUsers.length === 0) {
@@ -183,13 +174,12 @@ module.exports = (client) => {
                     continue;
                 }
 
-                // Pick random winners
                 const winners = [];
                 for (let i = 0; i < giveaway.winners; i++) {
                     if (validUsers.length === 0) break;
                     const randomIndex = Math.floor(Math.random() * validUsers.length);
                     winners.push(validUsers[randomIndex]);
-                    validUsers.splice(randomIndex, 1); // Remove the winner so they can't win twice
+                    validUsers.splice(randomIndex, 1);
                 }
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
