@@ -1,3 +1,4 @@
+const { PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
 const { Groq } = require('groq-sdk');
 const { PermissionFlagsBits } = require('discord.js');
 
