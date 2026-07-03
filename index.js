@@ -115,6 +115,7 @@ loadModule('Emoji Stealer', './steal.js');
 loadModule('Welcome System', './welcome.js');
 loadModule('User Protection', './protect.js');
 loadModule('Goodbye System', './goodbye.js');
+const banCommand = require('./ban.js'); // Adjust the path if you put it in a folder like './commands/ban.js'
 
 // ==========================================
 // 6. LOGIN TO DISCORD
