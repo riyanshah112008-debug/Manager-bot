@@ -80,13 +80,16 @@ module.exports = (client) => {
                         [CMD:UNTIMEOUT|ID:123456789012345678]
                         Always extract the raw numerical Discord ID from their mention.
 
-                        RULE 2 (Universal Commands): If the user asks you to do ANYTHING ELSE that a bot can do, you MUST output a RUN block.
-                        Here is your specific Command Cheat Sheet. Use EXACTLY these formats (with a '.' prefix):
-                        - Giveaways: [RUN:.gstart <time> <prize>] (Example: [RUN:.gstart 1m Discord Nitro])
+                        RULE 2 (Universal Commands): If the user asks you to do ANYTHING ELSE, you MUST output a RUN block. DO NOT use CMD for these.
+                        Format: [RUN:.commandname arguments]
+                        
+                        Specific Cheat Sheet:
+                        - Giveaways: [RUN:.gstart 10m Discord Nitro] (You MUST replace 10m and Discord Nitro with the exact time and prize the user asked for)
                         - Lock Channel: [RUN:.lock]
                         - Unlock Channel: [RUN:.unlock]
                         - Truth or Dare: [RUN:.truth] or [RUN:.dare]
-                        - Play Music: [RUN:.play <song name>]
+                        - Play Music: [RUN:.play despacito]
+                        
                         If a user asks for a command not on this list, make your best guess using a '.' prefix (e.g., [RUN:.ping]).` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
@@ -105,7 +108,6 @@ module.exports = (client) => {
             if (runMatch) {
                 const simulatedCommand = runMatch[1].trim(); 
                 
-                // NEW: This logs the AI's guess to your Render console so you can see why it failed!
                 console.log(`🤖 AI attempted to execute: ${simulatedCommand}`); 
                 
                 replyText = replyText.replace(runMatch[0], '').trim();
