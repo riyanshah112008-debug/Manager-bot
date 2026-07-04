@@ -103,9 +103,12 @@ module.exports = (client) => {
                         - Delete a role: [CMD:DELETEROLE|ROLE_ID:456]
                         - List a user's roles: [CMD:LISTROLES|USER_ID:123]
                         
-                        RULE 3 (Channel Permissions): To add or remove a role from a specific channel:
-                        - Add role to channel (Allow): [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
-                        - Remove role from channel (Deny): [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
+                        RULE 3 (Channel Permissions): To add or remove a role OR user from a specific channel:
+                        - Add role to channel: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
+                        - Remove role from channel: [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
+                        - Add user to channel: [CMD:USERALLOW|CHANNEL_ID:123|USER_ID:456]
+                        - Remove user from channel: [CMD:USERDENY|CHANNEL_ID:123|USER_ID:456]
+                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:USERALLOW|USER_ID:456]).
 
                         RULE 4 (Server Commands & Images): If the user asks for real server actions or to GENERATE AN IMAGE, output a RUN block:
                         - Generate an Image: [RUN:.imagine A wizard penguin]
@@ -137,7 +140,7 @@ module.exports = (client) => {
             }
 
             // NATIVE MODERATION EXECUTOR
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY)(?:\|(.*?))?\]/i);
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY)(?:\|(.*?))?\]/i);
 
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
@@ -197,6 +200,12 @@ module.exports = (client) => {
                     const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
                     args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
                     args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                } else if (action === 'USERALLOW' || action === 'USERDENY') {
+                    functionName = action === 'USERALLOW' ? 'user_allow' : 'user_deny';
+                    const cidMatch = params.find(p => p.toUpperCase().startsWith('CHANNEL_ID:'));
+                    const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:'));
+                    args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
+                    args.userId = uidMatch ? uidMatch.substring(8).trim() : "";
                 }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
@@ -204,29 +213,44 @@ module.exports = (client) => {
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
-
             if (functionName) {
                 // ==========================================
                 // CHANNEL PERMISSIONS EXECUTION
                 // ==========================================
-                if (functionName === 'channel_allow' || functionName === 'channel_deny') {
+                if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny'].includes(functionName)) {
                     if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ You need `Manage Channels` permission to do this!").catch(()=>{});
                     if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ I need `Manage Channels` permissions in my server settings to do this!").catch(()=>{});
 
                     const cleanChannelId = String(args.channelId).replace(/\D/g, '');
-                    const cleanRoleId = String(args.roleId).replace(/\D/g, '');
+                    // If she omits the channel ID because you said "this channel", it gracefully defaults to the current channel.
+                    const targetChannel = cleanChannelId ? (message.guild.channels.cache.get(cleanChannelId) || message.channel) : message.channel;
 
-                    const targetChannel = message.guild.channels.cache.get(cleanChannelId) || message.channel;
-                    const targetRole = message.guild.roles.cache.get(cleanRoleId);
+                    if (functionName === 'channel_allow' || functionName === 'channel_deny') {
+                        const cleanRoleId = String(args.roleId).replace(/\D/g, '');
+                        const targetRole = message.guild.roles.cache.get(cleanRoleId);
 
-                    if (!targetRole) return message.reply("❌ I couldn't find that role. Make sure you @mention it!").catch(()=>{});
+                        if (!targetRole) return message.reply("❌ I couldn't find that role. Make sure you @mention it!").catch(()=>{});
 
-                    if (functionName === 'channel_allow') {
-                        await targetChannel.permissionOverwrites.edit(targetRole.id, { ViewChannel: true, SendMessages: true });
-                        return message.reply(`✅ The **${targetRole.name}** role has been added to ${targetChannel} (Allowed to view and speak).`).catch(()=>{});
-                    } else {
-                        await targetChannel.permissionOverwrites.edit(targetRole.id, { ViewChannel: false });
-                        return message.reply(`✅ The **${targetRole.name}** role has been removed from ${targetChannel} (Denied viewing).`).catch(()=>{});
+                        if (functionName === 'channel_allow') {
+                            await targetChannel.permissionOverwrites.edit(targetRole.id, { ViewChannel: true, SendMessages: true });
+                            return message.reply(`✅ The **${targetRole.name}** role has been added to ${targetChannel} (Allowed to view and speak).`).catch(()=>{});
+                        } else {
+                            await targetChannel.permissionOverwrites.edit(targetRole.id, { ViewChannel: false });
+                            return message.reply(`✅ The **${targetRole.name}** role has been removed from ${targetChannel} (Denied viewing).`).catch(()=>{});
+                        }
+                    } else if (functionName === 'user_allow' || functionName === 'user_deny') {
+                        const cleanUserId = String(args.userId).replace(/\D/g, '');
+                        const targetMember = await message.guild.members.fetch(cleanUserId).catch(() => null);
+
+                        if (!targetMember) return message.reply("❌ I couldn't find that user. Make sure you @mention them!").catch(()=>{});
+
+                        if (functionName === 'user_allow') {
+                            await targetChannel.permissionOverwrites.edit(targetMember.id, { ViewChannel: true, SendMessages: true });
+                            return message.reply(`✅ **${targetMember.user.username}** has been added to ${targetChannel} (Allowed to view and speak).`).catch(()=>{});
+                        } else {
+                            await targetChannel.permissionOverwrites.edit(targetMember.id, { ViewChannel: false });
+                            return message.reply(`✅ **${targetMember.user.username}** has been removed from ${targetChannel} (Denied viewing).`).catch(()=>{});
+                        }
                     }
                 }
 
@@ -307,7 +331,6 @@ module.exports = (client) => {
                         const requested = args.permissions.split(',');
                         for (const p of requested) {
                             const cleanP = p.trim();
-                            // Find the correct permission flag regardless of how the AI capitalized it
                             const validKey = Object.keys(PermissionFlagsBits).find(key => key.toLowerCase() === cleanP.toLowerCase());
                             if (validKey) permsArray.push(PermissionFlagsBits[validKey]);
                         }
