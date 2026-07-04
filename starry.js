@@ -1,4 +1,4 @@
-const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js'); // Fixed: lower-case 'const'
 const { Groq } = require('groq-sdk');
 
 const groq = new Groq({
@@ -135,12 +135,11 @@ module.exports = (client) => {
             }
 
             // NATIVE MODERATION EXECUTOR
-            // Updated Regex: The (?:\|(.*?))? makes the parameters optional, so [CMD:LISTSERVERROLES] gets parsed correctly without crashing.
             const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES)(?:\|(.*?))?\]/i);
-            
+
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
-                const params = (cmdMatch[2] || '').split('|'); // Fallback to empty string if no params
+                const params = (cmdMatch[2] || '').split('|');
 
                 if (action === 'CLEAR') {
                     functionName = 'clear_messages';
@@ -184,7 +183,6 @@ module.exports = (client) => {
                     args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
                 } else if (action === 'LISTROLES') {
                     functionName = 'list_roles';
-                    // Check for either ID: or USER_ID: since the AI sometimes uses just ID:
                     const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:') || p.toUpperCase().startsWith('ID:'));
                     args.userId = uidMatch ? uidMatch.split(':')[1].trim() : "";
                 } else if (action === 'LISTSERVERROLES') {
@@ -192,8 +190,7 @@ module.exports = (client) => {
                 }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
-                
-                // Clean up any rogue hallucinated RUN blocks the AI might have accidentally chained after the CMD block
+
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
@@ -205,22 +202,22 @@ module.exports = (client) => {
                 if (functionName === 'list_roles') {
                     const cleanUserId = String(args.userId).replace(/\D/g, '');
                     if (!cleanUserId) return message.reply("❌ Please provide a valid user to check roles for!").catch(()=>{});
-                    
+
                     const targetMember = await message.guild.members.fetch(cleanUserId).catch(() => null);
                     if (!targetMember) return message.reply("❌ I couldn't find that user in the server.").catch(()=>{});
-                    
+
                     const roles = targetMember.roles.cache
                         .filter(r => r.name !== '@everyone')
                         .map(r => `<@&${r.id}>`)
                         .join(', ');
 
                     if (!roles) return message.reply(`**${targetMember.user.username}** has no custom roles.`).catch(()=>{});
-                    
+
                     const embed = new EmbedBuilder()
                         .setColor('#2b2d31')
                         .setTitle(`Roles for ${targetMember.user.username}`)
                         .setDescription(roles);
-                    
+
                     return message.reply({ embeds: [embed] }).catch(()=>{});
                 }
 
@@ -232,16 +229,15 @@ module.exports = (client) => {
                         .join(', ');
 
                     if (!roles) return message.reply("This server has no custom roles.").catch(()=>{});
-                    
+
                     let description = roles;
-                    // Discord limits embed descriptions to 4096 characters
                     if (description.length > 4096) description = description.slice(0, 4093) + '...';
-                    
+
                     const embed = new EmbedBuilder()
                         .setColor('#2b2d31')
                         .setTitle(`Roles in ${message.guild.name}`)
                         .setDescription(description);
-                    
+
                     return message.reply({ embeds: [embed] }).catch(()=>{});
                 }
 
@@ -278,10 +274,10 @@ module.exports = (client) => {
                 if (functionName === 'delete_role') {
                     const cleanRoleId = String(args.roleId).replace(/\D/g, '');
                     const role = message.guild.roles.cache.get(cleanRoleId);
-                    
+
                     if (!role) return message.reply("❌ I couldn't find that role. Make sure you @mention it!").catch(()=>{});
                     if (message.guild.members.me.roles.highest.position <= role.position) return message.reply("❌ I can't delete a role that is higher than my own!").catch(()=>{});
-                    
+
                     const roleName = role.name;
                     await role.delete(`Deleted by ${message.author.tag} via Starry AI`);
                     return message.reply(`✅ Poof! The **${roleName}** role was deleted.`).catch(()=>{});
@@ -290,7 +286,7 @@ module.exports = (client) => {
                 if (functionName === 'give_role' || functionName === 'remove_role') {
                     const cleanUserId = String(args.userId).replace(/\D/g, '');
                     const cleanRoleId = String(args.roleId).replace(/\D/g, '');
-                    
+
                     const targetMember = await message.guild.members.fetch(cleanUserId).catch(() => null);
                     const targetRole = message.guild.roles.cache.get(cleanRoleId);
 
@@ -337,4 +333,14 @@ module.exports = (client) => {
 
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
-                if (!targetMember) return message.reply("❌ I couldn't find that member in the server. Did 
+                // --- REPAIRED CUT-OFF CODE BELOW ---
+                if (!targetMember) return message.reply("❌ I couldn't find that member in the server. Did they already leave?").catch(()=>{});
+                if (!targetMember.manageable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
+
+                if (functionName === "timeout_member") {
+                    try {
+                        const durationMs = (args.minutes || 1) * 60 * 1000;
+                        await targetMember.timeout(durationMs, args.reason);
+                        return message.reply(`✅ Successfully timed out **${targetMember.user.tag}** for ${args.minutes} minute(s).`).catch(()=>{});
+                    } catch (err) {
+            
