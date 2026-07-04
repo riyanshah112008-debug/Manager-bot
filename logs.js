@@ -48,9 +48,9 @@ module.exports = (client) => {
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setlogs') return;
         const channel = interaction.options.getChannel('channel');
-        
+
         await setLogChannel(interaction.guild.id, channel.id);
-        
+
         await interaction.reply({ content: `✅ All server logs will now be safely saved to MongoDB and sent to <#${channel.id}>.`, ephemeral: true }).catch(() => {});
     });
 
@@ -58,12 +58,12 @@ module.exports = (client) => {
         if (message.author.bot || !message.guild) return;
         if (message.content.toLowerCase().startsWith(PREFIX + 'setlogs')) {
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return message.reply('❌ Admin only!').catch(() => {});
-            
+
             const channel = message.mentions.channels.first();
             if (!channel) return message.reply('🔹 **Usage:** `.setlogs #channel`').catch(() => {});
-            
+
             await setLogChannel(message.guild.id, channel.id);
-            
+
             return message.reply(`✅ All server logs will now be safely saved to MongoDB and sent to <#${channel.id}>.`).catch(() => {});
         }
     });
@@ -77,7 +77,7 @@ module.exports = (client) => {
 
         const logChannelId = await getLogChannel(message.guild.id);
         if (!logChannelId) return;
-        
+
         const logChannel = message.guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
@@ -116,12 +116,12 @@ module.exports = (client) => {
     // 3. MESSAGE EDITED LOGS
     // ==========================================
     client.on('messageUpdate', async (oldMessage, newMessage) => {
-        if (oldMessage.author?.bot || !oldMessage.guild) return;
+        if (!oldMessage.author || oldMessage.author.bot || !oldMessage.guild) return;
         if (oldMessage.content === newMessage.content) return; 
 
         const logChannelId = await getLogChannel(oldMessage.guild.id);
         if (!logChannelId) return;
-        
+
         const logChannel = oldMessage.guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
@@ -146,7 +146,7 @@ module.exports = (client) => {
     client.on(Events.GuildAuditLogEntryCreate, async (auditLog, guild) => {
         const logChannelId = await getLogChannel(guild.id);
         if (!logChannelId) return;
-        
+
         const logChannel = guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
@@ -205,7 +205,7 @@ module.exports = (client) => {
     client.on('guildMemberAdd', async (member) => {
         const logChannelId = await getLogChannel(member.guild.id);
         if (!logChannelId) return;
-        
+
         const logChannel = member.guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
