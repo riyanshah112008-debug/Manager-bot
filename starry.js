@@ -1,4 +1,4 @@
-const { PermissionFlagsBits, EmbedBuilder } = require('discord.js'); // Fixed: lower-case 'const'
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { Groq } = require('groq-sdk');
 
 const groq = new Groq({
@@ -44,7 +44,6 @@ module.exports = (client) => {
             try {
                 const safePrompt = encodeURIComponent(imagePrompt);
                 const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true`;
-
                 const cleanFileName = imagePrompt.replace(/\s+/g, '_') + '.png';
 
                 await message.reply({ 
@@ -333,7 +332,6 @@ module.exports = (client) => {
 
                 const targetMember = await message.guild.members.fetch(targetId).catch(() => null);
 
-                // --- REPAIRED CUT-OFF CODE BELOW ---
                 if (!targetMember) return message.reply("❌ I couldn't find that member in the server. Did they already leave?").catch(()=>{});
                 if (!targetMember.manageable) return message.reply("❌ I cannot moderate this user. Their role is higher than mine!").catch(()=>{});
 
@@ -343,15 +341,4 @@ module.exports = (client) => {
                         await targetMember.timeout(durationMs, args.reason);
                         return message.reply(`✅ Successfully timed out **${targetMember.user.tag}** for ${args.minutes} minute(s).`).catch(()=>{});
                     } catch (err) {
-            if (replyText.length > 0) {
-                return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
-            }
-
-        } catch (error) {
-            console.error("Groq Error:", error.message);
-            return message.reply("❌ An internal error occurred while trying to process that command.").catch(()=>{});
-        }
-    });
-};
-
-            
+                        return message.reply("❌ Discord blocked the timeout! Check my permissions
