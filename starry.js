@@ -9,18 +9,17 @@ const aiCooldowns = new Set();
 
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
-        
+
         // ==========================================
         // 0. DISBOARD BUMP TRACKER
         // ==========================================
-        // We must check this BEFORE the "ignore bots" rule!
-        if (message.author.id === '302050872383242240') { // Disboard's exact Discord ID
+        if (message.author.id === '302050872383242240') { 
             if (message.embeds.length > 0 && message.embeds[0].description && message.embeds[0].description.includes('Bump done')) {
                 const bumpEmbed = new EmbedBuilder()
-                    .setColor('#3BA55C') // A nice green color
+                    .setColor('#3BA55C') 
                     .setTitle('📈 Server Bumped!')
                     .setDescription('Thank you for bumping the server! You can bump us again in 2 hours.');
-                
+
                 return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
             }
         }
@@ -98,16 +97,21 @@ module.exports = (client) => {
                         [CMD:UNTIMEOUT|ID:123456789012345678]
                         Always extract the raw numerical Discord ID from their mention.
 
-                        RULE 2 (Server Commands): If the user asks for real server actions, you MUST output a RUN block.
-                        Specific Cheat Sheet:
-                        - Giveaways: [RUN:.giveaway 10m Discord Nitro] (You MUST replace 10m and Discord Nitro with the exact time and prize the user asked for)
+                        RULE 2 (Role Management): To manage roles, output EXACTLY:
+                        - Assign a role: [CMD:GIVEROLE|USER_ID:1234567890|ROLE_ID:0987654321]
+                        - Remove a role: [CMD:REMOVEROLE|USER_ID:1234567890|ROLE_ID:0987654321]
+                        - Create a role: [CMD:CREATEROLE|NAME:RoleNameHere]
+                        - Delete a role: [CMD:DELETEROLE|ROLE_ID:0987654321]
+                        Always extract the raw numerical IDs from user mentions (<@123>) and role mentions (<@&456>).
+
+                        RULE 3 (Server Commands): If the user asks for real server actions, you MUST output a RUN block.
+                        - Giveaways: [RUN:.giveaway 10m Discord Nitro] 
                         - Lock Channel: [RUN:.lock]
                         - Unlock Channel: [RUN:.unlock]
                         - Truth or Dare: [RUN:.truth] or [RUN:.dare]
                         - Play Music: [RUN:.play despacito]
                         
-                        RULE 3 (Casual Chat & Roleplay): If the user asks you a general question, says hello, or asks you to do something imaginary/fun (like cooking noodles, making coffee, or giving a hug), DO NOT use CMD or RUN blocks. Just reply naturally in text and play along enthusiastically!
-                        Example: "Starry can you make noodles?" -> "Sure, I'll make it right away! 🍜"` 
+                        RULE 4 (Casual Chat): If the user asks you a general question, says hello, or asks you to do something imaginary/fun, DO NOT use CMD or RUN blocks. Just reply naturally in text!` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
@@ -131,7 +135,7 @@ module.exports = (client) => {
             }
 
             // NATIVE MODERATION EXECUTOR
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT)\|(.*?)\]/i);
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE)\|(.*?)\]/i);
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
                 const params = cmdMatch[2].split('|');
@@ -162,12 +166,27 @@ module.exports = (client) => {
                     const reasonMatch = params.find(p => p.toUpperCase().startsWith('REASON:'));
                     args.userId = idMatch ? idMatch.substring(3).trim() : "";
                     args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
+                } else if (action === 'GIVEROLE' || action === 'REMOVEROLE') {
+                    functionName = action === 'GIVEROLE' ? 'give_role' : 'remove_role';
+                    const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.userId = uidMatch ? uidMatch.substring(8).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                } else if (action === 'CREATEROLE') {
+                    functionName = 'create_role';
+                    const nameMatch = params.find(p => p.toUpperCase().startsWith('NAME:'));
+                    args.roleName = nameMatch ? nameMatch.substring(5).trim() : "";
+                } else if (action === 'DELETEROLE') {
+                    functionName = 'delete_role';
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
                 }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 
             if (functionName) {
+                // Check general moderation permissions
                 if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && functionName === 'clear_messages') {
                     return message.reply(`❌ Sorry, you don't have permission to clear messages!`).catch(()=>{});
                 }
@@ -181,6 +200,62 @@ module.exports = (client) => {
                     return message.reply(`❌ Sorry, you don't have permission to manage timeouts!`).catch(()=>{});
                 }
 
+                // Check Role Permissions
+                if (['give_role', 'remove_role', 'create_role', 'delete_role'].includes(functionName)) {
+                    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                         return message.reply(`❌ Sorry, you don't have permission to manage roles!`).catch(()=>{});
+                    }
+                    if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                         return message.reply(`❌ I need the \`Manage Roles\` permission in my server settings to do this!`).catch(()=>{});
+                    }
+                }
+
+                // ==========================================
+                // ROLE EXECUTION LOGIC
+                // ==========================================
+                if (functionName === 'create_role') {
+                    if (!args.roleName) return message.reply("❌ Invalid role name provided.").catch(()=>{});
+                    const newRole = await message.guild.roles.create({ name: args.roleName, reason: `Created by ${message.author.tag} via Starry AI` });
+                    return message.reply(`✅ Created the role **${newRole.name}**!`).catch(()=>{});
+                }
+
+                if (functionName === 'delete_role') {
+                    const cleanRoleId = String(args.roleId).replace(/\D/g, '');
+                    const role = message.guild.roles.cache.get(cleanRoleId);
+                    
+                    if (!role) return message.reply("❌ I couldn't find that role. Make sure you @mention it!").catch(()=>{});
+                    if (message.guild.members.me.roles.highest.position <= role.position) return message.reply("❌ I can't delete a role that is higher than my own!").catch(()=>{});
+                    
+                    const roleName = role.name;
+                    await role.delete(`Deleted by ${message.author.tag} via Starry AI`);
+                    return message.reply(`✅ Poof! The **${roleName}** role was deleted.`).catch(()=>{});
+                }
+
+                if (functionName === 'give_role' || functionName === 'remove_role') {
+                    const cleanUserId = String(args.userId).replace(/\D/g, '');
+                    const cleanRoleId = String(args.roleId).replace(/\D/g, '');
+                    
+                    const targetMember = await message.guild.members.fetch(cleanUserId).catch(() => null);
+                    const targetRole = message.guild.roles.cache.get(cleanRoleId);
+
+                    if (!targetMember) return message.reply("❌ I couldn't find that user. Ensure you tagged them correctly.").catch(()=>{});
+                    if (!targetRole) return message.reply("❌ I couldn't find that role. Ensure you tagged it correctly.").catch(()=>{});
+                    if (message.guild.members.me.roles.highest.position <= targetRole.position) return message.reply("❌ I can't assign/remove a role that is higher than my own!").catch(()=>{});
+
+                    if (functionName === 'give_role') {
+                        if (targetMember.roles.cache.has(targetRole.id)) return message.reply(`⚠️ **${targetMember.user.username}** already has the **${targetRole.name}** role.`).catch(()=>{});
+                        await targetMember.roles.add(targetRole);
+                        return message.reply(`✅ Assigned the **${targetRole.name}** role to **${targetMember.user.username}**!`).catch(()=>{});
+                    } else {
+                        if (!targetMember.roles.cache.has(targetRole.id)) return message.reply(`⚠️ **${targetMember.user.username}** doesn't have the **${targetRole.name}** role.`).catch(()=>{});
+                        await targetMember.roles.remove(targetRole);
+                        return message.reply(`✅ Removed the **${targetRole.name}** role from **${targetMember.user.username}**!`).catch(()=>{});
+                    }
+                }
+
+                // ==========================================
+                // ORIGINAL MODERATION LOGIC
+                // ==========================================
                 if (functionName === "clear_messages") {
                     const amount = Math.min(args.amount || 0, 100);
                     if (amount <= 0) return message.reply("❌ Please specify a valid number of messages to clear.").catch(()=>{});
