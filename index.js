@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
 const https = require('https'); // 1. Imported for self-ping
+const mongoose = require('mongoose'); // 2. Imported for MongoDB
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
@@ -10,18 +11,18 @@ const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
 
-// 2. Dedicated lightweight endpoint for the ping
+// Dedicated lightweight endpoint for the ping
 app.get('/health', (req, res) => res.status(200).json({ status: 'awake' }));
 
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web server listening on port ${port}`);
-    
-    // 3. Self-ping every 14 minutes (840,000 milliseconds)
+
+    // Self-ping every 14 minutes (840,000 milliseconds)
     setInterval(() => {
         // Render automatically provides this environment variable. 
         // If testing locally, it falls back to a placeholder.
         const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://YOUR-APP-NAME.onrender.com';
-        
+
         https.get(`${appUrl}/health`).on('error', (err) => {
             console.error('⚠️ Self-ping failed:', err.message);
         });
@@ -133,7 +134,19 @@ const banCommand = require('./ban.js');
 loadModule('Role Manager', './roleManager.js');
 
 // ==========================================
-// 6. LOGIN TO DISCORD
+// 6. CONNECT TO MONGODB
+// ==========================================
+if (!process.env.MONGO_URI) {
+    console.error("🛑 CRITICAL ERROR: The MONGO_URI is missing from the Environment Variables!");
+    process.exit(1);
+}
+
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('🍃 Successfully connected to MongoDB Cloud!'))
+    .catch((err) => console.error('❌ MongoDB Connection Error:', err));
+
+// ==========================================
+// 7. LOGIN TO DISCORD
 // ==========================================
 if (!process.env.TOKEN) {
     console.error("🛑 CRITICAL ERROR: The TOKEN is missing from the Environment Variables!");
