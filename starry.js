@@ -103,12 +103,14 @@ module.exports = (client) => {
                         - Delete a role: [CMD:DELETEROLE|ROLE_ID:456]
                         - List a user's roles: [CMD:LISTROLES|USER_ID:123]
                         
-                        RULE 3 (Channel Permissions - CHANNELS ONLY): To add or remove a role OR user from a specific channel:
+                        RULE 3 (Channel Management - CHANNELS ONLY): To add/remove permissions or CREATE channels:
                         - Add role to channel: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
                         - Remove role from channel: [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
                         - Add user to channel: [CMD:USERALLOW|CHANNEL_ID:123|USER_ID:456]
                         - Remove user from channel: [CMD:USERDENY|CHANNEL_ID:123|USER_ID:456]
-                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:CHANNELDENY|ROLE_ID:456]). NEVER output REMOVEROLE when asked to remove something from a channel!
+                        - Create a text channel: [CMD:CREATECHANNEL|NAME:channel-name]
+                        - Create a private channel for a role: [CMD:CREATECHANNEL|NAME:channel-name|ROLE_ID:456]
+                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:CHANNELDENY|ROLE_ID:456]).
 
                         RULE 4 (Server Commands & Images): If the user asks for real server actions or to GENERATE AN IMAGE, output a RUN block:
                         - Generate an Image: [RUN:.imagine A wizard penguin]
@@ -140,7 +142,7 @@ module.exports = (client) => {
             }
 
             // NATIVE MODERATION EXECUTOR
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY)(?:\|(.*?))?\]/i);
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL)(?:\|(.*?))?\]/i);
 
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
@@ -206,6 +208,12 @@ module.exports = (client) => {
                     const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:'));
                     args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
                     args.userId = uidMatch ? uidMatch.substring(8).trim() : "";
+                } else if (action === 'CREATECHANNEL') {
+                    functionName = 'create_channel';
+                    const nameMatch = params.find(p => p.toUpperCase().startsWith('NAME:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.channelName = nameMatch ? nameMatch.substring(5).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
                 }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
@@ -218,12 +226,45 @@ module.exports = (client) => {
                 // ==========================================
                 // CHANNEL PERMISSIONS EXECUTION
                 // ==========================================
+                if (functionName === 'create_channel') {
+                    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ You need `Manage Channels` permission to do this!").catch(()=>{});
+                    if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ I need `Manage Channels` permissions in my server settings to do this!").catch(()=>{});
+                    if (!args.channelName) return message.reply("❌ Please provide a name for the new channel!").catch(()=>{});
+
+                    let permissionOverwrites = [];
+                    
+                    if (args.roleId) {
+                        const cleanRoleId = String(args.roleId).replace(/\D/g, '');
+                        const targetRole = message.guild.roles.cache.get(cleanRoleId);
+                        if (targetRole) {
+                            permissionOverwrites = [
+                                {
+                                    id: message.guild.id, // @everyone
+                                    deny: [PermissionFlagsBits.ViewChannel],
+                                },
+                                {
+                                    id: targetRole.id,
+                                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+                                }
+                            ];
+                        }
+                    }
+
+                    const newChannel = await message.guild.channels.create({
+                        name: args.channelName,
+                        type: 0,
+                        permissionOverwrites: permissionOverwrites,
+                        reason: `Created by ${message.author.tag} via Starry AI`
+                    });
+
+                    return message.reply(`✅ Created the channel ${newChannel}!`).catch(()=>{});
+                }
+
                 if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny'].includes(functionName)) {
                     if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ You need `Manage Channels` permission to do this!").catch(()=>{});
                     if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ I need `Manage Channels` permissions in my server settings to do this!").catch(()=>{});
 
                     const cleanChannelId = String(args.channelId).replace(/\D/g, '');
-                    // If she omits the channel ID because you said "this channel", it gracefully defaults to the current channel.
                     const targetChannel = cleanChannelId ? (message.guild.channels.cache.get(cleanChannelId) || message.channel) : message.channel;
 
                     if (functionName === 'channel_allow' || functionName === 'channel_deny') {
