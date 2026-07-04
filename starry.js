@@ -103,14 +103,15 @@ module.exports = (client) => {
                         - List a user's roles: [CMD:LISTROLES|USER_ID:1234567890]
                         - List ALL server roles: [CMD:LISTSERVERROLES]
 
-                        RULE 3 (Server Commands): If the user asks for real server actions, you MUST output a RUN block.
+                        RULE 3 (Server Commands & Images): If the user asks for real server actions, or asks you to DRAW, PAINT, or GENERATE AN IMAGE, you MUST output a RUN block. Do NOT just describe an image in text.
+                        - Generate an Image: [RUN:.imagine A wizard penguin casting a spell]
                         - Giveaways: [RUN:.giveaway 10m Discord Nitro] 
                         - Lock Channel: [RUN:.lock]
                         - Unlock Channel: [RUN:.unlock]
                         - Truth or Dare: [RUN:.truth] or [RUN:.dare]
                         - Play Music: [RUN:.play despacito]
                         
-                        RULE 4 (Casual Chat): If the user asks you a general question, says hello, or asks you to do something imaginary/fun, DO NOT use CMD or RUN blocks. Just reply naturally in text!` 
+                        RULE 4 (Casual Chat): If the user asks you a general question, says hello, or asks you to do something imaginary/fun (that isn't generating an image), DO NOT use CMD or RUN blocks. Just reply naturally in text!` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
@@ -193,6 +194,7 @@ module.exports = (client) => {
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
+
             if (functionName) {
                 // ==========================================
                 // ROLE EXECUTION LOGIC
