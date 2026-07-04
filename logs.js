@@ -1,23 +1,33 @@
 const { EmbedBuilder, PermissionsBitField, AuditLogEvent, Events } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-const dbPath = path.join(__dirname, 'logSettings.json');
+const mongoose = require('mongoose');
+
+// ==========================================
+// MONGODB DATABASE SCHEMA
+// ==========================================
+const logSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    channelId: { type: String, required: true }
+});
+
+// Check if model exists to prevent crash on restart, otherwise build it
+const LogConfig = mongoose.models.LogConfig || mongoose.model('LogConfig', logSchema);
 
 module.exports = (client) => {
     const PREFIX = '.';
 
-    // Helper to read/write the log channel setting
-    function getLogChannel(guildId) {
-        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
-        const data = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-        return data[guildId] || null;
+    // Async helper to read the log channel setting from MongoDB
+    async function getLogChannel(guildId) {
+        const data = await LogConfig.findOne({ guildId: guildId });
+        return data ? data.channelId : null;
     }
 
-    function setLogChannel(guildId, channelId) {
-        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
-        const data = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-        data[guildId] = channelId;
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    // Async helper to save the log channel setting to MongoDB
+    async function setLogChannel(guildId, channelId) {
+        await LogConfig.findOneAndUpdate(
+            { guildId: guildId },
+            { channelId: channelId },
+            { upsert: true, new: true } // Creates new document if it doesn't exist, updates if it does
+        );
     }
 
     // ==========================================
@@ -31,25 +41,30 @@ module.exports = (client) => {
                 default_member_permissions: '8',
                 options: [{ name: 'channel', description: 'The channel to send logs to', type: 7, required: true }]
             });
-            console.log('✅ Advanced Logging & Audit Module Loaded');
+            console.log('✅ Advanced Logging & Audit Module Loaded (MongoDB Enabled)');
         } catch (err) {}
     });
 
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setlogs') return;
         const channel = interaction.options.getChannel('channel');
-        setLogChannel(interaction.guild.id, channel.id);
-        await interaction.reply({ content: `✅ All server logs will now be sent to <#${channel.id}>.`, ephemeral: true }).catch(() => {});
+        
+        await setLogChannel(interaction.guild.id, channel.id);
+        
+        await interaction.reply({ content: `✅ All server logs will now be safely saved to MongoDB and sent to <#${channel.id}>.`, ephemeral: true }).catch(() => {});
     });
 
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
         if (message.content.toLowerCase().startsWith(PREFIX + 'setlogs')) {
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return message.reply('❌ Admin only!').catch(() => {});
+            
             const channel = message.mentions.channels.first();
             if (!channel) return message.reply('🔹 **Usage:** `.setlogs #channel`').catch(() => {});
-            setLogChannel(message.guild.id, channel.id);
-            return message.reply(`✅ All server logs will now be sent to <#${channel.id}>.`).catch(() => {});
+            
+            await setLogChannel(message.guild.id, channel.id);
+            
+            return message.reply(`✅ All server logs will now be safely saved to MongoDB and sent to <#${channel.id}>.`).catch(() => {});
         }
     });
 
@@ -60,8 +75,9 @@ module.exports = (client) => {
         if (!message.guild) return;
         if (message.author?.id === client.user.id) return; // Don't log when Starry deletes her own system messages
 
-        const logChannelId = getLogChannel(message.guild.id);
+        const logChannelId = await getLogChannel(message.guild.id);
         if (!logChannelId) return;
+        
         const logChannel = message.guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
@@ -71,7 +87,7 @@ module.exports = (client) => {
         try {
             const fetchedLogs = await message.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MessageDelete });
             const deletionLog = fetchedLogs.entries.first();
-            
+
             // If the log is fresh (within 5 seconds) and matches the author
             if (deletionLog && deletionLog.target.id === message.author?.id && deletionLog.createdTimestamp > (Date.now() - 5000)) {
                 executor = `<@${deletionLog.executor.id}>`;
@@ -103,8 +119,9 @@ module.exports = (client) => {
         if (oldMessage.author?.bot || !oldMessage.guild) return;
         if (oldMessage.content === newMessage.content) return; 
 
-        const logChannelId = getLogChannel(oldMessage.guild.id);
+        const logChannelId = await getLogChannel(oldMessage.guild.id);
         if (!logChannelId) return;
+        
         const logChannel = oldMessage.guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
@@ -127,8 +144,9 @@ module.exports = (client) => {
     // 4. MODERATOR ACTIONS (KICK, BAN, TIMEOUT)
     // ==========================================
     client.on(Events.GuildAuditLogEntryCreate, async (auditLog, guild) => {
-        const logChannelId = getLogChannel(guild.id);
+        const logChannelId = await getLogChannel(guild.id);
         if (!logChannelId) return;
+        
         const logChannel = guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
@@ -185,8 +203,9 @@ module.exports = (client) => {
     // 5. MEMBER JOIN / LEAVE LOGS
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
-        const logChannelId = getLogChannel(member.guild.id);
+        const logChannelId = await getLogChannel(member.guild.id);
         if (!logChannelId) return;
+        
         const logChannel = member.guild.channels.cache.get(logChannelId);
         if (!logChannel) return;
 
