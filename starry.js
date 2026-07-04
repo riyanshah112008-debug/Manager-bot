@@ -193,7 +193,6 @@ module.exports = (client) => {
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
-
             if (functionName) {
                 // ==========================================
                 // ROLE EXECUTION LOGIC
@@ -341,4 +340,45 @@ module.exports = (client) => {
                         await targetMember.timeout(durationMs, args.reason);
                         return message.reply(`✅ Successfully timed out **${targetMember.user.tag}** for ${args.minutes} minute(s).`).catch(()=>{});
                     } catch (err) {
-                        return message.reply("❌ Discord blocked the timeout! Check my permissions
+                        return message.reply("❌ Discord blocked the timeout! Check my permissions.").catch(()=>{});
+                    }
+                }
+
+                if (functionName === "untimeout_member") {
+                    try {
+                        await targetMember.timeout(null, "Timeout removed by Starry AI");
+                        return message.reply(`✅ Successfully removed the timeout for **${targetMember.user.tag}**.`).catch(()=>{});
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the action! Check my permissions.").catch(()=>{});
+                    }
+                }
+
+                if (functionName === "kick_member") {
+                    try {
+                        await targetMember.kick(args.reason);
+                        return message.reply(`✅ Successfully kicked **${targetMember.user.tag}**.`).catch(()=>{});
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the kick! Check my permissions.").catch(()=>{});
+                    }
+                }
+
+                if (functionName === "ban_member") {
+                    try {
+                        await targetMember.ban({ reason: args.reason });
+                        return message.reply(`✅ Successfully banned **${targetMember.user.tag}**.`).catch(()=>{});
+                    } catch (err) {
+                        return message.reply("❌ Discord blocked the ban! Check my permissions.").catch(()=>{});
+                    }
+                }
+            }
+
+            if (replyText.length > 0) {
+                return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
+            }
+
+        } catch (error) {
+            console.error("Groq Error:", error.message);
+            return message.reply("❌ An internal error occurred while trying to process that command.").catch(()=>{});
+        }
+    });
+};
