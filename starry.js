@@ -343,4 +343,15 @@ module.exports = (client) => {
                         await targetMember.timeout(durationMs, args.reason);
                         return message.reply(`✅ Successfully timed out **${targetMember.user.tag}** for ${args.minutes} minute(s).`).catch(()=>{});
                     } catch (err) {
+            if (replyText.length > 0) {
+                return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
+            }
+
+        } catch (error) {
+            console.error("Groq Error:", error.message);
+            return message.reply("❌ An internal error occurred while trying to process that command.").catch(()=>{});
+        }
+    });
+};
+
             
