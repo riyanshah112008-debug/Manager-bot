@@ -5,8 +5,13 @@ const express = require('express');
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
 // ==========================================
 const app = express();
+// Render dynamically assigns a port via process.env.PORT, otherwise defaults to 10000
+const port = process.env.PORT || 10000;
+
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
-app.listen(10000, () => console.log('🌐 Web server listening on port 10000'));
+
+// FIX: Explicitly bind to '0.0.0.0' so Render's health checks can detect the server
+app.listen(port, '0.0.0.0', () => console.log(`🌐 Web server listening on port ${port}`));
 
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
