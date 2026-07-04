@@ -130,6 +130,7 @@ loadModule('Welcome System', './welcome.js');
 loadModule('User Protection', './protect.js');
 loadModule('Goodbye System', './goodbye.js');
 const banCommand = require('./ban.js');
+loadModule('Role Manager', './roleManager.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
