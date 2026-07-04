@@ -1,17 +1,32 @@
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
+const https = require('https'); // 1. Imported for self-ping
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
 // ==========================================
 const app = express();
-// Render dynamically assigns a port via process.env.PORT, otherwise defaults to 10000
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
 
-// Explicitly bind to '0.0.0.0' so Render's health checks can detect the server
-app.listen(port, '0.0.0.0', () => console.log(`🌐 Web server listening on port ${port}`));
+// 2. Dedicated lightweight endpoint for the ping
+app.get('/health', (req, res) => res.status(200).json({ status: 'awake' }));
+
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🌐 Web server listening on port ${port}`);
+    
+    // 3. Self-ping every 14 minutes (840,000 milliseconds)
+    setInterval(() => {
+        // Render automatically provides this environment variable. 
+        // If testing locally, it falls back to a placeholder.
+        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://YOUR-APP-NAME.onrender.com';
+        
+        https.get(`${appUrl}/health`).on('error', (err) => {
+            console.error('⚠️ Self-ping failed:', err.message);
+        });
+    }, 840000); 
+});
 
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
@@ -44,21 +59,6 @@ client.once(Events.ClientReady, async () => {
     // ---------------------------------------------------------
     // FIX: DISABLED TO PREVENT STARTUP LAG & RATE LIMITING
     // ---------------------------------------------------------
-    // If you need to register a new command in the future, 
-    // uncomment this block temporarily, deploy once, then comment it out again.
-    
-    /*
-    try {
-        if (client.commands.size > 0) {
-            console.log('⏳ Pushing legacy slash commands to Discord...');
-            const commandsData = client.commands.map(cmd => cmd.data.toJSON());
-            await client.application.commands.set(commandsData);
-            console.log('✅ Legacy slash commands registered successfully!');
-        }
-    } catch (error) {
-        console.error('❌ Failed to register commands:', error);
-    }
-    */
     console.log('⏩ Skipped command registration to speed up boot time.');
 });
 
@@ -129,7 +129,7 @@ loadModule('Emoji Stealer', './steal.js');
 loadModule('Welcome System', './welcome.js');
 loadModule('User Protection', './protect.js');
 loadModule('Goodbye System', './goodbye.js');
-const banCommand = require('./ban.js'); // Adjust the path if you put it in a folder like './commands/ban.js'
+const banCommand = require('./ban.js');
 
 // ==========================================
 // 6. LOGIN TO DISCORD
