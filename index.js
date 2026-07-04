@@ -10,7 +10,7 @@ const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
 
-// FIX: Explicitly bind to '0.0.0.0' so Render's health checks can detect the server
+// Explicitly bind to '0.0.0.0' so Render's health checks can detect the server
 app.listen(port, '0.0.0.0', () => console.log(`🌐 Web server listening on port ${port}`));
 
 // ==========================================
@@ -41,6 +41,13 @@ client.commands = new Collection();
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 
+    // ---------------------------------------------------------
+    // FIX: DISABLED TO PREVENT STARTUP LAG & RATE LIMITING
+    // ---------------------------------------------------------
+    // If you need to register a new command in the future, 
+    // uncomment this block temporarily, deploy once, then comment it out again.
+    
+    /*
     try {
         if (client.commands.size > 0) {
             console.log('⏳ Pushing legacy slash commands to Discord...');
@@ -51,6 +58,8 @@ client.once(Events.ClientReady, async () => {
     } catch (error) {
         console.error('❌ Failed to register commands:', error);
     }
+    */
+    console.log('⏩ Skipped command registration to speed up boot time.');
 });
 
 // ==========================================
