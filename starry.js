@@ -95,7 +95,7 @@ module.exports = (client) => {
                         [CMD:TIMEOUT|ID:123456789012345678|MINUTES:1|REASON:spam]
                         [CMD:UNTIMEOUT|ID:123456789012345678]
 
-                        RULE 2 (Role Management): To manage roles, output EXACTLY one of these CMD blocks:
+                        RULE 2 (Role Management - USERS ONLY): To manage roles on users, use these. NEVER use these for channels.
                         - Assign a role: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456]
                         - Remove a role: [CMD:REMOVEROLE|USER_ID:123|ROLE_ID:456]
                         - Create a role: [CMD:CREATEROLE|NAME:RoleNameHere]
@@ -103,12 +103,12 @@ module.exports = (client) => {
                         - Delete a role: [CMD:DELETEROLE|ROLE_ID:456]
                         - List a user's roles: [CMD:LISTROLES|USER_ID:123]
                         
-                        RULE 3 (Channel Permissions): To add or remove a role OR user from a specific channel:
+                        RULE 3 (Channel Permissions - CHANNELS ONLY): To add or remove a role OR user from a specific channel:
                         - Add role to channel: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
                         - Remove role from channel: [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
                         - Add user to channel: [CMD:USERALLOW|CHANNEL_ID:123|USER_ID:456]
                         - Remove user from channel: [CMD:USERDENY|CHANNEL_ID:123|USER_ID:456]
-                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:USERALLOW|USER_ID:456]).
+                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:CHANNELDENY|ROLE_ID:456]). NEVER output REMOVEROLE when asked to remove something from a channel!
 
                         RULE 4 (Server Commands & Images): If the user asks for real server actions or to GENERATE AN IMAGE, output a RUN block:
                         - Generate an Image: [RUN:.imagine A wizard penguin]
@@ -213,6 +213,7 @@ module.exports = (client) => {
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
+
             if (functionName) {
                 // ==========================================
                 // CHANNEL PERMISSIONS EXECUTION
