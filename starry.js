@@ -95,23 +95,25 @@ module.exports = (client) => {
                         [CMD:TIMEOUT|ID:123456789012345678|MINUTES:1|REASON:spam]
                         [CMD:UNTIMEOUT|ID:123456789012345678]
 
-                        RULE 2 (Role Management): To manage roles, output EXACTLY one of these CMD blocks. Do not output RUN blocks for these:
-                        - Assign a role: [CMD:GIVEROLE|USER_ID:1234567890|ROLE_ID:0987654321]
-                        - Remove a role: [CMD:REMOVEROLE|USER_ID:1234567890|ROLE_ID:0987654321]
+                        RULE 2 (Role Management): To manage roles, output EXACTLY one of these CMD blocks:
+                        - Assign a role: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456]
+                        - Remove a role: [CMD:REMOVEROLE|USER_ID:123|ROLE_ID:456]
                         - Create a role: [CMD:CREATEROLE|NAME:RoleNameHere]
-                        - Delete a role: [CMD:DELETEROLE|ROLE_ID:0987654321]
-                        - List a user's roles: [CMD:LISTROLES|USER_ID:1234567890]
-                        - List ALL server roles: [CMD:LISTSERVERROLES]
+                        - Create a role with perms: [CMD:CREATEROLE|NAME:RoleNameHere|PERMISSIONS:Administrator,ManageChannels]
+                        - Delete a role: [CMD:DELETEROLE|ROLE_ID:456]
+                        - List a user's roles: [CMD:LISTROLES|USER_ID:123]
+                        
+                        RULE 3 (Channel Permissions): To add or remove a role from a specific channel:
+                        - Add role to channel (Allow): [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
+                        - Remove role from channel (Deny): [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
 
-                        RULE 3 (Server Commands & Images): If the user asks for real server actions, or asks you to DRAW, PAINT, or GENERATE AN IMAGE, you MUST output a RUN block. Do NOT just describe an image in text.
-                        - Generate an Image: [RUN:.imagine A wizard penguin casting a spell]
+                        RULE 4 (Server Commands & Images): If the user asks for real server actions or to GENERATE AN IMAGE, output a RUN block:
+                        - Generate an Image: [RUN:.imagine A wizard penguin]
                         - Giveaways: [RUN:.giveaway 10m Discord Nitro] 
                         - Lock Channel: [RUN:.lock]
                         - Unlock Channel: [RUN:.unlock]
-                        - Truth or Dare: [RUN:.truth] or [RUN:.dare]
-                        - Play Music: [RUN:.play despacito]
                         
-                        RULE 4 (Casual Chat): If the user asks you a general question, says hello, or asks you to do something imaginary/fun (that isn't generating an image), DO NOT use CMD or RUN blocks. Just reply naturally in text!` 
+                        RULE 5 (Casual Chat): If the user asks a general question, do NOT use CMD or RUN blocks. Just reply naturally in text!` 
                     },
                     { role: "user", content: `${message.author.username} says: ${message.content}` }
                 ],
@@ -135,7 +137,7 @@ module.exports = (client) => {
             }
 
             // NATIVE MODERATION EXECUTOR
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES)(?:\|(.*?))?\]/i);
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY)(?:\|(.*?))?\]/i);
 
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase();
@@ -176,7 +178,9 @@ module.exports = (client) => {
                 } else if (action === 'CREATEROLE') {
                     functionName = 'create_role';
                     const nameMatch = params.find(p => p.toUpperCase().startsWith('NAME:'));
+                    const permMatch = params.find(p => p.toUpperCase().startsWith('PERMISSIONS:'));
                     args.roleName = nameMatch ? nameMatch.substring(5).trim() : "";
+                    args.permissions = permMatch ? permMatch.substring(12).trim() : "";
                 } else if (action === 'DELETEROLE') {
                     functionName = 'delete_role';
                     const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
@@ -187,6 +191,12 @@ module.exports = (client) => {
                     args.userId = uidMatch ? uidMatch.split(':')[1].trim() : "";
                 } else if (action === 'LISTSERVERROLES') {
                     functionName = 'list_server_roles';
+                } else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') {
+                    functionName = action === 'CHANNELALLOW' ? 'channel_allow' : 'channel_deny';
+                    const cidMatch = params.find(p => p.toUpperCase().startsWith('CHANNEL_ID:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
                 }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
@@ -196,6 +206,30 @@ module.exports = (client) => {
             }
 
             if (functionName) {
+                // ==========================================
+                // CHANNEL PERMISSIONS EXECUTION
+                // ==========================================
+                if (functionName === 'channel_allow' || functionName === 'channel_deny') {
+                    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ You need `Manage Channels` permission to do this!").catch(()=>{});
+                    if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply("❌ I need `Manage Channels` permissions in my server settings to do this!").catch(()=>{});
+
+                    const cleanChannelId = String(args.channelId).replace(/\D/g, '');
+                    const cleanRoleId = String(args.roleId).replace(/\D/g, '');
+
+                    const targetChannel = message.guild.channels.cache.get(cleanChannelId) || message.channel;
+                    const targetRole = message.guild.roles.cache.get(cleanRoleId);
+
+                    if (!targetRole) return message.reply("❌ I couldn't find that role. Make sure you @mention it!").catch(()=>{});
+
+                    if (functionName === 'channel_allow') {
+                        await targetChannel.permissionOverwrites.edit(targetRole.id, { ViewChannel: true, SendMessages: true });
+                        return message.reply(`✅ The **${targetRole.name}** role has been added to ${targetChannel} (Allowed to view and speak).`).catch(()=>{});
+                    } else {
+                        await targetChannel.permissionOverwrites.edit(targetRole.id, { ViewChannel: false });
+                        return message.reply(`✅ The **${targetRole.name}** role has been removed from ${targetChannel} (Denied viewing).`).catch(()=>{});
+                    }
+                }
+
                 // ==========================================
                 // ROLE EXECUTION LOGIC
                 // ==========================================
@@ -267,8 +301,25 @@ module.exports = (client) => {
 
                 if (functionName === 'create_role') {
                     if (!args.roleName) return message.reply("❌ Invalid role name provided.").catch(()=>{});
-                    const newRole = await message.guild.roles.create({ name: args.roleName, reason: `Created by ${message.author.tag} via Starry AI` });
-                    return message.reply(`✅ Created the role **${newRole.name}**!`).catch(()=>{});
+                    
+                    let permsArray = [];
+                    if (args.permissions) {
+                        const requested = args.permissions.split(',');
+                        for (const p of requested) {
+                            const cleanP = p.trim();
+                            // Find the correct permission flag regardless of how the AI capitalized it
+                            const validKey = Object.keys(PermissionFlagsBits).find(key => key.toLowerCase() === cleanP.toLowerCase());
+                            if (validKey) permsArray.push(PermissionFlagsBits[validKey]);
+                        }
+                    }
+
+                    const newRole = await message.guild.roles.create({ 
+                        name: args.roleName, 
+                        permissions: permsArray.length > 0 ? permsArray : [],
+                        reason: `Created by ${message.author.tag} via Starry AI` 
+                    });
+                    
+                    return message.reply(`✅ Created the role **${newRole.name}**${permsArray.length > 0 ? ' with custom permissions' : ''}!`).catch(()=>{});
                 }
 
                 if (functionName === 'delete_role') {
