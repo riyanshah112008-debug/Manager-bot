@@ -32,9 +32,27 @@ module.exports = (client) => {
         const text = message.content.toLowerCase();
 
         // ==========================================
-        // OWNER-ONLY: EMERGENCY LEAVE & SERVER DUMP
+        // CONFIG: OWNER ID SETUP
         // ==========================================
-        const myOwnerId = 'YOUR_COPIED_ID_HERE'; // <--- PASTE YOUR ID HERE
+        const myOwnerId = '1465049039153135639'; // <--- PASTE YOUR DISCORD ID HERE
+
+        // ==========================================
+        // OWNER-ONLY: DEVELOPER TOOLS (.dev & LEAVE/DUMP)
+        // ==========================================
+        if (text === '.dev') {
+            if (message.author.id !== myOwnerId) return;
+            try {
+                await message.author.send(
+                    `💻 **Starry Developer Commands (Owner-Only):**\n\n` +
+                    `\`.emergencyleave\` - Forces the bot to leave the current server.\n` +
+                    `\`.serverdump\` - Generates a full text data dump file of channels, roles, and members.\n` +
+                    `\`.dev\` - Sends you this private developer command checklist.`
+                );
+                return message.reply('📬 Check your DMs! Sent the developer commands over.').catch(() => {});
+            } catch (err) {
+                return message.reply('❌ I couldn\'t DM you! Please make sure your DMs are open.').catch(() => {});
+            }
+        }
 
         if (text === '.emergencyleave') {
             if (message.author.id === myOwnerId) {
@@ -52,7 +70,7 @@ module.exports = (client) => {
 
             try {
                 const guild = message.guild;
-                await guild.members.fetch(); // Forces the bot to load all members into memory
+                await guild.members.fetch(); 
 
                 let dump = `=== SERVER DUMP: ${guild.name} ===\n`;
                 dump += `Server ID: ${guild.id}\n`;
@@ -76,7 +94,6 @@ module.exports = (client) => {
                     dump += `${m.user.tag} (ID: ${m.id}) - Joined: ${m.joinedAt ? m.joinedAt.toUTCString() : 'Unknown'}\n`;
                 });
 
-                // Convert text string into a physical file
                 const buffer = Buffer.from(dump, 'utf-8');
                 return await message.channel.send({
                     content: `✅ **Server Data Dump Complete:**`,
@@ -185,6 +202,7 @@ module.exports = (client) => {
             let replyText = chatCompletion.choices[0].message.content || "";
             let functionName = null;
             let args = {};
+
 
                 // ==========================================
                 // CHANNEL PERMISSIONS EXECUTION
