@@ -203,7 +203,100 @@ module.exports = (client) => {
             let functionName = null;
             let args = {};
 
+            // UNIVERSAL COMMAND EXECUTOR
+            const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
+            if (runMatch) {
+                const simulatedCommand = runMatch[1].trim(); 
+                replyText = replyText.replace(runMatch[0], '').trim();
 
+                message.content = simulatedCommand;
+                client.emit('messageCreate', message);
+
+                if (replyText.length === 0) return;
+            }
+
+            // NATIVE MODERATION EXECUTOR
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL)(?:\|(.*?))?\]/i);
+
+            if (cmdMatch) {
+                const action = cmdMatch[1].toUpperCase();
+                const params = (cmdMatch[2] || '').split('|');
+
+                if (action === 'CLEAR') {
+                    functionName = 'clear_messages';
+                    const amtMatch = params.find(p => p.toUpperCase().startsWith('AMOUNT:'));
+                    args.amount = amtMatch ? parseInt(amtMatch.substring(7)) : 0;
+                } else if (action === 'TIMEOUT') {
+                    functionName = 'timeout_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    const minMatch = params.find(p => p.toUpperCase().startsWith('MINUTES:'));
+                    const reasonMatch = params.find(p => p.toUpperCase().startsWith('REASON:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                    args.minutes = minMatch ? parseInt(minMatch.substring(8).trim()) : 1;
+                    args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
+                } else if (action === 'UNTIMEOUT') {
+                    functionName = 'untimeout_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                } else if (action === 'UNBAN') {
+                    functionName = 'unban_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                } else if (action === 'KICK' || action === 'BAN') {
+                    functionName = action === 'KICK' ? 'kick_member' : 'ban_member';
+                    const idMatch = params.find(p => p.toUpperCase().startsWith('ID:'));
+                    const reasonMatch = params.find(p => p.toUpperCase().startsWith('REASON:'));
+                    args.userId = idMatch ? idMatch.substring(3).trim() : "";
+                    args.reason = reasonMatch ? reasonMatch.substring(7).trim() : "Moderated by Starry AI";
+                } else if (action === 'GIVEROLE' || action === 'REMOVEROLE') {
+                    functionName = action === 'GIVEROLE' ? 'give_role' : 'remove_role';
+                    const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.userId = uidMatch ? uidMatch.substring(8).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                } else if (action === 'CREATEROLE') {
+                    functionName = 'create_role';
+                    const nameMatch = params.find(p => p.toUpperCase().startsWith('NAME:'));
+                    const permMatch = params.find(p => p.toUpperCase().startsWith('PERMISSIONS:'));
+                    args.roleName = nameMatch ? nameMatch.substring(5).trim() : "";
+                    args.permissions = permMatch ? permMatch.substring(12).trim() : "";
+                } else if (action === 'DELETEROLE') {
+                    functionName = 'delete_role';
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                } else if (action === 'LISTROLES') {
+                    functionName = 'list_roles';
+                    const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:') || p.toUpperCase().startsWith('ID:'));
+                    args.userId = uidMatch ? uidMatch.split(':')[1].trim() : "";
+                } else if (action === 'LISTSERVERROLES') {
+                    functionName = 'list_server_roles';
+                } else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') {
+                    functionName = action === 'CHANNELALLOW' ? 'channel_allow' : 'channel_deny';
+                    const cidMatch = params.find(p => p.toUpperCase().startsWith('CHANNEL_ID:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                } else if (action === 'USERALLOW' || action === 'USERDENY') {
+                    functionName = action === 'USERALLOW' ? 'user_allow' : 'user_deny';
+                    const cidMatch = params.find(p => p.toUpperCase().startsWith('CHANNEL_ID:'));
+                    const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:'));
+                    args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
+                    args.userId = uidMatch ? uidMatch.substring(8).trim() : "";
+                } else if (action === 'CREATECHANNEL') {
+                    functionName = 'create_channel';
+                    const nameMatch = params.find(p => p.toUpperCase().startsWith('NAME:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.channelName = nameMatch ? nameMatch.substring(5).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                }
+
+                replyText = replyText.replace(cmdMatch[0], '').trim();
+
+                const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
+                if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
+              }
+
+                    if (functionName) {
                 // ==========================================
                 // CHANNEL PERMISSIONS EXECUTION
                 // ==========================================
@@ -481,3 +574,4 @@ module.exports = (client) => {
         }
     });
 };
+                    
