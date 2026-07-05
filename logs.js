@@ -34,15 +34,8 @@ module.exports = (client) => {
     // 1. SETUP COMMANDS (SLASH & PREFIX)
     // ==========================================
     client.on('ready', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'setlogs',
-                description: 'Set the channel where Starry will send server logs (Admin Only)',
-                default_member_permissions: '8',
-                options: [{ name: 'channel', description: 'The channel to send logs to', type: 7, required: true }]
-            });
-            console.log('✅ Advanced Logging & Audit Module Loaded (MongoDB Enabled)');
-        } catch (err) {}
+        // We removed the command deployment spam here to prevent Discord Rate Limits!
+        console.log('✅ Advanced Logging & Audit Module Loaded (MongoDB Enabled)');
     });
 
     client.on('interactionCreate', async (interaction) => {
@@ -219,3 +212,4 @@ module.exports = (client) => {
         logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 };
+             
