@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
-const https = require('https'); // 1. Imported for self-ping
-const mongoose = require('mongoose'); // 2. Imported for MongoDB
+const https = require('https'); 
+const mongoose = require('mongoose'); 
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
@@ -10,19 +10,13 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
-
-// Dedicated lightweight endpoint for the ping
 app.get('/health', (req, res) => res.status(200).json({ status: 'awake' }));
 
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web server listening on port ${port}`);
 
-    // Self-ping every 14 minutes (840,000 milliseconds)
     setInterval(() => {
-        // Render automatically provides this environment variable. 
-        // If testing locally, it falls back to a placeholder.
-        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://YOUR-APP-NAME.onrender.com';
-
+        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-izjg.onrender.com';
         https.get(`${appUrl}/health`).on('error', (err) => {
             console.error('⚠️ Self-ping failed:', err.message);
         });
@@ -45,27 +39,31 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
 }); 
 
-// Increase Max Listeners to prevent memory leak crashes
 client.setMaxListeners(30);
-
-// Create a collection to store older Slash Commands 
 client.commands = new Collection(); 
 
 // ==========================================
-// 3. BOT READY & DEPLOY COMMANDS
+// 3. GLOBAL ERROR CATCHERS (THE X-RAY)
 // ==========================================
-client.once(Events.ClientReady, async () => {
-    console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
+client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
+client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
 
-    // ---------------------------------------------------------
-    // FIX: DISABLED TO PREVENT STARTUP LAG & RATE LIMITING
-    // ---------------------------------------------------------
-    console.log('⏩ Skipped command registration to speed up boot time.');
+process.on('unhandledRejection', error => {
+    console.error('❌ Unhandled Promise Rejection:', error);
+});
+process.on('uncaughtException', error => {
+    console.error('❌ Uncaught Exception:', error);
 });
 
 // ==========================================
-// 4. INTERACTION LISTENER (FOR LEGACY COMMANDS)
+// 4. BOT READY & INTERACTION LISTENER
 // ==========================================
+client.once(Events.ClientReady, async () => {
+    console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+    console.log('⏩ Skipped command registration to speed up boot time.');
+});
+
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -97,7 +95,6 @@ const loadModule = (name, filePath) => {
     }
 };
 
-// Loading all features in the exact, clean order
 loadModule('Moderation', './moderation.js');
 loadModule('Automod', './automod.js');
 loadModule('Premium', './premium.js');
@@ -130,7 +127,6 @@ loadModule('Emoji Stealer', './steal.js');
 loadModule('Welcome System', './welcome.js');
 loadModule('User Protection', './protect.js');
 loadModule('Goodbye System', './goodbye.js');
-const banCommand = require('./ban.js');
 loadModule('Role Manager', './roleManager.js');
 
 // ==========================================
@@ -153,9 +149,10 @@ if (!process.env.TOKEN) {
     process.exit(1);
 }
 
-// --- DIAGNOSTIC CHECK ---
 console.log(`🔍 TOKEN DEBUG: The first 5 characters Render sees are: "${process.env.TOKEN.substring(0, 5)}"`);
 console.log(`🔍 TOKEN DEBUG: Total length of the token string is: ${process.env.TOKEN.length} characters`);
-// ------------------------
 
-client.login(process.env.TOKEN);
+// The .catch block is crucial. If Discord rejects the login, this prints the exact reason why!
+client.login(process.env.TOKEN).catch(err => {
+    console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
+});
