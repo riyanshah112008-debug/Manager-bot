@@ -185,6 +185,234 @@ module.exports = (client) => {
                 if (repliedMessage.author.id === client.user.id) isReplyToBot = true;
             } catch (err) {}
         }
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { Groq } = require('groq-sdk');
+
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+});
+
+const aiCooldowns = new Set();
+const blacklistedUsers = new Set(); // 🚫 Temporary Blacklist Memory
+
+module.exports = (client) => {
+    
+    client.on('ready', () => {
+        console.log('✅ Starry Protocol Module Loaded');
+    });
+
+    client.on('messageCreate', async (message) => {
+
+        // ==========================================
+        // 0. DISBOARD BUMP TRACKER & BLACKLIST CHECK
+        // ==========================================
+        if (blacklistedUsers.has(message.author.id)) return; // Completely ignore blacklisted users!
+
+        if (message.author.id === '302050872383242240') { 
+            if (message.embeds.length > 0 && message.embeds[0].description && message.embeds[0].description.includes('Bump done')) {
+                const bumpEmbed = new EmbedBuilder()
+                    .setColor('#3BA55C') 
+                    .setTitle('📈 Server Bumped!')
+                    .setDescription('Thank you for bumping the server! You can bump us again in 2 hours.');
+
+                return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
+            }
+        }
+
+        // ==========================================
+        // Ignore ALL OTHER bots or empty messages
+        // ==========================================
+        if (message.author.bot || !message.content) return;
+
+        const text = message.content.toLowerCase();
+
+        // ==========================================
+        // CONFIG: OWNER ID SETUP
+        // ==========================================
+        const myOwnerId = '1465049039153135639'; 
+
+        // ==========================================
+        // OWNER-ONLY: DEVELOPER TOOLS 
+        // ==========================================
+        if (text === '.dev') {
+            if (message.author.id !== myOwnerId) return;
+            try {
+                await message.author.send(
+                    `💻 **Starry Developer Commands (Owner-Only):**\n\n` +
+                    `\`.servers\` - Lists all servers the bot is in.\n` +
+                    `\`.serverdump\` - Full text data dump of the current server.\n` +
+                    `\`.sysinfo\` - Shows RAM, Uptime, and Ping.\n` +
+                    `\`.eval <code>\` - Executes raw JavaScript code (DANGEROUS).\n` +
+                    `\`.broadcast <msg>\` - Sends a message to ALL servers.\n` +
+                    `\`.leaveserver <ID>\` - Remotely forces the bot to leave a server.\n` +
+                    `\`.blacklist <ID>\` - Toggles a user on/off the ignore list.\n` +
+                    `\`.emergencyleave\` - Forces the bot to leave the current server.\n` +
+                    `\`.restart\` - Kills the bot process (Render revives it).\n` +
+                    `\`.setstatus <text>\` - Changes the bot's playing status.`
+                );
+                return message.reply('📬 Check your DMs! Sent the updated advanced developer commands over.').catch(() => {});
+            } catch (err) {
+                return message.reply('❌ I couldn\'t DM you! Please make sure your DMs are open.').catch(() => {});
+            }
+        }
+
+        // --- NEW ADVANCED TOOLS ---
+
+        if (text === '.sysinfo') {
+            if (message.author.id !== myOwnerId) return;
+            const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+            const uptime = (process.uptime() / 3600).toFixed(2);
+            return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
+        }
+
+        if (text.startsWith('.blacklist ')) {
+            if (message.author.id !== myOwnerId) return;
+            const targetId = message.content.split(' ')[1];
+            if (!targetId) return message.reply('❌ Please provide a User ID.');
+            if (blacklistedUsers.has(targetId)) {
+                blacklistedUsers.delete(targetId);
+                return message.reply(`✅ Removed \`${targetId}\` from the blacklist. They can talk to me again.`).catch(()=>{});
+            } else {
+                blacklistedUsers.add(targetId);
+                return message.reply(`🚫 Added \`${targetId}\` to the blacklist. I will now ignore them globally.`).catch(()=>{});
+            }
+        }
+
+        if (text.startsWith('.leaveserver ')) {
+            if (message.author.id !== myOwnerId) return;
+            const targetId = message.content.split(' ')[1];
+            const guildToLeave = client.guilds.cache.get(targetId);
+            if (!guildToLeave) return message.reply('❌ I am not in a server with that ID.').catch(()=>{});
+            await guildToLeave.leave();
+            return message.reply(`✅ Successfully sniped and left **${guildToLeave.name}**.`).catch(()=>{});
+        }
+
+        if (text.startsWith('.broadcast ')) {
+            if (message.author.id !== myOwnerId) return;
+            const announcement = message.content.slice(11).trim();
+            if (!announcement) return message.reply('❌ What do you want to broadcast?');
+            let successCount = 0;
+            client.guilds.cache.forEach(guild => {
+                const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
+                if (channel) {
+                    channel.send(`📢 **Message from Starry's Developer:**\n\n${announcement}`).catch(()=>{});
+                    successCount++;
+                }
+            });
+            return message.reply(`✅ Broadcast successfully sent to ${successCount} servers!`).catch(()=>{});
+        }
+
+        if (text.startsWith('.eval ')) {
+            if (message.author.id !== myOwnerId) return;
+            const code = message.content.slice(6);
+            try {
+                let evaled = eval(code);
+                if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
+                return message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
+            } catch (err) {
+                return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{});
+            }
+        }
+
+        // --- OLD DEV TOOLS ---
+
+        if (text === '.emergencyleave') {
+            if (message.author.id === myOwnerId) {
+                await message.reply('I am leaving this server now. Goodbye! 👋').catch(() => {});
+                return message.guild.leave(); 
+            } else {
+                return;
+            }
+        }
+
+        if (text === '.serverdump') {
+            if (message.author.id !== myOwnerId) return;
+            await message.reply('🗄️ Gathering all server data... This might take a moment.').catch(() => {});
+            try {
+                const guild = message.guild;
+                await guild.members.fetch(); 
+                let dump = `=== SERVER DUMP: ${guild.name} ===\n`;
+                dump += `Server ID: ${guild.id}\nOwner ID: ${guild.ownerId}\nTotal Members: ${guild.memberCount}\nCreated: ${guild.createdAt.toUTCString()}\n\n`;
+                dump += `=== CHANNELS ===\n`;
+                guild.channels.cache.sort((a, b) => a.position - b.position).forEach(c => {
+                    const type = c.type === 0 ? 'Text' : c.type === 2 ? 'Voice' : c.type === 4 ? 'Category' : 'Other';
+                    dump += `[${type}] ${c.name} (ID: ${c.id})\n`;
+                });
+                dump += `\n=== ROLES ===\n`;
+                guild.roles.cache.sort((a, b) => b.position - a.position).forEach(r => { dump += `${r.name} (ID: ${r.id})\n`; });
+                dump += `\n=== MEMBERS ===\n`;
+                guild.members.cache.sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).forEach(m => {
+                    dump += `${m.user.tag} (ID: ${m.id}) - Joined: ${m.joinedAt ? m.joinedAt.toUTCString() : 'Unknown'}\n`;
+                });
+                const buffer = Buffer.from(dump, 'utf-8');
+                return await message.channel.send({ content: `✅ **Server Data Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/\s+/g, '_')}_Dump.txt` }] }).catch(() => {});
+            } catch (err) {
+                return message.reply('❌ Failed to gather server data.').catch(() => {});
+            }
+        }
+
+        if (text === '.servers') {
+            if (message.author.id !== myOwnerId) return;
+            let serverList = `🌐 **Starry is currently deployed in ${client.guilds.cache.size} servers:**\n\n`;
+            client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => {
+                serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`;
+            });
+            return message.reply(serverList).catch(() => {});
+        }
+
+        if (text === '.restart') {
+            if (message.author.id !== myOwnerId) return;
+            await message.reply('🔄 **Initiating remote reboot...**\nGoing offline. Render will automatically revive me in ~2 minutes.').catch(() => {});
+            process.exit(1); 
+        }
+
+        if (text.startsWith('.setstatus ')) {
+            if (message.author.id !== myOwnerId) return;
+            const newStatus = message.content.slice(11).trim();
+            if (!newStatus) return message.reply('❌ You need to provide a status text!').catch(() => {});
+            client.user.setActivity(newStatus, { type: 4 }); 
+            return message.reply(`✅ Starry's status successfully updated to: **${newStatus}**`).catch(() => {});
+        }
+
+        // ==========================================
+        // 1. IMAGE GENERATOR (.imagine)
+        // ==========================================
+        if (text.startsWith('.imagine ')) {
+            const imagePrompt = message.content.slice(9).trim();
+            if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(() => {});
+
+            const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
+            if (!replyMsg) return; 
+
+            try {
+                const safePrompt = encodeURIComponent(imagePrompt);
+                const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true`;
+                const cleanFileName = imagePrompt.replace(/\s+/g, '_') + '.png';
+
+                await message.reply({ 
+                    content: `🖼️ **${imagePrompt}**\nGenerated by ${message.author}`, 
+                    files: [{ attachment: imageUrl, name: cleanFileName }] 
+                }).catch(() => {});
+
+                return await replyMsg.delete().catch(() => {});
+            } catch (error) {
+                return replyMsg.edit('❌ Trouble drawing that.').catch(() => {});
+            }
+        }
+
+        // ==========================================
+        // 2. TEXT CONVERSATION & CUSTOM MODERATION
+        // ==========================================
+        const mentionsBot = message.mentions.has(client.user.id);
+        const containsName = text.includes('starry');
+
+        let isReplyToBot = false;
+        if (message.reference) {
+            try {
+                const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+                if (repliedMessage.author.id === client.user.id) isReplyToBot = true;
+            } catch (err) {}
+        }
 
         if (!mentionsBot && !containsName && !isReplyToBot) return;
 
