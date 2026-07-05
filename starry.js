@@ -1,4 +1,4 @@
-constconst { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { Groq } = require('groq-sdk');
 
 const groq = new Groq({
@@ -8,6 +8,12 @@ const groq = new Groq({
 const aiCooldowns = new Set();
 
 module.exports = (client) => {
+    
+    // This adds your green checkmark back to the Render console!
+    client.on('ready', () => {
+        console.log('✅ Starry Protocol Module Loaded');
+    });
+
     client.on('messageCreate', async (message) => {
 
         // ==========================================
@@ -34,7 +40,7 @@ module.exports = (client) => {
         // ==========================================
         // CONFIG: OWNER ID SETUP
         // ==========================================
-        const myOwnerId = '1465049039153135639'; // <--- PASTE YOUR DISCORD ID HERE
+        const myOwnerId = '1465049039153135639'; // Your Owner ID is locked in here
 
         // ==========================================
         // OWNER-ONLY: DEVELOPER TOOLS (.dev & LEAVE/DUMP)
@@ -236,32 +242,6 @@ module.exports = (client) => {
             let replyText = chatCompletion.choices[0].message.content || "";
             let functionName = null;
             let args = {};
-              
-                        RULE 3 (Channel Management - CHANNELS ONLY): To add/remove permissions or CREATE channels:
-                        - Add role to channel: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
-                        - Remove role from channel: [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
-                        - Add user to channel: [CMD:USERALLOW|CHANNEL_ID:123|USER_ID:456]
-                        - Remove user from channel: [CMD:USERDENY|CHANNEL_ID:123|USER_ID:456]
-                        - Create a text channel: [CMD:CREATECHANNEL|NAME:channel-name]
-                        - Create a private channel for a role: [CMD:CREATECHANNEL|NAME:channel-name|ROLE_ID:456]
-                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:CHANNELDENY|ROLE_ID:456]).
-
-                        RULE 4 (Server Commands & Images): If the user asks for real server actions or to GENERATE AN IMAGE, output a RUN block:
-                        - Generate an Image: [RUN:.imagine A wizard penguin]
-                        - Giveaways: [RUN:.giveaway 10m Discord Nitro] 
-                        - Lock Channel: [RUN:.lock]
-                        - Unlock Channel: [RUN:.unlock]
-                        
-                        RULE 5 (Casual Chat): If the user asks a general question, do NOT use CMD or RUN blocks. Just reply naturally in text!` 
-                    },
-                    { role: "user", content: `${message.author.username} says: ${message.content}` }
-                ],
-                model: "llama-3.1-8b-instant"
-            });
-
-            let replyText = chatCompletion.choices[0].message.content || "";
-            let functionName = null;
-            let args = {};
 
             // UNIVERSAL COMMAND EXECUTOR
             const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
@@ -354,9 +334,9 @@ module.exports = (client) => {
 
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i);
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
-              }
+            }
 
-                    if (functionName) {
+                        if (functionName) {
                 // ==========================================
                 // CHANNEL PERMISSIONS EXECUTION
                 // ==========================================
@@ -634,4 +614,5 @@ module.exports = (client) => {
         }
     });
 };
-                    
+                        
+        
