@@ -1,4 +1,4 @@
-const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+constconst { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { Groq } = require('groq-sdk');
 
 const groq = new Groq({
@@ -46,9 +46,12 @@ module.exports = (client) => {
                     `💻 **Starry Developer Commands (Owner-Only):**\n\n` +
                     `\`.emergencyleave\` - Forces the bot to leave the current server.\n` +
                     `\`.serverdump\` - Generates a full text data dump file of channels, roles, and members.\n` +
+                    `\`.servers\` - Lists all servers the bot is in with their member counts.\n` +
+                    `\`.restart\` - Kills the bot process (Render will automatically revive it).\n` +
+                    `\`.setstatus <text>\` - Changes the bot's custom playing status.\n` +
                     `\`.dev\` - Sends you this private developer command checklist.`
                 );
-                return message.reply('📬 Check your DMs! Sent the developer commands over.').catch(() => {});
+                return message.reply('📬 Check your DMs! Sent the updated developer commands over.').catch(() => {});
             } catch (err) {
                 return message.reply('❌ I couldn\'t DM you! Please make sure your DMs are open.').catch(() => {});
             }
@@ -104,6 +107,7 @@ module.exports = (client) => {
                 return message.reply('❌ Failed to gather server data.').catch(() => {});
             }
         }
+
         // ==========================================
         // NEW DEV TOOLS (.servers, .restart, .setstatus)
         // ==========================================
@@ -122,7 +126,7 @@ module.exports = (client) => {
             if (message.author.id !== myOwnerId) return;
             
             await message.reply('🔄 **Initiating remote reboot...**\nGoing offline. Render will automatically revive me in ~2 minutes.').catch(() => {});
-            process.exit(1); // This fatally kills the Node.js process, triggering Render's auto-restart
+            process.exit(1); 
         }
 
         if (text.startsWith('.setstatus ')) {
@@ -131,11 +135,10 @@ module.exports = (client) => {
             const newStatus = message.content.slice(11).trim();
             if (!newStatus) return message.reply('❌ You need to provide a status text!').catch(() => {});
             
-            // Sets a custom playing status
             client.user.setActivity(newStatus, { type: 4 }); 
             return message.reply(`✅ Starry's status successfully updated to: **${newStatus}**`).catch(() => {});
         }
-        
+
         // ==========================================
         // 1. IMAGE GENERATOR (.imagine)
         // ==========================================
@@ -208,6 +211,32 @@ module.exports = (client) => {
                         - Delete a role: [CMD:DELETEROLE|ROLE_ID:456]
                         - List a user's roles: [CMD:LISTROLES|USER_ID:123]
                         
+                        RULE 3 (Channel Management - CHANNELS ONLY): To add/remove permissions or CREATE channels:
+                        - Add role to channel: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
+                        - Remove role from channel: [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
+                        - Add user to channel: [CMD:USERALLOW|CHANNEL_ID:123|USER_ID:456]
+                        - Remove user from channel: [CMD:USERDENY|CHANNEL_ID:123|USER_ID:456]
+                        - Create a text channel: [CMD:CREATECHANNEL|NAME:channel-name]
+                        - Create a private channel for a role: [CMD:CREATECHANNEL|NAME:channel-name|ROLE_ID:456]
+                        *CRUCIAL:* If the user says "this channel" or does not specify a channel, omit the CHANNEL_ID entirely (e.g. [CMD:CHANNELDENY|ROLE_ID:456]).
+
+                        RULE 4 (Server Commands & Images): If the user asks for real server actions or to GENERATE AN IMAGE, output a RUN block:
+                        - Generate an Image: [RUN:.imagine A wizard penguin]
+                        - Giveaways: [RUN:.giveaway 10m Discord Nitro] 
+                        - Lock Channel: [RUN:.lock]
+                        - Unlock Channel: [RUN:.unlock]
+                        
+                        RULE 5 (Casual Chat): If the user asks a general question, do NOT use CMD or RUN blocks. Just reply naturally in text!` 
+                    },
+                    { role: "user", content: `${message.author.username} says: ${message.content}` }
+                ],
+                model: "llama-3.1-8b-instant"
+            });
+
+            let replyText = chatCompletion.choices[0].message.content || "";
+            let functionName = null;
+            let args = {};
+              
                         RULE 3 (Channel Management - CHANNELS ONLY): To add/remove permissions or CREATE channels:
                         - Add role to channel: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456]
                         - Remove role from channel: [CMD:CHANNELDENY|CHANNEL_ID:123|ROLE_ID:456]
