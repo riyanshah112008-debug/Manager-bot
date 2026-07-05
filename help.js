@@ -67,12 +67,12 @@ module.exports = (client) => {
                 },
                 { 
                     name: '📊 Utility, Setup & Fun', 
-                    value: '`/afk` or `.afk <reason>` - Set an AFK status to warn users who ping you\n`/whois` - Pull up a detailed ID card for any user\n`/tod` - Play Truth or Dare\n`/setupstats` - Create live server member & bot count voice channels (Admin)\n`/setupcount` - Set the current channel as the Counting Game channel (Admin)\n\n**Passive Tracking:** Advanced Server Logs, Invite Tracker, Bump Tracker', 
+                    value: '`/afk` or `.afk <reason>` - Set an AFK status to warn users who ping you\n`/whois` - Pull up a detailed ID card for any user\n`/tod` - Play Truth or Dare\n`/setupstats` - Create live server member & bot count voice channels (Admin)\n`/setupcount` - Set the current channel as the Counting Game channel (Admin)\n`/setlogs` or `.setlogs <#channel>` - Setup permanent MongoDB server auditing logs (Admin)\n\n**Passive Tracking:** Advanced Server Logs, Invite Tracker, Bump Tracker', 
                     inline: false 
                 },
                 { 
                     name: '✨ Starry AI & Extras', 
-                    value: '`.imagine <prompt>` - Generate stunning AI images\n`@Starry <message>` - Chat naturally with the AI (can kick/ban/clear if authorized by Admin)\n\n*Premium features are active on this server.*', 
+                    value: '`.imagine <prompt>` - Generate stunning AI images\n`@Starry <message>` or say `starry` - Chat naturally with the AI engine!\n\n**AI Admin Powers:** Starry understands natural language commands to kick, ban, timeout, clear messages, manage roles (create/delete/give/remove), and control channel permissions! Just ask her to do it in plain English.\n\n*Premium features are active on this server.*', 
                     inline: false 
                 }
             )
@@ -103,3 +103,4 @@ module.exports = (client) => {
         await interaction.reply({ embeds: [helpEmbed] }).catch(() => {});
     });
 };
+                    
