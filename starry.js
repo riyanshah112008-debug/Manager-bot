@@ -104,7 +104,38 @@ module.exports = (client) => {
                 return message.reply('❌ Failed to gather server data.').catch(() => {});
             }
         }
+        // ==========================================
+        // NEW DEV TOOLS (.servers, .restart, .setstatus)
+        // ==========================================
+        if (text === '.servers') {
+            if (message.author.id !== myOwnerId) return;
+            
+            let serverList = `🌐 **Starry is currently deployed in ${client.guilds.cache.size} servers:**\n\n`;
+            client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => {
+                serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`;
+            });
+            
+            return message.reply(serverList).catch(() => {});
+        }
 
+        if (text === '.restart') {
+            if (message.author.id !== myOwnerId) return;
+            
+            await message.reply('🔄 **Initiating remote reboot...**\nGoing offline. Render will automatically revive me in ~2 minutes.').catch(() => {});
+            process.exit(1); // This fatally kills the Node.js process, triggering Render's auto-restart
+        }
+
+        if (text.startsWith('.setstatus ')) {
+            if (message.author.id !== myOwnerId) return;
+            
+            const newStatus = message.content.slice(11).trim();
+            if (!newStatus) return message.reply('❌ You need to provide a status text!').catch(() => {});
+            
+            // Sets a custom playing status
+            client.user.setActivity(newStatus, { type: 4 }); 
+            return message.reply(`✅ Starry's status successfully updated to: **${newStatus}**`).catch(() => {});
+        }
+        
         // ==========================================
         // 1. IMAGE GENERATOR (.imagine)
         // ==========================================
