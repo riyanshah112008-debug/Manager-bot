@@ -9,20 +9,6 @@ const aiCooldowns = new Set();
 
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
-        // ==========================================
-        // OWNER-ONLY: EMERGENCY LEAVE COMMAND
-        // ==========================================
-        if (text === '.emergencyleave') {
-            // Paste your actual Discord User ID inside the quotes below
-            const myOwnerId = 'YOUR_COPIED_ID_HERE'; 
-
-            if (message.author.id === myOwnerId) {
-                await message.reply('I am leaving this server now. Goodbye! 👋').catch(() => {});
-                return message.guild.leave(); // Forces the bot to leave the server
-            } else {
-                return; // If anyone else types it, the bot silently ignores them
-            }
-        }
 
         // ==========================================
         // 0. DISBOARD BUMP TRACKER
@@ -44,6 +30,21 @@ module.exports = (client) => {
         if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
+
+        // ==========================================
+        // OWNER-ONLY: EMERGENCY LEAVE COMMAND
+        // ==========================================
+        if (text === '.emergencyleave') {
+            // Paste your actual Discord User ID inside the quotes below
+            const myOwnerId = '1465049039153135639'; 
+
+            if (message.author.id === myOwnerId) {
+                await message.reply('I am leaving this server now. Goodbye! 👋').catch(() => {});
+                return message.guild.leave(); // Forces the bot to leave the server
+            } else {
+                return; // If anyone else types it, the bot silently ignores them
+            }
+        }
 
         // ==========================================
         // 1. IMAGE GENERATOR (.imagine)
