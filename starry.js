@@ -6,7 +6,7 @@ const groq = new Groq({
 });
 
 const aiCooldowns = new Set();
-const blacklistedUsers = new Set(); // 🚫 Temporary Blacklist Memory
+const blacklistedUsers = new Set(); 
 
 module.exports = (client) => {
     
@@ -16,9 +16,6 @@ module.exports = (client) => {
 
     client.on('messageCreate', async (message) => {
 
-        // ==========================================
-        // 0. DISBOARD BUMP TRACKER & BLACKLIST CHECK
-        // ==========================================
         if (blacklistedUsers.has(message.author.id)) return; 
 
         if (message.author.id === '302050872383242240') { 
@@ -37,9 +34,6 @@ module.exports = (client) => {
         const text = message.content.toLowerCase();
         const myOwnerId = '1465049039153135639'; 
 
-        // ==========================================
-        // OWNER-ONLY: DEVELOPER TOOLS 
-        // ==========================================
         if (text === '.dev') {
             if (message.author.id !== myOwnerId) return;
             try {
@@ -176,9 +170,6 @@ module.exports = (client) => {
             return message.reply(`✅ Starry's status successfully updated to: **${newStatus}**`).catch(() => {});
         }
 
-        // ==========================================
-        // 1. IMAGE GENERATOR (.imagine)
-        // ==========================================
         if (text.startsWith('.imagine ')) {
             const imagePrompt = message.content.slice(9).trim();
             if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(() => {});
@@ -202,9 +193,6 @@ module.exports = (client) => {
             }
         }
 
-        // ==========================================
-        // 2. TEXT CONVERSATION & CUSTOM MODERATION
-        // ==========================================
         const mentionsBot = message.mentions.has(client.user.id);
         const containsName = text.includes('starry');
 
@@ -346,4 +334,14 @@ module.exports = (client) => {
                     functionName = action === 'USERALLOW' ? 'user_allow' : 'user_deny';
                     const cidMatch = params.find(p => p.toUpperCase().startsWith('CHANNEL_ID:'));
                     const uidMatch = params.find(p => p.toUpperCase().startsWith('USER_ID:'));
-                    args.channelId 
+                    args.channelId = cidMatch ? cidMatch.substring(11).trim() : "";
+                    args.userId = uidMatch ? uidMatch.substring(8).trim() : "";
+                } else if (action === 'CREATECHANNEL') {
+                    functionName = 'create_channel';
+                    const nameMatch = params.find(p => p.toUpperCase().startsWith('NAME:'));
+                    const ridMatch = params.find(p => p.toUpperCase().startsWith('ROLE_ID:'));
+                    args.channelName = nameMatch ? nameMatch.substring(5).trim() : "";
+                    args.roleId = ridMatch ? ridMatch.substring(8).trim() : "";
+                }
+
+                replyText = replyText.
