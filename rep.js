@@ -1,82 +1,97 @@
 const { EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-const dbPath = path.join(__dirname, 'repData.json');
+const Database = require('better-sqlite3');
+
+// 1. Initialize the SQLite Database
+const db = new Database('reputation.db');
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS rep (
+        guild_id TEXT,
+        user_id TEXT,
+        rep INTEGER DEFAULT 0,
+        last_given INTEGER DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+    )
+`);
+
+const getUser = db.prepare('SELECT rep, last_given FROM rep WHERE guild_id = ? AND user_id = ?');
+const insertUser = db.prepare('INSERT INTO rep (guild_id, user_id, rep, last_given) VALUES (?, ?, ?, ?)');
+const updateRep = db.prepare('UPDATE rep SET rep = rep + 1 WHERE guild_id = ? AND user_id = ?');
+const updateCooldown = db.prepare('UPDATE rep SET last_given = ? WHERE guild_id = ? AND user_id = ?');
+
+function ensureUser(guildId, userId) {
+    let user = getUser.get(guildId, userId);
+    if (!user) {
+        insertUser.run(guildId, userId, 0, 0);
+        user = { rep: 0, last_given: 0 };
+    }
+    return user;
+}
 
 module.exports = (client) => {
-    function getRepData() {
-        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
-        return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-    }
-
-    function saveRepData(data) {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-    }
-
-    client.on('ready', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'rep',
-                description: 'Give a reputation point to another user (Once per day)',
-                options: [{ name: 'user', description: 'The user to give rep to', type: 6, required: true }]
-            });
-            await client.application.commands.create({
-                name: 'checkrep',
-                description: 'Check your or another user\'s reputation',
-                options: [{ name: 'user', description: 'The user to check', type: 6, required: false }]
-            });
-            console.log('✅ Reputation System Loaded');
-        } catch (err) {}
-    });
-
+    // ==========================================
+    // SLASH COMMAND HANDLERS
+    // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
+        // --- COMMAND: /rep ---
         if (interaction.commandName === 'rep') {
             const target = interaction.options.getUser('user');
-            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot give reputation to yourself!', ephemeral: true });
-            if (target.bot) return interaction.reply({ content: '❌ You cannot give reputation to bots!', ephemeral: true });
-
-            const data = getRepData();
-            const guildId = interaction.guild.id;
-            const userId = interaction.user.id;
-            const targetId = target.id;
-            const now = Date.now();
-            const cooldown = 24 * 60 * 60 * 1000; // 24 hours
-
-            if (!data[guildId]) data[guildId] = {};
-            if (!data[guildId][userId]) data[guildId][userId] = { lastGiven: 0 };
-            if (!data[guildId][targetId]) data[guildId][targetId] = { rep: 0 };
-
-            const lastGiven = data[guildId][userId].lastGiven || 0;
-            if (now - lastGiven < cooldown) {
-                const timeLeft = Math.floor((lastGiven + cooldown) / 1000);
-                return interaction.reply({ content: `⏳ You have already given rep recently! You can give rep again <t:${timeLeft}:R>.`, ephemeral: true });
+            
+            if (target.id === interaction.user.id) {
+                return interaction.reply({ content: '❌ You cannot give reputation to yourself!', ephemeral: true }).catch(() => {});
+            }
+            if (target.bot) {
+                return interaction.reply({ content: '❌ You cannot give reputation to bots!', ephemeral: true }).catch(() => {});
             }
 
-            // Grant the rep
-            data[guildId][targetId].rep = (data[guildId][targetId].rep || 0) + 1;
-            data[guildId][userId].lastGiven = now;
-            saveRepData(data);
+            const guildId = interaction.guild.id;
+            const giverId = interaction.user.id;
+            const targetId = target.id;
+            const now = Date.now();
+            const cooldown = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+            // Ensure both users exist in the database
+            const giverData = ensureUser(guildId, giverId);
+            ensureUser(guildId, targetId);
+
+            // Check Cooldown
+            if (now - giverData.last_given < cooldown) {
+                const timeLeft = Math.floor((giverData.last_given + cooldown) / 1000);
+                return interaction.reply({ content: `⏳ You have already given rep today! You can give rep again <t:${timeLeft}:R>.`, ephemeral: true }).catch(() => {});
+            }
+
+            // Execute the Transaction
+            updateRep.run(guildId, targetId);
+            updateCooldown.run(now, guildId, giverId);
+
+            // Fetch the updated rep count for the target
+            const updatedTargetData = getUser.get(guildId, targetId);
 
             const embed = new EmbedBuilder()
-                .setColor('Gold')
-                .setDescription(`🌟 <@${interaction.user.id}> gave **+1 Reputation** to <@${targetId}>!\nThey now have **${data[guildId][targetId].rep}** Rep.`);
+                .setColor('#FFD700') // Gold
+                .setDescription(`🌟 <@${giverId}> gave **+1 Reputation** to <@${targetId}>!\nThey now have **${updatedTargetData.rep}** Rep.`)
+                .setTimestamp();
             
-            await interaction.reply({ embeds: [embed] });
+            await interaction.reply({ embeds: [embed] }).catch(() => {});
         }
 
+        // --- COMMAND: /checkrep ---
         if (interaction.commandName === 'checkrep') {
             const target = interaction.options.getUser('user') || interaction.user;
-            const data = getRepData();
-            const repCount = data[interaction.guild.id]?.[target.id]?.rep || 0;
+            const guildId = interaction.guild.id;
+
+            const userData = ensureUser(guildId, target.id);
 
             const embed = new EmbedBuilder()
-                .setColor('Blurple')
-                .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
-                .setDescription(`🌟 **Reputation Points:** ${repCount}`);
+                .setColor('#2b2d31')
+                .setAuthor({ name: `${target.username}'s Reputation`, iconURL: target.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`🌟 **Reputation Points:** \`${userData.rep}\``)
+                .setTimestamp();
             
-            await interaction.reply({ embeds: [embed] });
+            await interaction.reply({ embeds: [embed] }).catch(() => {});
         }
     });
 };
+                                          
