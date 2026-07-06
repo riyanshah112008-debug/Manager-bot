@@ -17,24 +17,7 @@ module.exports = (client) => {
     }
 
     // ==========================================
-    // 1. REGISTER SLASH COMMAND
-    // ==========================================
-    client.on('ready', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'setupcount',
-                description: 'Set the channel for the Counting Game (Admin Only)',
-                default_member_permissions: '8',
-                options: [
-                    { name: 'channel', description: 'The counting channel', type: 7, required: true }
-                ]
-            });
-            console.log('✅ Counting Game Module Loaded');
-        } catch (err) {}
-    });
-
-    // ==========================================
-    // 2. SETUP COMMAND LOGIC
+    // 1. SETUP COMMAND LOGIC
     // ==========================================
     
     // Slash Command
@@ -72,7 +55,7 @@ module.exports = (client) => {
         }
 
         // ==========================================
-        // 3. THE COUNTING GAME RULES
+        // 2. THE COUNTING GAME RULES
         // ==========================================
         let data = getCountData();
         const guildData = data[message.guild.id];
@@ -122,3 +105,4 @@ module.exports = (client) => {
         }
     });
 };
+                                                
