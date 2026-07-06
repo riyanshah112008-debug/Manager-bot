@@ -4,22 +4,7 @@ module.exports = (client) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. DISCORD SLASH COMMAND SYNC (MODULAR)
-    // ==========================================
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'help',
-                description: 'Shows all available commands and bot info'
-            });
-            console.log('✅ Help Slash Command Added');
-        } catch (error) {
-            console.error('❌ Failed to add help slash command:', error);
-        }
-    });
-
-    // ==========================================
-    // 2. HELP EMBED BUILDER
+    // 1. HELP EMBED BUILDER
     // ==========================================
     const buildHelpEmbed = (user, guild) => {
         return new EmbedBuilder()
@@ -81,7 +66,7 @@ module.exports = (client) => {
     };
 
     // ==========================================
-    // 3. PREFIX COMMAND (.help)
+    // 2. PREFIX COMMAND (.help)
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
@@ -93,7 +78,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 4. SLASH COMMAND (/help)
+    // 3. SLASH COMMAND (/help)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
