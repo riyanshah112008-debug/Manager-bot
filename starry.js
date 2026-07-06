@@ -1,11 +1,12 @@
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { Groq } = require('groq-sdk');
+const { GoogleGenAI } = require('@google/genai');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Initialize Gemini instead of Groq
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
-    client.on('ready', () => { console.log('✅ Starry Protocol Module Loaded'); });
+    client.on('ready', () => { console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); });
     client.on('messageCreate', async (message) => {
         if (blacklistedUsers.has(message.author.id)) return;
         if (message.author.id === '302050872383242240') {
@@ -17,6 +18,8 @@ module.exports = (client) => {
         if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
+        
+        // REPLACE THIS WITH YOUR ACTUAL DISCORD USER ID
         const myOwnerId = '1465049039153135639';
 
         if (text === '.dev') {
@@ -115,27 +118,28 @@ module.exports = (client) => {
         const mentionsBot = message.mentions.has(client.user.id);
         if (!mentionsBot && !text.includes('starry') && !(message.reference && (await message.channel.messages.fetch(message.reference.messageId).catch(()=>{}))?.author.id === client.user.id)) return;
 
-        // Sent typing indicator directly without cooldown checks
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const chatCompletion = await groq.chat.completions.create({
-                messages: [
-                    { 
-                        role: "system", 
-                        content: `You are Starry, a helpful Discord bot. 
-                        RULE 1: To moderate, output EXACTLY: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
-                        RULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).
-                        RULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY, CREATECHANNEL). Omit CHANNEL_ID for current channel.
-                        RULE 4: For commands: [RUN:.imagine penguin]
-                        RULE 5: Casual chat requires natural text.` 
-                    },
-                    { role: "user", content: `${message.author.username} says: ${message.content}` }
-                ],
-                model: "llama-3.1-8b-instant"
+            // Updated Prompt Structure for Gemini
+            const prompt = `[SYSTEM INSTRUCTION]
+You are Starry, a helpful Discord bot. 
+RULE 1: To moderate, output EXACTLY: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
+RULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).
+RULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY, CREATECHANNEL). Omit CHANNEL_ID for current channel.
+RULE 4: For commands: [RUN:.imagine penguin]
+RULE 5: Casual chat requires natural text.
+
+[USER MESSAGE]
+${message.author.username} says: ${message.content}`;
+
+            // Gemini 2.5 Flash Generation
+            const geminiResponse = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt
             });
 
-            let replyText = chatCompletion.choices[0].message.content || "";
+            let replyText = geminiResponse.text || "";
             let functionName = null; let args = {};
 
             const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
@@ -236,9 +240,8 @@ module.exports = (client) => {
             if (replyText.length > 0) return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
 
         } catch (error) { 
-            console.error("Groq AI Error:", error);
-            return message.reply("❌ An AI error occurred (Possible Groq Rate Limit).").catch(()=>{}); 
+            console.error("Gemini AI Error:", error);
+            return message.reply("❌ My AI core experienced a glitch processing that request.").catch(()=>{}); 
         }
     });
 };
-                
