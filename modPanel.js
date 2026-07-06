@@ -28,24 +28,7 @@ module.exports = (client) => {
     }
 
     // ==========================================
-    // 1. REGISTER THE COMMAND
-    // ==========================================
-    client.on('ready', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'modpanel',
-                description: 'Open an interactive UI dashboard to moderate a user (Mod Only)',
-                default_member_permissions: '8192', // Manage Messages permission
-                options: [
-                    { name: 'user', description: 'The user you want to moderate', type: 6, required: true }
-                ]
-            });
-            console.log('✅ Interactive Mod Panel Loaded');
-        } catch (err) {}
-    });
-
-    // ==========================================
-    // 2. SPAWN THE BUTTON DASHBOARD
+    // 1. SPAWN THE BUTTON DASHBOARD
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'modpanel') return;
@@ -71,7 +54,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 3. HANDLE BUTTON CLICKS (OPEN MODALS)
+    // 2. HANDLE BUTTON CLICKS (OPEN MODALS)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
@@ -103,7 +86,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 4. HANDLE MODAL SUBMISSIONS (EXECUTE ACTION)
+    // 3. HANDLE MODAL SUBMISSIONS (EXECUTE ACTION)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isModalSubmit()) return;
@@ -113,6 +96,23 @@ module.exports = (client) => {
         const action = parts[1];
         const targetId = parts[2];
         const reason = interaction.fields.getTextInputValue('reason') || 'No reason provided';
+        
+        // 🚨 PROTECTION SYSTEM CHECK 🚨
+        const isProtected = client.isUserProtected && client.isUserProtected(interaction.guildId, targetId);
+        if (isProtected && ['timeout', 'kick', 'ban'].includes(action)) {
+            
+            // Log the attempt
+            const logChannelId = '123456789012345678'; 
+            const logChannel = interaction.guild.channels.cache.get(logChannelId);
+            if (logChannel) {
+                logChannel.send(`🚨 **PROTECTION ALERT** 🚨\nModerator <@${interaction.user.id}> attempted to **${action}** protected user <@${targetId}> via the Mod Panel.\n**Reason:** ${reason}`).catch(()=>{});
+            }
+
+            return interaction.reply({ 
+                content: `❌ **Action Denied:** You cannot ${action} <@${targetId}> because they are protected by the server owner!`, 
+                ephemeral: true 
+            });
+        }
         
         const member = await interaction.guild.members.fetch(targetId).catch(() => null);
         
@@ -156,3 +156,4 @@ module.exports = (client) => {
         }
     });
 };
+    
