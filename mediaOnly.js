@@ -5,33 +5,6 @@ const dbPath = path.join(__dirname, 'mediaChannels.json');
 module.exports = (client) => {
     const PREFIX = '.';
 
-    // ==========================================
-    // 1. REGISTER SLASH COMMAND
-    // ==========================================
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'mediaonly',
-                description: 'Manage Media-Only mode for the current channel (Admin Only)',
-                default_member_permissions: '8',
-                options: [
-                    {
-                        name: 'action',
-                        description: 'Enable, disable, or check status',
-                        type: 3, 
-                        required: true,
-                        choices: [
-                            { name: 'Enable', value: 'enable' },
-                            { name: 'Disable', value: 'disable' },
-                            { name: 'Status', value: 'status' }
-                        ]
-                    }
-                ]
-            });
-            console.log('✅ Media-Only Module Loaded');
-        } catch (err) {}
-    });
-
     function getMediaData() {
         if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([]));
         return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
@@ -42,18 +15,21 @@ module.exports = (client) => {
     }
 
     // ==========================================
-    // 2. HANDLE SLASH COMMANDS (/mediaonly)
+    // 1. HANDLE SLASH COMMANDS (/mediaonly)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'mediaonly') return;
 
         const action = interaction.options.getString('action');
+        // Let them specify a channel, otherwise default to the current one
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        const channelId = targetChannel.id;
+        
         let channels = getMediaData();
-        const channelId = interaction.channel.id;
 
         if (action === 'status') {
             const isEnabled = channels.includes(channelId);
-            return interaction.reply({ content: `📢 **Media-Only Status for <#${channelId}>:** ${isEnabled ? '🟢 Enabled' : '🔴 Disabled'}` }).catch(() => {});
+            return interaction.reply({ content: `📢 **Media-Only Status for <#${channelId}>:** ${isEnabled ? '🟢 Enabled' : '🔴 Disabled'}`, ephemeral: true }).catch(() => {});
         }
 
         if (action === 'enable') {
@@ -61,18 +37,18 @@ module.exports = (client) => {
                 channels.push(channelId);
                 saveMediaData(channels);
             }
-            return interaction.reply({ content: '✅ Media-Only mode **enabled**. Only images, videos, and links are allowed here!' }).catch(() => {});
+            return interaction.reply({ content: `✅ Media-Only mode **enabled** in <#${channelId}>. Only images, videos, and links are allowed there now!` }).catch(() => {});
         }
 
         if (action === 'disable') {
             channels = channels.filter(id => id !== channelId);
             saveMediaData(channels);
-            return interaction.reply({ content: '🚫 Media-Only mode **disabled**. Text is now allowed here.' }).catch(() => {});
+            return interaction.reply({ content: `🚫 Media-Only mode **disabled** in <#${channelId}>. Text is now allowed again.` }).catch(() => {});
         }
     });
 
     // ==========================================
-    // 3. HANDLE PREFIX COMMANDS & ENFORCEMENT
+    // 2. HANDLE PREFIX COMMANDS & ENFORCEMENT
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
@@ -87,11 +63,13 @@ module.exports = (client) => {
             const action = args[0]?.toLowerCase();
             
             if (!['enable', 'disable', 'status'].includes(action)) {
-                return message.reply('🔹 **Usage:** `.mediaonly <enable/disable/status>`').catch(() => {});
+                return message.reply('🔹 **Usage:** `.mediaonly <enable/disable/status> [#channel]`').catch(() => {});
             }
 
+            // Let them tag a channel, otherwise default to current
+            const targetChannel = message.mentions.channels.first() || message.channel;
+            const channelId = targetChannel.id;
             let channels = getMediaData();
-            const channelId = message.channel.id;
 
             if (action === 'status') {
                 const isEnabled = channels.includes(channelId);
@@ -103,13 +81,13 @@ module.exports = (client) => {
                     channels.push(channelId);
                     saveMediaData(channels);
                 }
-                return message.reply('✅ Media-Only mode **enabled**. Only images, videos, and links are allowed here!').catch(() => {});
+                return message.reply(`✅ Media-Only mode **enabled** in <#${channelId}>. Only images, videos, and links are allowed there now!`).catch(() => {});
             }
 
             if (action === 'disable') {
                 channels = channels.filter(id => id !== channelId);
                 saveMediaData(channels);
-                return message.reply('🚫 Media-Only mode **disabled**. Text is now allowed here.').catch(() => {});
+                return message.reply(`🚫 Media-Only mode **disabled** in <#${channelId}>. Text is now allowed again.`).catch(() => {});
             }
             return;
         }
@@ -135,3 +113,4 @@ module.exports = (client) => {
         }
     });
 };
+                
