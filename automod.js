@@ -34,15 +34,7 @@ module.exports = (client) => {
   }
 
   // ==========================================
-  // 1. REGISTER SLASH COMMANDS (DISABLED)
-  // ==========================================
-  client.on('clientReady', async () => {
-      // Commands are already deployed to Discord, skipping sync to avoid rate limits!
-      console.log('✅ Automod Module Loaded');
-  });
-
-  // ==========================================
-  // 2. HANDLE SLASH COMMANDS
+  // 1. HANDLE SLASH COMMANDS
   // ==========================================
   client.on('interactionCreate', async (interaction) => {
       if (!interaction.isChatInputCommand()) return;
@@ -96,7 +88,7 @@ module.exports = (client) => {
   });
 
   // ==========================================
-  // 3. HANDLE PREFIX COMMANDS & SPAM FILTER
+  // 2. HANDLE PREFIX COMMANDS & SPAM FILTER
   // ==========================================
   client.on("messageCreate", async (message) => {
     if (message.author.bot || !message.guild) return;
@@ -216,3 +208,4 @@ module.exports = (client) => {
     }
   });
 };
+  
