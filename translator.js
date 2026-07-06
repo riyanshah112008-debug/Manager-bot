@@ -1,5 +1,5 @@
 const translate = require('google-translate-api-x');
-const { EmbedBuilder, REST, Routes } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 const languageMap = {
     'english': 'en', 'spanish': 'es', 'french': 'fr', 'german': 'de',
@@ -12,18 +12,24 @@ module.exports = (client, app) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. EXPRESS WEB API
+    // 1. EXPRESS WEB API (Premium Locked)
     // ==========================================
     if (app) {
         app.get('/api/translate', async (req, res) => {
             const text = req.query.text;
             const requestedLang = req.query.to || 'en';
+            const guildId = req.query.guildId; // Expecting guildId in request
+
+            if (!guildId || !client.isPremium(guildId)) {
+                return res.status(403).json({ error: 'Premium required' });
+            }
+            
             if (!text) return res.status(400).json({ error: 'No text provided' });
             
             const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
             try {
                 const result = await translate(text, { to: targetCode, client: 'gtx' });
-                res.json({ success: true, translatedText: result.text, sourceLanguage: result.raw.src });
+                res.json({ success: true, translatedText: result.text });
             } catch (error) {
                 res.status(500).json({ error: error.message });
             }
@@ -31,87 +37,54 @@ module.exports = (client, app) => {
     }
 
     // ==========================================
-    // ==========================================
-    // 2. DISCORD SLASH COMMAND SYNC (MODULAR)
-    // ==========================================
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'translate',
-                description: 'Translate text to another language',
-                options: [
-                    { name: 'language', description: 'Language to translate to (e.g., german)', type: 3, required: true },
-                    { name: 'text', description: 'The text to translate', type: 3, required: true }
-                ]
-            });
-            console.log('✅ Translator Slash Commands Added');
-        } catch (error) {
-            console.error('❌ Failed to add translator slash commands:', error);
-        }
-    });
-
-
-    // ==========================================
-    // 3. DISCORD PREFIX COMMAND (.translate)
+    // 2. DISCORD COMMANDS
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
+        if (!message.content.startsWith(PREFIX + 'translate')) return;
 
-        const args = message.content.trim().split(/ +/);
-        const command = args.shift().toLowerCase();
+        // 🔒 PREMIUM LOCK
+        if (!client.isPremium(message.guild.id)) {
+            return message.reply('❌ **Translator is a Premium feature!** Use `.premium` to upgrade.').catch(() => {});
+        }
 
-        if (command === PREFIX + 'translate') {
-            const requestedLang = args.shift(); 
-            let text = args.join(' '); 
+        const args = message.content.slice(PREFIX.length + 9).trim().split(/ +/);
+        const requestedLang = args.shift(); 
+        let text = args.join(' '); 
 
-            if (!requestedLang) {
-                return message.reply('❌ **Usage:** `.translate <language> <text>`\n💡 *Tip: You can also reply to someone else\'s message with* `.translate <language>`');
-            }
+        if (!requestedLang) return message.reply('🔹 **Usage:** `.translate <language> <text>`');
+        if (!text && message.reference) {
+            const repliedMessage = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+            text = repliedMessage?.content;
+        }
 
-            if (!text && message.reference) {
-                try {
-                    const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
-                    text = repliedMessage.content;
-                } catch (err) {
-                    return message.reply('❌ I could not read the message you replied to.');
-                }
-            }
+        if (!text) return message.reply('❌ Please provide text to translate.');
 
-            if (!text) {
-                return message.reply('❌ You forgot to tell me what to translate! Either type text after the language or reply to a message.');
-            }
+        const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
+        const waitMessage = await message.reply('🔄 Translating...');
 
-            const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
-            const waitMessage = await message.reply('🔄 Translating...');
-
-            try {
-                // client: 'gtx' helps bypass Google 403 Forbidden blocks
-                const result = await translate(text, { to: targetCode, client: 'gtx' });
-                
-                const embed = new EmbedBuilder()
-                    .setColor('#7289DA')
-                    .setTitle('🌐 Translation')
-                    .addFields(
-                        { name: `To ${requestedLang.charAt(0).toUpperCase() + requestedLang.slice(1)}`, value: result.text },
-                        { name: 'Original', value: text.length > 1024 ? text.substring(0, 1020) + '...' : text }
-                    )
-                    .setFooter({ text: 'Powered by Google Translate' });
-
-                await waitMessage.edit({ content: null, embeds: [embed] });
-            } catch (error) {
-                console.error('[Translator Error]', error);
-                // Print the exact error so we can read it
-                await waitMessage.edit(`❌ Translation Failed: \`${error.message || 'Unknown API Error'}\``);
-            }
+        try {
+            const result = await translate(text, { to: targetCode, client: 'gtx' });
+            const embed = new EmbedBuilder()
+                .setColor('#7289DA')
+                .setTitle('🌐 Translation')
+                .addFields(
+                    { name: `To ${requestedLang}`, value: result.text },
+                    { name: 'Original', value: text.substring(0, 1000) }
+                );
+            await waitMessage.edit({ content: null, embeds: [embed] });
+        } catch (error) {
+            await waitMessage.edit(`❌ Translation Failed: \`${error.message}\``);
         }
     });
 
-    // ==========================================
-    // 4. DISCORD SLASH COMMAND (/translate)
-    // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
-        if (interaction.commandName !== 'translate') return;
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'translate') return;
+
+        // 🔒 PREMIUM LOCK
+        if (!client.isPremium(interaction.guild.id)) {
+            return interaction.reply({ content: '❌ **Translator is a Premium feature!** Use `.premium` to upgrade.', ephemeral: true });
+        }
 
         const requestedLang = interaction.options.getString('language');
         const text = interaction.options.getString('text');
@@ -121,21 +94,17 @@ module.exports = (client, app) => {
 
         try {
             const result = await translate(text, { to: targetCode, client: 'gtx' });
-            
             const embed = new EmbedBuilder()
                 .setColor('#7289DA')
                 .setTitle('🌐 Translation')
                 .addFields(
-                    { name: `To ${requestedLang.charAt(0).toUpperCase() + requestedLang.slice(1)}`, value: result.text },
+                    { name: `To ${requestedLang}`, value: result.text },
                     { name: 'Original', value: text }
-                )
-                .setFooter({ text: 'Powered by Google Translate' });
-
+                );
             await interaction.followUp({ embeds: [embed] });
         } catch (error) {
-            console.error('[Translator Slash Error]', error);
-            await interaction.followUp(`❌ Translation Failed: \`${error.message || 'Unknown API Error'}\``);
+            await interaction.followUp(`❌ Translation Failed: \`${error.message}\``);
         }
     });
 };
-                    
+            
