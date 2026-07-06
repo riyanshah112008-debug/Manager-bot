@@ -1,88 +1,54 @@
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const Database = require('better-sqlite3');
-
-// Create a database to remember the goodbye channel
-const db = new Database('goodbye.db');
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS goodbye_settings (
-        guild_id TEXT PRIMARY KEY,
-        channel_id TEXT
-    )
-`);
-
-const getGoodbye = db.prepare('SELECT channel_id FROM goodbye_settings WHERE guild_id = ?');
-const setGoodbye = db.prepare(`
-    INSERT INTO goodbye_settings (guild_id, channel_id) 
-    VALUES (?, ?) 
-    ON CONFLICT(guild_id) DO UPDATE SET channel_id = ?
-`);
+const { Events, AttachmentBuilder } = require('discord.js');
+const Canvas = require('canvas');
 
 module.exports = (client) => {
-    // 1. Create the Setup Slash Command
-    client.on('clientReady', async () => {
+    client.on(Events.GuildMemberRemove, async (member) => {
+        // Find the goodbye channel. By default, it looks for a channel named 'goodbye' 
+        // or falls back to the server's default system messages channel.
+        const channel = member.guild.channels.cache.find(c => c.name === 'goodbye' || c.name === 'leave') || member.guild.systemChannel;
+        if (!channel) return;
+
         try {
-            await client.application.commands.create({
-                name: 'setgoodbye',
-                description: 'Set the channel where Starry will send goodbye messages',
-                default_member_permissions: '8', // Administrators only
-                options: [
-                    {
-                        name: 'channel',
-                        description: 'The channel to send goodbye embeds to',
-                        type: 7, 
-                        required: true
-                    }
-                ]
-            });
-            console.log('✅ Goodbye Slash Command Added');
-        } catch (error) {
-            console.error('❌ Failed to add goodbye slash command:', error);
+            // 1. Create a blank canvas
+            const canvas = Canvas.createCanvas(1024, 450);
+            const ctx = canvas.getContext('2d');
+
+            // 2. Load your background image
+            const bgURL = 'https://cdn.discordapp.com/attachments/1508799648154779772/1515357119564742847/lv_0_20260519173542.jpg?ex=6a4c5f8b&is=6a4b0e0b&hm=cff1d7636f0ef6d0c6b0d706dbe5e01327484f45922f3de181eecfd25bdbd420&';
+            const background = await Canvas.loadImage(bgURL);
+            ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+
+            // Add a slight dark tint so white text is always readable over bright backgrounds
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 3. Draw the "GOODBYE" text
+            ctx.font = 'bold 80px sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('GOODBYE', canvas.width / 2, canvas.height / 2 + 60);
+
+            // 4. Draw the User's Tag (e.g., Username#1234)
+            ctx.font = '40px sans-serif';
+            ctx.fillStyle = '#cccccc';
+            ctx.fillText(member.user.tag, canvas.width / 2, canvas.height / 2 + 120);
+
+            // 5. Draw the User's Avatar in a circle
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2 - 80, 90, 0, Math.PI * 2, true);
+            ctx.closePath();
+            ctx.clip();
+
+            const avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 256 });
+            const avatar = await Canvas.loadImage(avatarURL);
+            ctx.drawImage(avatar, canvas.width / 2 - 90, canvas.height / 2 - 170, 180, 180);
+
+            // 6. Build and send the final image
+            const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'goodbye.png' });
+            await channel.send({ content: `Farewell, **${member.user.username}**! 🌠`, files: [attachment] });
+
+        } catch (err) {
+            console.error('❌ Failed to generate goodbye image:', err);
         }
-    });
-
-    // 2. Handle the Setup Command
-    client.on('interactionCreate', async interaction => {
-        if (!interaction.isChatInputCommand()) return;
-
-        if (interaction.commandName === 'setgoodbye') {
-            const channel = interaction.options.getChannel('channel');
-            
-            setGoodbye.run(interaction.guildId, channel.id, channel.id);
-            
-            return interaction.reply({ 
-                content: `👋 Success! I will now send goodbye messages to ${channel}!`, 
-                ephemeral: true 
-            }).catch(() => {});
-        }
-    });
-
-    // 3. The Goodbye Event Trigger
-    client.on('guildMemberRemove', async member => {
-        const setting = getGoodbye.get(member.guild.id);
-        if (!setting || !setting.channel_id) return;
-
-        const goodbyeChannel = member.guild.channels.cache.get(setting.channel_id);
-        if (!goodbyeChannel) return; 
-
-        // Build the Goodbye Embed
-        const goodbyeEmbed = new EmbedBuilder()
-            .setColor('#2b2d31') // A darker color for farewells
-            .setTitle(`Farewell, ${member.user.username}... 🌠`)
-            .setDescription(`**${member.user.username}** has left the server. We're sad to see you go!`)
-            .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-            .addFields(
-                { name: '👤 Member Count', value: `We are now down to **${member.guild.memberCount}** members.`, inline: true }
-            )
-            // ⚠️ REPLACE THIS LINK WITH YOUR NEW GOODBYE IMAGE ⚠️
-            .setImage('https://cdn.discordapp.com/attachments/1508799648154779772/1515357119564742847/lv_0_20260519173542.jpg?ex=6a47c24b&is=6a4670cb&hm=309e462cd4c198ffe6667d605b32750ef439d0f81e86393c9a5448c69602087d&') 
-            .setFooter({ text: 'May our paths cross again!', iconURL: member.guild.iconURL() })
-            .setTimestamp();
-
-        // Send the message
-        goodbyeChannel.send({ 
-            content: `Goodbye, **${member.user.username}**. 🕊️`, 
-            embeds: [goodbyeEmbed] 
-        }).catch(err => console.error("Could not send goodbye message:", err));
     });
 };
