@@ -31,23 +31,10 @@ module.exports = (client) => {
     }
 
     // ==========================================
-    // 2. REGISTER THE SLASH COMMAND
+    // 2. BACKGROUND CHECKER INITIALIZATION
     // ==========================================
-    client.on('ready', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'giveaway',
-                description: 'Start a new giveaway in the current channel (Admin Only)',
-                default_member_permissions: '8',
-                options: [
-                    { name: 'duration', description: 'Example: 10m, 1h, 2d', type: 3, required: true },
-                    { name: 'winners', description: 'Number of winners (e.g., 1)', type: 4, required: true },
-                    { name: 'prize', description: 'What are you giving away?', type: 3, required: true }
-                ]
-            });
-            console.log('✅ Giveaway Module Loaded');
-        } catch (err) {}
-
+    // Use 'once' instead of 'on' to prevent duplicate loops if the bot reconnects to Discord
+    client.once('clientReady', () => {
         setInterval(checkGiveaways, 10000); 
     });
 
@@ -198,3 +185,4 @@ module.exports = (client) => {
         }
     }
 };
+            
