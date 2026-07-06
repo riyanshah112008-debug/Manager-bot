@@ -10,14 +10,18 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
-app.get('/health', (req, res) => res.status(200).json({ status: 'awake' }));
+app.get('/health', (req, res) => res.status(200).send('awake'));
 
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web server listening on port ${port}`);
 
+    // Self-ping every 14 minutes to prevent Render sleep
     setInterval(() => {
-        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-izjg.onrender.com';
-        https.get(`${appUrl}/health`).on('error', (err) => {
+        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-hglf.onrender.com';
+        const options = {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        };
+        https.get(`${appUrl}/health`, options).on('error', (err) => {
             console.error('⚠️ Self-ping failed:', err.message);
         });
     }, 840000); 
@@ -152,7 +156,6 @@ if (!process.env.TOKEN) {
 console.log(`🔍 TOKEN DEBUG: The first 5 characters Render sees are: "${process.env.TOKEN.substring(0, 5)}"`);
 console.log(`🔍 TOKEN DEBUG: Total length of the token string is: ${process.env.TOKEN.length} characters`);
 
-// The .catch block is crucial. If Discord rejects the login, this prints the exact reason why!
 client.login(process.env.TOKEN).catch(err => {
     console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
 });
