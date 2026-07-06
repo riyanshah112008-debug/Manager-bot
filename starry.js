@@ -75,19 +75,86 @@ module.exports = (client) => {
             await message.reply('I am leaving this server now. Goodbye! 👋').catch(() => {});
             return message.guild.leave();
         }
-        if (text === '.serverdump') {
+                if (text === '.serverdump') {
             if (message.author.id !== myOwnerId) return;
-            await message.reply('🗄️ Gathering all server data...').catch(() => {});
+            await message.reply('🗄️ Compiling a neatly organized server dump...').catch(() => {});
             try {
-                const guild = message.guild; await guild.members.fetch();
-                let dump = `=== SERVER DUMP: ${guild.name} ===\nServer ID: ${guild.id}\nTotal Members: ${guild.memberCount}\n\n=== CHANNELS ===\n`;
-                guild.channels.cache.sort((a, b) => a.position - b.position).forEach(c => { dump += `[${c.type}] ${c.name} (ID: ${c.id})\n`; });
-                dump += `\n=== ROLES ===\n`;
-                guild.roles.cache.sort((a, b) => b.position - a.position).forEach(r => { dump += `${r.name} (ID: ${r.id})\n`; });
+                const guild = message.guild; 
+                await guild.members.fetch();
+                
+                let dump = `=================================================\n`;
+                dump += `             SERVER DUMP: ${guild.name.toUpperCase()} \n`;
+                dump += `=================================================\n\n`;
+                dump += `[SERVER INFO]\n`;
+                dump += `- Server ID     : ${guild.id}\n`;
+                dump += `- Total Members : ${guild.memberCount}\n`;
+                dump += `- Owner ID      : ${guild.ownerId}\n\n`;
+
+                dump += `=================================================\n`;
+                dump += `                 CHANNELS \n`;
+                dump += `=================================================\n\n`;
+                
+                // Helper function to turn Discord's number types into readable tags
+                const getTypeName = (type) => {
+                    if (type === 0) return '📝 TEXT ';
+                    if (type === 2) return '🔊 VOICE';
+                    if (type === 4) return '📁 CAT  ';
+                    if (type === 5) return '📢 ANN  ';
+                    if (type === 15) return '💬 FORUM';
+                    return '📄 MISC ';
+                };
+
+                const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
+                const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
+
+                // Print channels that don't belong to any category first
+                const noCategory = textAndVoice.filter(c => !c.parentId);
+                if (noCategory.size > 0) {
+                    dump += `[NO CATEGORY]\n`;
+                    noCategory.forEach(c => {
+                        dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`;
+                    });
+                    dump += `\n`;
+                }
+
+                // Print categories and their child channels neatly indented
+                categories.forEach(cat => {
+                    dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
+                    const children = textAndVoice.filter(c => c.parentId === cat.id);
+                    children.forEach(c => {
+                        dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`;
+                    });
+                    dump += `\n`;
+                });
+
+                dump += `=================================================\n`;
+                dump += `                   ROLES \n`;
+                dump += `=================================================\n\n`;
+                
+                const sortedRoles = guild.roles.cache.sort((a, b) => b.position - a.position);
+                
+                // Find the longest role name so we can align the IDs perfectly
+                const maxLen = Math.max(...sortedRoles.map(r => r.name.length));
+                
+                sortedRoles.forEach(r => {
+                    const paddedName = r.name.padEnd(maxLen + 3, ' ');
+                    dump += `- ${paddedName} (ID: ${r.id}) [${r.members.size} Members]\n`;
+                });
+
+                // Remove emojis/special characters from the filename so it downloads safely
+                const safeName = guild.name.replace(/[^a-zA-Z0-9]/g, '_');
                 const buffer = Buffer.from(dump, 'utf-8');
-                return await message.channel.send({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name}_Dump.txt` }] }).catch(() => {});
-            } catch (err) { return message.reply('❌ Failed to gather data.').catch(() => {}); }
+                
+                return await message.channel.send({ 
+                    content: `✅ **Organized Dump Complete:**`, 
+                    files: [{ attachment: buffer, name: `${safeName}_Dump.txt` }] 
+                }).catch(() => {});
+            } catch (err) { 
+                console.error(err);
+                return message.reply('❌ Failed to gather data.').catch(() => {}); 
+            }
         }
+
         if (text === '.servers') {
             if (message.author.id !== myOwnerId) return;
             let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
