@@ -2,6 +2,19 @@ const { Events, AttachmentBuilder } = require('discord.js');
 const Canvas = require('canvas');
 
 module.exports = (client) => {
+    // 1. SLASH COMMAND EXECUTION (Replies instantly to prevent Discord errors)
+    client.on(Events.InteractionCreate, async (interaction) => {
+        if (!interaction.isChatInputCommand()) return;
+
+        if (interaction.commandName === 'setgoodbye') {
+            return interaction.reply({ 
+                content: '✅ **Goodbye System is Active!**\nRight now, I am programmed to automatically look for a channel named `goodbye` or `leave`. Just name your channel one of those, and I will handle the rest!', 
+                ephemeral: true 
+            });
+        }
+    });
+
+    // 2. GOODBYE IMAGE GENERATOR
     client.on(Events.GuildMemberRemove, async (member) => {
         // Find the goodbye channel. By default, it looks for a channel named 'goodbye' 
         // or falls back to the server's default system messages channel.
