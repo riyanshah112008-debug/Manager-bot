@@ -19,29 +19,7 @@ const setWelcome = db.prepare(`
 `);
 
 module.exports = (client) => {
-    // 1. Create the Setup Slash Command
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'setwelcome',
-                description: 'Set the channel where Starry will send welcome messages',
-                default_member_permissions: '8', // Only Administrators can use this
-                options: [
-                    {
-                        name: 'channel',
-                        description: 'The channel to send welcome embeds to',
-                        type: 7, // Type 7 represents a Channel
-                        required: true
-                    }
-                ]
-            });
-            console.log('✅ Welcome Slash Command Added');
-        } catch (error) {
-            console.error('❌ Failed to add welcome slash command:', error);
-        }
-    });
-
-    // 2. Handle the Setup Command
+    // 1. Handle the Setup Command
     client.on('interactionCreate', async interaction => {
         if (!interaction.isChatInputCommand()) return;
 
@@ -58,7 +36,7 @@ module.exports = (client) => {
         }
     });
 
-    // 3. The Welcome Event Trigger
+    // 2. The Welcome Event Trigger
     client.on('guildMemberAdd', async member => {
         // Check if this server has set up a welcome channel
         const setting = getWelcome.get(member.guild.id);
@@ -90,3 +68,4 @@ module.exports = (client) => {
         }).catch(err => console.error("Could not send welcome message:", err));
     });
 };
+                
