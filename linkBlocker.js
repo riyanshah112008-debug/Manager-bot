@@ -27,11 +27,27 @@ module.exports = (client) => {
         if (links) {
             let isBadLink = false;
 
-            // Check every link in the message against our Safe List
+            // Check every link in the message against our Safe List and GIF check
             for (const link of links) {
-                const isSafe = safeDomains.some(domain => link.toLowerCase().includes(domain));
-                if (!isSafe) {
-                    isBadLink = true; // Found a link that isn't on the safe list!
+                const isSafeDomain = safeDomains.some(domain => link.toLowerCase().includes(domain));
+                
+                let isGifFile = false;
+                try {
+                    // Check if the actual file path ends in .gif to allow random GIF sites
+                    const parsedUrl = new URL(link);
+                    if (parsedUrl.pathname.toLowerCase().endsWith('.gif')) {
+                        isGifFile = true;
+                    }
+                } catch (err) {
+                    // Fallback just in case the URL structure is deeply weird
+                    if (link.toLowerCase().includes('.gif')) {
+                        isGifFile = true;
+                    }
+                }
+
+                // If it is NOT a safe domain AND NOT a direct GIF file, flag it for deletion
+                if (!isSafeDomain && !isGifFile) {
+                    isBadLink = true; 
                     break;
                 }
             }
@@ -41,8 +57,9 @@ module.exports = (client) => {
                 await message.delete().catch(() => {});
                 
                 const warningMsg = await message.channel.send(`⚠️ <@${message.author.id}>, please do not post unauthorized links here!`);
-                setTimeout(() => warningMsg.delete().catch(() => {}), 5000); // Clean up the warning after 5 seconds
+                setTimeout(() => warningMsg.delete().catch(() => {}), 5000); 
             }
         }
     });
 };
+                    
