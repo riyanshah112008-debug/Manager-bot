@@ -2,7 +2,6 @@ const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { Groq } = require('groq-sdk');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const aiCooldowns = new Set();
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
@@ -116,8 +115,7 @@ module.exports = (client) => {
         const mentionsBot = message.mentions.has(client.user.id);
         if (!mentionsBot && !text.includes('starry') && !(message.reference && (await message.channel.messages.fetch(message.reference.messageId).catch(()=>{}))?.author.id === client.user.id)) return;
 
-        if (aiCooldowns.has(message.author.id)) return;
-        aiCooldowns.add(message.author.id); setTimeout(() => aiCooldowns.delete(message.author.id), 4000);
+        // Sent typing indicator directly without cooldown checks
         await message.channel.sendTyping().catch(() => {});
 
         try {
@@ -237,6 +235,10 @@ module.exports = (client) => {
 
             if (replyText.length > 0) return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
 
-        } catch (error) { return message.reply("❌ An AI error occurred.").catch(()=>{}); }
+        } catch (error) { 
+            console.error("Groq AI Error:", error);
+            return message.reply("❌ An AI error occurred (Possible Groq Rate Limit).").catch(()=>{}); 
+        }
     });
 };
+                
