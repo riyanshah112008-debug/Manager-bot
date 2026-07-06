@@ -1,43 +1,50 @@
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
 
-// Initialize Gemini instead of Groq
+// Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
     client.on('ready', () => { console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); });
+    
     client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.content) return;
         if (blacklistedUsers.has(message.author.id)) return;
+
+        // Disboard Bump Tracker Fallback
         if (message.author.id === '302050872383242240') {
             if (message.embeds.length > 0 && message.embeds[0].description && message.embeds[0].description.includes('Bump done')) {
                 const bumpEmbed = new EmbedBuilder().setColor('#3BA55C').setTitle('📈 Server Bumped!').setDescription('Thank you for bumping the server! You can bump us again in 2 hours.');
                 return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
             }
         }
-        if (message.author.bot || !message.content) return;
 
         const text = message.content.toLowerCase();
         
-        // REPLACE THIS WITH YOUR ACTUAL DISCORD USER ID
-        const myOwnerId = '1465049039153135639';
+        // Securely grab the owner ID from Environment Variables
+        const isOwner = message.author.id === process.env.OWNER_ID;
 
+        // ==========================================
+        // 1. OWNER-ONLY DEVELOPER COMMANDS
+        // ==========================================
         if (text === '.dev') {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             try {
-                await message.author.send(`💻 **Starry Developer Commands (Owner-Only):**\n\n\`.servers\` - Lists all servers the bot is in.\n\`.serverdump\` - Full text data dump.\n\`.sysinfo\` - Bot stats.\n\`.eval <code>\` - Run raw JavaScript.\n\`.broadcast <msg>\` - Send message to ALL servers.\n\`.leaveserver <ID>\` - Remotely force leave.\n\`.blacklist <ID>\` - Block a user.\n\`.emergencyleave\` - Force leave current server.\n\`.restart\` - Kills the bot process.\n\`.setstatus <text>\` - Changes status.`);
-                return message.reply('📬 Check your DMs! Sent the updated advanced developer commands over.').catch(() => {});
+                await message.author.send(`💻 **Starry Developer Commands (Owner-Only):**\n\n\`.servers\` - Lists all servers.\n\`.serverdump\` - Full text data dump.\n\`.sysinfo\` - Bot stats.\n\`.eval <code>\` - Run raw JavaScript.\n\`.broadcast <msg>\` - Send message to ALL servers.\n\`.leaveserver <ID>\` - Remotely force leave.\n\`.blacklist <ID>\` - Block a user.\n\`.emergencyleave\` - Force leave current server.\n\`.restart\` - Kills the bot process.\n\`.setstatus <text>\` - Changes status.`);
+                return message.reply('📬 Check your DMs!').catch(() => {});
             } catch (err) { return message.reply('❌ I couldn\'t DM you! Make sure your DMs are open.').catch(() => {}); }
         }
 
         if (text === '.sysinfo') {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
             const uptime = (process.uptime() / 3600).toFixed(2);
             return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
         }
+
         if (text.startsWith('.blacklist ')) {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             const targetId = message.content.split(' ')[1];
             if (!targetId) return message.reply('❌ Please provide a User ID.');
             if (blacklistedUsers.has(targetId)) {
@@ -46,22 +53,21 @@ module.exports = (client) => {
                 blacklistedUsers.add(targetId); return message.reply(`🚫 Added \`${targetId}\` to the blacklist.`).catch(()=>{});
             }
         }
+
         if (text.startsWith('.leaveserver ')) {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             const guildToLeave = client.guilds.cache.get(message.content.split(' ')[1]);
             if (!guildToLeave) return message.reply('❌ I am not in a server with that ID.').catch(()=>{});
             await guildToLeave.leave(); return message.reply(`✅ Successfully left **${guildToLeave.name}**.`).catch(()=>{});
         }
-                if (text.startsWith('.broadcast ')) {
-            if (message.author.id !== myOwnerId) return;
+
+        if (text.startsWith('.broadcast ')) {
+            if (!isOwner) return;
             const announcement = message.content.slice(11).trim();
             if (!announcement) return message.reply('❌ What do you want to broadcast?');
             
             let successCount = 0;
             client.guilds.cache.forEach(guild => {
-                // 1. Target "general" or "chat" channels first
-                // 2. Fallback to system channel
-                // 3. Fallback to first available text channel
                 const channel = guild.channels.cache.find(c => 
                     c.type === 0 && 
                     (c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('chat') || c.name.toLowerCase().includes('main')) && 
@@ -77,113 +83,97 @@ module.exports = (client) => {
         }
 
         if (text.startsWith('.eval ')) {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             try {
                 let evaled = eval(message.content.slice(6));
                 if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
                 return message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
             } catch (err) { return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
         }
-        if (text === '.emergencyleave' && message.author.id === myOwnerId) {
+
+        if (text === '.emergencyleave' && isOwner) {
             await message.reply('I am leaving this server now. Goodbye! 👋').catch(() => {});
             return message.guild.leave();
         }
-                if (text === '.serverdump') {
-            if (message.author.id !== myOwnerId) return;
+
+        if (text === '.serverdump') {
+            if (!isOwner) return;
             await message.reply('🗄️ Compiling a neatly organized server dump...').catch(() => {});
             try {
                 const guild = message.guild; 
                 await guild.members.fetch();
                 
-                let dump = `=================================================\n`;
-                dump += `             SERVER DUMP: ${guild.name.toUpperCase()} \n`;
-                dump += `=================================================\n\n`;
-                dump += `[SERVER INFO]\n`;
-                dump += `- Server ID     : ${guild.id}\n`;
-                dump += `- Total Members : ${guild.memberCount}\n`;
-                dump += `- Owner ID      : ${guild.ownerId}\n\n`;
-
-                dump += `=================================================\n`;
-                dump += `                 CHANNELS \n`;
-                dump += `=================================================\n\n`;
+                let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
                 
-                // Helper function to turn Discord's number types into readable tags
-                const getTypeName = (type) => {
-                    if (type === 0) return '📝 TEXT ';
-                    if (type === 2) return '🔊 VOICE';
-                    if (type === 4) return '📁 CAT  ';
-                    if (type === 5) return '📢 ANN  ';
-                    if (type === 15) return '💬 FORUM';
-                    return '📄 MISC ';
-                };
-
+                const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
                 const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
                 const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-
-                // Print channels that don't belong to any category first
                 const noCategory = textAndVoice.filter(c => !c.parentId);
+
                 if (noCategory.size > 0) {
                     dump += `[NO CATEGORY]\n`;
-                    noCategory.forEach(c => {
-                        dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`;
-                    });
+                    noCategory.forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
                     dump += `\n`;
                 }
 
-                // Print categories and their child channels neatly indented
                 categories.forEach(cat => {
                     dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
-                    const children = textAndVoice.filter(c => c.parentId === cat.id);
-                    children.forEach(c => {
-                        dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`;
-                    });
+                    textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
                     dump += `\n`;
                 });
 
-                dump += `=================================================\n`;
-                dump += `                   ROLES \n`;
-                dump += `=================================================\n\n`;
-                
+                dump += `=================================================\n                   ROLES \n=================================================\n\n`;
                 const sortedRoles = guild.roles.cache.sort((a, b) => b.position - a.position);
-                
-                // Find the longest role name so we can align the IDs perfectly
                 const maxLen = Math.max(...sortedRoles.map(r => r.name.length));
                 
-                sortedRoles.forEach(r => {
-                    const paddedName = r.name.padEnd(maxLen + 3, ' ');
-                    dump += `- ${paddedName} (ID: ${r.id}) [${r.members.size} Members]\n`;
-                });
+                sortedRoles.forEach(r => dump += `- ${r.name.padEnd(maxLen + 3, ' ')} (ID: ${r.id}) [${r.members.size} Members]\n`);
 
-                // Remove emojis/special characters from the filename so it downloads safely
-                const safeName = guild.name.replace(/[^a-zA-Z0-9]/g, '_');
                 const buffer = Buffer.from(dump, 'utf-8');
-                
-                return await message.channel.send({ 
-                    content: `✅ **Organized Dump Complete:**`, 
-                    files: [{ attachment: buffer, name: `${safeName}_Dump.txt` }] 
-                }).catch(() => {});
-            } catch (err) { 
-                console.error(err);
-                return message.reply('❌ Failed to gather data.').catch(() => {}); 
-            }
+                return await message.channel.send({ content: `✅ **Organized Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] }).catch(() => {});
+            } catch (err) { return message.reply('❌ Failed to gather data.').catch(() => {}); }
         }
 
         if (text === '.servers') {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
             client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
             return message.reply(serverList).catch(() => {});
         }
+
         if (text === '.restart') {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             await message.reply('🔄 **Initiating remote reboot...**').catch(() => {}); process.exit(1);
         }
+
         if (text.startsWith('.setstatus ')) {
-            if (message.author.id !== myOwnerId) return;
+            if (!isOwner) return;
             client.user.setActivity(message.content.slice(11).trim(), { type: 4 });
             return message.reply(`✅ Status updated!`).catch(() => {});
         }
-        if (text.startsWith('.imagine ')) {
+
+        // ==========================================
+        // 2. AI GENERATION (REQUIRES PREMIUM)
+        // ==========================================
+        const isImagine = text.startsWith('.imagine ');
+        const mentionsBot = message.mentions.has(client.user.id);
+        const hasName = text.includes('starry');
+        let isReplyToBot = false;
+        
+        if (message.reference) {
+            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
+            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
+        }
+
+        // If the message isn't interacting with the AI, ignore it
+        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
+
+        // 🔒 PREMIUM LOCK: Check if the server has premium (Owners bypass this)
+        if (!isOwner && (!message.guild || !client.isPremium(message.guild.id))) {
+            return message.reply('❌ **Starry AI is a Premium feature!** Use `.premium` to learn how to upgrade your server.').catch(() => {});
+        }
+
+        // --- IMAGE GENERATION ---
+        if (isImagine) {
             const imagePrompt = message.content.slice(9).trim();
             if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(() => {});
             const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
@@ -195,13 +185,10 @@ module.exports = (client) => {
             } catch (error) { return replyMsg.edit('❌ Trouble drawing that.').catch(() => {}); }
         }
 
-        const mentionsBot = message.mentions.has(client.user.id);
-        if (!mentionsBot && !text.includes('starry') && !(message.reference && (await message.channel.messages.fetch(message.reference.messageId).catch(()=>{}))?.author.id === client.user.id)) return;
-
+        // --- CHAT & MODERATION GENERATION ---
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            // Updated Prompt Structure for Gemini
             const prompt = `[SYSTEM INSTRUCTION]
 You are Starry, a helpful Discord bot. 
 RULE 1: To moderate, output EXACTLY: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
@@ -213,7 +200,6 @@ RULE 5: Casual chat requires natural text.
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            // Gemini 2.5 Flash Generation
             const geminiResponse = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: prompt
@@ -251,6 +237,7 @@ ${message.author.username} says: ${message.content}`;
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
 
+            // --- EXECUTE MODERATION ACTIONS ---
             if (functionName) {
                 const permErr = "❌ Missing permissions.";
                 const hasPerm = (perm) => message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
@@ -300,28 +287,19 @@ ${message.author.username} says: ${message.content}`;
                     await message.guild.members.unban(tId).catch(()=>{}); return message.reply("✅ Unbanned.");
                 }
                 
+                // REPAIRED MODERATION ACTIONS
                 const tMember = await message.guild.members.fetch(tId).catch(()=>null);
                 if (!tMember || !tMember.manageable) return message.reply("❌ Cannot moderate this user.");
                 
                 if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    await tMember.timeout(args.minutes * 60000, args.reason).catch(()=>{}); return message.reply("✅ Timed out.");
+                    await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(()=>{}); 
+                    return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m.`);
                 }
                 if (functionName === "untimeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    await tMember.timeout(null).catch(()=>{}); return message.reply("✅ Timeout removed.");
+                    await tMember.timeout(null).catch(()=>{}); 
+                    return message.reply(`✅ Removed timeout from <@${tId}>.`);
                 }
                 if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
-                    await tMember.kick(args.reason).catch(()=>{}); return message.reply("✅ Kicked.");
-                }
-                if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
-                    await tMember.ban({reason: args.reason}).catch(()=>{}); return message.reply("✅ Banned.");
-                }
-            }
-
-            if (replyText.length > 0) return message.reply(replyText.length > 2000 ? replyText.slice(0, 1995) + "..." : replyText).catch(()=>{});
-
-        } catch (error) { 
-            console.error("Gemini AI Error:", error);
-            return message.reply("❌ My AI core experienced a glitch processing that request.").catch(()=>{}); 
-        }
-    });
-};
+                    await tMember.kick(args.reason).catch(()=>{}); 
+                    return message.reply(`👢 Kicked <@${tId}>.`);
+        
