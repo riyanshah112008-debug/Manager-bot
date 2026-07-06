@@ -1,4 +1,4 @@
-const { Events, AuditLogEvent } = require('discord.js');
+const { EmbedBuilder, Events, AuditLogEvent } = require('discord.js');
 const Database = require('better-sqlite3');
 
 // 1. Initialize the Protection Database
@@ -25,34 +25,7 @@ module.exports = (client) => {
     };
 
     // ==========================================
-    // 2. REGISTER SLASH COMMANDS
-    // ==========================================
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'protect',
-                description: 'Protect a user from being kicked or banned by staff (Owner Only)',
-                default_member_permissions: '0', 
-                options: [
-                    { name: 'user', description: 'The user to protect', type: 6, required: true }
-                ]
-            });
-            await client.application.commands.create({
-                name: 'unprotect',
-                description: 'Remove protection from a user (Owner Only)',
-                default_member_permissions: '0',
-                options: [
-                    { name: 'user', description: 'The user to unprotect', type: 6, required: true }
-                ]
-            });
-            console.log('✅ Protection Slash Commands Added');
-        } catch (error) {
-            console.error('❌ Failed to add protect slash commands:', error);
-        }
-    });
-
-    // ==========================================
-    // 3. PREFIX COMMANDS (.protect / .unprotect)
+    // 1. PREFIX COMMANDS (.protect / .unprotect)
     // ==========================================
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.guild) return;
@@ -62,8 +35,8 @@ module.exports = (client) => {
             const command = args.shift().toLowerCase();
 
             if (command === 'protect' || command === 'unprotect') {
-                // 🛑 STRICT OWNERSHIP CHECK
-                if (message.author.id !== message.guild.ownerId) {
+                // 🛑 STRICT OWNERSHIP CHECK (Server Owner OR Bot Owner)
+                if (message.author.id !== message.guild.ownerId && message.author.id !== process.env.OWNER_ID) {
                     return message.reply('❌ **Access Denied:** Only the Server Owner can use this command!').catch(() => {});
                 }
 
@@ -74,7 +47,7 @@ module.exports = (client) => {
 
                 if (command === 'protect') {
                     addProtect.run(message.guild.id, targetUser.id);
-                    return message.reply(`🛡️ **${targetUser.username}** is now heavily protected! Staff cannot ban them.`).catch(() => {});
+                    return message.reply(`🛡️ **${targetUser.username}** is now heavily protected! Staff cannot ban or kick them.`).catch(() => {});
                 } else {
                     removeProtect.run(message.guild.id, targetUser.id);
                     return message.reply(`🔓 **${targetUser.username}** is no longer protected.`).catch(() => {});
@@ -84,14 +57,14 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 4. SLASH COMMANDS (/protect / /unprotect)
+    // 2. SLASH COMMANDS (/protect / /unprotect)
     // ==========================================
     client.on('interactionCreate', async interaction => {
         if (!interaction.isChatInputCommand()) return;
 
         if (interaction.commandName === 'protect' || interaction.commandName === 'unprotect') {
             // 🛑 STRICT OWNERSHIP CHECK
-            if (interaction.user.id !== interaction.guild.ownerId) {
+            if (interaction.user.id !== interaction.guild.ownerId && interaction.user.id !== process.env.OWNER_ID) {
                 return interaction.reply({ content: '❌ **Access Denied:** Only the Server Owner can use this command!', ephemeral: true }).catch(() => {});
             }
 
@@ -99,7 +72,7 @@ module.exports = (client) => {
 
             if (interaction.commandName === 'protect') {
                 addProtect.run(interaction.guildId, targetUser.id);
-                return interaction.reply({ content: `🛡️ **${targetUser.username}** is now heavily protected! Staff cannot ban them.` }).catch(() => {});
+                return interaction.reply({ content: `🛡️ **${targetUser.username}** is now heavily protected! Staff cannot ban or kick them.` }).catch(() => {});
             } else {
                 removeProtect.run(interaction.guildId, targetUser.id);
                 return interaction.reply({ content: `🔓 **${targetUser.username}** is no longer protected.` }).catch(() => {});
@@ -108,36 +81,54 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 5. THE ACTIVE ANTI-BAN SHIELD
+    // 3. THE ACTIVE ANTI-BAN / ANTI-KICK SHIELD
     // ==========================================
     client.on(Events.GuildAuditLogEntryCreate, async (auditLog, guild) => {
-        // If a ban is executed, intercept it
-        if (auditLog.action === AuditLogEvent.MemberBanAdd) {
-            const targetId = auditLog.targetId;
-            const executorId = auditLog.executorId;
+        const { action, executorId, targetId } = auditLog;
 
-            // Ignore if the bot did it, or if the Owner did it
-            if (executorId === client.user.id || executorId === guild.ownerId) return;
+        // Ignore if the bot did it, or if the Server Owner/Bot Owner did it
+        if (executorId === client.user.id || executorId === guild.ownerId || executorId === process.env.OWNER_ID) return;
 
-            // Check if the target is on the protected list
-            const isProtected = client.isUserProtected(guild.id, targetId);
-            
-            if (isProtected) {
-                try {
-                    // Instantly reverse the ban
-                    await guild.members.unban(targetId, "Anti-Ban System: Target is a protected user");
-                    
-                    // Fetch details to alert the server
-                    const targetUser = await client.users.fetch(targetId).catch(() => null);
-                    const logChannel = guild.systemChannel; 
-                    
-                    if (logChannel) {
-                        logChannel.send(`🚨 **PROTECTION ALERT** 🚨\n<@${executorId}> attempted to ban **${targetUser ? targetUser.tag : targetId}**, but they are protected by the Owner!\n*The ban has been automatically reversed.*`);
-                    }
-                } catch (error) {
-                    console.error("Failed to reverse ban:", error);
+        // Check if the target is on the protected list
+        const isProtected = client.isUserProtected(guild.id, targetId);
+        if (!isProtected) return;
+
+        const logChannel = guild.systemChannel;
+        const targetUser = await client.users.fetch(targetId).catch(() => null);
+        const targetName = targetUser ? targetUser.tag : targetId;
+
+        // 🔨 IF SOMEONE BANS A PROTECTED USER
+        if (action === AuditLogEvent.MemberBanAdd) {
+            try {
+                // Instantly reverse the ban
+                await guild.members.unban(targetId, "Anti-Ban System: Target is a protected user");
+                
+                if (logChannel) {
+                    const embed = new EmbedBuilder()
+                        .setColor('#ED4245')
+                        .setTitle('🚨 PROTECTION ALERT: ILLEGAL BAN 🚨')
+                        .setDescription(`<@${executorId}> attempted to ban **${targetName}**!`)
+                        .addFields({ name: 'Action Taken', value: 'The ban was automatically reversed because this user is protected by the Server Owner.' })
+                        .setTimestamp();
+                    logChannel.send({ embeds: [embed] }).catch(() => null);
                 }
+            } catch (error) {
+                console.error("Failed to reverse ban:", error);
+            }
+        }
+        
+        // 👢 IF SOMEONE KICKS A PROTECTED USER
+        else if (action === AuditLogEvent.MemberKick) {
+            if (logChannel) {
+                const embed = new EmbedBuilder()
+                    .setColor('#E67E22')
+                    .setTitle('🚨 PROTECTION ALERT: ILLEGAL KICK 🚨')
+                    .setDescription(`<@${executorId}> kicked **${targetName}**!`)
+                    .addFields({ name: 'Notice', value: 'This user is protected by the Server Owner! (Note: Kicks cannot be automatically reversed, please invite them back).' })
+                    .setTimestamp();
+                logChannel.send({ embeds: [embed] }).catch(() => null);
             }
         }
     });
 };
+                        
