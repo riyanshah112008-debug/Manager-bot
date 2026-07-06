@@ -4,23 +4,7 @@ const PREFIX = '.';
 
 module.exports = (client) => {
     // ==========================================
-    // 1. REGISTER THE SLASH COMMAND
-    // ==========================================
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'afk',
-                description: 'Set an AFK status so people know you are away',
-                options: [
-                    { name: 'reason', description: 'Why are you AFK?', type: 3, required: false }
-                ]
-            });
-            console.log('✅ AFK Slash Command Added');
-        } catch (err) {}
-    });
-
-    // ==========================================
-    // 2. HANDLE THE SLASH COMMAND (/afk)
+    // 1. HANDLE THE SLASH COMMAND (/afk)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'afk') return;
@@ -32,7 +16,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 3. HANDLE PREFIX (.afk) AND MESSAGE TRACKING
+    // 2. HANDLE PREFIX (.afk) AND MESSAGE TRACKING
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
@@ -82,3 +66,4 @@ module.exports = (client) => {
         }
     });
 };
+                    
