@@ -52,17 +52,30 @@ module.exports = (client) => {
             if (!guildToLeave) return message.reply('❌ I am not in a server with that ID.').catch(()=>{});
             await guildToLeave.leave(); return message.reply(`✅ Successfully left **${guildToLeave.name}**.`).catch(()=>{});
         }
-        if (text.startsWith('.broadcast ')) {
+                if (text.startsWith('.broadcast ')) {
             if (message.author.id !== myOwnerId) return;
             const announcement = message.content.slice(11).trim();
             if (!announcement) return message.reply('❌ What do you want to broadcast?');
+            
             let successCount = 0;
             client.guilds.cache.forEach(guild => {
-                const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
-                if (channel) { channel.send(`📢 **Message from Starry's Developer:**\n\n${announcement}`).catch(()=>{}); successCount++; }
+                // 1. Target "general" or "chat" channels first
+                // 2. Fallback to system channel
+                // 3. Fallback to first available text channel
+                const channel = guild.channels.cache.find(c => 
+                    c.type === 0 && 
+                    (c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('chat') || c.name.toLowerCase().includes('main')) && 
+                    c.permissionsFor(guild.members.me).has('SendMessages')
+                ) || guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
+
+                if (channel) { 
+                    channel.send(`📢 **Message from Starry's Developer:**\n\n${announcement}`).catch(()=>{}); 
+                    successCount++; 
+                }
             });
-            return message.reply(`✅ Broadcast successfully sent to ${successCount} servers!`).catch(()=>{});
+            return message.reply(`✅ Broadcast successfully sent to the general chat of ${successCount} servers!`).catch(()=>{});
         }
+
         if (text.startsWith('.eval ')) {
             if (message.author.id !== myOwnerId) return;
             try {
