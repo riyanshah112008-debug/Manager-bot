@@ -1,63 +1,54 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 
 module.exports = (client) => {
-    client.on('clientReady', async () => {
-        try {
-            await client.application.commands.create({
-                name: 'tod',
-                description: 'Play a game of Truth or Dare!',
-                options: [
-                    {
-                        name: 'choice',
-                        description: 'Choose Truth or Dare',
-                        type: 3, 
-                        required: true,
-                        choices: [
-                            { name: 'Truth', value: 'truth' },
-                            { name: 'Dare', value: 'dare' }
-                        ]
-                    }
-                ]
-            });
-            console.log('✅ Truth or Dare Slash Command Added');
-        } catch (err) {
-            console.log('❌ Failed to add Truth or Dare command');
+    // Content Pools
+    const premiumTruths = ["What's your darkest secret?", "What's the most shameful thing you've done in public?"];
+    const premiumDares = ["Post a screenshot of your search history.", "Change nickname to 'Simp' for 24h."];
+    const standardTruths = ["What is your biggest fear?", "Who is your secret crush?"];
+    const standardDares = ["Bark in VC.", "Ping a random person."];
+
+    client.on('interactionCreate', async (interaction) => {
+        // Handle Button Clicks (Next Player)
+        if (interaction.isButton() && interaction.customId.startsWith('tod_')) {
+            const choice = interaction.customId.split('_')[1]; // truth or dare
+            handleTod(interaction, choice);
+        }
+
+        // Handle Slash Command
+        if (interaction.isChatInputCommand() && interaction.commandName === 'tod') {
+            handleTod(interaction, interaction.options.getString('choice'));
         }
     });
 
-    const truths = [
-        "What is your biggest fear?",
-        "What is the most embarrassing thing you've ever done?",
-        "Who is your secret crush?",
-        "What is a lie you've told that no one knows about?",
-        "What is the weirdest habit you have?"
-    ];
-
-    const dares = [
-        "Send a voice message of you barking like a dog.",
-        "Type your next 5 messages with your eyes closed.",
-        "Ping a random person in the server and say 'I know what you did'.",
-        "Change your Discord status to 'I love eating bugs' for 10 minutes.",
-        "Confess something embarrassing in the general chat."
-    ];
-
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'tod') return;
-
-        const choice = interaction.options.getString('choice');
+    async function handleTod(interaction, choice) {
+        const isPremium = client.isPremium(interaction.guild.id);
         const isTruth = choice === 'truth';
-        const randomItem = isTruth
-            ? truths[Math.floor(Math.random() * truths.length)]
-            : dares[Math.floor(Math.random() * dares.length)];
+
+        // Select Question
+        let pool = isTruth 
+            ? (isPremium ? [...standardTruths, ...premiumTruths] : standardTruths)
+            : (isPremium ? [...standardDares, ...premiumDares] : standardDares);
+        const selected = pool[Math.floor(Math.random() * pool.length)];
+
+        // Select Next Victim (Random member from guild)
+        const nextMember = interaction.guild.members.cache.random();
 
         const embed = new EmbedBuilder()
-            .setColor(isTruth ? 'Blue' : 'Red')
-            .setTitle(isTruth ? '🔵 Truth Selected!' : '🔴 Dare Selected!')
-            .setDescription(`**${interaction.user.username}**, here is your ${choice}:\n\n> **${randomItem}**`)
-            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-            .setFooter({ text: 'You must complete it!' })
-            .setTimestamp();
+            .setColor(isTruth ? '#3498DB' : '#E74C3C')
+            .setTitle(isTruth ? '🔵 Truth' : '🔴 Dare')
+            .setDescription(`**${interaction.user.username}** chose ${choice}:\n\n> **${selected}**\n\n---`)
+            .addFields({ name: 'Next Player', value: `Your turn, ${nextMember.user.username}! Choose:` })
+            .setFooter({ text: isPremium ? '🌟 Premium Content Unlocked' : 'Use .premium to unlock more' });
 
-        await interaction.reply({ embeds: [embed] }).catch(() => {});
-    });
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('tod_truth').setLabel('Truth').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('tod_dare').setLabel('Dare').setStyle(ButtonStyle.Danger)
+        );
+
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({ content: `${nextMember}`, embeds: [embed], components: [row] });
+        } else {
+            await interaction.reply({ content: `${nextMember}`, embeds: [embed], components: [row] });
+        }
+    }
 };
