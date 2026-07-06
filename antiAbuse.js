@@ -9,8 +9,6 @@ const badWordsList = [
 ];
 
 module.exports = (client) => {
-    client.on('clientReady', () => console.log('✅ Anti-Abuse Module Loaded'));
-
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
@@ -69,8 +67,9 @@ module.exports = (client) => {
 
                 await message.channel.send(`🔨 **Auto-Mod:** <@${userId}> has been timed out for 5 minutes due to rapid spamming.`);
             } catch (err) {
-                console.log(`Failed to timeout spammer: ${err.message}`);
+                console.error(`Failed to timeout spammer: ${err.message}`);
             }
         }
     });
 };
+        
