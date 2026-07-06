@@ -303,20 +303,19 @@ ${message.author.username} says: ${message.content}`;
                     await tMember.kick(args.reason).catch(()=>{}); 
                     return message.reply(`👢 Kicked <@${tId}>.`);
                 }
-                if (gunctionName ==="ban_member" && hasPerm(PermissionFlagBits.BanMembers)) {
-                    await tMember.ban(args.reason).catch(()=>{});
+                if (functionName ==="ban_member" && hasPerm(PermissionFlagBits.BanMembers)) {
+                    await tMember.ban({ reason: args.reason }).catch(() => {});
                     return message.reply(`🔨 banned <@${tId}>.`);
                 }
             }
             // Output Starrys conversational response 
             if(replyText.length >0) {
             //Remove Markdown formatting for cleaner chat appearance if desired,or keep as it is.
-                await message reply(replyText).catch(() => {});
-                
+                await message.reply(replyText).catch(() => {});
             }
         }catch (error) {
-              console.error("Gemini AI error:" error);
-            return message.reply("❌ I'm having trouble thinking right now.Please try again later!
+              console.error("Gemini AI error:",error);
+            return message.reply("❌ I'm having trouble thinking right now. Please try again later!");
                   }
      });
 };
