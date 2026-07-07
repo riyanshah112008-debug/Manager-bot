@@ -10,18 +10,20 @@ const PremiumSchema = new mongoose.Schema({
 
 const PremiumModel = mongoose.model('PremiumGuilds', PremiumSchema);
 
-module.exports = async (client) => {
+module.exports = (client) => {
     // 🧠 2. Initialize a fast local cache
     const premiumCache = new Set();
 
-    // 📥 3. Load all premium servers from MongoDB on boot
-    try {
-        const premiumGuilds = await PremiumModel.find({ isPremium: true });
-        premiumGuilds.forEach(g => premiumCache.add(g.guildId));
-        console.log(`💎 Loaded ${premiumCache.size} Premium servers from MongoDB!`);
-    } catch (err) {
-        console.error('❌ Failed to load premium servers from DB:', err);
-    }
+    // 📥 3. Wait for MongoDB to connect before loading the cache!
+    mongoose.connection.once('open', async () => {
+        try {
+            const premiumGuilds = await PremiumModel.find({ isPremium: true });
+            premiumGuilds.forEach(g => premiumCache.add(g.guildId));
+            console.log(`💎 Loaded ${premiumCache.size} Premium servers from MongoDB!`);
+        } catch (err) {
+            console.error('❌ Failed to load premium servers from DB:', err);
+        }
+    });
 
     // 🔗 4. Attach a fast check function to the client object
     client.isPremium = (guildId) => {
