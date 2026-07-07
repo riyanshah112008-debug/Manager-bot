@@ -58,7 +58,6 @@ module.exports = (client) => {
         if (!checkPermissions(channel, interaction.guild.members.me)) return interaction.reply({ content: '❌ I am missing Connect or Speak permissions!', ephemeral: true }).catch(() => {});
 
         const queue = player.nodes.get(interaction.guild.id);
-
         try {
             // --- /PLAY ---
             if (command === 'play') {
@@ -67,17 +66,15 @@ module.exports = (client) => {
 
                 try {
                     await player.play(channel, query, {
-    searchEngine: 'soundcloud', // Forces the bot to use SoundCloud to find the audio stream
-    nodeOptions: { 
-        metadata: interaction, 
-        leaveOnEmpty: true 
-    }
-});
-
+                        searchEngine: 'soundcloud', // Bypasses YouTube to avoid Render IP blocks
+                        nodeOptions: { 
+                            metadata: interaction, 
+                            leaveOnEmpty: true 
+                        }
                     });
                     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#3BA55C').setDescription(`✅ Added to queue!`)] }).catch(() => {});
                 } catch (error) {
-                    return interaction.editReply({ content: '❌ Failed to play song. YouTube might have blocked this specific track.', embeds: [] }).catch(() => {});
+                    return interaction.editReply({ content: '❌ Failed to play song. The track might be restricted.', embeds: [] }).catch(() => {});
                 }
             }
 
@@ -151,4 +148,3 @@ module.exports = (client) => {
         }
     });
 };
-        
