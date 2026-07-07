@@ -3,7 +3,12 @@ const { REST, Routes } = require('discord.js');
 const commands = [
     // ================= MUSIC =================
     { name: 'play', description: 'Play a song', options: [{ name: 'song', type: 3, required: true, description: 'Song name or URL to play' }] },
-
+        { name: 'pause', description: 'Pause the currently playing song' },
+    { name: 'resume', description: 'Resume the paused song' },
+    { name: 'skip', description: 'Skip the current song' },
+    { name: 'stop', description: 'Stop the music and clear the queue' },
+    { name: 'queue', description: 'View the upcoming songs in the queue' },
+    
     // ================= MODERATION =================
     { name: 'kick', description: 'Kick a member from the server', options: [{ name: 'target', type: 6, required: true, description: 'The user to kick' }, { name: 'reason', type: 3, required: false, description: 'Reason for kicking' }] },
     { name: 'ban', description: 'Ban a member from the server', options: [{ name: 'target', type: 6, required: true, description: 'The user to ban' }, { name: 'reason', type: 3, required: false, description: 'Reason for banning' }] },
