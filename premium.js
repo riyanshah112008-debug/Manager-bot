@@ -29,59 +29,61 @@ module.exports = (client) => {
     client.isPremium = (guildId) => {
         return premiumCache.has(guildId);
     };
-
     // --- COMMAND HANDLING ---
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
         const { commandName, options, guildId, user } = interaction;
 
-        if (commandName === 'premium') {
+        // --- ACTIVATE PREMIUM ---
+        if (commandName === 'activatepremium') {
             try {
-                const subcommand = options.getSubcommand();
-                const targetGuildId = options.getString('server_id') || guildId;
-
-                // Security check: Only the bot owner can add/remove premium servers globally
                 if (user.id !== process.env.OWNER_ID) {
                     return interaction.reply({ content: '❌ Only the global Bot Owner can manage Premium activation.', ephemeral: true });
                 }
-                // --- ACTIVATE PREMIUM ---
-                if (subcommand === 'activate') {
-                    await interaction.deferReply({ ephemeral: true });
 
-                    // Save permanently to MongoDB
-                    await PremiumModel.findOneAndUpdate(
-                        { guildId: targetGuildId },
-                        { isPremium: true },
-                        { upsert: true, new: true }
-                    );
-
-                    // Update memory cache instantly
-                    premiumCache.add(targetGuildId);
-
-                    return interaction.editReply({ content: `✅ **Server ID \`${targetGuildId}\` has been permanently upgraded to Premium!**` });
-                }
-
-                // --- DEACTIVATE PREMIUM ---
-                if (subcommand === 'deactivate') {
-                    await interaction.deferReply({ ephemeral: true });
-
-                    // Remove permanently from MongoDB
-                    await PremiumModel.deleteOne({ guildId: targetGuildId });
-
-                    // Remove from memory cache instantly
-                    premiumCache.delete(targetGuildId);
-
-                    return interaction.editReply({ content: `🛑 **Premium status has been removed from Server ID \`${targetGuildId}\`.**` });
-                }
+                await interaction.deferReply({ ephemeral: true });
                 
+                const targetGuildId = options.getString('server_id') || guildId;
+
+                // Save permanently to MongoDB
+                await PremiumModel.findOneAndUpdate(
+                    { guildId: targetGuildId },
+                    { isPremium: true },
+                    { upsert: true, new: true }
+                );
+
+                // Update memory cache instantly
+                premiumCache.add(targetGuildId);
+
+                return interaction.editReply({ content: `✅ **SUCCESS:** Premium has been enabled for server \`${targetGuildId}\`!` });
             } catch (error) {
                 console.error('Premium Command Error:', error);
-                if (interaction.replied || interaction.deferred) {
-                    await interaction.followUp({ content: '❌ An error occurred processing the premium command.', ephemeral: true }).catch(()=>{});
-                } else {
-                    await interaction.reply({ content: '❌ An error occurred processing the premium command.', ephemeral: true }).catch(()=>{});
+                return interaction.editReply({ content: '❌ An error occurred processing the premium command.' }).catch(()=>{});
+            }
+        }
+
+        // --- DEACTIVATE PREMIUM ---
+        if (commandName === 'deactivatepremium' || commandName === 'removepremium') {
+            try {
+                if (user.id !== process.env.OWNER_ID) {
+                    return interaction.reply({ content: '❌ Only the global Bot Owner can manage Premium activation.', ephemeral: true });
                 }
+
+                await interaction.deferReply({ ephemeral: true });
+                
+                const targetGuildId = options.getString('server_id') || guildId;
+
+                // Remove permanently from MongoDB
+                await PremiumModel.deleteOne({ guildId: targetGuildId });
+
+                // Remove from memory cache instantly
+                premiumCache.delete(targetGuildId);
+
+                return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status has been removed from server \`${targetGuildId}\`.` });
+            } catch (error) {
+                console.error('Premium Command Error:', error);
+                return interaction.editReply({ content: '❌ An error occurred processing the premium command.' }).catch(()=>{});
             }
         }
     });
