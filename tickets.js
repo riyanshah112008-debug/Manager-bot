@@ -60,7 +60,7 @@ module.exports = (client) => {
                     permissionOverwrites: [
                         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-                        { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
+                        { id client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
                     ]
                 });
 
@@ -77,13 +77,7 @@ module.exports = (client) => {
             if (interaction.customId === 'apply_staff' || interaction.customId === 'apply_partner') {
                 const modal = new ModalBuilder().setCustomId(interaction.customId === 'apply_staff' ? 'modal_staff' : 'modal_partner').setTitle('Application');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q1').setLabel('Q1').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q2').setLabel('Q2').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q3').setLabel('Q3').setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-                await interaction.showModal(modal);
-            }
-
+                    new Action
             // Management Buttons
             if (['claim_ticket', 'close_ticket', 'transcript_ticket', 'delete_ticket', 'app_accept', 'app_reject'].includes(interaction.customId)) {
                 if (!hasAdmin(interaction.member) && interaction.user.id !== process.env.OWNER_ID) return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
@@ -135,5 +129,16 @@ module.exports = (client) => {
             const isStaff = interaction.customId === 'modal_staff';
             const channel = await interaction.guild.channels.create({ name: `app-${interaction.user.username}`, type: ChannelType.GuildText, topic: interaction.user.id });
             const embed = new EmbedBuilder().setTitle(`New ${isStaff ? 'Staff' : 'Partner'} App`).addFields(
-                { name: 'Q1', value: interaction.fields.getTextInputValue('q1')
-                    
+                { name: 'Q1', value: interaction.fields.getTextInputValue('q1') },
+                { name: 'Q2', value: interaction.fields.getTextInputValue('q2') },
+                { name: 'Q3', value: interaction.fields.getTextInputValue('q3') }
+            );
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('app_accept').setLabel('✅ Accept').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('app_reject').setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
+            );
+            await channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: `✅ Application sent to <#${channel.id}>`, ephemeral: true });
+        }
+    });
+};
