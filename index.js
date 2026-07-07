@@ -3,7 +3,8 @@ const express = require('express');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Player } = require('discord-player'); 
-const { SpotifyExtractor } = require('@discord-player/extractor'); 
+// 👇 We now import SoundCloud to act as the primary bridge
+const { SpotifyExtractor, SoundCloudExtractor } = require('@discord-player/extractor'); 
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
@@ -63,6 +64,11 @@ player.events.on('error', (queue, error) => {
 
 player.events.on('playerError', (queue, error) => {
     console.log(`[Music Error] Audio player error: ${error.message}`);
+});
+
+// Register SoundCloud Extractor first (Bypasses YouTube entirely)
+player.extractors.register(SoundCloudExtractor, {}).then(() => {
+    console.log('✅ SoundCloud Audio Engine loaded!');
 });
 
 // Register Spotify Extractor with your Developer Keys
@@ -162,7 +168,7 @@ loadModule('User Protection', './protect.js');
 loadModule('Goodbye System', './goodbye.js');
 loadModule('Role Manager', './roleManager.js');
 loadModule('Anti-Abuse', './antiAbuse.js');
-           
+
 // ==========================================
 // 6. CONNECT TO MONGODB
 // ==========================================
@@ -190,4 +196,3 @@ require('./deploy-commands.js');
 client.login(process.env.TOKEN).catch(err => {
     console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
 });
-           
