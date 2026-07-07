@@ -1,9 +1,14 @@
+// ==========================================
+// 🔧 0. CRITICAL AUDIO ENGINE FIX
+// ==========================================
+// This MUST be at the very top. It loads the engine before the player boots up!
+process.env.FFMPEG_PATH = require('ffmpeg-static');
+
 const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
 const express = require('express');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Player } = require('discord-player'); 
-// 👇 We now import SoundCloud to act as the primary bridge
 const { SpotifyExtractor, SoundCloudExtractor } = require('@discord-player/extractor'); 
 
 // ==========================================
@@ -18,12 +23,9 @@ app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web server listening on port ${port}`);
 
-    // Self-ping every 14 minutes to prevent Render sleep
     setInterval(() => {
         const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-hglf.onrender.com';
-        const options = {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        };
+        const options = { headers: { 'User-Agent': 'Mozilla/5.0' } };
         https.get(`${appUrl}/health`, options).on('error', (err) => {
             console.error('⚠️ Self-ping failed:', err.message);
         });
@@ -53,47 +55,25 @@ client.commands = new Collection();
 // 2.5 MUSIC PLAYER & SPOTIFY SETUP
 // ==========================================
 const player = new Player(client);
-
-// Attach player to client so music.js can access it using client.player
 client.player = player;
 
-// Anti-crash error catchers for the music player
-player.events.on('error', (queue, error) => {
-    console.log(`[Music Error] General error: ${error.message}`);
-});
+player.events.on('error', (queue, error) => console.log(`[Music Error] General error: ${error.message}`));
+player.events.on('playerError', (queue, error) => console.log(`[Music Error] Audio player error: ${error.message}`));
 
-player.events.on('playerError', (queue, error) => {
-    console.log(`[Music Error] Audio player error: ${error.message}`);
-});
-
-// Register SoundCloud Extractor first (Bypasses YouTube entirely)
-player.extractors.register(SoundCloudExtractor, {}).then(() => {
-    console.log('✅ SoundCloud Audio Engine loaded!');
-});
-
-// Register Spotify Extractor with your Developer Keys
+player.extractors.register(SoundCloudExtractor, {}).then(() => console.log('✅ SoundCloud Audio Engine loaded!'));
 player.extractors.register(SpotifyExtractor, {
     clientId: process.env.SPOTIFY_CLIENT_ID,
     clientSecret: process.env.SPOTIFY_CLIENT_SECRET
-}).then(() => {
-    console.log('✅ Spotify Developer API successfully linked!');
-}).catch((err) => {
-    console.log(`❌ Spotify API Error: ${err.message}`);
-});
+}).then(() => console.log('✅ Spotify Developer API successfully linked!')).catch((err) => console.log(`❌ Spotify API Error: ${err.message}`));
 
 // ==========================================
-// 3. GLOBAL ERROR CATCHERS (THE X-RAY)
+// 3. GLOBAL ERROR CATCHERS
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
 client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
-
-process.on('unhandledRejection', error => {
-    console.error('❌ Unhandled Promise Rejection:', error);
-});
-process.on('uncaughtException', error => {
-    console.error('❌ Uncaught Exception:', error);
-});
+process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error));
+process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error));
 
 // ==========================================
 // 4. BOT READY & INTERACTION LISTENER
