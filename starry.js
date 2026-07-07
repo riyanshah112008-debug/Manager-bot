@@ -200,7 +200,7 @@ RULE 5: Casual chat requires natural text.
 ${message.author.username} says: ${message.content}`;
 
                                     const geminiResponse = await ai.models.generateContent({
-                model: 'gemini-pro',
+                model: 'gemini-1.5-pro',
                 contents: prompt
             });
 
