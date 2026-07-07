@@ -60,7 +60,7 @@ module.exports = (client) => {
                     permissionOverwrites: [
                         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-                        { id client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
+                        { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
                     ]
                 });
 
@@ -77,7 +77,12 @@ module.exports = (client) => {
             if (interaction.customId === 'apply_staff' || interaction.customId === 'apply_partner') {
                 const modal = new ModalBuilder().setCustomId(interaction.customId === 'apply_staff' ? 'modal_staff' : 'modal_partner').setTitle('Application');
                 modal.addComponents(
-                    new Action
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q1').setLabel('Q1').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q2').setLabel('Q2').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q3').setLabel('Q3').setStyle(TextInputStyle.Paragraph).setRequired(true))
+                );
+                await interaction.showModal(modal);
+            }
             // Management Buttons
             if (['claim_ticket', 'close_ticket', 'transcript_ticket', 'delete_ticket', 'app_accept', 'app_reject'].includes(interaction.customId)) {
                 if (!hasAdmin(interaction.member) && interaction.user.id !== process.env.OWNER_ID) return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
