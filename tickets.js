@@ -43,7 +43,7 @@ module.exports = (client) => {
         if (interaction.isButton()) {
             // 🔒 PREMIUM CHECK (Block tickets/apps in non-premium servers)
             if (['create_ticket', 'apply_staff', 'apply_partner'].includes(interaction.customId)) {
-                if (!client.isPremium(interaction.guildId)) {
+                if (client.isPremium && !client.isPremium(interaction.guildId)) {
                     return interaction.reply({ content: '❌ **Tickets/Applications are a Premium feature!** Use `.premium` to upgrade.', ephemeral: true });
                 }
             }
@@ -128,20 +128,12 @@ module.exports = (client) => {
 
         // --- MODAL SUBMISSIONS ---
         if (interaction.isModalSubmit()) {
+            // SECURITY CHECK: Only process modals created by this specific file
+            const validModals = ['modal_staff', 'modal_partner'];
+            if (!validModals.includes(interaction.customId)) return;
+
             const isStaff = interaction.customId === 'modal_staff';
             const channel = await interaction.guild.channels.create({ name: `app-${interaction.user.username}`, type: ChannelType.GuildText, topic: interaction.user.id });
             const embed = new EmbedBuilder().setTitle(`New ${isStaff ? 'Staff' : 'Partner'} App`).addFields(
-                { name: 'Q1', value: interaction.fields.getTextInputValue('q1') },
-                { name: 'Q2', value: interaction.fields.getTextInputValue('q2') },
-                { name: 'Q3', value: interaction.fields.getTextInputValue('q3') }
-            );
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('app_accept').setLabel('✅ Accept').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('app_reject').setLabel('❌ Reject').setStyle(ButtonStyle.Danger)
-            );
-            await channel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: `✅ Application sent to <#${channel.id}>`, ephemeral: true });
-        }
-    });
-};
-                                              
+                { name: 'Q1', value: interaction.fields.getTextInputValue('q1')
+                    
