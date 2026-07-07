@@ -12,7 +12,12 @@ const commands = [
     { name: 'purge', description: 'Delete multiple messages', options: [{ name: 'amount', type: 4, required: true, description: 'Number of messages to delete' }]},
     { name: 'lock', description: 'Lock a channel', options: [{ name: 'channel', type: 7, required: false, description: 'Channel to lock' }]},
     { name: 'unlock', description: 'Unlock a channel', options: [{ name: 'channel', type: 7, required: false, description: 'Channel to unlock' }]},
-
+         { 
+        name: 'modpanel', 
+        description: 'Open the interactive moderation dashboard', 
+        options: [{ name: 'user', type: 6, required: true, description: 'The user to moderate' }] 
+    },
+    
     // ================= WARNINGS =================
     { name: 'warn', description: 'Warn user', options: [{ name: 'target', type: 6, required: true, description: 'User to warn' }, { name: 'reason', type: 3, required: true, description: 'Reason for the warning' }] },
     { name: 'warnings', description: 'Check warnings', options: [{ name: 'target', type: 6, required: true, description: 'User to check' }] },
