@@ -1,9 +1,9 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { Player } = require('discord-player');
 const { YoutubeiExtractor } = require('discord-player-youtubei'); 
 
 module.exports = (client) => {
-    const player = new Player(client);
+    // 🔗 Hook into the global player we created in index.js
+    const player = client.player;
     
     client.once('ready', async () => {
         try {
@@ -44,12 +44,12 @@ module.exports = (client) => {
         if (!interaction.isChatInputCommand()) return;
 
         const command = interaction.commandName;
-        const musicCommands = ['play', 'pause', 'resume', 'skip', 'stop', 'queue'];
+        const musicCommands = ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume'];
         
         if (!musicCommands.includes(command)) return;
 
         // 🔒 PREMIUM LOCK
-        if (!client.isPremium(interaction.guild.id)) {
+        if (client.isPremium && !client.isPremium(interaction.guild.id)) {
             return interaction.reply({ content: '❌ **Music is a Premium feature!** Ask the owner to upgrade the server.', ephemeral: true }).catch(() => {});
         }
 
@@ -80,35 +80,45 @@ module.exports = (client) => {
 
             // --- /PAUSE ---
             if (command === 'pause') {
-                if (!queue || !queue.isPlaying()) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+                if (!queue) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
                 queue.node.setPaused(true);
                 return interaction.reply({ content: '⏸️ **Paused the music.**' });
             }
 
             // --- /RESUME ---
             if (command === 'resume') {
-                if (!queue || !queue.isPlaying()) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+                if (!queue) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
                 queue.node.setPaused(false);
                 return interaction.reply({ content: '▶️ **Resumed the music.**' });
             }
 
             // --- /SKIP ---
             if (command === 'skip') {
-                if (!queue || !queue.isPlaying()) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+                if (!queue) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
                 queue.node.skip();
                 return interaction.reply({ content: '⏭️ **Skipped to the next song.**' });
             }
 
             // --- /STOP ---
             if (command === 'stop') {
-                if (!queue || !queue.isPlaying()) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+                if (!queue) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
                 queue.delete();
                 return interaction.reply({ content: '🛑 **Stopped the music and cleared the queue.**' });
             }
 
+            // --- /VOLUME ---
+            if (command === 'volume') {
+                if (!queue) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+                const vol = interaction.options.getInteger('amount');
+                if (!vol || vol < 1 || vol > 100) return interaction.reply({ content: '❌ Volume must be between 1 and 100.', ephemeral: true });
+                
+                queue.node.setVolume(vol);
+                return interaction.reply({ content: `🔊 **Volume set to ${vol}%**` });
+            }
+
             // --- /QUEUE ---
             if (command === 'queue') {
-                if (!queue || !queue.isPlaying()) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+                if (!queue || !queue.currentTrack) return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
                 const currentTrack = queue.currentTrack;
                 const tracks = queue.tracks.toArray(); 
 
@@ -138,4 +148,4 @@ module.exports = (client) => {
         }
     });
 };
-            
+        
