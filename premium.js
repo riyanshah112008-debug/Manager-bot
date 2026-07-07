@@ -1,90 +1,86 @@
-const { EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+const { EmbedBuilder, PermissionsBitField } = require('discord.js');
+const mongoose = require('mongoose');
 
-// ==========================================
-// SIMPLE JSON DATABASE FOR PREMIUM
-// ==========================================
-const dbPath = path.join(__dirname, 'premiumData.json');
+// 🗄️ 1. Define the Permanent Premium Schema for MongoDB
+const PremiumSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    isPremium: { type: Boolean, default: true },
+    activatedAt: { type: Date, default: Date.now }
+});
 
-function getPremiumData() {
-    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({ servers: [] }));
-    return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-}
+const PremiumModel = mongoose.model('PremiumGuilds', PremiumSchema);
 
-function savePremiumData(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
+module.exports = async (client) => {
+    // 🧠 2. Initialize a fast local cache
+    const premiumCache = new Set();
 
-// ==========================================
-// MODULE EXPORT
-// ==========================================
-module.exports = (client) => {
-    
-    // Global helper so other files (like Starry.js) can check if a server is premium
+    // 📥 3. Load all premium servers from MongoDB on boot
+    try {
+        const premiumGuilds = await PremiumModel.find({ isPremium: true });
+        premiumGuilds.forEach(g => premiumCache.add(g.guildId));
+        console.log(`💎 Loaded ${premiumCache.size} Premium servers from MongoDB!`);
+    } catch (err) {
+        console.error('❌ Failed to load premium servers from DB:', err);
+    }
+
+    // 🔗 4. Attach a fast check function to the client object
     client.isPremium = (guildId) => {
-        const data = getPremiumData();
-        return data.servers.includes(guildId);
+        return premiumCache.has(guildId);
     };
 
-    client.on("interactionCreate", async (interaction) => {
+    // --- COMMAND HANDLING ---
+    client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
-        const isOwner = interaction.user.id === process.env.OWNER_ID;
-        const premiumData = getPremiumData();
+        const { commandName, options, guildId, user } = interaction;
 
-        // --- /premiumcheck ---
-        if (interaction.commandName === "premiumcheck") {
-            if (!interaction.guild) {
-                return interaction.reply({ content: "❌ Use this command in a server.", ephemeral: true });
+        if (commandName === 'premium') {
+            const subcommand = options.getSubcommand();
+            const targetGuildId = options.getString('server_id') || guildId;
+
+            // Security check: Only the bot owner can add/remove premium servers globally
+            if (user.id !== process.env.OWNER_ID) {
+                return interaction.reply({ content: '❌ Only the global Bot Owner can manage Premium activation.', ephemeral: true });
+            }
+            // --- ACTIVATE PREMIUM ---
+            if (subcommand === 'activate') {
+                await interaction.deferReply({ ephemeral: true });
+
+                try {
+                    // Save permanently to MongoDB
+                    await PremiumModel.findOneAndUpdate(
+                        { guildId: targetGuildId },
+                        { isPremium: true },
+                        { upsert: true, new: true }
+                    );
+
+                    // Update memory cache instantly
+                    premiumCache.add(targetGuildId);
+
+                    return interaction.editReply({ content: `✅ **Server ID \`${targetGuildId}\` has been permanently upgraded to Premium!**` });
+                } catch (error) {
+                    console.error(error);
+                    return interaction.editReply({ content: '❌ Database error while activating premium status.' });
+                }
             }
 
-            const isPrem = client.isPremium(interaction.guild.id);
-            const embed = new EmbedBuilder()
-                .setColor(isPrem ? "#FFD700" : "#2b2d31")
-                .setTitle("⭐ Premium Status")
-                .setDescription(isPrem 
-                    ? "✅ **Premium is ACTIVE for this server!** All advanced features and Starry AI are unlocked." 
-                    : "❌ **Premium is NOT active.** Upgrade to unlock Starry AI and advanced protections.")
-                .setTimestamp();
-                
-            return interaction.reply({ embeds: [embed] });
-        }
+            // --- DEACTIVATE PREMIUM ---
+            if (subcommand === 'deactivate') {
+                await interaction.deferReply({ ephemeral: true });
 
-        // --- /activatepremium ---
-        if (interaction.commandName === "activatepremium") {
-            if (!isOwner) {
-                return interaction.reply({ content: "❌ Only the bot owner can use this command.", ephemeral: true });
-            }
+                try {
+                    // Remove permanently from MongoDB
+                    await PremiumModel.deleteOne({ guildId: targetGuildId });
 
-            const targetServer = interaction.options.getString("server_id");
-            
-            if (!premiumData.servers.includes(targetServer)) {
-                premiumData.servers.push(targetServer);
-                savePremiumData(premiumData); // Save it to the JSON file
-                return interaction.reply(`✅ **SUCCESS:** Premium has been enabled for server \`${targetServer}\`!`);
-            }
-            
-            return interaction.reply({ content: "⚠️ That server already has Premium activated.", ephemeral: true });
-        }
+                    // Remove from memory cache instantly
+                    premiumCache.delete(targetGuildId);
 
-        // --- /removepremium ---
-        if (interaction.commandName === "removepremium") {
-            if (!isOwner) {
-                return interaction.reply({ content: "❌ Only the bot owner can use this command.", ephemeral: true });
+                    return interaction.editReply({ content: `🛑 **Premium status has been removed from Server ID \`${targetGuildId}\`.**` });
+                } catch (error) {
+                    console.error(error);
+                    return interaction.editReply({ content: '❌ Database error while removing premium status.' });
+                }
             }
-
-            const targetServer = interaction.options.getString("server_id");
-            
-            if (premiumData.servers.includes(targetServer)) {
-                // Filter out the removed server
-                premiumData.servers = premiumData.servers.filter(id => id !== targetServer);
-                savePremiumData(premiumData); // Save the updated list
-                return interaction.reply(`❌ **REVOKED:** Premium has been removed for server \`${targetServer}\`.`);
-            }
-            
-            return interaction.reply({ content: "⚠️ That server does not currently have Premium.", ephemeral: true });
         }
     });
 };
-                                
