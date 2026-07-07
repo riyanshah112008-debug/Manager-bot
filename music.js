@@ -17,10 +17,7 @@ module.exports = (client) => {
         }
     });
 
-    // ==========================================
-    // 🎵 AUTOMATIC "NOW PLAYING" EMBED
-    // ==========================================
-       // 🐛 DEBUGGING: Catch hidden audio crashes
+    // 🐛 DEBUGGING: Catch hidden audio crashes
     player.events.on('error', (queue, error) => {
         console.error(`[Player Error] ${error.message}`);
     });
@@ -32,7 +29,11 @@ module.exports = (client) => {
     player.events.on('debug', (queue, message) => {
         console.log(`[Player Debug] ${message}`);
     });
- player.events.on('playerStart', (queue, track) => {
+
+    // ==========================================
+    // 🎵 AUTOMATIC "NOW PLAYING" EMBED
+    // ==========================================
+    player.events.on('playerStart', (queue, track) => {
         const embed = new EmbedBuilder()
             .setColor('#FFD700')
             .setAuthor({ name: '🎵 Now Playing' })
@@ -50,7 +51,6 @@ module.exports = (client) => {
         const permissions = channel.permissionsFor(botMember);
         return permissions.has(PermissionsBitField.Flags.Connect) && permissions.has(PermissionsBitField.Flags.Speak);
     };
-
     // ==========================================
     // 🎛️ MUSIC SLASH COMMANDS
     // ==========================================
@@ -72,6 +72,7 @@ module.exports = (client) => {
         if (!checkPermissions(channel, interaction.guild.members.me)) return interaction.reply({ content: '❌ I am missing Connect or Speak permissions!', ephemeral: true }).catch(() => {});
 
         const queue = player.nodes.get(interaction.guild.id);
+
         try {
             // --- /PLAY ---
             if (command === 'play') {
@@ -83,7 +84,10 @@ module.exports = (client) => {
                         searchEngine: 'soundcloud', 
                         nodeOptions: { 
                             metadata: interaction, 
-                            leaveOnEmpty: true 
+                            volume: 99,           // 🔧 FORCES FFmpeg to activate (stops the raw stream crash)
+                            leaveOnEmpty: false,  // 🔧 Stops the bot from accidentally hanging up on itself
+                            leaveOnEnd: false,
+                            leaveOnStop: false
                         }
                     });
                     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#3BA55C').setDescription(`✅ Added to queue!`)] }).catch(() => {});
