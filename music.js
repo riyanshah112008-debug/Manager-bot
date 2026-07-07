@@ -67,10 +67,13 @@ module.exports = (client) => {
 
                 try {
                     await player.play(channel, query, {
-                        nodeOptions: { 
-                            metadata: interaction, // Passes interaction so playerStart knows where to send the embed
-                            leaveOnEmpty: true 
-                        }
+    searchEngine: 'soundcloud', // Forces the bot to use SoundCloud to find the audio stream
+    nodeOptions: { 
+        metadata: interaction, 
+        leaveOnEmpty: true 
+    }
+});
+
                     });
                     return interaction.editReply({ embeds: [new EmbedBuilder().setColor('#3BA55C').setDescription(`✅ Added to queue!`)] }).catch(() => {});
                 } catch (error) {
