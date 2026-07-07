@@ -156,7 +156,7 @@ if (!process.env.TOKEN) {
 
 console.log(`🔍 TOKEN DEBUG: The first 5 characters Render sees are: "${process.env.TOKEN.substring(0, 5)}"`);
 console.log(`🔍 TOKEN DEBUG: Total length of the token string is: ${process.env.TOKEN.length} characters`);
-require('./deploy-global.js'); // <--- ADD THIS LINE!
+require('./deploy-commands.js'); // <--- ADD THIS LINE!
 
 
 
