@@ -1,71 +1,57 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const Database = require('better-sqlite3');
+const fs = require('fs');
+const path = require('path');
 
-// Create a small database just to remember which channel to use
-const db = new Database('welcome.db');
+const dbPath = path.join(__dirname, 'welcomeData.json');
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS welcome_settings (
-        guild_id TEXT PRIMARY KEY,
-        channel_id TEXT
-    )
-`);
+function getWelcomeData() {
+    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
+    return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+}
 
-const getWelcome = db.prepare('SELECT channel_id FROM welcome_settings WHERE guild_id = ?');
-const setWelcome = db.prepare(`
-    INSERT INTO welcome_settings (guild_id, channel_id) 
-    VALUES (?, ?) 
-    ON CONFLICT(guild_id) DO UPDATE SET channel_id = ?
-`);
+function saveWelcomeData(data) {
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+}
 
 module.exports = (client) => {
-    // 1. Handle the Setup Command
-    client.on('interactionCreate', async interaction => {
-        if (!interaction.isChatInputCommand()) return;
-
-        if (interaction.commandName === 'setwelcome') {
-            const channel = interaction.options.getChannel('channel');
-            
-            // Save the channel ID to the database
-            setWelcome.run(interaction.guildId, channel.id, channel.id);
-            
-            return interaction.reply({ 
-                content: `🎉 Success! I will now welcome all new members in ${channel}!`, 
-                ephemeral: true 
-            }).catch(() => {});
+    // 1. Handle the Slash Command
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'setupwelcome') return;
+        
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+            return interaction.reply({ content: '❌ You need Manage Server permissions to do this.', ephemeral: true });
         }
+
+        const channel = interaction.options.getChannel('channel');
+        const data = getWelcomeData();
+        
+        data[interaction.guild.id] = channel.id;
+        saveWelcomeData(data);
+
+        await interaction.reply({ content: `✅ Welcome messages will now be sent to ${channel}!`, ephemeral: true });
     });
 
-    // 2. The Welcome Event Trigger
-    client.on('guildMemberAdd', async member => {
-        // Check if this server has set up a welcome channel
-        const setting = getWelcome.get(member.guild.id);
-        if (!setting || !setting.channel_id) return;
+    // 2. Handle the User Joining
+    client.on('guildMemberAdd', async (member) => {
+        const data = getWelcomeData();
+        const channelId = data[member.guild.id];
+        if (!channelId) return;
 
-        // Find the actual channel in the server
-        const welcomeChannel = member.guild.channels.cache.get(setting.channel_id);
-        if (!welcomeChannel) return; // If the channel was deleted, do nothing
+        const channel = member.guild.channels.cache.get(channelId);
+        if (!channel) return;
 
-        // Build the Welcome Embed
-        const welcomeEmbed = new EmbedBuilder()
-            .setColor('#7289DA')
-            .setTitle(`✨ Welcome to ${member.guild.name}! ✨`)
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle(`✨ Welcome to ${member.guild.name} ✨`)
             .setDescription(`Hello <@${member.id}>, we are so glad you joined the server! Be sure to read the rules and enjoy your stay.`)
-            .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
             .addFields(
-                { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!`, inline: true },
-                { name: '📅 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!` },
+                { name: '📆 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` }
             )
-            // Updated with your specific image URL
-            .setImage('https://cdn.discordapp.com/attachments/1508799648154779772/1515357119564742847/lv_0_20260519173542.jpg?ex=6a47c24b&is=6a4670cb&hm=309e462cd4c198ffe6667d605b32750ef439d0f81e86393c9a5448c69602087d&') 
-            .setFooter({ text: 'Enjoy your stay!', iconURL: member.guild.iconURL() })
-            .setTimestamp();
+            .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+            .setFooter({ text: `Enjoy your stay! | ${new Date().toLocaleDateString()}` });
 
-        // Send the message
-        welcomeChannel.send({ 
-            content: `Hey <@${member.id}>! 👋`, 
-            embeds: [welcomeEmbed] 
-        }).catch(err => console.error("Could not send welcome message:", err));
+        await channel.send({ content: `Hey <@${member.id}>! 👋`, embeds: [embed] }).catch(() => {});
     });
 };
-                
+        
