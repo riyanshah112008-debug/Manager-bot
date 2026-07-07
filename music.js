@@ -20,7 +20,19 @@ module.exports = (client) => {
     // ==========================================
     // 🎵 AUTOMATIC "NOW PLAYING" EMBED
     // ==========================================
-    player.events.on('playerStart', (queue, track) => {
+       // 🐛 DEBUGGING: Catch hidden audio crashes
+    player.events.on('error', (queue, error) => {
+        console.error(`[Player Error] ${error.message}`);
+    });
+
+    player.events.on('playerError', (queue, error) => {
+        console.error(`[Audio Stream Error] ${error.message}`);
+    });
+
+    player.events.on('debug', (queue, message) => {
+        console.log(`[Player Debug] ${message}`);
+    });
+ player.events.on('playerStart', (queue, track) => {
         const embed = new EmbedBuilder()
             .setColor('#FFD700')
             .setAuthor({ name: '🎵 Now Playing' })
