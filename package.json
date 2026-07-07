@@ -12,22 +12,22 @@
     "@discord-player/extractor": "^4.4.0",
     "@discordjs/voice": "^0.17.0",
     "@google/genai": "latest",
-    "google-translate-api-x": "^10.6.0",
     "better-sqlite3": "^11.0.0",
     "canvas": "^2.11.2",
     "discord-player": "latest",
     "discord-player-youtubei": "0.0.3",
     "discord.js": "^14.14.1",
-    "tweetnacl": "latest",
-
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "ffmpeg-static": "^5.2.0",
+    "google-translate-api-x": "^10.6.0",
     "husky": "latest",
     "libsodium-wrappers": "^0.7.13",
-    "undici": "^6.19.8",
     "mongoose": "^8.4.0",
-    "play-dl": "latest"
+    "opusscript": "latest",
+    "play-dl": "latest",
+    "tweetnacl": "latest",
+    "undici": "^6.19.8"
   },
   "optionalDependencies": {
     "@discordjs/opus": "^0.9.0"
