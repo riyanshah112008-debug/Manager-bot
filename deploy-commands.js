@@ -1,4 +1,3 @@
-require('dotenv').config(); 
 const { REST, Routes } = require('discord.js');
 
 const commands = [
@@ -8,7 +7,7 @@ const commands = [
     { name: 'sussetup', description: 'Config auto-sus account protection', options: [
         { name: 'enabled', type: 5, required: true },
         { name: 'threshold', type: 4, required: true },
-        { name: 'action', type: 3, required: true, choices: [{name: 'Warn', value: 'warn'}, {name: 'Kick', value: 'kick'}, {name: 'Ban', value: 'ban'}] }
+        { name: 'action', type: 3, required: true, choices: [{name: 'warn', value: 'warn'}, {name: 'kick', value: 'kick'}, {name: 'ban', value: 'ban'}] }
     ]},
     { name: 'rr', description: 'Reaction role manager', options: [
         { name: 'spawn', type: 1, description: 'Create panel', options: [{name: 'channel', type: 7, required: true}, {name: 'title', type: 3, required: true}, {name: 'text', type: 3, required: true}] },
@@ -18,20 +17,21 @@ const commands = [
     { name: 'warnings', description: 'Check warnings', options: [{ name: 'target', type: 6, required: true }] },
     { name: 'delwarn', description: 'Remove warn', options: [{ name: 'id', type: 4, required: true }] },
     { name: 'role', description: 'Manage roles', options: [
-        { name: 'create', type: 1, options: [{name: 'name', type: 3, required: true}, {name: 'color', type: 3}] },
-        { name: 'delete', type: 1, options: [{name: 'role', type: 8, required: true}] },
-        { name: 'give', type: 1, options: [{name: 'user', type: 6, required: true}, {name: 'role', type: 8, required: true}] },
-        { name: 'remove', type: 1, options: [{name: 'user', type: 6, required: true}, {name: 'role', type: 8, required: true}] }
+        { name: 'create', type: 1, description: 'Create a role', options: [{name: 'name', type: 3, required: true}, {name: 'color', type: 3, description: 'Hex color'}] },
+        { name: 'delete', type: 1, description: 'Delete a role', options: [{name: 'role', type: 8, required: true}] },
+        { name: 'give', type: 1, description: 'Give a role', options: [{name: 'user', type: 6, required: true}, {name: 'role', type: 8, required: true}] },
+        { name: 'remove', type: 1, description: 'Remove a role', options: [{name: 'user', type: 6, required: true}, {name: 'role', type: 8, required: true}] }
     ]},
-    { name: 'whois', description: 'User info', options: [{ name: 'target', type: 6 }] },
+    { name: 'whois', description: 'User info', options: [{ name: 'target', type: 6, description: 'User to lookup' }] },
     { name: 'translate', description: 'Translate text', options: [{name: 'language', type: 3, required: true}, {name: 'text', type: 3, required: true}] },
     { name: 'setupvc', description: 'Setup Join-to-create VC', options: [{name: 'channel', type: 7, required: true}]},
     { name: 'setupstats', description: 'Create stat channels' },
-    { name: 'tod', description: 'Play Truth or Dare', options: [{name: 'choice', type: 3, required: true, choices: [{name: 'Truth', value: 'truth'}, {name: 'Dare', value: 'dare'}]}]},
+    { name: 'tod', description: 'Play Truth or Dare', options: [{name: 'choice', type: 3, required: true, choices: [{name: 'truth', value: 'truth'}, {name: 'dare', value: 'dare'}]}]},
     { name: 'activatepremium', description: 'Activate Premium for a server', options: [{name: 'server_id', description: 'Server ID', type: 3, required: true}] },
     { name: 'removepremium', description: 'Remove Premium from a server', options: [{name: 'server_id', description: 'Server ID', type: 3, required: true}] },
     { name: 'premiumcheck', description: 'Check Premium status of this server' },
-    { name: 'Steal Emojis', type: 3 }
+    // Fixed: Name must be lowercase with no spaces. Changed type to 1 (ChatInput) because context menus are tricky to deploy in bulk.
+    { name: 'steal_emoji', description: 'Steal an emoji' } 
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -39,12 +39,10 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 (async () => {
     try {
         console.log('🔄 Syncing commands GLOBALLY across all servers...');
-        
-        // This pushes to all servers!
         await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-        
         console.log('✅ Success! Commands are registered globally.');
     } catch (e) { 
-        console.error(e); 
+        console.error('❌ Discord API Rejected the payload:', e); 
     }
 })();
+                                                                  
