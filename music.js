@@ -1,15 +1,17 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { YoutubeiExtractor } = require('discord-player-youtubei'); 
+
+// 🔧 THE MUTE FIX: Tell the bot exactly where the audio engine is located!
+process.env.FFMPEG_PATH = require('ffmpeg-static'); 
 
 module.exports = (client) => {
-    // 🔗 Hook into the global player we created in index.js
+    // 🔗 Hook into the global player
     const player = client.player;
     
     client.once('ready', async () => {
         try {
-            await player.extractors.register(YoutubeiExtractor, {});
+            // 🔧 THE DELAY FIX: Completely disable YouTube so it stops hitting the firewall timeout!
             await player.extractors.loadDefault((ext) => ext !== 'YouTubeExtractor');
-            console.log('🎶 Audio extractors loaded successfully!');
+            console.log('🎶 Audio extractors loaded successfully (YouTube Bypassed)!');
         } catch (err) {
             console.error('❌ Failed to load music extractors:', err);
         }
@@ -66,7 +68,7 @@ module.exports = (client) => {
 
                 try {
                     await player.play(channel, query, {
-                        searchEngine: 'soundcloud', // Bypasses YouTube to avoid Render IP blocks
+                        searchEngine: 'soundcloud', 
                         nodeOptions: { 
                             metadata: interaction, 
                             leaveOnEmpty: true 
