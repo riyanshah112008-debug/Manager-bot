@@ -9,9 +9,9 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "discord-player/extractor": "^4.4.0",
-    "discordjs/voice": "^0.17.0",
-    "google/genai": "latest",
+    "@discord-player/extractor": "^4.4.0",
+    "@discordjs/voice": "^0.17.0",
+    "@google/genai": "latest",
     "google-translate-api-x": "^10.6.0",
     "better-sqlite3": "^11.0.0",
     "canvas": "^2.11.2",
