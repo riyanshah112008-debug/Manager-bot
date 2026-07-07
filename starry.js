@@ -199,10 +199,11 @@ RULE 5: Casual chat requires natural text.
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-                        const geminiResponse = await ai.models.generateContent({
-                model: 'gemini-1.5-flash-latest', 
+                                    const geminiResponse = await ai.models.generateContent({
+                model: 'gemini-pro',
                 contents: prompt
             });
+
 
 
             let replyText = geminiResponse.text || "";
