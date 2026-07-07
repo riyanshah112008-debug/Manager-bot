@@ -2,6 +2,8 @@ const { Client, GatewayIntentBits, Partials, Collection, Events } = require('dis
 const express = require('express');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
+const { Player } = require('discord-player'); 
+const { SpotifyExtractor } = require('@discord-player/extractor'); 
 
 // ==========================================
 // 1. WEB SERVER (KEEPS RENDER ALIVE)
@@ -45,6 +47,33 @@ const client = new Client({
 
 client.setMaxListeners(30);
 client.commands = new Collection(); 
+
+// ==========================================
+// 2.5 MUSIC PLAYER & SPOTIFY SETUP
+// ==========================================
+const player = new Player(client);
+
+// Attach player to client so music.js can access it using client.player
+client.player = player;
+
+// Anti-crash error catchers for the music player
+player.events.on('error', (queue, error) => {
+    console.log(`[Music Error] General error: ${error.message}`);
+});
+
+player.events.on('playerError', (queue, error) => {
+    console.log(`[Music Error] Audio player error: ${error.message}`);
+});
+
+// Register Spotify Extractor with your Developer Keys
+player.extractors.register(SpotifyExtractor, {
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET
+}).then(() => {
+    console.log('✅ Spotify Developer API successfully linked!');
+}).catch((err) => {
+    console.log(`❌ Spotify API Error: ${err.message}`);
+});
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS (THE X-RAY)
@@ -156,10 +185,9 @@ if (!process.env.TOKEN) {
 
 console.log(`🔍 TOKEN DEBUG: The first 5 characters Render sees are: "${process.env.TOKEN.substring(0, 5)}"`);
 console.log(`🔍 TOKEN DEBUG: Total length of the token string is: ${process.env.TOKEN.length} characters`);
-require('./deploy-commands.js'); // <--- ADD THIS LINE!
-
-
+require('./deploy-commands.js'); 
 
 client.login(process.env.TOKEN).catch(err => {
     console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
 });
+           
