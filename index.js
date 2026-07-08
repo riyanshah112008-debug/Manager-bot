@@ -53,9 +53,15 @@ client.commands = new Collection();
 // ==========================================
 // 2.5 MUSIC PLAYER & SPOTIFY SETUP
 // ==========================================
-const player = new Player(client, { ffmpegPath: process.env.FFMPEG_PATH });
+const player = new Player(client, { 
+    ffmpegPath: process.env.FFMPEG_PATH,
+    useUniversalBridge: true,  // 🔧 CRITICAL FIX: Enables SoundCloud/Spotify bridging
+    enableBlockedExtractors: false,  // Block YouTube completely
+    skipFFmpegCheck: false
+});
 client.player = player;
 
+console.log('🎵 Discord Player initialized with universal bridge enabled');
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
