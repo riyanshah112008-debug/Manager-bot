@@ -101,7 +101,15 @@ module.exports = (client) => {
                 await interaction.deferReply();
                 await ensureExtractors();
 
+                // 🔧 FIX: Check if server-muted BEFORE attempting to play
+                const botVoiceState = interaction.guild.members.me?.voice;
+                if (botVoiceState?.serverMute) {
+                    return interaction.editReply({ content: '❌ The bot is server-muted. Ask a server administrator to unmute the bot in the voice channel.' });
+                }
+
                 const playableQuery = getPlayableQuery(query);
+                
+                // 🔧 FIX: Use player.play() with proper options to join and play
                 const result = await player.play(voiceChannel, playableQuery, {
                     requestedBy: interaction.user,
                     nodeOptions: {
@@ -118,12 +126,11 @@ module.exports = (client) => {
                     }
                 });
 
-                // 🔧 THE REJOIN HACK WAS DELETED FROM HERE. The audio stream will no longer be strangled!
+                if (!result || !result.track) {
+                    return interaction.editReply({ content: '❌ Could not find or play that track. Try another search term.' });
+                }
 
-                const botVoiceState = interaction.guild.members.me?.voice;
-                if (botVoiceState?.serverMute) throw new Error('The bot is server-muted. Server-unmute it in the voice channel.');
-
-                const trackTitle = result?.track?.title;
+                const trackTitle = result.track.title;
                 return interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setColor('#3BA55C')
