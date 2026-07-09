@@ -204,9 +204,9 @@ RULE 5: Casual chat requires natural text.
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            // ✅ Uses the highly capable 2.5 Pro model for advanced coding and reasoning!
+            // ✅ Uses the highly capable 3.5 Flash model for advanced coding without hitting free tier limits!
             const geminiResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-pro', 
+                model: 'gemini-3.5-flash', 
                 contents: prompt 
             });
 
@@ -330,4 +330,4 @@ ${message.author.username} says: ${message.content}`;
         }
     });
 };
-            
+                
