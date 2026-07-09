@@ -149,8 +149,8 @@ module.exports = (client) => {
             if (!isOwner) return;
             client.user.setActivity(message.content.slice(11).trim(), { type: 4 });
             return message.reply(`✅ Status updated!`).catch(() => {});
-            }
-                    // ==========================================
+        }
+                // ==========================================
         // 2. AI GENERATION (REQUIRES PREMIUM)
         // ==========================================
         const isImagine = text.startsWith('.imagine ');
@@ -204,7 +204,7 @@ RULE 5: Casual chat requires natural text.
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-                        // ✅ Uses the highly capable 2.5 Pro model for advanced coding and reasoning!
+            // ✅ Uses the highly capable 2.5 Pro model for advanced coding and reasoning!
             const geminiResponse = await ai.models.generateContent({
                 model: 'gemini-2.5-pro', 
                 contents: prompt 
@@ -315,14 +315,17 @@ ${message.author.username} says: ${message.content}`;
                     return message.reply(`🔨 banned <@${tId}>.`);
                 }
             }
-            // Output Starrys conversational response 
-            if(replyText.length > 0) {
-                //Remove Markdown formatting for cleaner chat appearance if desired,or keep as it is.
-                await message.reply(replyText).catch(() => {});
+            
+            // 🛑 NEW: Output Starry's conversational response WITH FALLBACK TRAP
+            if (replyText && replyText.trim().length > 0) {
+                await message.reply(replyText.trim()).catch(() => {});
+            } else if (!functionName && !runMatch) {
+                // This traps the silent fail! If no command ran, and text is empty, it tells you instead of freezing.
+                await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(() => {});
             }
+
         } catch (error) {
             console.error("Gemini AI error:", error);
-            // 🛑 DEBUG UPDATE: It will now dump the exact API error code directly into Discord so we know what is wrong!
             return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\`\n*(Please check the bot's terminal window for more details!)*`).catch(() => {});
         }
     });
