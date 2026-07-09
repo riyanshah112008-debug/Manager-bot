@@ -204,9 +204,9 @@ RULE 5: Casual chat requires natural text.
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            // ✅ CORRECT - Uses proper Gemini API syntax for @google/genai
+                        // ✅ Uses the highly capable 2.5 Pro model for advanced coding and reasoning!
             const geminiResponse = await ai.models.generateContent({
-                model: 'gemini-1.5-pro',
+                model: 'gemini-2.5-pro', 
                 contents: prompt 
             });
 
