@@ -199,14 +199,18 @@ RULE 5: Casual chat requires natural text.
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-                                    const geminiResponse = await ai.models.generateContent({
-                model: 'gemini-1.5-pro',
-                contents: prompt
-            });
+                                    // ✅ CORRECT - Uses proper Gemini API
+const geminiResponse = await ai.generativeModels.generateContent({
+    model: 'gemini-1.5-pro',
+    contents: [{ text: prompt }]  // Must be array format
+});
+
+// Properly extract response
+let replyText = geminiResponse.response.text() || "";
 
 
 
-            let replyText = geminiResponse.text || "";
+           
             let functionName = null; let args = {};
 
             const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
