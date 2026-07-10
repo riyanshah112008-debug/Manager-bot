@@ -193,7 +193,7 @@ module.exports = (client) => {
         }
 
         try {
-            // 🛑 UPDATED: New rules force faster responses and clearly explain how to attach roles to new channels!
+            // 🛑 Rules force faster responses and clearly explain how to attach roles to new channels!
             const prompt = `[SYSTEM INSTRUCTION]
 You are Starry, a helpful Discord bot. 
 RULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
@@ -206,10 +206,28 @@ RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            const geminiResponse = await ai.models.generateContent({
-                model: 'gemini-3.5-flash', 
-                contents: prompt 
-            });
+            let geminiResponse;
+            let attempts = 0;
+            const maxAttempts = 3; 
+
+            // 🛑 NEW: AUTO-RETRY LOOP. If we get a 503 error, wait 2 seconds and try again!
+            while (attempts < maxAttempts) {
+                try {
+                    geminiResponse = await ai.models.generateContent({
+                        model: 'gemini-3.5-flash', 
+                        contents: prompt 
+                    });
+                    break; // Success! Break out of the retry loop.
+                } catch (apiError) {
+                    attempts++;
+                    if (apiError.status === 503 && attempts < maxAttempts) {
+                        console.warn(`[API] 503 High Demand hit! Retrying attempt ${attempts + 1}...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                    } else {
+                        throw apiError; // If it's NOT a 503, or we are out of retries, crash.
+                    }
+                }
+            }
 
             // Properly extract response
             let replyText = geminiResponse.text || "";
