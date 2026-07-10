@@ -33,12 +33,14 @@ module.exports = (client) => {
         
         // Securely grab the owner ID from Environment Variables
         const isOwner = message.author.id === process.env.OWNER_ID;
+        // 🛑 NEW: A universal warning message applied to all developer commands!
+        const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner! Ensure your exact Discord ID is pasted into the `OWNER_ID` variable on Render.";
 
         // ==========================================
         // 1. OWNER-ONLY DEVELOPER COMMANDS
         // ==========================================
         if (text === '.dev') {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             try {
                 await message.author.send(`💻 **Starry Developer Commands (Owner-Only):**\n\n\`.servers\` - Lists all servers.\n\`.serverdump\` - Full text data dump.\n\`.sysinfo\` - Bot stats.\n\`.eval <code>\` - Run raw JavaScript.\n\`.broadcast <msg>\` - Send message to ALL servers.\n\`.leaveserver <ID>\` - Remotely force leave.\n\`.blacklist <ID>\` - Block a user.\n\`.emergencyleave\` - Force leave current server.\n\`.restart\` - Kills the bot process.\n\`.setstatus <text>\` - Changes status.`);
                 return message.reply('📬 Check your DMs!').catch(() => {});
@@ -46,14 +48,14 @@ module.exports = (client) => {
         }
 
         if (text === '.sysinfo') {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
             const uptime = (process.uptime() / 3600).toFixed(2);
             return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
         }
 
         if (text.startsWith('.blacklist ')) {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const targetId = message.content.split(' ')[1];
             if (!targetId) return message.reply('❌ Please provide a User ID.');
             if (blacklistedUsers.has(targetId)) {
@@ -64,14 +66,14 @@ module.exports = (client) => {
         }
 
         if (text.startsWith('.leaveserver ')) {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const guildToLeave = client.guilds.cache.get(message.content.split(' ')[1]);
             if (!guildToLeave) return message.reply('❌ I am not in a server with that ID.').catch(()=>{});
             await guildToLeave.leave(); return message.reply(`✅ Successfully left **${guildToLeave.name}**.`).catch(()=>{});
         }
 
         if (text.startsWith('.broadcast ')) {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const announcement = message.content.slice(11).trim();
             if (!announcement) return message.reply('❌ What do you want to broadcast?');
             
@@ -92,7 +94,7 @@ module.exports = (client) => {
         }
 
         if (text.startsWith('.eval ')) {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             try {
                 let evaled = eval(message.content.slice(6));
                 if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
@@ -100,13 +102,14 @@ module.exports = (client) => {
             } catch (err) { return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
         }
 
-        if (text === '.emergencyleave' && isOwner) {
+        if (text === '.emergencyleave') {
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             await message.reply('I am leaving this server now. Goodbye! 👋').catch(() => {});
             return message.guild.leave();
         }
 
         if (text === '.serverdump') {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             await message.reply('🗄️ Compiling a neatly organized server dump...').catch(() => {});
             try {
                 const guild = message.guild; 
@@ -143,19 +146,19 @@ module.exports = (client) => {
         }
 
         if (text === '.servers') {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
             client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
             return message.reply(serverList).catch(() => {});
         }
 
         if (text === '.restart') {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             await message.reply('🔄 **Initiating remote reboot...**').catch(() => {}); process.exit(1);
         }
 
         if (text.startsWith('.setstatus ')) {
-            if (!isOwner) return;
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             client.user.setActivity(message.content.slice(11).trim(), { type: 4 });
             return message.reply(`✅ Status updated!`).catch(() => {});
         }
@@ -180,9 +183,23 @@ module.exports = (client) => {
             return message.reply('❌ **Starry AI is a Premium feature!** Use `.premium` to learn how to upgrade your server.').catch(() => {});
         }
 
-        // --- IMAGE GENERATION ---
+        // 🚀 NATURAL LANGUAGE IMAGE ROUTER
+        const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
+        let isImageRequest = isImagine;
+        let imagePrompt = "";
+
         if (isImagine) {
-            const imagePrompt = message.content.slice(9).trim();
+            imagePrompt = message.content.slice(9).trim();
+        } else if (hasName || mentionsBot) {
+            const match = message.content.match(imageRegex);
+            if (match) {
+                isImageRequest = true;
+                imagePrompt = match[1].trim(); // Extracts "a phoenix" from the sentence!
+            }
+        }
+
+        // --- IMAGE GENERATION EXECUTION ---
+        if (isImageRequest) {
             if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(() => {});
             const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
             if (!replyMsg) return;
@@ -214,11 +231,8 @@ RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            // 🚀 THE DUAL-ENGINE ROUTER
-            // Detects if the prompt is asking for code, including specific languages like C++ or VBScript
+            // THE DUAL-ENGINE ROUTER
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
-            
-            // Use 3.5-Flash for complex coding, and 2.5-Flash for blazing fast chat!
             const selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-2.5-flash';
 
             let geminiResponse;
@@ -272,11 +286,12 @@ ${message.author.username} says: ${message.content}`;
                 else if (action === 'LISTSERVERROLES') { functionName = 'list_server_roles'; }
                 else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.roleId = getParam('ROLE_ID'); }
                 else if (action === 'USERALLOW' || action === 'USERDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.userId = getParam('USER_ID'); }
-                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); args.roleId = getParam('ROLE_ID'); }
+                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); argsroleId = getParam('ROLE_ID');}
 
-                replyText = replyText.replace(cmdMatch[0], '').trim();
-                const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
-            }
+replyText = replyText.replace(cmdMatch[0],'').trim();
+const rogueRunMatch = replyText.match(/\(RUN:.*?)/i); if (rogueRunMatch) replyText=replyText.replace(rogueRunMatch[0],'').trim();
+}
+
             // --- EXECUTE MODERATION ACTIONS ---
             if (functionName) {
                 const permErr = "❌ Missing permissions.";
@@ -367,3 +382,4 @@ ${message.author.username} says: ${message.content}`;
         }
     });
 };
+
