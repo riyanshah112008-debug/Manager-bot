@@ -150,7 +150,7 @@ module.exports = (client) => {
             client.user.setActivity(message.content.slice(11).trim(), { type: 4 });
             return message.reply(`✅ Status updated!`).catch(() => {});
         }
-                // ==========================================
+        // ==========================================
         // 2. AI GENERATION (REQUIRES PREMIUM)
         // ==========================================
         const isImagine = text.startsWith('.imagine ');
@@ -193,18 +193,19 @@ module.exports = (client) => {
         }
 
         try {
+            // 🛑 UPDATED: New rules force faster responses and clearly explain how to attach roles to new channels!
             const prompt = `[SYSTEM INSTRUCTION]
 You are Starry, a helpful Discord bot. 
-RULE 1: To moderate, output EXACTLY: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
+RULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
 RULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).
-RULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY, CREATECHANNEL). Omit CHANNEL_ID for current channel.
-RULE 4: For commands: [RUN:.imagine penguin]
-RULE 5: Casual chat requires natural text.
+RULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). 
+RULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).
+RULE 5: For commands: [RUN:.imagine penguin]
+RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!
 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            // ✅ Uses the highly capable 3.5 Flash model for advanced coding without hitting free tier limits!
             const geminiResponse = await ai.models.generateContent({
                 model: 'gemini-3.5-flash', 
                 contents: prompt 
@@ -254,9 +255,14 @@ ${message.author.username} says: ${message.content}`;
                     
                     if (functionName === 'create_channel') {
                         let overwrites = [];
-                        if (args.roleId) overwrites = [{ id: message.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: args.roleId.replace(/\D/g, ''), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }];
+                        if (args.roleId) {
+                            overwrites = [
+                                { id: message.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, 
+                                { id: args.roleId.replace(/\D/g, ''), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                            ];
+                        }
                         const nc = await message.guild.channels.create({ name: args.channelName || 'new-channel', type: 0, permissionOverwrites: overwrites });
-                        return message.reply(`✅ Created ${nc}!`);
+                        return message.reply(`✅ Created <#${nc.id}>!`);
                     }
                     
                     const channel = args.channelId ? (message.guild.channels.cache.get(args.channelId.replace(/\D/g, '')) || message.channel) : message.channel;
@@ -316,11 +322,10 @@ ${message.author.username} says: ${message.content}`;
                 }
             }
             
-            // 🛑 NEW: Output Starry's conversational response WITH FALLBACK TRAP
+            // Output Starry's conversational response WITH FALLBACK TRAP
             if (replyText && replyText.trim().length > 0) {
                 await message.reply(replyText.trim()).catch(() => {});
             } else if (!functionName && !runMatch) {
-                // This traps the silent fail! If no command ran, and text is empty, it tells you instead of freezing.
                 await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(() => {});
             }
 
@@ -330,4 +335,3 @@ ${message.author.username} says: ${message.content}`;
         }
     });
 };
-                
