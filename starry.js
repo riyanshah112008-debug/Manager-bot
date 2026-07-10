@@ -230,17 +230,40 @@ RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-                                                           // THE DUAL-ENGINE ROUTER
+                                                                       // THE DUAL-ENGINE ROUTER
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
             
-            // 🔧 Using the correct, modern models that your API key supports!
-            let selectedModel = isCodingRequest ? 'gemini-2.5-flash' : 'gemini-2.0-flash';
-            let fallbackModel = isCodingRequest ? 'gemini-2.0-flash' : 'gemini-2.5-flash';
+            // 🔧 Use the actual free-tier models available in 2026!
+            let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
+            let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
 
             // 👇 The crucial variables so the retry loop actually works
             let geminiResponse;
             let attempts = 0;
             const maxAttempts = 4; 
+
+            // 🚀 Smart Auto-Retry Loop with Exponential Backoff
+            while (attempts < maxAttempts) {
+                try {
+                    geminiResponse = await ai.models.generateContent({
+                        model: selectedModel, 
+                        contents: prompt 
+                    });
+                    break; 
+                } catch (apiError) {
+                    attempts++;
+                    if (apiError.status === 503 && attempts < maxAttempts) {
+                        const waitTime = attempts * 2000; 
+                        if (attempts === maxAttempts - 1) {
+                            selectedModel = fallbackModel; // Swaps models if the main one is jammed
+                        }
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                    } else {
+                        throw apiError; 
+                    }
+                }
+            }
+
 
             // 🚀 Smart Auto-Retry Loop with Exponential Backoff
             while (attempts < maxAttempts) {
