@@ -158,7 +158,6 @@ if (!process.env.MONGO_URI) {
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('🍃 Successfully connected to MongoDB Cloud!'))
     .catch((err) => console.error('❌ MongoDB Connection Error:', err));
-
 // ==========================================
 // 7. LOGIN TO DISCORD
 // ==========================================
@@ -170,6 +169,10 @@ if (!process.env.TOKEN) {
 console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
 
 if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
+    console.log("🔄 Auto-deploying commands...");
+    const { deployCommands } = require('./deploy-commands.js');
+    deployCommands().catch(err => console.error("❌ Auto-deploy failed:", err));
+} // <--- THIS WAS THE MISSING BRACKET
 
 client.login(process.env.TOKEN).catch(err => {
     console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
