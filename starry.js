@@ -230,16 +230,13 @@ RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-                       // THE DUAL-ENGINE ROUTER
+                                   // THE DUAL-ENGINE ROUTER
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
             
-            // 🔧 FIX 1: Using actual available Gemini models
-            let selectedModel = isCodingRequest ? 'gemini-2.5-flash' : 'gemini-2.0-flash';
-            let fallbackModel = isCodingRequest ? 'gemini-2.0-flash' : 'gemini-2.5-flash';
+            // 🔧 FIX: Force the standard stable model for everything
+            let selectedModel = 'gemini-1.5-flash';
+            let fallbackModel = 'gemini-1.5-flash';
 
-            let geminiResponse;
-            let attempts = 0;
-            const maxAttempts = 4; 
 
             // Smart Auto-Retry Loop with Exponential Backoff & Model Swapping
             while (attempts < maxAttempts) {
