@@ -230,16 +230,18 @@ RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
 
-            // THE DUAL-ENGINE ROUTER
+                       // THE DUAL-ENGINE ROUTER
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
-            let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-2.5-flash';
-            let fallbackModel = isCodingRequest ? 'gemini-2.5-flash' : 'gemini-3.5-flash';
+            
+            // 🔧 FIX 1: Using actual available Gemini models
+            let selectedModel = isCodingRequest ? 'gemini-2.5-flash' : 'gemini-2.0-flash';
+            let fallbackModel = isCodingRequest ? 'gemini-2.0-flash' : 'gemini-2.5-flash';
 
             let geminiResponse;
             let attempts = 0;
-            const maxAttempts = 4; // 🚀 Increased to 4 attempts
+            const maxAttempts = 4; 
 
-            // 🚀 NEW: Smart Auto-Retry Loop with Exponential Backoff & Model Swapping
+            // Smart Auto-Retry Loop with Exponential Backoff & Model Swapping
             while (attempts < maxAttempts) {
                 try {
                     geminiResponse = await ai.models.generateContent({
@@ -250,13 +252,10 @@ ${message.author.username} says: ${message.content}`;
                 } catch (apiError) {
                     attempts++;
                     if (apiError.status === 503 && attempts < maxAttempts) {
-                        const waitTime = attempts * 2000; // Waits 2s, then 4s, then 6s
-                        
-                        // If we are on our very last attempt, swap to the other model to bypass the jam!
+                        const waitTime = attempts * 2000; 
                         if (attempts === maxAttempts - 1) {
                             selectedModel = fallbackModel;
                         }
-                        
                         await new Promise(resolve => setTimeout(resolve, waitTime));
                     } else {
                         throw apiError; 
@@ -301,10 +300,10 @@ ${message.author.username} says: ${message.content}`;
             if (functionName) {
                 const permErr = "❌ Missing permissions.";
                 const hasPerm = (perm) => message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
-                
+
                 if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny', 'create_channel'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageChannels)) return message.reply(permErr);
-                    
+
                     if (functionName === 'create_channel') {
                         let overwrites = [];
                         if (args.roleId) {
@@ -316,11 +315,11 @@ ${message.author.username} says: ${message.content}`;
                         const nc = await message.guild.channels.create({ name: args.channelName || 'new-channel', type: 0, permissionOverwrites: overwrites });
                         return message.reply(`✅ Created <#${nc.id}>!`);
                     }
-                    
+
                     const channel = args.channelId ? (message.guild.channels.cache.get(args.channelId.replace(/\D/g, '')) || message.channel) : message.channel;
                     const allow = functionName.includes('allow');
                     const targetId = (args.roleId || args.userId || '').replace(/\D/g, '');
-                    
+
                     await channel.permissionOverwrites.edit(targetId, { ViewChannel: allow, SendMessages: allow });
                     return message.reply(`✅ Permissions updated for <#${channel.id}>.`);
                 }
@@ -346,16 +345,15 @@ ${message.author.username} says: ${message.content}`;
                     await message.channel.bulkDelete(Math.min(args.amount || 0, 100) + 1, true).catch(()=>{});
                     return message.channel.send(`🧹 Cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete(), 3000));
                 }
-                
+
                 const tId = (args.userId||'').replace(/\D/g, '');
                 if (functionName === "unban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
                     await message.guild.members.unban(tId).catch(()=>{}); return message.reply("✅ Unbanned.");
                 }
-                
-                // REPAIRED MODERATION ACTIONS
+
                 const tMember = await message.guild.members.fetch(tId).catch(()=>null);
                 if (!tMember || !tMember.manageable) return message.reply("❌ Cannot moderate this user.");
-                
+
                 if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
                     await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(()=>{}); 
                     return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m.`);
@@ -373,17 +371,25 @@ ${message.author.username} says: ${message.content}`;
                     return message.reply(`🔨 banned <@${tId}>.`);
                 }
             }
-            
-            // Output Starry's conversational response WITH FALLBACK TRAP
+
+            // 🔧 FIX 2: Text Chunker to bypass Discord's 2000 character limit
             if (replyText && replyText.trim().length > 0) {
-                await message.reply(replyText.trim()).catch(() => {});
+                const cleanedText = replyText.trim();
+                // Splits the string into chunks of 1950 chars maximum
+                const textChunks = cleanedText.match(/[\s\S]{1,1950}/g) || [];
+                
+                for (const chunk of textChunks) {
+                    // Replaced silent swallow with console.error so you can actually see future failures
+                    await message.reply(chunk).catch(console.error); 
+                }
             } else if (!functionName && !runMatch) {
-                await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(() => {});
+                await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(console.error);
             }
 
         } catch (error) {
             console.error("Gemini AI error:", error);
-            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\`\n*(Please check the bot's terminal window for more details!)*`).catch(() => {});
+            // Replaced silent swallow with console.error here as well
+            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\`\n*(Please check the bot's terminal window for more details!)*`).catch(console.error);
         }
     });
 };
