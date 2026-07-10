@@ -80,7 +80,6 @@ const commands = [
     { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'id', type: 4, required: true, description: 'Warning ID' }
     ] },
-
     // ================= AUTOMOD =================
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [
         { name: 'action', type: 3, required: true, description: 'Automod action', choices: [
@@ -175,7 +174,6 @@ const commands = [
         { name: 'winners', type: 4, required: true, description: 'Number of winners', min_value: 1 },
         { name: 'prize', type: 3, required: true, description: 'Giveaway prize' }
     ] },
-
     // ================= LEVELING / COMMUNITY =================
     { name: 'toggleleveling', description: 'Enable or disable the leveling system', default_member_permissions: ADMIN, options: [
         { name: 'state', type: 3, required: false, description: 'Desired state; omit to toggle', choices: [
@@ -237,18 +235,22 @@ const commands = [
 async function deployCommands() {
     const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
+    
+    // Hardcoded fallback so you don't have to rely entirely on the .env file during testing
+    const guildId = process.env.GUILD_ID || 'PASTE_YOUR_SERVER_ID_HERE';
 
     if (!token || !clientId) {
         throw new Error('TOKEN and CLIENT_ID must be set before deploying commands.');
     }
 
     const rest = new REST({ version: '10' }).setToken(token);
-    const guildId = process.env.GUILD_ID;
-    const route = guildId
+    
+    // Now it guarantees it routes as a Guild Command if a guild ID is provided above
+    const route = guildId !== 'PASTE_YOUR_SERVER_ID_HERE'
         ? Routes.applicationGuildCommands(clientId, guildId)
         : Routes.applicationCommands(clientId);
 
-    console.log(`🔄 Syncing ${commands.length} commands ${guildId ? `to guild ${guildId}` : 'globally'}...`);
+    console.log(`🔄 Syncing ${commands.length} commands ${guildId !== 'PASTE_YOUR_SERVER_ID_HERE' ? `to guild ${guildId}` : 'globally'}...`);
     const result = await rest.put(route, { body: commands });
     console.log(`✅ Registered ${result.length} commands successfully.`);
     return result;
