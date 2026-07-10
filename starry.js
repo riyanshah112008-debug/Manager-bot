@@ -232,13 +232,14 @@ ${message.author.username} says: ${message.content}`;
 
             // THE DUAL-ENGINE ROUTER
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
-            const selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-2.5-flash';
+            let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-2.5-flash';
+            let fallbackModel = isCodingRequest ? 'gemini-2.5-flash' : 'gemini-3.5-flash';
 
             let geminiResponse;
             let attempts = 0;
-            const maxAttempts = 3; 
+            const maxAttempts = 4; // 🚀 Increased to 4 attempts
 
-            // Auto-Retry Loop with Dynamic Model Selection
+            // 🚀 NEW: Smart Auto-Retry Loop with Exponential Backoff & Model Swapping
             while (attempts < maxAttempts) {
                 try {
                     geminiResponse = await ai.models.generateContent({
@@ -249,8 +250,14 @@ ${message.author.username} says: ${message.content}`;
                 } catch (apiError) {
                     attempts++;
                     if (apiError.status === 503 && attempts < maxAttempts) {
-                        console.warn(`[API] 503 High Demand hit! Retrying attempt ${attempts + 1}...`);
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                        const waitTime = attempts * 2000; // Waits 2s, then 4s, then 6s
+                        
+                        // If we are on our very last attempt, swap to the other model to bypass the jam!
+                        if (attempts === maxAttempts - 1) {
+                            selectedModel = fallbackModel;
+                        }
+                        
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
                     } else {
                         throw apiError; 
                     }
