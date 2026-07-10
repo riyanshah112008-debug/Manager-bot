@@ -167,10 +167,9 @@ if (!process.env.TOKEN) {
     process.exit(1);
 }
 
+console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
+
 if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
-    const { deployCommands } = require('./deploy-commands.js');
-    deployCommands().catch(err => console.error('❌ Command deployment failed:', err));
-}
 
 client.login(process.env.TOKEN).catch(err => {
     console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
