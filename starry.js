@@ -33,9 +33,8 @@ module.exports = (client) => {
         
         // Securely grab the owner ID from Environment Variables
         const isOwner = message.author.id === process.env.OWNER_ID;
-        // 🛑 NEW: A universal warning message applied to all developer commands!
+        // A universal warning message applied to all developer commands!
         const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner! Ensure your exact Discord ID is pasted into the `OWNER_ID` variable on Render.";
-
         // ==========================================
         // 1. OWNER-ONLY DEVELOPER COMMANDS
         // ==========================================
@@ -194,7 +193,7 @@ module.exports = (client) => {
             const match = message.content.match(imageRegex);
             if (match) {
                 isImageRequest = true;
-                imagePrompt = match[1].trim(); // Extracts "a phoenix" from the sentence!
+                imagePrompt = match[1].trim(); 
             }
         }
 
@@ -260,7 +259,6 @@ ${message.author.username} says: ${message.content}`;
 
             // Properly extract response
             let replyText = geminiResponse.text || "";
-           
             let functionName = null; let args = {};
 
             const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
@@ -286,11 +284,11 @@ ${message.author.username} says: ${message.content}`;
                 else if (action === 'LISTSERVERROLES') { functionName = 'list_server_roles'; }
                 else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.roleId = getParam('ROLE_ID'); }
                 else if (action === 'USERALLOW' || action === 'USERDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.userId = getParam('USER_ID'); }
-                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); argsroleId = getParam('ROLE_ID');}
+                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); args.roleId = getParam('ROLE_ID'); }
 
-replyText = replyText.replace(cmdMatch[0],'').trim();
-const rogueRunMatch = replyText.match(/\(RUN:.*?)/i); if (rogueRunMatch) replyText=replyText.replace(rogueRunMatch[0],'').trim();
-}
+                replyText = replyText.replace(cmdMatch[0], '').trim();
+                const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
+            }
 
             // --- EXECUTE MODERATION ACTIONS ---
             if (functionName) {
@@ -382,4 +380,3 @@ const rogueRunMatch = replyText.match(/\(RUN:.*?)/i); if (rogueRunMatch) replyTe
         }
     });
 };
-
