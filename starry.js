@@ -456,7 +456,7 @@ ${message.author.username} says: ${message.content}`;
                 await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(console.error);
             }
 
-                } catch (error) {
+                        } catch (error) {
             console.error("Gemini AI error:", error);
             
             // 🔧 Catching the Rate Limit / Quota Exhaustion Error (429)
@@ -480,5 +480,5 @@ ${message.author.username} says: ${message.content}`;
             // For all other unexpected errors
             return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\`\n*(Please check the bot's terminal window for more details!)*`).catch(console.error);
         }
-
+    }); // <--- THIS WAS THE MISSING LINE! It closes client.on('messageCreate', ...)
 };
