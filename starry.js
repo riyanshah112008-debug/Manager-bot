@@ -161,6 +161,30 @@ module.exports = (client) => {
             client.user.setActivity(message.content.slice(11).trim(), { type: 4 });
             return message.reply(`✅ Status updated!`).catch(() => {});
         }
+            // ================= DEVELOPER PANEL =================
+    { name: 'devpanel', description: '💻 Developer-only control panel', options: [
+        { name: 'sysinfo', type: 1, description: 'View bot system stats' },
+        { name: 'servers', type: 1, description: 'List all servers the bot is in' },
+        { name: 'serverdump', type: 1, description: 'Get a text file dump of the current server' },
+        { name: 'restart', type: 1, description: 'Reboot the bot process' },
+        { name: 'emergencyleave', type: 1, description: 'Force the bot to leave the current server' },
+        { name: 'broadcast', type: 1, description: 'Send a message to all servers', options: [
+            { name: 'message', type: 3, required: true, description: 'Message to send' }
+        ] },
+        { name: 'eval', type: 1, description: 'Run raw JavaScript code', options: [
+            { name: 'code', type: 3, required: true, description: 'JS code to execute' }
+        ] },
+        { name: 'blacklist', type: 1, description: 'Toggle user blacklist', options: [
+            { name: 'user_id', type: 3, required: true, description: 'Discord User ID' }
+        ] },
+        { name: 'leaveserver', type: 1, description: 'Force leave a specific server', options: [
+            { name: 'server_id', type: 3, required: true, description: 'Discord Server ID' }
+        ] },
+        { name: 'setstatus', type: 1, description: 'Change bot status', options: [
+            { name: 'status_text', type: 3, required: true, description: 'New status text' }
+        ] }
+    ] },
+     
         // ==========================================
         // 2. AI GENERATION (REQUIRES PREMIUM)
         // ==========================================
