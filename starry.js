@@ -1,4 +1,13 @@
-const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { 
+    PermissionFlagsBits, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    ModalBuilder, 
+    TextInputBuilder, 
+    TextInputStyle 
+} = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
 
 // Initialize Gemini
@@ -136,29 +145,66 @@ module.exports = (client) => {
         }
     });
     // ==========================================
-    // 3. SLASH COMMAND PANEL (/devpanel)
+    // 3. INTERACTIVE BUTTON & MODAL DEV PANEL
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'devpanel') return;
-
+        // Securely block non-owners
         if (interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
+            if (interaction.isRepliable()) {
+                return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
+            }
+            return;
         }
 
-        const sub = interaction.options.getSubcommand();
+        // 1. SPAWN THE DASHBOARD (/devpanel)
+        if (interaction.isChatInputCommand() && interaction.commandName === 'devpanel') {
+            const embed = new EmbedBuilder()
+                .setTitle('💻 Starry Developer Control Panel')
+                .setDescription('Click a button below to execute an owner-only developer command. Buttons with a **📝** will open a pop-up text box for input.')
+                .setColor('#5865F2')
+                .setFooter({ text: 'Powered by Starry Protocol • Owner Access Only' });
 
-        try {
-            if (sub === 'sysinfo') {
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
+                new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
+                new ButtonBuilder().setCustomId('dev_dump').setLabel('Server Dump').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+            );
+
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
+                new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📝'),
+                new ButtonBuilder().setCustomId('dev_status_btn').setLabel('Set Status').setStyle(ButtonStyle.Secondary).setEmoji('📝')
+            );
+
+            const row3 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dev_blacklist_btn').setLabel('Blacklist User').setStyle(ButtonStyle.Danger).setEmoji('📝'),
+                new ButtonBuilder().setCustomId('dev_leaveserver_btn').setLabel('Leave Server by ID').setStyle(ButtonStyle.Danger).setEmoji('📝'),
+                new ButtonBuilder().setCustomId('dev_emergencyleave').setLabel('Leave Current Server').setStyle(ButtonStyle.Danger).setEmoji('⚠️')
+            );
+
+            const row4 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot').setStyle(ButtonStyle.Danger).setEmoji('🔄')
+            );
+
+            return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
+        }
+
+        // 2. HANDLE BUTTON CLICKS
+        if (interaction.isButton()) {
+            const id = interaction.customId;
+
+            // Instant Commands
+            if (id === 'dev_sysinfo') {
                 const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
                 const uptime = (process.uptime() / 3600).toFixed(2);
                 return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
             }
-            if (sub === 'servers') {
+            if (id === 'dev_servers') {
                 let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
                 client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
                 return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
             }
-            if (sub === 'serverdump') {
+            if (id === 'dev_dump') {
                 await interaction.deferReply({ ephemeral: true });
                 const guild = interaction.guild;
                 if (!guild) return interaction.editReply('❌ Must be used inside a server.');
@@ -178,18 +224,63 @@ module.exports = (client) => {
                 const buffer = Buffer.from(dump, 'utf-8');
                 return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
             }
-            if (sub === 'restart') {
+            if (id === 'dev_restart') {
                 await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true });
                 process.exit(1);
             }
-            if (sub === 'emergencyleave') {
+            if (id === 'dev_emergencyleave') {
                 if (!interaction.guild) return interaction.reply({ content: 'Not in a server!', ephemeral: true });
                 await interaction.reply({ content: 'I am leaving this server now. Goodbye! 👋', ephemeral: true });
                 return interaction.guild.leave();
             }
-            if (sub === 'broadcast') {
+
+            // Pop-up Modals
+            if (id === 'dev_eval_btn') {
+                const modal = new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript');
+                const input = new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+            if (id === 'dev_broadcast_btn') {
+                const modal = new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast');
+                const input = new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+            if (id === 'dev_status_btn') {
+                const modal = new ModalBuilder().setCustomId('modal_status').setTitle('Change Bot Status');
+                const input = new TextInputBuilder().setCustomId('status_text').setLabel('New Status Text').setStyle(TextInputStyle.Short).setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+            if (id === 'dev_blacklist_btn') {
+                const modal = new ModalBuilder().setCustomId('modal_blacklist').setTitle('Toggle User Blacklist');
+                const input = new TextInputBuilder().setCustomId('target_id').setLabel('Discord User ID').setStyle(TextInputStyle.Short).setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+            if (id === 'dev_leaveserver_btn') {
+                const modal = new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server');
+                const input = new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+        }
+        // 3. HANDLE MODAL SUBMISSIONS
+        if (interaction.isModalSubmit()) {
+            const id = interaction.customId;
+
+            if (id === 'modal_eval') {
                 await interaction.deferReply({ ephemeral: true });
-                const msg = interaction.options.getString('message');
+                try {
+                    let evaled = eval(interaction.fields.getTextInputValue('eval_code'));
+                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
+                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``);
+                } catch (err) { return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); }
+            }
+            if (id === 'modal_broadcast') {
+                await interaction.deferReply({ ephemeral: true });
+                const msg = interaction.fields.getTextInputValue('broadcast_msg');
                 let count = 0;
                 client.guilds.cache.forEach(guild => {
                     const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
@@ -197,38 +288,27 @@ module.exports = (client) => {
                 });
                 return interaction.editReply(`✅ Broadcast sent to ${count} servers!`);
             }
-            if (sub === 'eval') {
-                await interaction.deferReply({ ephemeral: true });
-                try {
-                    let evaled = eval(interaction.options.getString('code'));
-                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``);
-                } catch (err) { return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); }
+            if (id === 'modal_status') {
+                client.user.setActivity(interaction.fields.getTextInputValue('status_text'), { type: 4 });
+                return interaction.reply({ content: '✅ Status updated!', ephemeral: true });
             }
-            if (sub === 'blacklist') {
-                const targetId = interaction.options.getString('user_id');
+            if (id === 'modal_blacklist') {
+                const targetId = interaction.fields.getTextInputValue('target_id').trim();
                 if (blacklistedUsers.has(targetId)) {
                     blacklistedUsers.delete(targetId); return interaction.reply({ content: `✅ Removed \`${targetId}\` from the blacklist.`, ephemeral: true });
                 } else {
                     blacklistedUsers.add(targetId); return interaction.reply({ content: `🚫 Added \`${targetId}\` to the blacklist.`, ephemeral: true });
                 }
             }
-            if (sub === 'leaveserver') {
-                const guildToLeave = client.guilds.cache.get(interaction.options.getString('server_id'));
-                if (!guildToLeave) return interaction.reply({ content: '❌ Not in that server.', ephemeral: true });
+            if (id === 'modal_leave') {
+                const guildToLeave = client.guilds.cache.get(interaction.fields.getTextInputValue('server_id').trim());
+                if (!guildToLeave) return interaction.reply({ content: '❌ Not in a server with that ID.', ephemeral: true });
                 await guildToLeave.leave();
-                return interaction.reply({ content: `✅ Left **${guildToLeave.name}**.`, ephemeral: true });
+                return interaction.reply({ content: `✅ Successfully left **${guildToLeave.name}**.`, ephemeral: true });
             }
-            if (sub === 'setstatus') {
-                client.user.setActivity(interaction.options.getString('status_text'), { type: 4 });
-                return interaction.reply({ content: '✅ Status updated!', ephemeral: true });
-            }
-        } catch (err) {
-            console.error(err);
-            if (interaction.deferred) interaction.editReply('❌ Error executing command.');
-            else interaction.reply({ content: '❌ Error executing command.', ephemeral: true });
         }
     });
+
     // ==========================================
     // 4. AI & IMAGE GENERATION ROUTER
     // ==========================================
@@ -371,7 +451,6 @@ module.exports = (client) => {
                         const nc = await message.guild.channels.create({ name: args.channelName || 'new-channel', type: 0, permissionOverwrites: overwrites });
                         return message.reply(`✅ Created <#${nc.id}>!`);
                     }
-
                     const channel = args.channelId ? (message.guild.channels.cache.get(args.channelId.replace(/\D/g, '')) || message.channel) : message.channel;
                     const allow = functionName.includes('allow');
                     const targetId = (args.roleId || args.userId || '').replace(/\D/g, '');
