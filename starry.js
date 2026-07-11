@@ -456,10 +456,29 @@ ${message.author.username} says: ${message.content}`;
                 await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(console.error);
             }
 
-        } catch (error) {
+                } catch (error) {
             console.error("Gemini AI error:", error);
-            // Replaced silent swallow with console.error here as well
+            
+            // 🔧 Catching the Rate Limit / Quota Exhaustion Error (429)
+            if (error.status === 429) {
+                
+                // 1. Send the Bot Owner a DM alert
+                if (process.env.OWNER_ID) {
+                    try {
+                        // Fetches your Discord account using the ID in your .env file
+                        const owner = await client.users.fetch(process.env.OWNER_ID);
+                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry just hit the Google free-tier rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`);
+                    } catch (dmError) {
+                        console.error("Failed to DM the bot owner. Make sure your DMs are open!", dmError);
+                    }
+                }
+
+                // 2. Send the friendly fallback message to the public chat
+                return message.reply("⏳ **Starry is taking a quick breather!** We've hit Google's free-tier rate limit. Please try asking again in a minute!").catch(console.error);
+            }
+            
+            // For all other unexpected errors
             return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\`\n*(Please check the bot's terminal window for more details!)*`).catch(console.error);
         }
-    });
+
 };
