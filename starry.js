@@ -9,6 +9,8 @@ const {
     TextInputStyle 
 } = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
+// Paste this right after you create your "client" variable
+require('./premium.js')(client); 
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
