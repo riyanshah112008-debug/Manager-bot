@@ -6,8 +6,13 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
-    client.on('ready', () => { console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); });
-    
+    client.on('ready', () => { 
+        console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); 
+    });
+
+    // ==========================================
+    // 1. BUMP TRACKERS & BASIC SETUP
+    // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content) return;
         if (blacklistedUsers.has(message.author.id)) return;
@@ -28,16 +33,13 @@ module.exports = (client) => {
                 return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
             }
         }
-
+        // ==========================================
+        // 2. OWNER-ONLY DEVELOPER COMMANDS
+        // ==========================================
         const text = message.content.toLowerCase();
-        
-        // Securely grab the owner ID from Environment Variables
         const isOwner = message.author.id === process.env.OWNER_ID;
-        // A universal warning message applied to all developer commands!
         const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner! Ensure your exact Discord ID is pasted into the `OWNER_ID` variable on Render.";
-        // ==========================================
-        // 1. OWNER-ONLY DEVELOPER COMMANDS
-        // ==========================================
+
         if (text === '.dev') {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             try {
@@ -75,7 +77,7 @@ module.exports = (client) => {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const announcement = message.content.slice(11).trim();
             if (!announcement) return message.reply('❌ What do you want to broadcast?');
-            
+
             let successCount = 0;
             client.guilds.cache.forEach(guild => {
                 const channel = guild.channels.cache.find(c => 
@@ -113,37 +115,38 @@ module.exports = (client) => {
             try {
                 const guild = message.guild; 
                 await guild.members.fetch();
-                
+
                 let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
-                
+
                 const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
                 const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
                 const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-                const noCategory = textAndVoice.filter(c => !c.parentId);
 
-                if (noCategory.size > 0) {
-                    dump += `[NO CATEGORY]\n`;const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
+                categories.forEach(cat => {
+                    dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
+                    textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
+                    dump += `\n`;
+                });
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const blacklistedUsers = new Set();
-
-module.exports = (client) => {
-    client.on('ready', () => { console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); });
-
+                const buffer = Buffer.from(dump, 'utf-8');
+                return message.reply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] }).catch(()=>{});
+            } catch (err) {
+                return message.reply(`❌ Failed to compile dump: ${err.message}`).catch(()=>{});
+            }
+        }
+    });
     // ==========================================
-    // 1. DEVELOPER SLASH COMMAND PANEL
+    // 3. SLASH COMMAND PANEL (/devpanel)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'devpanel') return;
-        
-        // Securely block non-owners
+
         if (interaction.user.id !== process.env.OWNER_ID) {
             return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
         }
 
         const sub = interaction.options.getSubcommand();
-        
+
         try {
             if (sub === 'sysinfo') {
                 const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
@@ -165,7 +168,7 @@ module.exports = (client) => {
                 const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
                 const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
                 const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-                
+
                 categories.forEach(cat => {
                     dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
                     textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
@@ -226,19 +229,17 @@ module.exports = (client) => {
             else interaction.reply({ content: '❌ Error executing command.', ephemeral: true });
         }
     });
-
     // ==========================================
-    // 2. CHATBOT AND AI LOGIC
+    // 4. AI & IMAGE GENERATION ROUTER
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
-        // --- Bump Tracker Logic Remains Unchanged Here ---
-        
         const text = message.content.toLowerCase();
         const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
         const hasName = text.includes('starry');
+        const isOwner = message.author.id === process.env.OWNER_ID;
         let isReplyToBot = false;
 
         if (message.reference) {
@@ -248,119 +249,12 @@ module.exports = (client) => {
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // --- Premium & Image logic remains unchanged here ---
-
-        await message.channel.sendTyping().catch(() => {});
-
-        try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. 
-RULE 1: Keep casual chat highly concise. Shorter text ensures faster API response times!
-[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-
-            let selectedModel = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content) 
-                ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
-            let fallbackModel = 'gemini-3.5-flash';
-
-            let geminiResponse;
-            let attempts = 0;
-            const maxAttempts = 3; 
-
-            while (attempts < maxAttempts) {
-                try {
-                    geminiResponse = await ai.models.generateContent({
-                        model: selectedModel, 
-                        contents: prompt,
-                        config: { 
-                            maxOutputTokens: 8192 // 🔧 FIX: Forces the AI to use its maximum limit so it stops cutting off!
-                        }
-                    });
-                    break; 
-                } catch (apiError) {
-                    attempts++;
-                    if ((apiError.status === 503 || apiError.status === 429) && attempts < maxAttempts) {
-                        if (attempts === maxAttempts - 1) selectedModel = fallbackModel;
-                        await new Promise(resolve => setTimeout(resolve, attempts * 5000));
-                    } else { throw apiError; }
-                }
-            }
-
-            let replyText = geminiResponse.text || "";
-            
-            // --- Mod/Run parsing regex logic remains unchanged here ---
-
-            // 🔧 FIX: Smarter chunker that avoids cutting words or code blocks in half
-            if (replyText && replyText.trim().length > 0) {
-                const cleanedText = replyText.trim();
-                // Splits at spaces closest to 1950 characters
-                const textChunks = cleanedText.match(/[\s\S]{1,1950}(?=\s|$)/g) || cleanedText.match(/[\s\S]{1,1950}/g) || [];
-                
-                for (const chunk of textChunks) {
-                    await message.reply(chunk).catch(console.error); 
-                }
-            }
-
-        } catch (error) {
-            console.error("Gemini AI error:", error);
-            if (error.status === 429) {
-                if (process.env.OWNER_ID) {
-                    try {
-                        const owner = await client.users.fetch(process.env.OWNER_ID);
-                        await owner.send(`⚠️ **API Quota Exhausted!**\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`);
-                    } catch (dmError) { console.error("DM Failed", dmError); }
-                }
-                return message.reply("⏳ **Starry is taking a quick breather!** We've hit Google's free-tier rate limit. Try again in a minute!").catch(console.error);
-            }
-            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\``).catch(console.error);
-        }
-    }); 
-};
-
-            // ================= DEVELOPER PANEL =================
-    { name: 'devpanel', description: '💻 Developer-only control panel', options: [
-        { name: 'sysinfo', type: 1, description: 'View bot system stats' },
-        { name: 'servers', type: 1, description: 'List all servers the bot is in' },
-        { name: 'serverdump', type: 1, description: 'Get a text file dump of the current server' },
-        { name: 'restart', type: 1, description: 'Reboot the bot process' },
-        { name: 'emergencyleave', type: 1, description: 'Force the bot to leave the current server' },
-        { name: 'broadcast', type: 1, description: 'Send a message to all servers', options: [
-            { name: 'message', type: 3, required: true, description: 'Message to send' }
-        ] },
-        { name: 'eval', type: 1, description: 'Run raw JavaScript code', options: [
-            { name: 'code', type: 3, required: true, description: 'JS code to execute' }
-        ] },
-        { name: 'blacklist', type: 1, description: 'Toggle user blacklist', options: [
-            { name: 'user_id', type: 3, required: true, description: 'Discord User ID' }
-        ] },
-        { name: 'leaveserver', type: 1, description: 'Force leave a specific server', options: [
-            { name: 'server_id', type: 3, required: true, description: 'Discord Server ID' }
-        ] },
-        { name: 'setstatus', type: 1, description: 'Change bot status', options: [
-            { name: 'status_text', type: 3, required: true, description: 'New status text' }
-        ] }
-    ] },
-     
-        // ==========================================
-        // 2. AI GENERATION (REQUIRES PREMIUM)
-        // ==========================================
-        const isImagine = text.startsWith('.imagine ');
-        const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes('starry');
-        let isReplyToBot = false;
-        
-        if (message.reference) {
-            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
-            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
-        }
-
-        // If the message isn't interacting with the AI, ignore it
-        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
-
-        // 🔒 PREMIUM LOCK: Check if the server has premium (Owners bypass this)
-        if (!isOwner && (!message.guild || !client.isPremium(message.guild.id))) {
+        // Premium Check (Owners bypass this)
+        if (!isOwner && (!message.guild || (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id)))) {
             return message.reply('❌ **Starry AI is a Premium feature!** Use `.premium` to learn how to upgrade your server.').catch(() => {});
         }
 
-        // 🚀 NATURAL LANGUAGE IMAGE ROUTER
+        // Natural Language Image Router
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -375,52 +269,38 @@ RULE 1: Keep casual chat highly concise. Shorter text ensures faster API respons
             }
         }
 
-        // --- IMAGE GENERATION EXECUTION ---
+        // Image Execution via Pollinations
         if (isImageRequest) {
             if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(() => {});
             const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
             if (!replyMsg) return;
             try {
-                // Notice that image creation uses a separate, fast API and never waits for Gemini!
                 const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?width=1024&height=1024&nologo=true`;
                 await message.reply({ content: `🖼️ **${imagePrompt}**\nGenerated by ${message.author}`, files: [{ attachment: imageUrl, name: imagePrompt.replace(/\s+/g, '_') + '.png' }] }).catch(() => {});
                 return await replyMsg.delete().catch(() => {});
             } catch (error) { return replyMsg.edit('❌ Trouble drawing that.').catch(() => {}); }
         }
-        
-        // --- CHAT & MODERATION GENERATION ---
-        await message.channel.sendTyping().catch(() => {});
 
         if (!process.env.GEMINI_API_KEY) {
-            return message.reply("❌ **Setup Error:** I cannot read your `GEMINI_API_KEY`! Make sure your main file uses `require('dotenv').config();` so I can see it.");
+            return message.reply("❌ **Setup Error:** I cannot read your `GEMINI_API_KEY`! Make sure your main file uses `require('dotenv').config();`.");
         }
 
+        await message.channel.sendTyping().catch(() => {});
+        // ==========================================
+        // 5. GEMINI EXECUTION & MODERATION
+        // ==========================================
         try {
-            const prompt = `[SYSTEM INSTRUCTION]
-You are Starry, a helpful Discord bot. 
-RULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).
-RULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).
-RULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). 
-RULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).
-RULE 5: For commands: [RUN:.imagine penguin]
-RULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).\nRULE 5: For commands: [RUN:.imagine penguin]\nRULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
 
-[USER MESSAGE]
-${message.author.username} says: ${message.content}`;
-
-                                                                       // THE DUAL-ENGINE ROUTER
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
-            
-            // 🔧 Use the actual free-tier models available in 2026!
             let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
             let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
 
-            // 👇 The crucial variables so the retry loop actually works
             let geminiResponse;
             let attempts = 0;
             const maxAttempts = 4; 
 
-            // 🚀 Smart Auto-Retry Loop with Exponential Backoff
+            // Single, clean auto-retry loop with exponential backoff
             while (attempts < maxAttempts) {
                 try {
                     geminiResponse = await ai.models.generateContent({
@@ -432,9 +312,7 @@ ${message.author.username} says: ${message.content}`;
                     attempts++;
                     if (apiError.status === 503 && attempts < maxAttempts) {
                         const waitTime = attempts * 2000; 
-                        if (attempts === maxAttempts - 1) {
-                            selectedModel = fallbackModel; // Swaps models if the main one is jammed
-                        }
+                        if (attempts === maxAttempts - 1) selectedModel = fallbackModel;
                         await new Promise(resolve => setTimeout(resolve, waitTime));
                     } else {
                         throw apiError; 
@@ -442,76 +320,6 @@ ${message.author.username} says: ${message.content}`;
                 }
             }
 
-
-            // 🚀 Smart Auto-Retry Loop with Exponential Backoff
-            while (attempts < maxAttempts) {
-                try {
-                    geminiResponse = await ai.models.generateContent({
-                        model: selectedModel, 
-                        contents: prompt 
-                    });
-                    break; 
-                } catch (apiError) {
-                    attempts++;
-                    if (apiError.status === 503 && attempts < maxAttempts) {
-                        const waitTime = attempts * 2000; 
-                        if (attempts === maxAttempts - 1) {
-                            selectedModel = fallbackModel; // Swaps models if the main one is jammed
-                        }
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                    } else {
-                        throw apiError; 
-                    }
-                }
-            }
-
-
-            // 🚀 Smart Auto-Retry Loop with Exponential Backoff
-            while (attempts < maxAttempts) {
-                try {
-                    geminiResponse = await ai.models.generateContent({
-                        model: selectedModel, 
-                        contents: prompt 
-                    });
-                    break; 
-                } catch (apiError) {
-                    attempts++;
-                    if (apiError.status === 503 && attempts < maxAttempts) {
-                        const waitTime = attempts * 2000; 
-                        if (attempts === maxAttempts - 1) {
-                            selectedModel = fallbackModel;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                    } else {
-                        throw apiError; 
-                    }
-                }
-            }
-
-
-            // Smart Auto-Retry Loop with Exponential Backoff & Model Swapping
-            while (attempts < maxAttempts) {
-                try {
-                    geminiResponse = await ai.models.generateContent({
-                        model: selectedModel, 
-                        contents: prompt 
-                    });
-                    break; 
-                } catch (apiError) {
-                    attempts++;
-                    if (apiError.status === 503 && attempts < maxAttempts) {
-                        const waitTime = attempts * 2000; 
-                        if (attempts === maxAttempts - 1) {
-                            selectedModel = fallbackModel;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                    } else {
-                        throw apiError; 
-                    }
-                }
-            }
-
-            // Properly extract response
             let replyText = geminiResponse.text || "";
             let functionName = null; let args = {};
 
@@ -544,10 +352,10 @@ ${message.author.username} says: ${message.content}`;
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
 
-            // --- EXECUTE MODERATION ACTIONS ---
+            // Moderation Action Execution
             if (functionName) {
                 const permErr = "❌ Missing permissions.";
-                const hasPerm = (perm) => message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
+                const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
 
                 if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny', 'create_channel'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageChannels)) return message.reply(permErr);
@@ -582,11 +390,11 @@ ${message.author.username} says: ${message.content}`;
                         const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, ''));
                         if (!role) return; await role.delete(); return message.reply(`✅ Role deleted.`);
                     }
-                        const member = await message.guild.members.fetch((args.userId||'').replace(/\D/g, '')).catch(()=>null);
-                        const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, ''));
-                        if (!member || !role) return message.reply("❌ User or Role not found.");
-                        if (functionName === 'give_role') { await member.roles.add(role); return message.reply(`✅ Role assigned!`); }
-                        else { await member.roles.remove(role); return message.reply(`✅ Role removed!`); }
+                    const member = await message.guild.members.fetch((args.userId||'').replace(/\D/g, '')).catch(()=>null);
+                    const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, ''));
+                    if (!member || !role) return message.reply("❌ User or Role not found.");
+                    if (functionName === 'give_role') { await member.roles.add(role); return message.reply(`✅ Role assigned!`); }
+                    else { await member.roles.remove(role); return message.reply(`✅ Role removed!`); }
                 }
 
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
@@ -620,43 +428,30 @@ ${message.author.username} says: ${message.content}`;
                 }
             }
 
-            // 🔧 FIX 2: Text Chunker to bypass Discord's 2000 character limit
+            // Text Chunker (Bypasses 2000 character limit)
             if (replyText && replyText.trim().length > 0) {
                 const cleanedText = replyText.trim();
-                // Splits the string into chunks of 1950 chars maximum
                 const textChunks = cleanedText.match(/[\s\S]{1,1950}/g) || [];
-                
                 for (const chunk of textChunks) {
-                    // Replaced silent swallow with console.error so you can actually see future failures
                     await message.reply(chunk).catch(console.error); 
                 }
             } else if (!functionName && !runMatch) {
-                await message.reply("⚠️ **Debug Error:** I processed the prompt successfully, but my text output was completely empty!").catch(console.error);
+                await message.reply("⚠️ **Debug Error:** Processed prompt successfully, but text output was empty!").catch(console.error);
             }
-
-                        } catch (error) {
+        } catch (error) {
             console.error("Gemini AI error:", error);
-            
-            // 🔧 Catching the Rate Limit / Quota Exhaustion Error (429)
             if (error.status === 429) {
-                
-                // 1. Send the Bot Owner a DM alert
                 if (process.env.OWNER_ID) {
                     try {
-                        // Fetches your Discord account using the ID in your .env file
                         const owner = await client.users.fetch(process.env.OWNER_ID);
-                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry just hit the Google free-tier rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`);
+                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`);
                     } catch (dmError) {
-                        console.error("Failed to DM the bot owner. Make sure your DMs are open!", dmError);
+                        console.error("Failed to DM the bot owner.", dmError);
                     }
                 }
-
-                // 2. Send the friendly fallback message to the public chat
-                return message.reply("⏳ **Starry is taking a quick breather!** We've hit Google's free-tier rate limit. Please try asking again in a minute!").catch(console.error);
+                return message.reply("⏳ **Starry is taking a quick breather!** We hit the free-tier rate limit. Try again in a minute!").catch(console.error);
             }
-            
-            // For all other unexpected errors
-            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\`\n*(Please check the bot's terminal window for more details!)*`).catch(console.error);
+            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\``).catch(console.error);
         }
-    }); // <--- THIS WAS THE MISSING LINE! It closes client.on('messageCreate', ...)
+    }); 
 };
