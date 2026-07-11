@@ -19,8 +19,8 @@ module.exports = (client) => {
     // Load Premium Module 
     require('./premium.js')(client);
 
-    // ==========================================
-    // 💎 PREMIUM MODERATION DM ENGINE
+      // ==========================================
+    // 💎 PREMIUM MODERATION DM ENGINE (WITH DEBUGGING)
     // ==========================================
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
         const actionType = action.toLowerCase();
@@ -28,6 +28,7 @@ module.exports = (client) => {
         // Safety check: isPremium might not be loaded immediately, default to false if unavailable
         const isGuildPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
 
+        // --- FREE TIER FALLBACK ---
         if (!isGuildPremium) {
             const basicEmbed = new EmbedBuilder()
                 .setColor('#2F3136')
@@ -39,10 +40,16 @@ module.exports = (client) => {
                 )
                 .setFooter({ text: `${guild.name} • Upgrade server to Premium for enhanced notices.` })
                 .setTimestamp();
-            try { await member.send({ embeds: [basicEmbed] }); return true; } 
-            catch (err) { return false; }
+            try { 
+                await member.send({ embeds: [basicEmbed] }); 
+                return true; 
+            } catch (err) { 
+                console.error(`🚨 [DM FAILED - FREE TIER] Target: ${member.user.tag} | Error:`, err.message);
+                return false; 
+            }
         }
 
+        // --- PREMIUM TIER EMBED ---
         let embedColor, actionTitle, actionEmoji, durationDisplay;
         switch(actionType) {
             case 'ban': embedColor = '#ED4245'; actionTitle = 'Server Ban Notice'; actionEmoji = '🔨'; durationDisplay = duration ? `\`${duration}\`` : '`Permanent`'; break;
@@ -74,14 +81,15 @@ module.exports = (client) => {
         if (actionType !== 'ban') row.addComponents(new ButtonBuilder().setLabel('Read Server Rules').setURL('https://discord.com').setStyle(ButtonStyle.Link).setEmoji('📜'));
         if (row.components.length > 0) components.push(row);
 
-        try { await member.send({ embeds: [modEmbed], components: components }); return true; } 
-        catch (error) { return false; }
+        try { 
+            await member.send({ embeds: [modEmbed], components: components }); 
+            return true; 
+        } catch (error) { 
+            console.error(`🚨 [DM FAILED - PREMIUM TIER] Target: ${member.user.tag} | Error:`, error.message);
+            return false; 
+        }
     };
-
-    client.on('ready', () => { 
-        console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); 
-    });
-    // ==========================================
+ ==========================================
     // 1. BUMP TRACKERS & BASIC SETUP
     // ==========================================
     client.on('messageCreate', async (message) => {
