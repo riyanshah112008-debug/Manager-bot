@@ -68,58 +68,58 @@ const commands = [
     { name: 'clear', description: 'Delete up to 100 recent messages', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'amount', type: 4, required: true, description: 'Number of messages to delete', min_value: 1, max_value: 100 }
     ] },
-
-{
-    name: 'devpanel',
-    description: '💻 Developer-only control panel',
-    options: [
-        { name: 'sysinfo', type: 1, description: 'View bot system stats' },
-        { name: 'servers', type: 1, description: 'List all servers the bot is in' },
-        { name: 'serverdump', type: 1, description: 'Get a text file dump of the current server' },
-        { name: 'restart', type: 1, description: 'Reboot the bot process' },
-        { name: 'emergencyleave', type: 1, description: 'Force the bot to leave the current server' },
-        { 
-            name: 'broadcast', 
-            type: 1, 
-            description: 'Send a message to all servers', 
-            options: [
-                { name: 'message', type: 3, required: true, description: 'Message to send' }
-            ] 
-        },
-        { 
-            name: 'eval', 
-            type: 1, 
-            description: 'Run raw JavaScript code', 
-            options: [
-                { name: 'code', type: 3, required: true, description: 'JS code to execute' }
-            ] 
-        },
-        { 
-            name: 'blacklist', 
-            type: 1, 
-            description: 'Toggle user blacklist', 
-            options: [
-                { name: 'user_id', type: 3, required: true, description: 'Discord User ID' }
-            ] 
-        },
-        { 
-            name: 'leaveserver', 
-            type: 1, 
-            description: 'Force leave a specific server', 
-            options: [
-                { name: 'server_id', type: 3, required: true, description: 'Discord Server ID' }
-            ] 
-        },
-        { 
-            name: 'setstatus', 
-            type: 1, 
-            description: 'Change bot status', 
-            options: [
-                { name: 'status_text', type: 3, required: true, description: 'New status text' }
-            ] 
-        }
-    ]
-}
+    // ================= DEVELOPER PANEL =================
+    {
+        name: 'devpanel',
+        description: '💻 Developer-only control panel',
+        options: [
+            { name: 'sysinfo', type: 1, description: 'View bot system stats' },
+            { name: 'servers', type: 1, description: 'List all servers the bot is in' },
+            { name: 'serverdump', type: 1, description: 'Get a text file dump of the current server' },
+            { name: 'restart', type: 1, description: 'Reboot the bot process' },
+            { name: 'emergencyleave', type: 1, description: 'Force the bot to leave the current server' },
+            { 
+                name: 'broadcast', 
+                type: 1, 
+                description: 'Send a message to all servers', 
+                options: [
+                    { name: 'message', type: 3, required: true, description: 'Message to send' }
+                ] 
+            },
+            { 
+                name: 'eval', 
+                type: 1, 
+                description: 'Run raw JavaScript code', 
+                options: [
+                    { name: 'code', type: 3, required: true, description: 'JS code to execute' }
+                ] 
+            },
+            { 
+                name: 'blacklist', 
+                type: 1, 
+                description: 'Toggle user blacklist', 
+                options: [
+                    { name: 'user_id', type: 3, required: true, description: 'Discord User ID' }
+                ] 
+            },
+            { 
+                name: 'leaveserver', 
+                type: 1, 
+                description: 'Force leave a specific server', 
+                options: [
+                    { name: 'server_id', type: 3, required: true, description: 'Discord Server ID' }
+                ] 
+            },
+            { 
+                name: 'setstatus', 
+                type: 1, 
+                description: 'Change bot status', 
+                options: [
+                    { name: 'status_text', type: 3, required: true, description: 'New status text' }
+                ] 
+            }
+        ]
+    },   // <--- ✅ Added the crucial missing comma right here!
 
     // ================= WARNINGS =================
     { name: 'warn', description: 'Warn a member', default_member_permissions: MANAGE_MESSAGES, options: [
@@ -201,7 +201,6 @@ const commands = [
             { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }
         ] }
     ] },
-
     // ================= SETUP / SERVER FEATURES =================
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [
         { name: 'channel', type: 7, required: true, description: 'Channel for logs' }
@@ -287,7 +286,7 @@ const commands = [
 async function deployCommands() {
     const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
-    
+
     // Hardcoded fallback so you don't have to rely entirely on the .env file during testing
     const guildId = process.env.GUILD_ID || 'PASTE_YOUR_SERVER_ID_HERE';
 
@@ -296,7 +295,7 @@ async function deployCommands() {
     }
 
     const rest = new REST({ version: '10' }).setToken(token);
-    
+
     // Now it guarantees it routes as a Guild Command if a guild ID is provided above
     const route = guildId !== 'PASTE_YOUR_SERVER_ID_HERE'
         ? Routes.applicationGuildCommands(clientId, guildId)
