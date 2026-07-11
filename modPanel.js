@@ -40,7 +40,6 @@ module.exports = (client) => {
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'modpanel') return;
 
-        // 🔒 SECURITY CHECK: Only Mods can open this panel
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
             return interaction.reply({ content: '❌ Access Denied: You do not have permission to open the mod panel.', ephemeral: true });
         }
@@ -69,7 +68,6 @@ module.exports = (client) => {
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || !interaction.customId.startsWith('mod_')) return;
 
-        // Ensure the person clicking the button has permissions (prevents bypass via old buttons)
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
             return interaction.reply({ content: '❌ You do not have permission to use this button.', ephemeral: true });
         }
@@ -100,7 +98,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 3. HANDLE MODAL SUBMISSIONS (EXECUTE ACTION)
+    // 3. HANDLE MODAL SUBMISSIONS (UPGRADED WITH DMS)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isModalSubmit() || !interaction.customId.startsWith('modal_')) return;
@@ -109,7 +107,7 @@ module.exports = (client) => {
         const action = parts[1];
         const targetId = parts[2];
         const reason = interaction.fields.getTextInputValue('reason') || 'No reason provided';
-        
+
         // 🚨 PROTECTION SYSTEM CHECK
         const isProtected = client.isUserProtected && client.isUserProtected(interaction.guildId, targetId);
         if (isProtected && ['timeout', 'kick', 'ban'].includes(action)) {
@@ -118,9 +116,13 @@ module.exports = (client) => {
                 ephemeral: true 
             });
         }
-        
+
+        // Defer reply immediately so Discord doesn't timeout while attempting to send DMs
+        await interaction.deferReply({ ephemeral: true });
+
         const member = await interaction.guild.members.fetch(targetId).catch(() => null);
-        
+        const caseId = Math.floor(Math.random() * 90000) + 10000;
+
         try {
             if (action === 'warn') {
                 if (!warnCache[interaction.guild.id]) warnCache[interaction.guild.id] = {};
@@ -130,34 +132,61 @@ module.exports = (client) => {
                 warnCache[interaction.guild.id][targetId].push({ id: warnId, reason: reason, moderator: interaction.user.id, date: Date.now() });
                 saveWarns();
 
-                if (member) member.send(`⚠️ You received a warning in **${interaction.guild.name}** for: *${reason}*`).catch(() => {});
-                await interaction.reply({ content: `✅ Successfully warned <@${targetId}>. (Warn ID: \`${warnId}\`)`, ephemeral: true });
+                // Send enhanced DM if available, otherwise fallback to basic string
+                let dmSent = false;
+                if (member && typeof client.sendPremiumModDM === 'function') {
+                    dmSent = await client.sendPremiumModDM(member, interaction.member, 'warn', reason, null, interaction.guild, warnId);
+                } else if (member) {
+                    await member.send(`⚠️ You received a warning in **${interaction.guild.name}** for: *${reason}*`).catch(() => {});
+                    dmSent = true;
+                }
+
+                return interaction.editReply({ content: `✅ Successfully warned <@${targetId}>. (Warn ID: \`${warnId}\`) ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}` });
             } 
-            
+
             else if (action === 'timeout') {
-                if (!member) return interaction.reply({ content: '❌ User is not in the server.', ephemeral: true });
+                if (!member) return interaction.editReply({ content: '❌ User is not in the server.' });
                 const durationStr = interaction.fields.getTextInputValue('duration');
                 const msDuration = parseTime(durationStr);
-                
-                if (!msDuration) return interaction.reply({ content: '❌ Invalid duration format! Use `m`, `h`, or `d`.', ephemeral: true });
-                
+
+                if (!msDuration) return interaction.editReply({ content: '❌ Invalid duration format! Use `m`, `h`, or `d`.' });
+
+                // 🟢 Send DM BEFORE timing out
+                let dmSent = false;
+                if (typeof client.sendPremiumModDM === 'function') {
+                    dmSent = await client.sendPremiumModDM(member, interaction.member, 'timeout', reason, durationStr, interaction.guild, caseId);
+                }
+
                 await member.timeout(msDuration, reason);
-                await interaction.reply({ content: `✅ Successfully timed out <@${targetId}> for ${durationStr}.`, ephemeral: true });
+                return interaction.editReply({ content: `✅ Successfully timed out <@${targetId}> for ${durationStr}. ${dmSent ? '*(User Notified in DMs)*' : '*(DMs Closed)*'}` });
             } 
-            
+
             else if (action === 'kick') {
-                if (!member) return interaction.reply({ content: '❌ User is not in the server.', ephemeral: true });
+                if (!member) return interaction.editReply({ content: '❌ User is not in the server.' });
+
+                // 🟢 Send DM BEFORE kicking
+                let dmSent = false;
+                if (typeof client.sendPremiumModDM === 'function') {
+                    dmSent = await client.sendPremiumModDM(member, interaction.member, 'kick', reason, null, interaction.guild, caseId);
+                }
+
                 await member.kick(reason);
-                await interaction.reply({ content: `✅ Successfully kicked <@${targetId}>.`, ephemeral: true });
+                return interaction.editReply({ content: `✅ Successfully kicked <@${targetId}>. ${dmSent ? '*(User Notified in DMs)*' : '*(DMs Closed)*'}` });
             } 
-            
+
             else if (action === 'ban') {
+                // 🟢 Try fetching member to send DM BEFORE banning
+                let dmSent = false;
+                if (member && typeof client.sendPremiumModDM === 'function') {
+                    dmSent = await client.sendPremiumModDM(member, interaction.member, 'ban', reason, 'Permanent', interaction.guild, caseId, 'https://discord.com');
+                }
+
                 await interaction.guild.members.ban(targetId, { reason: reason });
-                await interaction.reply({ content: `✅ Successfully banned <@${targetId}>.`, ephemeral: true });
+                return interaction.editReply({ content: `✅ Successfully banned <@${targetId}>. ${dmSent ? '*(User Notified in DMs)*' : '*(DMs Closed)*'}` });
             }
         } catch (error) {
-            await interaction.reply({ content: `❌ Error: I don't have permission to do that to this user. Make sure my role is higher than theirs!`, ephemeral: true }).catch(() => {});
+            console.error('[ModPanel Error]:', error);
+            return interaction.editReply({ content: `❌ Error: I don't have permission to do that to this user. Make sure my role is higher than theirs!` }).catch(() => {});
         }
     });
 };
-            
