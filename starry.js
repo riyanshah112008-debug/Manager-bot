@@ -15,17 +15,21 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
-    
+
     // Load Premium Module 
     require('./premium.js')(client);
 
-      // ==========================================
-    // 💎 PREMIUM MODERATION DM ENGINE (WITH DEBUGGING)
+    // ==========================================
+    // 💎 PREMIUM MODERATION DM ENGINE (REPAIRED)
     // ==========================================
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
+        // Discord strictly prohibits DMing bots. Immediately abort to prevent API errors.
+        if (member.user.bot) {
+            console.log(`[Mod DM] Skipped DMing ${member.user.tag} because they are a bot.`);
+            return false;
+        }
+
         const actionType = action.toLowerCase();
-        
-        // Safety check: isPremium might not be loaded immediately, default to false if unavailable
         const isGuildPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
 
         // --- FREE TIER FALLBACK ---
@@ -44,7 +48,7 @@ module.exports = (client) => {
                 await member.send({ embeds: [basicEmbed] }); 
                 return true; 
             } catch (err) { 
-                console.error(`🚨 [DM FAILED - FREE TIER] Target: ${member.user.tag} | Error:`, err.message);
+                console.error(`🚨 [DM FAILED - FREE TIER] Target: ${member.user.tag} | Reason:`, err.message);
                 return false; 
             }
         }
@@ -85,54 +89,75 @@ module.exports = (client) => {
             await member.send({ embeds: [modEmbed], components: components }); 
             return true; 
         } catch (error) { 
-            console.error(`🚨 [DM FAILED - PREMIUM TIER] Target: ${member.user.tag} | Error:`, error.message);
+            console.error(`🚨 [DM FAILED - PREMIUM TIER] Target: ${member.user.tag} | Reason:`, error.message);
             return false; 
         }
     };
- ==========================================
+
+    client.on('clientReady', () => { 
+        console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); 
+    });
+    // ==========================================
+    // 🛠️ UTILITIES & HELPER FUNCTIONS
+    // ==========================================
+    const generateServerDump = async (guild) => {
+        await guild.members.fetch();
+        let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
+        const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
+        const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
+        const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
+        
+        categories.forEach(cat => {
+            dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
+            textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
+            dump += `\n`;
+        });
+        return Buffer.from(dump, 'utf-8');
+    };
+
+    // ==========================================
     // 1. BUMP TRACKERS & BASIC SETUP
     // ==========================================
     client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.content) return;
-        if (blacklistedUsers.has(message.author.id)) return;
+        if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
         // Disboard Bump Tracker
         if (message.author.id === '302050872383242240') {
-            if (message.embeds.length > 0 && message.embeds[0].description && message.embeds[0].description.includes('Bump done')) {
+            if (message.embeds.length > 0 && message.embeds[0].description?.includes('Bump done')) {
                 const bumpEmbed = new EmbedBuilder().setColor('#3BA55C').setTitle('📈 Server Bumped!').setDescription('Thank you for bumping the server! You can bump us again in 2 hours.');
                 return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
             }
         }
 
         // Discardia / Discadia Bump Tracker
-        if (message.author.username.toLowerCase().includes('discardia') || message.author.username.toLowerCase().includes('discadia')) {
+        const lowerName = message.author.username.toLowerCase();
+        if (lowerName.includes('discardia') || lowerName.includes('discadia')) {
             const embed = message.embeds[0];
-            if (embed && ((embed.description && embed.description.toLowerCase().includes('bump')) || (embed.title && embed.title.toLowerCase().includes('bump')))) {
+            if (embed && ((embed.description?.toLowerCase().includes('bump')) || (embed.title?.toLowerCase().includes('bump')))) {
                 const bumpEmbed = new EmbedBuilder().setColor('#5865F2').setTitle('🚀 Server Bumped on Discardia!').setDescription('Thank you for boosting our server! We will remind you when it is time to bump again.');
                 return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
             }
         }
-        
+
         // ==========================================
         // 2. OWNER-ONLY DEVELOPER COMMANDS
         // ==========================================
         const text = message.content.toLowerCase();
         const isOwner = message.author.id === process.env.OWNER_ID;
-        const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner! Ensure your exact Discord ID is pasted into the `OWNER_ID` variable on Render.";
+        const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner!";
 
         if (text === '.dev') {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             try {
                 await message.author.send(`💻 **Starry Developer Commands (Owner-Only):**\n\n\`.servers\` - Lists all servers.\n\`.serverdump\` - Full text data dump.\n\`.sysinfo\` - Bot stats.\n\`.eval <code>\` - Run raw JavaScript.\n\`.broadcast <msg>\` - Send message to ALL servers.\n\`.leaveserver <ID>\` - Remotely force leave.\n\`.blacklist <ID>\` - Block a user.\n\`.emergencyleave\` - Force leave current server.\n\`.restart\` - Kills the bot process.\n\`.setstatus <text>\` - Changes status.`);
                 return message.reply('📬 Check your DMs!').catch(() => {});
-            } catch (err) { return message.reply('❌ I couldn\'t DM you! Make sure your DMs are open.').catch(() => {}); }
+            } catch (err) { return message.reply('❌ I couldn\'t DM you!').catch(() => {}); }
         }
 
         if (text === '.sysinfo') {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-            const uptime = (process.uptime() / 3600).toFixed(2);
-            return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
+            return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
         }
 
         if (text.startsWith('.blacklist ')) {
@@ -162,7 +187,7 @@ module.exports = (client) => {
                 const channel = guild.channels.cache.find(c => c.type === 0 && (c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('chat') || c.name.toLowerCase().includes('main')) && c.permissionsFor(guild.members.me).has('SendMessages')) || guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
                 if (channel) { channel.send(`📢 **Message from Starry's Developer:**\n\n${announcement}`).catch(()=>{}); successCount++; }
             });
-            return message.reply(`✅ Broadcast successfully sent to the general chat of ${successCount} servers!`).catch(()=>{});
+            return message.reply(`✅ Broadcast successfully sent to ${successCount} servers!`).catch(()=>{});
         }
 
         if (text.startsWith('.eval ')) {
@@ -184,18 +209,8 @@ module.exports = (client) => {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             await message.reply('🗄️ Compiling a neatly organized server dump...').catch(() => {});
             try {
-                const guild = message.guild; await guild.members.fetch();
-                let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
-                const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
-                const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
-                const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-                categories.forEach(cat => {
-                    dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
-                    textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
-                    dump += `\n`;
-                });
-                const buffer = Buffer.from(dump, 'utf-8');
-                return message.reply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] }).catch(()=>{});
+                const buffer = await generateServerDump(message.guild);
+                return message.reply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${message.guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] }).catch(()=>{});
             } catch (err) { return message.reply(`❌ Failed to compile dump: ${err.message}`).catch(()=>{}); }
         }
     });
@@ -210,6 +225,7 @@ module.exports = (client) => {
 
         if (interaction.isChatInputCommand() && interaction.commandName === 'devpanel') {
             const embed = new EmbedBuilder().setTitle('💻 Starry Developer Control Panel').setDescription('Click a button below to execute an owner-only developer command. Buttons with a **📝** will open a pop-up text box for input.').setColor('#5865F2').setFooter({ text: 'Powered by Starry Protocol • Owner Access Only' });
+            
             const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
                 new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
@@ -226,6 +242,7 @@ module.exports = (client) => {
                 new ButtonBuilder().setCustomId('dev_emergencyleave').setLabel('Leave Current Server').setStyle(ButtonStyle.Danger).setEmoji('⚠️')
             );
             const row4 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot').setStyle(ButtonStyle.Danger).setEmoji('🔄'));
+            
             return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
         }
 
@@ -233,8 +250,7 @@ module.exports = (client) => {
             const id = interaction.customId;
             if (id === 'dev_sysinfo') {
                 const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-                const uptime = (process.uptime() / 3600).toFixed(2);
-                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
+                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
             }
             if (id === 'dev_servers') {
                 let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
@@ -243,22 +259,15 @@ module.exports = (client) => {
             }
             if (id === 'dev_dump') {
                 await interaction.deferReply({ ephemeral: true });
-                const guild = interaction.guild; if (!guild) return interaction.editReply('❌ Must be used inside a server.');
-                await guild.members.fetch();
-                let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
-                const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
-                const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
-                const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-                categories.forEach(cat => {
-                    dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
-                    textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`); dump += `\n`;
-                });
-                const buffer = Buffer.from(dump, 'utf-8');
-                return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
+                if (!interaction.guild) return interaction.editReply('❌ Must be used inside a server.');
+                try {
+                    const buffer = await generateServerDump(interaction.guild);
+                    return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${interaction.guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
+                } catch (err) { return interaction.editReply(`❌ Dump failed: ${err.message}`); }
             }
             if (id === 'dev_restart') { await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true }); process.exit(1); }
             if (id === 'dev_emergencyleave') { if (!interaction.guild) return interaction.reply({ content: 'Not in a server!', ephemeral: true }); await interaction.reply({ content: 'I am leaving this server now. Goodbye! 👋', ephemeral: true }); return interaction.guild.leave(); }
-            
+
             // Modals
             if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
             if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
@@ -442,7 +451,7 @@ module.exports = (client) => {
                 }
                 if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
                     const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://forms.gle/your-appeal-link');
+                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
                     await tMember.ban({ reason: args.reason }).catch(() => {});
                     return message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                 }
