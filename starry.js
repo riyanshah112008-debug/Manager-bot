@@ -9,18 +9,78 @@ const {
     TextInputStyle 
 } = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
-// Paste this right after you create your "client" variable
-require('./premium.js')(client); 
 
-// Initialize Gemini
+// Initialize Gemini & Caching
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
+    
+    // Load Premium Module 
+    require('./premium.js')(client);
+
+    // ==========================================
+    // 💎 PREMIUM MODERATION DM ENGINE
+    // ==========================================
+    client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
+        const actionType = action.toLowerCase();
+        
+        // Safety check: isPremium might not be loaded immediately, default to false if unavailable
+        const isGuildPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
+
+        if (!isGuildPremium) {
+            const basicEmbed = new EmbedBuilder()
+                .setColor('#2F3136')
+                .setTitle(`Moderation Notice: ${actionType.toUpperCase()}`)
+                .setDescription(`You have received a moderation action in **${guild.name}**.`)
+                .addFields(
+                    { name: 'Action', value: actionType.toUpperCase(), inline: true },
+                    { name: 'Reason', value: reason || 'No reason provided.', inline: true }
+                )
+                .setFooter({ text: `${guild.name} • Upgrade server to Premium for enhanced notices.` })
+                .setTimestamp();
+            try { await member.send({ embeds: [basicEmbed] }); return true; } 
+            catch (err) { return false; }
+        }
+
+        let embedColor, actionTitle, actionEmoji, durationDisplay;
+        switch(actionType) {
+            case 'ban': embedColor = '#ED4245'; actionTitle = 'Server Ban Notice'; actionEmoji = '🔨'; durationDisplay = duration ? `\`${duration}\`` : '`Permanent`'; break;
+            case 'kick': embedColor = '#FEE75C'; actionTitle = 'Server Kick Notice'; actionEmoji = '👢'; durationDisplay = '`Immediate`'; break;
+            case 'timeout': embedColor = '#5865F2'; actionTitle = 'Server Timeout Notice'; actionEmoji = '⏱️'; durationDisplay = duration ? `\`${duration}\`` : '`Unknown`'; break;
+            default: embedColor = '#95A5A6'; actionTitle = 'Moderation Notice'; actionEmoji = '🛡️'; durationDisplay = '`N/A`';
+        }
+
+        const modEmbed = new EmbedBuilder()
+            .setColor(embedColor)
+            .setAuthor({ name: `${guild.name} | Security & Moderation`, iconURL: guild.iconURL({ dynamic: true }) })
+            .setTitle(`${actionEmoji} ${actionTitle}`)
+            .setDescription(`Hello **${member.user.username}**, you have received a formal moderation action in **${guild.name}**.\n\nPlease review the details below.`)
+            .addFields(
+                { name: '👤 Moderator', value: `\`${moderator.user.username}\``, inline: true },
+                { name: '🛡️ Action', value: `\`${actionType.charAt(0).toUpperCase() + actionType.slice(1)}\``, inline: true },
+                { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
+                { name: '📝 Reason for Action', value: `>>> ${reason || 'No specific reason was provided.'}`, inline: false },
+                { name: '⏳ Duration', value: durationDisplay, inline: true },
+                { name: '📅 Time of Action', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true }
+            )
+            .setThumbnail(guild.iconURL({ dynamic: true, size: 512 }))
+            .setFooter({ text: `💎 Premium Automated Notice`, iconURL: client.user.displayAvatarURL() })
+            .setTimestamp();
+
+        const components = [];
+        const row = new ActionRowBuilder();
+        if (['ban', 'timeout'].includes(actionType) && appealLink) row.addComponents(new ButtonBuilder().setLabel('Submit Appeal').setURL(appealLink).setStyle(ButtonStyle.Link).setEmoji('⚖️'));
+        if (actionType !== 'ban') row.addComponents(new ButtonBuilder().setLabel('Read Server Rules').setURL('https://discord.com').setStyle(ButtonStyle.Link).setEmoji('📜'));
+        if (row.components.length > 0) components.push(row);
+
+        try { await member.send({ embeds: [modEmbed], components: components }); return true; } 
+        catch (error) { return false; }
+    };
+
     client.on('ready', () => { 
         console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); 
     });
-
     // ==========================================
     // 1. BUMP TRACKERS & BASIC SETUP
     // ==========================================
@@ -44,6 +104,7 @@ module.exports = (client) => {
                 return message.channel.send({ embeds: [bumpEmbed] }).catch(() => {});
             }
         }
+        
         // ==========================================
         // 2. OWNER-ONLY DEVELOPER COMMANDS
         // ==========================================
@@ -88,19 +149,10 @@ module.exports = (client) => {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const announcement = message.content.slice(11).trim();
             if (!announcement) return message.reply('❌ What do you want to broadcast?');
-
             let successCount = 0;
             client.guilds.cache.forEach(guild => {
-                const channel = guild.channels.cache.find(c => 
-                    c.type === 0 && 
-                    (c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('chat') || c.name.toLowerCase().includes('main')) && 
-                    c.permissionsFor(guild.members.me).has('SendMessages')
-                ) || guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
-
-                if (channel) { 
-                    channel.send(`📢 **Message from Starry's Developer:**\n\n${announcement}`).catch(()=>{}); 
-                    successCount++; 
-                }
+                const channel = guild.channels.cache.find(c => c.type === 0 && (c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('chat') || c.name.toLowerCase().includes('main')) && c.permissionsFor(guild.members.me).has('SendMessages')) || guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
+                if (channel) { channel.send(`📢 **Message from Starry's Developer:**\n\n${announcement}`).catch(()=>{}); successCount++; }
             });
             return message.reply(`✅ Broadcast successfully sent to the general chat of ${successCount} servers!`).catch(()=>{});
         }
@@ -124,78 +176,53 @@ module.exports = (client) => {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             await message.reply('🗄️ Compiling a neatly organized server dump...').catch(() => {});
             try {
-                const guild = message.guild; 
-                await guild.members.fetch();
-
+                const guild = message.guild; await guild.members.fetch();
                 let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
-
                 const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
                 const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
                 const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-
                 categories.forEach(cat => {
                     dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
                     textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
                     dump += `\n`;
                 });
-
                 const buffer = Buffer.from(dump, 'utf-8');
                 return message.reply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] }).catch(()=>{});
-            } catch (err) {
-                return message.reply(`❌ Failed to compile dump: ${err.message}`).catch(()=>{});
-            }
+            } catch (err) { return message.reply(`❌ Failed to compile dump: ${err.message}`).catch(()=>{}); }
         }
     });
     // ==========================================
     // 3. INTERACTIVE BUTTON & MODAL DEV PANEL
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        // Securely block non-owners
         if (interaction.user.id !== process.env.OWNER_ID) {
-            if (interaction.isRepliable()) {
-                return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
-            }
+            if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
             return;
         }
 
-        // 1. SPAWN THE DASHBOARD (/devpanel)
         if (interaction.isChatInputCommand() && interaction.commandName === 'devpanel') {
-            const embed = new EmbedBuilder()
-                .setTitle('💻 Starry Developer Control Panel')
-                .setDescription('Click a button below to execute an owner-only developer command. Buttons with a **📝** will open a pop-up text box for input.')
-                .setColor('#5865F2')
-                .setFooter({ text: 'Powered by Starry Protocol • Owner Access Only' });
-
+            const embed = new EmbedBuilder().setTitle('💻 Starry Developer Control Panel').setDescription('Click a button below to execute an owner-only developer command. Buttons with a **📝** will open a pop-up text box for input.').setColor('#5865F2').setFooter({ text: 'Powered by Starry Protocol • Owner Access Only' });
             const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
                 new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
                 new ButtonBuilder().setCustomId('dev_dump').setLabel('Server Dump').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
             );
-
             const row2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
                 new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📝'),
                 new ButtonBuilder().setCustomId('dev_status_btn').setLabel('Set Status').setStyle(ButtonStyle.Secondary).setEmoji('📝')
             );
-
             const row3 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_blacklist_btn').setLabel('Blacklist User').setStyle(ButtonStyle.Danger).setEmoji('📝'),
                 new ButtonBuilder().setCustomId('dev_leaveserver_btn').setLabel('Leave Server by ID').setStyle(ButtonStyle.Danger).setEmoji('📝'),
                 new ButtonBuilder().setCustomId('dev_emergencyleave').setLabel('Leave Current Server').setStyle(ButtonStyle.Danger).setEmoji('⚠️')
             );
-
-            const row4 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot').setStyle(ButtonStyle.Danger).setEmoji('🔄')
-            );
-
+            const row4 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot').setStyle(ButtonStyle.Danger).setEmoji('🔄'));
             return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
         }
 
-        // 2. HANDLE BUTTON CLICKS
         if (interaction.isButton()) {
             const id = interaction.customId;
-
-            // Instant Commands
             if (id === 'dev_sysinfo') {
                 const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
                 const uptime = (process.uptime() / 3600).toFixed(2);
@@ -208,109 +235,39 @@ module.exports = (client) => {
             }
             if (id === 'dev_dump') {
                 await interaction.deferReply({ ephemeral: true });
-                const guild = interaction.guild;
-                if (!guild) return interaction.editReply('❌ Must be used inside a server.');
+                const guild = interaction.guild; if (!guild) return interaction.editReply('❌ Must be used inside a server.');
                 await guild.members.fetch();
-
                 let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
                 const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
                 const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
                 const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-
                 categories.forEach(cat => {
                     dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
-                    textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
-                    dump += `\n`;
+                    textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`); dump += `\n`;
                 });
-
                 const buffer = Buffer.from(dump, 'utf-8');
                 return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
             }
-            if (id === 'dev_restart') {
-                await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true });
-                process.exit(1);
-            }
-            if (id === 'dev_emergencyleave') {
-                if (!interaction.guild) return interaction.reply({ content: 'Not in a server!', ephemeral: true });
-                await interaction.reply({ content: 'I am leaving this server now. Goodbye! 👋', ephemeral: true });
-                return interaction.guild.leave();
-            }
-
-            // Pop-up Modals
-            if (id === 'dev_eval_btn') {
-                const modal = new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript');
-                const input = new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-            if (id === 'dev_broadcast_btn') {
-                const modal = new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast');
-                const input = new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-            if (id === 'dev_status_btn') {
-                const modal = new ModalBuilder().setCustomId('modal_status').setTitle('Change Bot Status');
-                const input = new TextInputBuilder().setCustomId('status_text').setLabel('New Status Text').setStyle(TextInputStyle.Short).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-            if (id === 'dev_blacklist_btn') {
-                const modal = new ModalBuilder().setCustomId('modal_blacklist').setTitle('Toggle User Blacklist');
-                const input = new TextInputBuilder().setCustomId('target_id').setLabel('Discord User ID').setStyle(TextInputStyle.Short).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-            if (id === 'dev_leaveserver_btn') {
-                const modal = new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server');
-                const input = new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
+            if (id === 'dev_restart') { await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true }); process.exit(1); }
+            if (id === 'dev_emergencyleave') { if (!interaction.guild) return interaction.reply({ content: 'Not in a server!', ephemeral: true }); await interaction.reply({ content: 'I am leaving this server now. Goodbye! 👋', ephemeral: true }); return interaction.guild.leave(); }
+            
+            // Modals
+            if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+            if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+            if (id === 'dev_status_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_status').setTitle('Change Bot Status').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('status_text').setLabel('New Status Text').setStyle(TextInputStyle.Short).setRequired(true))));
+            if (id === 'dev_blacklist_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_blacklist').setTitle('Toggle User Blacklist').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target_id').setLabel('Discord User ID').setStyle(TextInputStyle.Short).setRequired(true))));
+            if (id === 'dev_leaveserver_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true))));
         }
-        // 3. HANDLE MODAL SUBMISSIONS
+
         if (interaction.isModalSubmit()) {
             const id = interaction.customId;
-
-            if (id === 'modal_eval') {
-                await interaction.deferReply({ ephemeral: true });
-                try {
-                    let evaled = eval(interaction.fields.getTextInputValue('eval_code'));
-                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``);
-                } catch (err) { return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); }
-            }
-            if (id === 'modal_broadcast') {
-                await interaction.deferReply({ ephemeral: true });
-                const msg = interaction.fields.getTextInputValue('broadcast_msg');
-                let count = 0;
-                client.guilds.cache.forEach(guild => {
-                    const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
-                    if (channel) { channel.send(`📢 **Message from Starry's Developer:**\n\n${msg}`).catch(()=>{}); count++; }
-                });
-                return interaction.editReply(`✅ Broadcast sent to ${count} servers!`);
-            }
-            if (id === 'modal_status') {
-                client.user.setActivity(interaction.fields.getTextInputValue('status_text'), { type: 4 });
-                return interaction.reply({ content: '✅ Status updated!', ephemeral: true });
-            }
-            if (id === 'modal_blacklist') {
-                const targetId = interaction.fields.getTextInputValue('target_id').trim();
-                if (blacklistedUsers.has(targetId)) {
-                    blacklistedUsers.delete(targetId); return interaction.reply({ content: `✅ Removed \`${targetId}\` from the blacklist.`, ephemeral: true });
-                } else {
-                    blacklistedUsers.add(targetId); return interaction.reply({ content: `🚫 Added \`${targetId}\` to the blacklist.`, ephemeral: true });
-                }
-            }
-            if (id === 'modal_leave') {
-                const guildToLeave = client.guilds.cache.get(interaction.fields.getTextInputValue('server_id').trim());
-                if (!guildToLeave) return interaction.reply({ content: '❌ Not in a server with that ID.', ephemeral: true });
-                await guildToLeave.leave();
-                return interaction.reply({ content: `✅ Successfully left **${guildToLeave.name}**.`, ephemeral: true });
-            }
+            if (id === 'modal_eval') { await interaction.deferReply({ ephemeral: true }); try { let evaled = eval(interaction.fields.getTextInputValue('eval_code')); if (typeof evaled !== "string") evaled = require("util").inspect(evaled); return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``); } catch (err) { return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); } }
+            if (id === 'modal_broadcast') { await interaction.deferReply({ ephemeral: true }); const msg = interaction.fields.getTextInputValue('broadcast_msg'); let count = 0; client.guilds.cache.forEach(guild => { const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages')); if (channel) { channel.send(`📢 **Message from Starry's Developer:**\n\n${msg}`).catch(()=>{}); count++; } }); return interaction.editReply(`✅ Broadcast sent to ${count} servers!`); }
+            if (id === 'modal_status') { client.user.setActivity(interaction.fields.getTextInputValue('status_text'), { type: 4 }); return interaction.reply({ content: '✅ Status updated!', ephemeral: true }); }
+            if (id === 'modal_blacklist') { const targetId = interaction.fields.getTextInputValue('target_id').trim(); if (blacklistedUsers.has(targetId)) { blacklistedUsers.delete(targetId); return interaction.reply({ content: `✅ Removed \`${targetId}\` from the blacklist.`, ephemeral: true }); } else { blacklistedUsers.add(targetId); return interaction.reply({ content: `🚫 Added \`${targetId}\` to the blacklist.`, ephemeral: true }); } }
+            if (id === 'modal_leave') { const guildToLeave = client.guilds.cache.get(interaction.fields.getTextInputValue('server_id').trim()); if (!guildToLeave) return interaction.reply({ content: '❌ Not in a server with that ID.', ephemeral: true }); await guildToLeave.leave(); return interaction.reply({ content: `✅ Successfully left **${guildToLeave.name}**.`, ephemeral: true }); }
         }
     });
-
     // ==========================================
     // 4. AI & IMAGE GENERATION ROUTER
     // ==========================================
@@ -331,12 +288,10 @@ module.exports = (client) => {
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // Premium Check (Owners bypass this)
         if (!isOwner && (!message.guild || (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id)))) {
             return message.reply('❌ **Starry AI is a Premium feature!** Use `.premium` to learn how to upgrade your server.').catch(() => {});
         }
 
-        // Natural Language Image Router
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -345,13 +300,9 @@ module.exports = (client) => {
             imagePrompt = message.content.slice(9).trim();
         } else if (hasName || mentionsBot) {
             const match = message.content.match(imageRegex);
-            if (match) {
-                isImageRequest = true;
-                imagePrompt = match[1].trim(); 
-            }
+            if (match) { isImageRequest = true; imagePrompt = match[1].trim(); }
         }
 
-        // Image Execution via Pollinations
         if (isImageRequest) {
             if (!imagePrompt) return message.reply('Please tell me what to draw!').catch(() => {});
             const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
@@ -363,42 +314,30 @@ module.exports = (client) => {
             } catch (error) { return replyMsg.edit('❌ Trouble drawing that.').catch(() => {}); }
         }
 
-        if (!process.env.GEMINI_API_KEY) {
-            return message.reply("❌ **Setup Error:** I cannot read your `GEMINI_API_KEY`! Make sure your main file uses `require('dotenv').config();`.");
-        }
-
+        if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** I cannot read your `GEMINI_API_KEY`!");
         await message.channel.sendTyping().catch(() => {});
+
         // ==========================================
-        // 5. GEMINI EXECUTION & MODERATION
+        // 5. GEMINI EXECUTION & NLP MODERATION
         // ==========================================
         try {
             const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).\nRULE 5: For commands: [RUN:.imagine penguin]\nRULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
             let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
             let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
 
             let geminiResponse;
             let attempts = 0;
-            const maxAttempts = 4; 
-
-            // Single, clean auto-retry loop with exponential backoff
-            while (attempts < maxAttempts) {
+            while (attempts < 4) {
                 try {
-                    geminiResponse = await ai.models.generateContent({
-                        model: selectedModel, 
-                        contents: prompt 
-                    });
+                    geminiResponse = await ai.models.generateContent({ model: selectedModel, contents: prompt });
                     break; 
                 } catch (apiError) {
                     attempts++;
-                    if (apiError.status === 503 && attempts < maxAttempts) {
-                        const waitTime = attempts * 2000; 
-                        if (attempts === maxAttempts - 1) selectedModel = fallbackModel;
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                    } else {
-                        throw apiError; 
-                    }
+                    if (apiError.status === 503 && attempts < 4) {
+                        if (attempts === 3) selectedModel = fallbackModel;
+                        await new Promise(resolve => setTimeout(resolve, attempts * 2000));
+                    } else throw apiError; 
                 }
             }
 
@@ -433,7 +372,6 @@ module.exports = (client) => {
                 replyText = replyText.replace(cmdMatch[0], '').trim();
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
-
             // Moderation Action Execution
             if (functionName) {
                 const permErr = "❌ Missing permissions.";
@@ -441,36 +379,23 @@ module.exports = (client) => {
 
                 if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny', 'create_channel'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageChannels)) return message.reply(permErr);
-
                     if (functionName === 'create_channel') {
                         let overwrites = [];
-                        if (args.roleId) {
-                            overwrites = [
-                                { id: message.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, 
-                                { id: args.roleId.replace(/\D/g, ''), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
-                            ];
-                        }
+                        if (args.roleId) { overwrites = [{ id: message.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: args.roleId.replace(/\D/g, ''), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }]; }
                         const nc = await message.guild.channels.create({ name: args.channelName || 'new-channel', type: 0, permissionOverwrites: overwrites });
                         return message.reply(`✅ Created <#${nc.id}>!`);
                     }
                     const channel = args.channelId ? (message.guild.channels.cache.get(args.channelId.replace(/\D/g, '')) || message.channel) : message.channel;
                     const allow = functionName.includes('allow');
                     const targetId = (args.roleId || args.userId || '').replace(/\D/g, '');
-
                     await channel.permissionOverwrites.edit(targetId, { ViewChannel: allow, SendMessages: allow });
                     return message.reply(`✅ Permissions updated for <#${channel.id}>.`);
                 }
 
                 if (['give_role', 'remove_role', 'create_role', 'delete_role'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageRoles)) return message.reply(permErr);
-                    if (functionName === 'create_role') {
-                        const newRole = await message.guild.roles.create({ name: args.roleName || 'New Role' });
-                        return message.reply(`✅ Created role **${newRole.name}**!`);
-                    }
-                    if (functionName === 'delete_role') {
-                        const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, ''));
-                        if (!role) return; await role.delete(); return message.reply(`✅ Role deleted.`);
-                    }
+                    if (functionName === 'create_role') { const newRole = await message.guild.roles.create({ name: args.roleName || 'New Role' }); return message.reply(`✅ Created role **${newRole.name}**!`); }
+                    if (functionName === 'delete_role') { const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, '')); if (!role) return; await role.delete(); return message.reply(`✅ Role deleted.`); }
                     const member = await message.guild.members.fetch((args.userId||'').replace(/\D/g, '')).catch(()=>null);
                     const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, ''));
                     if (!member || !role) return message.reply("❌ User or Role not found.");
@@ -488,34 +413,38 @@ module.exports = (client) => {
                     await message.guild.members.unban(tId).catch(()=>{}); return message.reply("✅ Unbanned.");
                 }
 
+                // --- 💎 AI MODERATION WITH PREMIUM DMS INJECTED HERE ---
                 const tMember = await message.guild.members.fetch(tId).catch(()=>null);
                 if (!tMember || !tMember.manageable) return message.reply("❌ Cannot moderate this user.");
 
                 if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
+                    const caseId = Math.floor(Math.random() * 90000) + 10000;
+                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
                     await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(()=>{}); 
-                    return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m.`);
+                    return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                 }
                 if (functionName === "untimeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    await tMember.timeout(null).catch(()=>{}); 
-                    return message.reply(`✅ Removed timeout from <@${tId}>.`);
+                    await tMember.timeout(null).catch(()=>{}); return message.reply(`✅ Removed timeout from <@${tId}>.`);
                 }
                 if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
+                    const caseId = Math.floor(Math.random() * 90000) + 10000;
+                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
                     await tMember.kick(args.reason).catch(()=>{}); 
-                    return message.reply(`👢 Kicked <@${tId}>.`);
+                    return message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                 }
                 if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
+                    const caseId = Math.floor(Math.random() * 90000) + 10000;
+                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://forms.gle/your-appeal-link');
                     await tMember.ban({ reason: args.reason }).catch(() => {});
-                    return message.reply(`🔨 banned <@${tId}>.`);
+                    return message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                 }
             }
 
-            // Text Chunker (Bypasses 2000 character limit)
+            // Text Chunker
             if (replyText && replyText.trim().length > 0) {
                 const cleanedText = replyText.trim();
                 const textChunks = cleanedText.match(/[\s\S]{1,1950}/g) || [];
-                for (const chunk of textChunks) {
-                    await message.reply(chunk).catch(console.error); 
-                }
+                for (const chunk of textChunks) await message.reply(chunk).catch(console.error); 
             } else if (!functionName && !runMatch) {
                 await message.reply("⚠️ **Debug Error:** Processed prompt successfully, but text output was empty!").catch(console.error);
             }
@@ -523,12 +452,7 @@ module.exports = (client) => {
             console.error("Gemini AI error:", error);
             if (error.status === 429) {
                 if (process.env.OWNER_ID) {
-                    try {
-                        const owner = await client.users.fetch(process.env.OWNER_ID);
-                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`);
-                    } catch (dmError) {
-                        console.error("Failed to DM the bot owner.", dmError);
-                    }
+                    try { const owner = await client.users.fetch(process.env.OWNER_ID); await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`); } catch (dmError) { console.error("Failed to DM the bot owner.", dmError); }
                 }
                 return message.reply("⏳ **Starry is taking a quick breather!** We hit the free-tier rate limit. Try again in a minute!").catch(console.error);
             }
