@@ -122,45 +122,199 @@ module.exports = (client) => {
                 const noCategory = textAndVoice.filter(c => !c.parentId);
 
                 if (noCategory.size > 0) {
-                    dump += `[NO CATEGORY]\n`;
-                    noCategory.forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
-                    dump += `\n`;
-                }
+                    dump += `[NO CATEGORY]\n`;const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { GoogleGenAI } = require('@google/genai');
 
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const blacklistedUsers = new Set();
+
+module.exports = (client) => {
+    client.on('ready', () => { console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); });
+
+    // ==========================================
+    // 1. DEVELOPER SLASH COMMAND PANEL
+    // ==========================================
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'devpanel') return;
+        
+        // Securely block non-owners
+        if (interaction.user.id !== process.env.OWNER_ID) {
+            return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
+        }
+
+        const sub = interaction.options.getSubcommand();
+        
+        try {
+            if (sub === 'sysinfo') {
+                const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+                const uptime = (process.uptime() / 3600).toFixed(2);
+                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${uptime} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
+            }
+            if (sub === 'servers') {
+                let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
+                client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
+                return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
+            }
+            if (sub === 'serverdump') {
+                await interaction.deferReply({ ephemeral: true });
+                const guild = interaction.guild;
+                if (!guild) return interaction.editReply('❌ Must be used inside a server.');
+                await guild.members.fetch();
+
+                let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
+                const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
+                const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
+                const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
+                
                 categories.forEach(cat => {
                     dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
                     textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
                     dump += `\n`;
                 });
 
-                dump += `=================================================\n                   ROLES \n=================================================\n\n`;
-                const sortedRoles = guild.roles.cache.sort((a, b) => b.position - a.position);
-                const maxLen = Math.max(...sortedRoles.map(r => r.name.length));
-                
-                sortedRoles.forEach(r => dump += `- ${r.name.padEnd(maxLen + 3, ' ')} (ID: ${r.id}) [${r.members.size} Members]\n`);
-
                 const buffer = Buffer.from(dump, 'utf-8');
-                return await message.channel.send({ content: `✅ **Organized Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] }).catch(() => {});
-            } catch (err) { return message.reply('❌ Failed to gather data.').catch(() => {}); }
+                return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
+            }
+            if (sub === 'restart') {
+                await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true });
+                process.exit(1);
+            }
+            if (sub === 'emergencyleave') {
+                if (!interaction.guild) return interaction.reply({ content: 'Not in a server!', ephemeral: true });
+                await interaction.reply({ content: 'I am leaving this server now. Goodbye! 👋', ephemeral: true });
+                return interaction.guild.leave();
+            }
+            if (sub === 'broadcast') {
+                await interaction.deferReply({ ephemeral: true });
+                const msg = interaction.options.getString('message');
+                let count = 0;
+                client.guilds.cache.forEach(guild => {
+                    const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages'));
+                    if (channel) { channel.send(`📢 **Message from Starry's Developer:**\n\n${msg}`).catch(()=>{}); count++; }
+                });
+                return interaction.editReply(`✅ Broadcast sent to ${count} servers!`);
+            }
+            if (sub === 'eval') {
+                await interaction.deferReply({ ephemeral: true });
+                try {
+                    let evaled = eval(interaction.options.getString('code'));
+                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
+                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``);
+                } catch (err) { return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); }
+            }
+            if (sub === 'blacklist') {
+                const targetId = interaction.options.getString('user_id');
+                if (blacklistedUsers.has(targetId)) {
+                    blacklistedUsers.delete(targetId); return interaction.reply({ content: `✅ Removed \`${targetId}\` from the blacklist.`, ephemeral: true });
+                } else {
+                    blacklistedUsers.add(targetId); return interaction.reply({ content: `🚫 Added \`${targetId}\` to the blacklist.`, ephemeral: true });
+                }
+            }
+            if (sub === 'leaveserver') {
+                const guildToLeave = client.guilds.cache.get(interaction.options.getString('server_id'));
+                if (!guildToLeave) return interaction.reply({ content: '❌ Not in that server.', ephemeral: true });
+                await guildToLeave.leave();
+                return interaction.reply({ content: `✅ Left **${guildToLeave.name}**.`, ephemeral: true });
+            }
+            if (sub === 'setstatus') {
+                client.user.setActivity(interaction.options.getString('status_text'), { type: 4 });
+                return interaction.reply({ content: '✅ Status updated!', ephemeral: true });
+            }
+        } catch (err) {
+            console.error(err);
+            if (interaction.deferred) interaction.editReply('❌ Error executing command.');
+            else interaction.reply({ content: '❌ Error executing command.', ephemeral: true });
+        }
+    });
+
+    // ==========================================
+    // 2. CHATBOT AND AI LOGIC
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
+
+        // --- Bump Tracker Logic Remains Unchanged Here ---
+        
+        const text = message.content.toLowerCase();
+        const isImagine = text.startsWith('.imagine ');
+        const mentionsBot = message.mentions.has(client.user.id);
+        const hasName = text.includes('starry');
+        let isReplyToBot = false;
+
+        if (message.reference) {
+            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
+            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
         }
 
-        if (text === '.servers') {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
-            let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;
-            client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
-            return message.reply(serverList).catch(() => {});
-        }
+        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        if (text === '.restart') {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
-            await message.reply('🔄 **Initiating remote reboot...**').catch(() => {}); process.exit(1);
-        }
+        // --- Premium & Image logic remains unchanged here ---
 
-        if (text.startsWith('.setstatus ')) {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
-            client.user.setActivity(message.content.slice(11).trim(), { type: 4 });
-            return message.reply(`✅ Status updated!`).catch(() => {});
+        await message.channel.sendTyping().catch(() => {});
+
+        try {
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. 
+RULE 1: Keep casual chat highly concise. Shorter text ensures faster API response times!
+[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+
+            let selectedModel = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content) 
+                ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
+            let fallbackModel = 'gemini-3.5-flash';
+
+            let geminiResponse;
+            let attempts = 0;
+            const maxAttempts = 3; 
+
+            while (attempts < maxAttempts) {
+                try {
+                    geminiResponse = await ai.models.generateContent({
+                        model: selectedModel, 
+                        contents: prompt,
+                        config: { 
+                            maxOutputTokens: 8192 // 🔧 FIX: Forces the AI to use its maximum limit so it stops cutting off!
+                        }
+                    });
+                    break; 
+                } catch (apiError) {
+                    attempts++;
+                    if ((apiError.status === 503 || apiError.status === 429) && attempts < maxAttempts) {
+                        if (attempts === maxAttempts - 1) selectedModel = fallbackModel;
+                        await new Promise(resolve => setTimeout(resolve, attempts * 5000));
+                    } else { throw apiError; }
+                }
+            }
+
+            let replyText = geminiResponse.text || "";
+            
+            // --- Mod/Run parsing regex logic remains unchanged here ---
+
+            // 🔧 FIX: Smarter chunker that avoids cutting words or code blocks in half
+            if (replyText && replyText.trim().length > 0) {
+                const cleanedText = replyText.trim();
+                // Splits at spaces closest to 1950 characters
+                const textChunks = cleanedText.match(/[\s\S]{1,1950}(?=\s|$)/g) || cleanedText.match(/[\s\S]{1,1950}/g) || [];
+                
+                for (const chunk of textChunks) {
+                    await message.reply(chunk).catch(console.error); 
+                }
+            }
+
+        } catch (error) {
+            console.error("Gemini AI error:", error);
+            if (error.status === 429) {
+                if (process.env.OWNER_ID) {
+                    try {
+                        const owner = await client.users.fetch(process.env.OWNER_ID);
+                        await owner.send(`⚠️ **API Quota Exhausted!**\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`);
+                    } catch (dmError) { console.error("DM Failed", dmError); }
+                }
+                return message.reply("⏳ **Starry is taking a quick breather!** We've hit Google's free-tier rate limit. Try again in a minute!").catch(console.error);
+            }
+            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\``).catch(console.error);
         }
+    }); 
+};
+
             // ================= DEVELOPER PANEL =================
     { name: 'devpanel', description: '💻 Developer-only control panel', options: [
         { name: 'sysinfo', type: 1, description: 'View bot system stats' },
