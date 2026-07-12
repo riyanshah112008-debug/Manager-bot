@@ -18,6 +18,7 @@ module.exports = (client) => {
 
     // Load Premium Module 
     require('./premium.js')(client);
+
     // ==========================================
     // 👑 MULTI-OWNER VERIFICATION HELPER
     // ==========================================
@@ -100,7 +101,6 @@ module.exports = (client) => {
             return false; 
         }
     };
-
     client.on('clientReady', () => { 
         console.log('✅ Starry Protocol Module Loaded (Powered by Gemini!)'); 
     });
@@ -113,7 +113,7 @@ module.exports = (client) => {
         const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
         const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
         const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-        
+
         categories.forEach(cat => {
             dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
             textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
@@ -151,8 +151,7 @@ module.exports = (client) => {
         // ==========================================
         const text = message.content.toLowerCase();
         const isOwner = client.isOwner(message.author.id);
-
-        const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner!";
+        const notOwnerMsg = "❌ **Access Denied:** You are not recognized as a bot owner!";
 
         if (text === '.dev') {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
@@ -185,7 +184,6 @@ module.exports = (client) => {
             if (!guildToLeave) return message.reply('❌ I am not in a server with that ID.').catch(()=>{});
             await guildToLeave.leave(); return message.reply(`✅ Successfully left **${guildToLeave.name}**.`).catch(()=>{});
         }
-
         if (text.startsWith('.broadcast ')) {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const announcement = message.content.slice(11).trim();
@@ -222,18 +220,20 @@ module.exports = (client) => {
             } catch (err) { return message.reply(`❌ Failed to compile dump: ${err.message}`).catch(()=>{}); }
         }
     });
+
     // ==========================================
     // 3. INTERACTIVE BUTTON & MODAL DEV PANEL
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        if (interaction.user.id !== process.env.OWNER_ID) {
-            if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as the bot owner!', ephemeral: true });
+        // 👑 MULTI-OWNER CHECK APPLIED HERE
+        if (!client.isOwner(interaction.user.id)) {
+            if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
             return;
         }
 
         if (interaction.isChatInputCommand() && interaction.commandName === 'devpanel') {
             const embed = new EmbedBuilder().setTitle('💻 Starry Developer Control Panel').setDescription('Click a button below to execute an owner-only developer command. Buttons with a **📝** will open a pop-up text box for input.').setColor('#5865F2').setFooter({ text: 'Powered by Starry Protocol • Owner Access Only' });
-            
+
             const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
                 new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
@@ -250,7 +250,7 @@ module.exports = (client) => {
                 new ButtonBuilder().setCustomId('dev_emergencyleave').setLabel('Leave Current Server').setStyle(ButtonStyle.Danger).setEmoji('⚠️')
             );
             const row4 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot').setStyle(ButtonStyle.Danger).setEmoji('🔄'));
-            
+
             return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
         }
 
@@ -283,7 +283,6 @@ module.exports = (client) => {
             if (id === 'dev_blacklist_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_blacklist').setTitle('Toggle User Blacklist').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target_id').setLabel('Discord User ID').setStyle(TextInputStyle.Short).setRequired(true))));
             if (id === 'dev_leaveserver_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true))));
         }
-
         if (interaction.isModalSubmit()) {
             const id = interaction.customId;
             if (id === 'modal_eval') { await interaction.deferReply({ ephemeral: true }); try { let evaled = eval(interaction.fields.getTextInputValue('eval_code')); if (typeof evaled !== "string") evaled = require("util").inspect(evaled); return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``); } catch (err) { return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); } }
@@ -293,6 +292,7 @@ module.exports = (client) => {
             if (id === 'modal_leave') { const guildToLeave = client.guilds.cache.get(interaction.fields.getTextInputValue('server_id').trim()); if (!guildToLeave) return interaction.reply({ content: '❌ Not in a server with that ID.', ephemeral: true }); await guildToLeave.leave(); return interaction.reply({ content: `✅ Successfully left **${guildToLeave.name}**.`, ephemeral: true }); }
         }
     });
+
     // ==========================================
     // 4. AI & IMAGE GENERATION ROUTER
     // ==========================================
@@ -303,7 +303,10 @@ module.exports = (client) => {
         const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
         const hasName = text.includes('starry');
-        const isOwner = message.author.id === process.env.OWNER_ID;
+        
+        // 👑 MULTI-OWNER CHECK APPLIED HERE
+        const isOwner = client.isOwner(message.author.id);
+        
         let isReplyToBot = false;
 
         if (message.reference) {
@@ -341,152 +344,3 @@ module.exports = (client) => {
 
         if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** I cannot read your `GEMINI_API_KEY`!");
         await message.channel.sendTyping().catch(() => {});
-
-        // ==========================================
-        // 5. GEMINI EXECUTION & NLP MODERATION
-        // ==========================================
-        try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).\nRULE 5: For commands: [RUN:.imagine penguin]\nRULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-            const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
-            let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
-            let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
-
-            let geminiResponse;
-            let attempts = 0;
-            while (attempts < 4) {
-                try {
-                    geminiResponse = await ai.models.generateContent({ model: selectedModel, contents: prompt });
-                    break; 
-                } catch (apiError) {
-                    attempts++;
-                    if (apiError.status === 503 && attempts < 4) {
-                        if (attempts === 3) selectedModel = fallbackModel;
-                        await new Promise(resolve => setTimeout(resolve, attempts * 2000));
-                    } else throw apiError; 
-                }
-            }
-
-            let replyText = geminiResponse.text || "";
-            let functionName = null; let args = {};
-
-            const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
-            if (runMatch) {
-                message.content = runMatch[1].trim(); replyText = replyText.replace(runMatch[0], '').trim();
-                client.emit('messageCreate', message); if (replyText.length === 0) return;
-            }
-
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL)(?:\|(.*?))?\]/i);
-            if (cmdMatch) {
-                const action = cmdMatch[1].toUpperCase(); const params = (cmdMatch[2] || '').split('|');
-                const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
-
-                if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 0; }
-                else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 1; args.reason = getParam('REASON') || "AI Moderation"; }
-                else if (action === 'UNTIMEOUT') { functionName = 'untimeout_member'; args.userId = getParam('ID'); }
-                else if (action === 'UNBAN') { functionName = 'unban_member'; args.userId = getParam('ID'); }
-                else if (action === 'KICK' || action === 'BAN') { functionName = action.toLowerCase() + '_member'; args.userId = getParam('ID'); args.reason = getParam('REASON') || "AI Moderation"; }
-                else if (action === 'GIVEROLE' || action === 'REMOVEROLE') { functionName = action === 'GIVEROLE' ? 'give_role' : 'remove_role'; args.userId = getParam('USER_ID'); args.roleId = getParam('ROLE_ID'); }
-                else if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME'); args.permissions = getParam('PERMISSIONS'); }
-                else if (action === 'DELETEROLE') { functionName = 'delete_role'; args.roleId = getParam('ROLE_ID'); }
-                else if (action === 'LISTROLES') { functionName = 'list_roles'; args.userId = getParam('USER_ID') || getParam('ID'); }
-                else if (action === 'LISTSERVERROLES') { functionName = 'list_server_roles'; }
-                else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.roleId = getParam('ROLE_ID'); }
-                else if (action === 'USERALLOW' || action === 'USERDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.userId = getParam('USER_ID'); }
-                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); args.roleId = getParam('ROLE_ID'); }
-
-                replyText = replyText.replace(cmdMatch[0], '').trim();
-                const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
-            }
-            // Moderation Action Execution
-            if (functionName) {
-                const permErr = "❌ Missing permissions.";
-                const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
-
-                if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny', 'create_channel'].includes(functionName)) {
-                    if (!hasPerm(PermissionFlagsBits.ManageChannels)) return message.reply(permErr);
-                    if (functionName === 'create_channel') {
-                        let overwrites = [];
-                        if (args.roleId) { overwrites = [{ id: message.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: args.roleId.replace(/\D/g, ''), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }]; }
-                        const nc = await message.guild.channels.create({ name: args.channelName || 'new-channel', type: 0, permissionOverwrites: overwrites });
-                        return message.reply(`✅ Created <#${nc.id}>!`);
-                    }
-                    const channel = args.channelId ? (message.guild.channels.cache.get(args.channelId.replace(/\D/g, '')) || message.channel) : message.channel;
-                    const allow = functionName.includes('allow');
-                    const targetId = (args.roleId || args.userId || '').replace(/\D/g, '');
-                    await channel.permissionOverwrites.edit(targetId, { ViewChannel: allow, SendMessages: allow });
-                    return message.reply(`✅ Permissions updated for <#${channel.id}>.`);
-                }
-
-                if (['give_role', 'remove_role', 'create_role', 'delete_role'].includes(functionName)) {
-                    if (!hasPerm(PermissionFlagsBits.ManageRoles)) return message.reply(permErr);
-                    if (functionName === 'create_role') { const newRole = await message.guild.roles.create({ name: args.roleName || 'New Role' }); return message.reply(`✅ Created role **${newRole.name}**!`); }
-                    if (functionName === 'delete_role') { const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, '')); if (!role) return; await role.delete(); return message.reply(`✅ Role deleted.`); }
-                    const member = await message.guild.members.fetch((args.userId||'').replace(/\D/g, '')).catch(()=>null);
-                    const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, ''));
-                    if (!member || !role) return message.reply("❌ User or Role not found.");
-                    if (functionName === 'give_role') { await member.roles.add(role); return message.reply(`✅ Role assigned!`); }
-                    else { await member.roles.remove(role); return message.reply(`✅ Role removed!`); }
-                }
-
-                if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
-                    await message.channel.bulkDelete(Math.min(args.amount || 0, 100) + 1, true).catch(()=>{});
-                    return message.channel.send(`🧹 Cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete(), 3000));
-                }
-
-                const tId = (args.userId||'').replace(/\D/g, '');
-                if (functionName === "unban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
-                    await message.guild.members.unban(tId).catch(()=>{}); return message.reply("✅ Unbanned.");
-                }
-
-                // --- 💎 AI MODERATION WITH PREMIUM DMS INJECTED HERE ---
-                const tMember = await message.guild.members.fetch(tId).catch(()=>null);
-                if (!tMember || !tMember.manageable) return message.reply("❌ Cannot moderate this user.");
-
-                if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
-                    await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(()=>{}); 
-                    return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                }
-                if (functionName === "untimeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    await tMember.timeout(null).catch(()=>{}); return message.reply(`✅ Removed timeout from <@${tId}>.`);
-                }
-                if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
-                    const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
-                    await tMember.kick(args.reason).catch(()=>{}); 
-                    return message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                }
-                if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
-                    const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
-                    await tMember.ban({ reason: args.reason }).catch(() => {});
-                    return message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                }
-            }
-
-            // Text Chunker
-            if (replyText && replyText.trim().length > 0) {
-                const cleanedText = replyText.trim();
-                const textChunks = cleanedText.match(/[\s\S]{1,1950}/g) || [];
-                for (const chunk of textChunks) await message.reply(chunk).catch(console.error); 
-            } else if (!functionName && !runMatch) {
-                await message.reply("⚠️ **Debug Error:** Processed prompt successfully, but text output was empty!").catch(console.error);
-            }
-        } catch (error) {
-            console.error("Gemini AI error:", error);
-                        if (error.status === 429) {
-                const ownerIds = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
-                for (const ownerId of ownerIds) {
-                    try { 
-                        const owner = await client.users.fetch(ownerId); 
-                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`); 
-                    } catch (dmError) { 
-                        console.error(`Failed to DM owner ${ownerId}.`); 
-                    }
-                }
-                return message.reply("⏳ **Starry is taking a quick breather!** We hit the free-tier rate limit. Try again in a minute!").catch(console.error);
-            }
-
-    }); 
-};
