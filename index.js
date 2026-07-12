@@ -146,7 +146,7 @@ loadModule('User Protection', './protect.js');
 loadModule('Goodbye System', './goodbye.js');
 loadModule('Role Manager', './roleManager.js');
 loadModule('Anti-Abuse', './antiAbuse.js');
-
+loadModule('Inactivity Tracker ', './inactivityTracker.js');
 // ==========================================
 // 6. CONNECT TO MONGODB
 // ==========================================
