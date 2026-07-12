@@ -15,13 +15,14 @@ const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', Level
 
 const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true }
+    enabled: { type: Boolean, default: true },
+    logChannelId: { type: String, default: null } // 🟢 Added Custom Log Channel
 }));
 
 // In-Memory Caches
-const settingsCache = new Map();
-const xpCooldowns = new Map(); // Prevents XP spam (1 min cooldown)
-const vcJoinTimes = new Map(); // Tracks when users join VC
+const settingsCache = new Map(); // Now stores { enabled: boolean, logChannelId: string | null }
+const xpCooldowns = new Map(); 
+const vcJoinTimes = new Map(); 
 
 // Helper Functions
 function calculateLevel(xp) { return Math.floor(0.1 * Math.sqrt(xp)); }
@@ -56,7 +57,7 @@ function buildRankEmbed(targetUser, userData, guild) {
         .setTimestamp();
 }
 
-// Build Interactive Leaderboards (Now Async for MongoDB)
+// Build Interactive Leaderboards
 async function buildLeaderboardData(guildId, guild, type = 'xp') {
     let topUsers = [];
     let title = ''; let emoji = ''; let color = '';
@@ -110,7 +111,7 @@ module.exports = (client) => {
     client.on('clientReady', async () => {
         try {
             const settings = await LevelSettings.find();
-            settings.forEach(s => settingsCache.set(s.guildId, s.enabled));
+            settings.forEach(s => settingsCache.set(s.guildId, { enabled: s.enabled, logChannelId: s.logChannelId }));
             console.log('✅ Leveling Module Loaded (MongoDB Synced)');
         } catch (err) {}
     });
@@ -142,7 +143,6 @@ module.exports = (client) => {
             }
         }
     });
-
     // ==========================================
     // 2. MESSAGE TRACKING & XP
     // ==========================================
@@ -152,7 +152,6 @@ module.exports = (client) => {
         const userId = message.author.id;
         const guildId = message.guild.id;
 
-        // --- PREFIX COMMANDS ---
         if (message.content.startsWith(PREFIX)) {
             const args = message.content.slice(PREFIX.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
@@ -175,15 +174,13 @@ module.exports = (client) => {
             return; 
         }
 
-        // --- STATS & XP GENERATION ---
-        const isEnabled = settingsCache.has(guildId) ? settingsCache.get(guildId) : true;
-        if (!isEnabled) return; 
+        const guildSettings = settingsCache.get(guildId) || { enabled: true, logChannelId: null };
+        if (!guildSettings.enabled) return; 
 
         const cooldownKey = `${guildId}-${userId}`;
         const onCooldown = xpCooldowns.has(cooldownKey) && (Date.now() - xpCooldowns.get(cooldownKey) < 60000);
 
         if (onCooldown) {
-            // Just update messages
             await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: { messages: 1 } }, { upsert: true }).catch(()=>{});
             return;
         }
@@ -202,8 +199,16 @@ module.exports = (client) => {
         if (newLevel > userDoc.level) {
             await LevelUser.updateOne({ userId, guildId }, { level: newLevel }).catch(()=>{});
 
-            // 🔕 SILENT ALERTS: Route to log channel or quietly react!
-            const logChannel = typeof client.getLogChannel === 'function' ? client.getLogChannel(message.guild, 'misc') : null;
+            // 🟢 CUSTOM CHANNEL ROUTING LOGIC
+            let logChannel = null;
+            if (guildSettings.logChannelId) {
+                logChannel = message.guild.channels.cache.get(guildSettings.logChannelId);
+            }
+            
+            // Fallback to Smart Router if no custom channel is set or it got deleted
+            if (!logChannel && typeof client.getLogChannel === 'function') {
+                logChannel = client.getLogChannel(message.guild, 'misc');
+            }
             
             if (logChannel) {
                 const levelUpEmbed = new EmbedBuilder()
@@ -235,21 +240,35 @@ module.exports = (client) => {
 
         if (!interaction.isChatInputCommand()) return;
 
+        const currentSettings = settingsCache.get(interaction.guildId) || { enabled: true, logChannelId: null };
+
+        if (interaction.commandName === 'setlevelchannel') {
+            const channel = interaction.options.getChannel('channel', true);
+            
+            await LevelSettings.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { logChannelId: channel.id },
+                { upsert: true }
+            );
+            
+            settingsCache.set(interaction.guildId, { enabled: currentSettings.enabled, logChannelId: channel.id });
+            return interaction.reply({ content: `✅ **Success:** All Level-Up notifications will now be sent to <#${channel.id}>.`, ephemeral: true }).catch(() => {});
+        }
+
         if (interaction.commandName === 'toggleleveling') {
-            const isEnabled = settingsCache.has(interaction.guildId) ? settingsCache.get(interaction.guildId) : true;
             const requestedState = interaction.options ? interaction.options.getString('state') : null; 
             let targetState;
 
             if (requestedState === 'on') targetState = true;
             else if (requestedState === 'off') targetState = false;
-            else targetState = !isEnabled;
+            else targetState = !currentSettings.enabled;
 
-            if (targetState === isEnabled && requestedState) {
+            if (targetState === currentSettings.enabled && requestedState) {
                 return interaction.reply({ content: `⚠️ The leveling system is already **${targetState ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true }).catch(() => {});
             }
 
             await LevelSettings.findOneAndUpdate({ guildId: interaction.guildId }, { enabled: targetState }, { upsert: true });
-            settingsCache.set(interaction.guildId, targetState);
+            settingsCache.set(interaction.guildId, { enabled: targetState, logChannelId: currentSettings.logChannelId });
             
             return interaction.reply({ content: `⚙️ Leveling system has been **${targetState ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true }).catch(() => {});
         }
