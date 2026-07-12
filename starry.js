@@ -18,6 +18,13 @@ module.exports = (client) => {
 
     // Load Premium Module 
     require('./premium.js')(client);
+    // ==========================================
+    // 👑 MULTI-OWNER VERIFICATION HELPER
+    // ==========================================
+    client.isOwner = (userId) => {
+        const owners = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
+        return owners.includes(userId);
+    };
 
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE (REPAIRED)
@@ -143,7 +150,8 @@ module.exports = (client) => {
         // 2. OWNER-ONLY DEVELOPER COMMANDS
         // ==========================================
         const text = message.content.toLowerCase();
-        const isOwner = message.author.id === process.env.OWNER_ID;
+        const isOwner = client.isOwner(message.author.id);
+
         const notOwnerMsg = "❌ **Access Denied:** You are not recognized as the bot owner!";
 
         if (text === '.dev') {
@@ -467,13 +475,18 @@ module.exports = (client) => {
             }
         } catch (error) {
             console.error("Gemini AI error:", error);
-            if (error.status === 429) {
-                if (process.env.OWNER_ID) {
-                    try { const owner = await client.users.fetch(process.env.OWNER_ID); await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`); } catch (dmError) { console.error("Failed to DM the bot owner.", dmError); }
+                        if (error.status === 429) {
+                const ownerIds = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
+                for (const ownerId of ownerIds) {
+                    try { 
+                        const owner = await client.users.fetch(ownerId); 
+                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`); 
+                    } catch (dmError) { 
+                        console.error(`Failed to DM owner ${ownerId}.`); 
+                    }
                 }
                 return message.reply("⏳ **Starry is taking a quick breather!** We hit the free-tier rate limit. Try again in a minute!").catch(console.error);
             }
-            return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\``).catch(console.error);
-        }
+
     }); 
 };
