@@ -237,22 +237,32 @@ module.exports = (client) => {
         }
     }, 60 * 60 * 1000); // Runs once every hour
 
-    // ==========================================
+    //     // ==========================================
     // ⚙️ 5. MANUAL SETUP COMMAND (/tracker)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
 
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-            return interaction.reply({ content: '❌ You need **Manage Server** permissions to configure the tracker.', ephemeral: true });
+        // 🟢 1. Defer immediately! This stops Discord's 3-second timeout clock completely.
+        await interaction.deferReply();
+
+        try {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+                return interaction.editReply({ content: '❌ You need **Manage Server** permissions to configure the tracker.' });
+            }
+
+            const channel = interaction.options.getChannel('channel', true);
+            
+            // 🟢 2. Use the upgraded memory cache (trackerCache) instead of the old function
+            if (!trackerCache[interaction.guildId]) trackerCache[interaction.guildId] = {};
+            trackerCache[interaction.guildId].customLogChannel = channel.id;
+            saveTrackerData();
+
+            return interaction.editReply({ content: `✅ **Success!** 14-Day Inactivity dashboards and alerts will now be sent to ${channel}.` });
+        } catch (error) {
+            console.error('[Tracker Command Error]:', error);
+            // 🟢 3. If anything ever goes wrong, tell you the exact error in Discord instead of failing silently!
+            return interaction.editReply({ content: `❌ **Error:** Could not save tracker settings. \`${error.message}\`` });
         }
-
-        const channel = interaction.options.getChannel('channel');
-        
-        if (!trackerCache[interaction.guildId]) trackerCache[interaction.guildId] = {};
-        trackerCache[interaction.guildId].customLogChannel = channel.id;
-        saveTrackerData();
-
-        return interaction.reply({ content: `✅ **Success!** 14-Day Inactivity dashboards and alerts will now be sent to ${channel}.` });
     });
-};
+}; // <--- Ensure your file ends with this bracket!
