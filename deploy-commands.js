@@ -225,7 +225,7 @@ const commands = [
     // Message context-menu command handled by steal.js
     { name: 'Steal Emojis', type: ApplicationCommandType.Message },
 
-    // ================= PREMIUM =================
+    // ================= PREMIUM & TRACKER =================
     { name: 'activatepremium', description: 'Activate Premium for a server', options: [
         { name: 'server_id', type: 3, required: true, description: 'Server ID to activate' }
     ] },
@@ -235,7 +235,12 @@ const commands = [
     { name: 'removepremium', description: 'Alias for deactivating Premium', options: [
         { name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }
     ] },
-    { name: 'premiumcheck', description: 'Check whether this server has Premium' }
+    { name: 'premiumcheck', description: 'Check whether this server has Premium' },
+    
+    // NEW TRACKER COMMAND ADDED HERE:
+    { name: 'tracker', description: 'Set a custom log channel for the inactivity tracker', default_member_permissions: MANAGE_GUILD, options: [
+        { name: 'channel', type: 7, required: true, description: 'The channel to send the 14-day inactivity logs to' }
+    ] }
 ];
 
 async function deployCommands() {
