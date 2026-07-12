@@ -39,6 +39,11 @@ module.exports = (client) => {
         });
         console.log('✅ Premium 14-Day Activity Tracker Loaded (Using Global Router).');
     });
+module.exports = (client) => {
+    client.trackerCache = trackerCache; // 🟢 Add this line!
+    
+    const invitesCache = new Map();
+    // ... rest of your code ...
 
     client.on('inviteCreate', (invite) => {
         if (!invitesCache.has(invite.guild.id)) invitesCache.set(invite.guild.id, new Map());
