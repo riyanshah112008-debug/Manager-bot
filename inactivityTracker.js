@@ -99,7 +99,7 @@ module.exports = (client) => {
         }
 
         if (!trackerCache[guild.id]) trackerCache[guild.id] = {};
-        
+
         trackerCache[guild.id][member.id] = {
             joinedAt: joinedAtMs,
             inviterId: inviterId,
@@ -119,7 +119,7 @@ module.exports = (client) => {
         // 💎 PREMIUM GATE: Don't process stats if server lost Premium status
         const isGuildPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
         if (!isGuildPremium || !trackerCache[guild.id] || !trackerCache[guild.id][user.id]) return;
-        
+
         const record = trackerCache[guild.id][user.id];
         if (Date.now() - record.joinedAt >= 14 * 24 * 60 * 60 * 1000) return;
 
@@ -141,14 +141,13 @@ module.exports = (client) => {
                             .setColor('#5865F2')
                             .setDescription(`**Messages:** ${record.stats.msgs}\n**Media:** ${record.stats.media}\n**Links:** ${record.stats.links}\n**Voice joins:** ${record.stats.voice}\n**Reactions:** ${record.stats.reacts}\n**Invites:** ${record.stats.invites}\n\n**Tracking ends**\n<t:${endsAtUnix}:F>\n<t:${endsAtUnix}:R>`)
                             .setFooter({ text: `💎 Premium Feature • User ID: ${user.id} • Activity counter updates for 14 days.` });
-                        
+
                         await msg.edit({ embeds: [updatedEmbed] }).catch(() => {});
                     }
                 }
             } catch (err) {}
         }
     }
-
     // ==========================================
     // 🎧 3. EVENT LISTENERS
     // ==========================================
@@ -237,13 +236,12 @@ module.exports = (client) => {
         }
     }, 60 * 60 * 1000); // Runs once every hour
 
-    //     // ==========================================
+    // ==========================================
     // ⚙️ 5. MANUAL SETUP COMMAND (/tracker)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
 
-        // 🟢 1. Defer immediately! This stops Discord's 3-second timeout clock completely.
         await interaction.deferReply();
 
         try {
@@ -252,8 +250,7 @@ module.exports = (client) => {
             }
 
             const channel = interaction.options.getChannel('channel', true);
-            
-            // 🟢 2. Use the upgraded memory cache (trackerCache) instead of the old function
+
             if (!trackerCache[interaction.guildId]) trackerCache[interaction.guildId] = {};
             trackerCache[interaction.guildId].customLogChannel = channel.id;
             saveTrackerData();
@@ -261,8 +258,34 @@ module.exports = (client) => {
             return interaction.editReply({ content: `✅ **Success!** 14-Day Inactivity dashboards and alerts will now be sent to ${channel}.` });
         } catch (error) {
             console.error('[Tracker Command Error]:', error);
-            // 🟢 3. If anything ever goes wrong, tell you the exact error in Discord instead of failing silently!
             return interaction.editReply({ content: `❌ **Error:** Could not save tracker settings. \`${error.message}\`` });
         }
     });
-}; // <--- Ensure your file ends with this bracket!
+
+    // ==========================================
+    // 🧪 6. DEVELOPER TEST COMMAND (.testalert)
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        // 👑 MULTI-OWNER CHECK: Both of you can now run this command!
+        if (typeof client.isOwner === 'function' ? !client.isOwner(message.author.id) : message.author.id !== process.env.OWNER_ID) return;
+        if (!message.content.startsWith('.testalert')) return;
+
+        const targetMember = message.mentions.members.first() || message.member;
+        const mockInviter = message.member;
+        const mockJoinUnix = Math.floor((Date.now() - (14 * 24 * 60 * 60 * 1000)) / 1000); // 14 days ago
+        const accountAge = getAccountAge(targetMember.user.createdAt);
+
+        const testEmbed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle('⚠️ No activity after 14 days')
+            .setDescription(`The user <@${targetMember.id}> had no interaction within **14 days** after joining.\n\nThe user joined through invite code \`uPUQpU4ecR\` created by <@${mockInviter.id}> on <t:${mockJoinUnix}:F>.`)
+            .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
+            .setFooter({ text: `💎 Premium Feature • Account age: ${accountAge} • User ID: ${targetMember.id}` })
+            .setTimestamp();
+
+        await message.channel.send({
+            content: `<@${mockInviter.id}>\nThe user <@${targetMember.id}> had no interaction within 14 days after joining.`,
+            embeds: [testEmbed]
+        });
+    });
+}; // <--- Module cleanly closed!
