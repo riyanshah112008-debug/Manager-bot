@@ -1,49 +1,25 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
-const Database = require('better-sqlite3');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const mongoose = require('mongoose');
 
-const db = new Database('leveling.db');
+// 🗄️ MONGODB SCHEMAS
+const LevelUserSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    guildId: { type: String, required: true },
+    xp: { type: Number, default: 0 },
+    level: { type: Number, default: 0 },
+    messages: { type: Number, default: 0 },
+    vc_time: { type: Number, default: 0 }
+});
+LevelUserSchema.index({ userId: 1, guildId: 1 }, { unique: true });
+const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', LevelUserSchema);
 
-// 1. DATABASE SETUP & AUTO-MIGRATION
-db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-        user_id TEXT,
-        guild_id TEXT,
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 0,
-        PRIMARY KEY (user_id, guild_id)
-    )
-`);
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS guild_settings (
-        guild_id TEXT PRIMARY KEY,
-        leveling_enabled INTEGER DEFAULT 1
-    )
-`);
-
-// Gracefully add new columns to existing databases without breaking old data
-try { db.exec('ALTER TABLE users ADD COLUMN messages INTEGER DEFAULT 0'); } catch (e) {}
-try { db.exec('ALTER TABLE users ADD COLUMN vc_time INTEGER DEFAULT 0'); } catch (e) {} // stored in minutes
-
-// Database Queries
-const getUser = db.prepare('SELECT * FROM users WHERE user_id = ? AND guild_id = ?');
-const insertUser = db.prepare('INSERT INTO users (user_id, guild_id, xp, level, messages, vc_time) VALUES (?, ?, ?, ?, ?, ?)');
-const updateUserXP = db.prepare('UPDATE users SET xp = ?, level = ? WHERE user_id = ? AND guild_id = ?');
-const addMessage = db.prepare('UPDATE users SET messages = messages + 1 WHERE user_id = ? AND guild_id = ?');
-const addVcTime = db.prepare('UPDATE users SET vc_time = vc_time + ? WHERE user_id = ? AND guild_id = ?');
-
-const getTopXP = db.prepare('SELECT user_id, xp, level FROM users WHERE guild_id = ? ORDER BY xp DESC LIMIT 10');
-const getTopMessages = db.prepare('SELECT user_id, messages FROM users WHERE guild_id = ? ORDER BY messages DESC LIMIT 10');
-const getTopVC = db.prepare('SELECT user_id, vc_time FROM users WHERE guild_id = ? ORDER BY vc_time DESC LIMIT 10');
-
-const getSettings = db.prepare('SELECT leveling_enabled FROM guild_settings WHERE guild_id = ?');
-const setSettings = db.prepare(`
-    INSERT INTO guild_settings (guild_id, leveling_enabled) 
-    VALUES (?, ?) 
-    ON CONFLICT(guild_id) DO UPDATE SET leveling_enabled = ?
-`);
+const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    enabled: { type: Boolean, default: true }
+}));
 
 // In-Memory Caches
+const settingsCache = new Map();
 const xpCooldowns = new Map(); // Prevents XP spam (1 min cooldown)
 const vcJoinTimes = new Map(); // Tracks when users join VC
 
@@ -57,17 +33,7 @@ function formatVcTime(minutes) {
     return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
 }
 
-// Ensure user exists in DB before updating stats
-function ensureUserExists(userId, guildId) {
-    let data = getUser.get(userId, guildId);
-    if (!data) {
-        insertUser.run(userId, guildId, 0, 0, 0, 0);
-        data = { user_id: userId, guild_id: guildId, xp: 0, level: 0, messages: 0, vc_time: 0 };
-    }
-    return data;
-}
-
-// Reusable function to build the rank embed
+// Build Rank Embed
 function buildRankEmbed(targetUser, userData, guild) {
     const nextLevelXp = xpForNextLevel(userData.level);
     const progressPercent = Math.min(Math.round((userData.xp / nextLevelXp) * 10), 10);
@@ -80,7 +46,7 @@ function buildRankEmbed(targetUser, userData, guild) {
         .addFields(
             { name: '✨ Level', value: `\`\`\`ansi\n\u001b[1;36mLevel ${userData.level}\u001b[0m\n\`\`\``, inline: true },
             { name: '📊 Total XP', value: `\`\`\`ansi\n\u001b[1;33m${userData.xp} XP\u001b[0m\n\`\`\``, inline: true },
-            { name: '\u200b', value: '\u200b', inline: true }, // Empty field for alignment
+            { name: '\u200b', value: '\u200b', inline: true }, 
             { name: '💬 Messages Sent', value: `\`${userData.messages || 0}\``, inline: true },
             { name: '🎙️ Time in Voice', value: `\`${formatVcTime(userData.vc_time)}\``, inline: true },
             { name: '\u200b', value: '\u200b', inline: true }, 
@@ -90,21 +56,19 @@ function buildRankEmbed(targetUser, userData, guild) {
         .setTimestamp();
 }
 
-// Reusable function to build Interactive Leaderboards
-function buildLeaderboardData(guildId, guild, type = 'xp') {
+// Build Interactive Leaderboards (Now Async for MongoDB)
+async function buildLeaderboardData(guildId, guild, type = 'xp') {
     let topUsers = [];
-    let title = '';
-    let emoji = '';
-    let color = '';
+    let title = ''; let emoji = ''; let color = '';
 
     if (type === 'xp') {
-        topUsers = getTopXP.all(guildId);
+        topUsers = await LevelUser.find({ guildId }).sort({ xp: -1 }).limit(10);
         title = 'Top XP Earners'; emoji = '✨'; color = '#FFD700';
     } else if (type === 'messages') {
-        topUsers = getTopMessages.all(guildId);
+        topUsers = await LevelUser.find({ guildId }).sort({ messages: -1 }).limit(10);
         title = 'Most Active Chatters'; emoji = '💬'; color = '#00BFFF';
     } else if (type === 'vc') {
-        topUsers = getTopVC.all(guildId);
+        topUsers = await LevelUser.find({ guildId }).sort({ vc_time: -1 }).limit(10);
         title = 'Voice Channel Leaders'; emoji = '🎙️'; color = '#FF4500';
     }
 
@@ -118,9 +82,9 @@ function buildLeaderboardData(guildId, guild, type = 'xp') {
             if (index === 1) medal = '🥈';
             if (index === 2) medal = '🥉';
 
-            if (type === 'xp') description += `**${index + 1}.** ${medal} <@${user.user_id}>\n↳ **Level ${user.level}** • \`${user.xp} XP\`\n\n`;
-            if (type === 'messages') description += `**${index + 1}.** ${medal} <@${user.user_id}>\n↳ \`${user.messages} Messages\`\n\n`;
-            if (type === 'vc') description += `**${index + 1}.** ${medal} <@${user.user_id}>\n↳ \`${formatVcTime(user.vc_time)}\` in Voice\n\n`;
+            if (type === 'xp') description += `**${index + 1}.** ${medal} <@${user.userId}>\n↳ **Level ${user.level}** • \`${user.xp} XP\`\n\n`;
+            if (type === 'messages') description += `**${index + 1}.** ${medal} <@${user.userId}>\n↳ \`${user.messages} Messages\`\n\n`;
+            if (type === 'vc') description += `**${index + 1}.** ${medal} <@${user.userId}>\n↳ \`${formatVcTime(user.vc_time)}\` in Voice\n\n`;
         });
     }
 
@@ -143,31 +107,36 @@ function buildLeaderboardData(guildId, guild, type = 'xp') {
 module.exports = (client) => {
     const PREFIX = '.';
 
+    client.on('clientReady', async () => {
+        try {
+            const settings = await LevelSettings.find();
+            settings.forEach(s => settingsCache.set(s.guildId, s.enabled));
+            console.log('✅ Leveling Module Loaded (MongoDB Synced)');
+        } catch (err) {}
+    });
+
     // ==========================================
     // 1. VOICE ACTIVITY TRACKER
     // ==========================================
-    client.on('voiceStateUpdate', (oldState, newState) => {
+    client.on('voiceStateUpdate', async (oldState, newState) => {
         if (newState.member.user.bot) return;
 
         const userId = newState.member.id;
         const guildId = newState.guild.id;
         const cacheKey = `${guildId}-${userId}`;
 
-        // User joined a voice channel
         if (!oldState.channelId && newState.channelId) {
             vcJoinTimes.set(cacheKey, Date.now());
-        }
-        
-        // User left a voice channel
-        else if (oldState.channelId && !newState.channelId) {
+        } else if (oldState.channelId && !newState.channelId) {
             if (vcJoinTimes.has(cacheKey)) {
-                const joinTime = vcJoinTimes.get(cacheKey);
-                const durationMs = Date.now() - joinTime;
+                const durationMs = Date.now() - vcJoinTimes.get(cacheKey);
                 const durationMinutes = Math.floor(durationMs / 60000);
-
                 if (durationMinutes > 0) {
-                    ensureUserExists(userId, guildId);
-                    addVcTime.run(durationMinutes, userId, guildId);
+                    await LevelUser.findOneAndUpdate(
+                        { userId, guildId }, 
+                        { $inc: { vc_time: durationMinutes } }, 
+                        { upsert: true }
+                    ).catch(()=>{});
                 }
                 vcJoinTimes.delete(cacheKey);
             }
@@ -175,7 +144,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 2. MESSAGE TRACKING & PREFIX COMMANDS
+    // 2. MESSAGE TRACKING & XP
     // ==========================================
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.guild) return;
@@ -183,67 +152,74 @@ module.exports = (client) => {
         const userId = message.author.id;
         const guildId = message.guild.id;
 
-        // --- COMMAND HANDLING ---
+        // --- PREFIX COMMANDS ---
         if (message.content.startsWith(PREFIX)) {
             const args = message.content.slice(PREFIX.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
 
             if (command === 'rank') {
                 const targetUser = message.mentions.users.first() || message.author;
-                const userData = ensureUserExists(targetUser.id, guildId);
+                let userData = await LevelUser.findOne({ userId: targetUser.id, guildId });
+                if (!userData) userData = { xp: 0, level: 0, messages: 0, vc_time: 0 };
                 return message.reply({ embeds: [buildRankEmbed(targetUser, userData, message.guild)] }).catch(() => {});
             }
-
             if (command === 'messages') {
                 const targetUser = message.mentions.users.first() || message.author;
-                const userData = ensureUserExists(targetUser.id, guildId);
-                return message.reply(`💬 **${targetUser.username}** has sent **${userData.messages || 0}** messages in this server!`).catch(() => {});
+                const userData = await LevelUser.findOne({ userId: targetUser.id, guildId });
+                return message.reply(`💬 **${targetUser.username}** has sent **${userData ? userData.messages : 0}** messages in this server!`).catch(() => {});
             }
-
             if (command === 'leaderboard' || command === 'lb') {
-                const data = buildLeaderboardData(guildId, message.guild, 'xp');
+                const data = await buildLeaderboardData(guildId, message.guild, 'xp');
                 return message.reply(data).catch(() => {});
             }
             return; 
         }
 
-        // --- STATS & XP GENERATION SYSTEM ---
-        const currentSetting = getSettings.get(guildId);
-        if (currentSetting && currentSetting.leveling_enabled === 0) return; 
+        // --- STATS & XP GENERATION ---
+        const isEnabled = settingsCache.has(guildId) ? settingsCache.get(guildId) : true;
+        if (!isEnabled) return; 
 
-        // Always log the message count
-        ensureUserExists(userId, guildId);
-        addMessage.run(userId, guildId);
-
-        // Cooldown Check for XP (1 minute)
         const cooldownKey = `${guildId}-${userId}`;
-        if (xpCooldowns.has(cooldownKey)) {
-            const lastMessageTime = xpCooldowns.get(cooldownKey);
-            if (Date.now() - lastMessageTime < 60000) return; 
+        const onCooldown = xpCooldowns.has(cooldownKey) && (Date.now() - xpCooldowns.get(cooldownKey) < 60000);
+
+        if (onCooldown) {
+            // Just update messages
+            await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: { messages: 1 } }, { upsert: true }).catch(()=>{});
+            return;
         }
-        
+
         xpCooldowns.set(cooldownKey, Date.now()); 
         
-        // Add XP
-        const xpToAdd = 15;
-        let userData = getUser.get(userId, guildId);
-        const newXp = userData.xp + xpToAdd;
-        const currentLevel = userData.level;
-        const newLevel = calculateLevel(newXp);
+        const userDoc = await LevelUser.findOneAndUpdate(
+            { userId, guildId },
+            { $inc: { messages: 1, xp: 15 } },
+            { new: true, upsert: true }
+        ).catch(()=>{});
 
-        updateUserXP.run(newXp, newLevel, userId, guildId);
+        if (!userDoc) return;
 
-        if (newLevel > currentLevel) {
-            const levelUpEmbed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setAuthor({ name: 'Level Up!', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`🎉 Congrats <@${userId}>! You've advanced to **Level ${newLevel}**!`)
-                .setTimestamp();
+        const newLevel = calculateLevel(userDoc.xp);
+        if (newLevel > userDoc.level) {
+            await LevelUser.updateOne({ userId, guildId }, { level: newLevel }).catch(()=>{});
 
-            message.channel.send({ 
-                content: `🎉 Congrats <@${userId}>, you just advanced to **Level ${newLevel}**!`, 
-                embeds: [levelUpEmbed] 
-            }).catch(() => {});
+            // 🔕 SILENT ALERTS: Route to log channel or quietly react!
+            const logChannel = typeof client.getLogChannel === 'function' ? client.getLogChannel(message.guild, 'misc') : null;
+            
+            if (logChannel) {
+                const levelUpEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setAuthor({ name: 'Level Up!', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                    .setDescription(`🎉 Congrats <@${userId}>! You've advanced to **Level ${newLevel}**!`)
+                    .setTimestamp();
+
+                logChannel.send({ 
+                    content: `<@${userId}>`, 
+                    embeds: [levelUpEmbed],
+                    allowedMentions: { users: [userId] }
+                }).catch(() => {});
+            } else {
+                message.react('⭐').catch(() => {});
+            }
         }
     });
 
@@ -251,51 +227,49 @@ module.exports = (client) => {
     // 3. SLASH COMMANDS & BUTTON HANDLING
     // ==========================================
     client.on('interactionCreate', async interaction => {
-        // --- BUTTON HANDLING FOR LEADERBOARD ---
         if (interaction.isButton() && interaction.customId.startsWith('lb_')) {
-            const type = interaction.customId.split('_')[1]; // 'xp', 'messages', or 'vc'
-            const data = buildLeaderboardData(interaction.guildId, interaction.guild, type);
+            const type = interaction.customId.split('_')[1]; 
+            const data = await buildLeaderboardData(interaction.guildId, interaction.guild, type);
             return interaction.update(data).catch(() => {});
         }
 
-        // --- SLASH COMMANDS ---
         if (!interaction.isChatInputCommand()) return;
 
         if (interaction.commandName === 'toggleleveling') {
-            // Logic unchanged
-            const currentSetting = getSettings.get(interaction.guildId);
-            const isEnabled = currentSetting ? currentSetting.leveling_enabled : 1;
+            const isEnabled = settingsCache.has(interaction.guildId) ? settingsCache.get(interaction.guildId) : true;
             const requestedState = interaction.options ? interaction.options.getString('state') : null; 
-            let newSetting;
+            let targetState;
 
-            if (requestedState === 'on') newSetting = 1;
-            else if (requestedState === 'off') newSetting = 0;
-            else newSetting = isEnabled ? 0 : 1;
+            if (requestedState === 'on') targetState = true;
+            else if (requestedState === 'off') targetState = false;
+            else targetState = !isEnabled;
 
-            if (newSetting === isEnabled && requestedState) {
-                return interaction.reply({ content: `⚠️ The leveling system is already **${newSetting ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true }).catch(() => {});
+            if (targetState === isEnabled && requestedState) {
+                return interaction.reply({ content: `⚠️ The leveling system is already **${targetState ? 'ENABLED' : 'DISABLED'}**!`, ephemeral: true }).catch(() => {});
             }
 
-            setSettings.run(interaction.guildId, newSetting, newSetting);
-            return interaction.reply({ content: `⚙️ Leveling system has been **${newSetting ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true }).catch(() => {});
+            await LevelSettings.findOneAndUpdate({ guildId: interaction.guildId }, { enabled: targetState }, { upsert: true });
+            settingsCache.set(interaction.guildId, targetState);
+            
+            return interaction.reply({ content: `⚙️ Leveling system has been **${targetState ? 'ENABLED ✅' : 'DISABLED ❌'}** for this server.`, ephemeral: true }).catch(() => {});
         }
 
         if (interaction.commandName === 'rank') {
             const targetUser = interaction.options.getUser('target') || interaction.user;
-            const userData = ensureUserExists(targetUser.id, interaction.guildId);
+            let userData = await LevelUser.findOne({ userId: targetUser.id, guildId: interaction.guildId });
+            if (!userData) userData = { xp: 0, level: 0, messages: 0, vc_time: 0 };
             await interaction.reply({ embeds: [buildRankEmbed(targetUser, userData, interaction.guild)] }).catch(() => {});
         }
 
         if (interaction.commandName === 'messages') {
             const targetUser = interaction.options.getUser('target') || interaction.user;
-            const userData = ensureUserExists(targetUser.id, interaction.guildId);
-            await interaction.reply({ content: `💬 <@${targetUser.id}> has sent **${userData.messages || 0}** messages in this server!`, ephemeral: false }).catch(() => {});
+            const userData = await LevelUser.findOne({ userId: targetUser.id, guildId: interaction.guildId });
+            await interaction.reply({ content: `💬 <@${targetUser.id}> has sent **${userData ? userData.messages : 0}** messages in this server!`, ephemeral: false }).catch(() => {});
         }
 
         if (interaction.commandName === 'leaderboard') {
-            const data = buildLeaderboardData(interaction.guildId, interaction.guild, 'xp');
+            const data = await buildLeaderboardData(interaction.guildId, interaction.guild, 'xp');
             await interaction.reply(data).catch(() => {});
         }
     });
 };
-                                                
