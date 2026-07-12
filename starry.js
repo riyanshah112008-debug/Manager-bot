@@ -26,6 +26,52 @@ module.exports = (client) => {
         const owners = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
         return owners.includes(userId);
     };
+    // ==========================================
+    // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
+    // ==========================================
+    /**
+     * Automatically analyzes a server's channels to find the perfect log destination.
+     * @param {Guild} guild - The Discord Server object
+     * @param {String} logType - 'access', 'moderate', 'messages', 'voice', 'channels', 'members', 'roles', or 'misc'
+     * @returns {TextChannel|null} - The best matching channel, or null if none exists.
+     */
+    client.getLogChannel = (guild, logType = 'misc') => {
+        if (!guild || !guild.channels) return null;
+
+        const typeMap = {
+            'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
+            'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs', 'automod-logs'],
+            'messages': ['logs-messages', 'message-logs', 'chat-logs'],
+            'voice': ['logs-voice', 'voice-logs', 'vc-logs'],
+            'channels': ['logs-channels', 'channel-logs'],
+            'members': ['logs-members', 'member-logs', 'user-logs'],
+            'roles': ['logs-roles', 'role-logs'],
+            'misc': ['logs-misc', 'bot-logs']
+        };
+
+        const targetNames = typeMap[logType.toLowerCase()] || typeMap['misc'];
+
+        // 1. Try to find the exact specialized channel (e.g., Froozen's #logs-messages or #logs-access)
+        let channel = guild.channels.cache.find(c => 
+            c.type === 0 && targetNames.some(name => c.name.includes(name))
+        );
+        if (channel) return channel;
+
+        // 2. Fallback to a general server log channel if the specific one doesn't exist
+        channel = guild.channels.cache.find(c => 
+            c.type === 0 && (
+                c.name === 'logs-server' ||
+                c.name === 'server-logs' ||
+                c.name === 'mod-logs' ||
+                c.name === 'bot-logs' ||
+                c.name === 'system-logs' ||
+                c.name === 'logs'
+            )
+        );
+
+        return channel || null;
+    };
+
 
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE (REPAIRED)
