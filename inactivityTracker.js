@@ -1,4 +1,4 @@
-const { EmbedBuilder, ChannelType } = require('discord.js');
+const { EmbedBuilder, ChannelType, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -73,9 +73,16 @@ module.exports = (client) => {
             invitesCache.set(guild.id, new Map(newInvites.map(inv => [inv.code, inv.uses])));
         } catch (err) {}
 
-        const logChannel = guild.channels.cache.find(c => 
-            c.type === ChannelType.GuildText && (c.name.includes('user-invite-logs') || c.name.includes('invite-logs') || c.name.includes('mod-logs'))
-        );
+        // Resolve Log Channel (Prioritize Custom Channel, fallback to name)
+        let logChannel = null;
+        if (trackerCache[guild.id] && trackerCache[guild.id].customLogChannel) {
+            logChannel = guild.channels.cache.get(trackerCache[guild.id].customLogChannel);
+        }
+        if (!logChannel) {
+            logChannel = guild.channels.cache.find(c => 
+                c.type === ChannelType.GuildText && (c.name.includes('user-invite-logs') || c.name.includes('invite-logs') || c.name.includes('mod-logs'))
+            );
+        }
 
         let trackingMsgId = null;
         const joinedAtMs = Date.now();
@@ -184,9 +191,16 @@ module.exports = (client) => {
             const guild = client.guilds.cache.get(guildId);
             if (!guild) continue;
 
-            const logChannel = guild.channels.cache.find(c => 
-                c.type === ChannelType.GuildText && (c.name.includes('user-invite-logs') || c.name.includes('invite-logs') || c.name.includes('mod-logs'))
-            );
+            // Resolve Log Channel (Prioritize Custom Channel, fallback to name)
+            let logChannel = null;
+            if (trackerCache[guildId] && trackerCache[guildId].customLogChannel) {
+                logChannel = guild.channels.cache.get(trackerCache[guildId].customLogChannel);
+            }
+            if (!logChannel) {
+                logChannel = guild.channels.cache.find(c => 
+                    c.type === ChannelType.GuildText && (c.name.includes('user-invite-logs') || c.name.includes('invite-logs') || c.name.includes('mod-logs'))
+                );
+            }
 
             for (const userId in trackerCache[guildId]) {
                 const userRecord = trackerCache[guildId][userId];
@@ -222,4 +236,23 @@ module.exports = (client) => {
             }
         }
     }, 60 * 60 * 1000); // Runs once every hour
+
+    // ==========================================
+    // ⚙️ 5. MANUAL SETUP COMMAND (/tracker)
+    // ==========================================
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
+
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+            return interaction.reply({ content: '❌ You need **Manage Server** permissions to configure the tracker.', ephemeral: true });
+        }
+
+        const channel = interaction.options.getChannel('channel');
+        
+        if (!trackerCache[interaction.guildId]) trackerCache[interaction.guildId] = {};
+        trackerCache[interaction.guildId].customLogChannel = channel.id;
+        saveTrackerData();
+
+        return interaction.reply({ content: `✅ **Success!** 14-Day Inactivity dashboards and alerts will now be sent to ${channel}.` });
+    });
 };
