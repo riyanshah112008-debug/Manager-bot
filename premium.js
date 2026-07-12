@@ -116,7 +116,7 @@ module.exports = (client) => {
     };
 
     // =====================================================================
-    // --- COMMAND HANDLING ---
+    // --- COMMAND HANDLING WITH INPUT TRIMMING ---
     // =====================================================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
@@ -137,7 +137,6 @@ module.exports = (client) => {
         // --- ACTIVATE PREMIUM ---
         if (commandName === 'activatepremium') {
             try {
-                // 👑 MULTI-OWNER CHECK: Verified against client.isOwner()
                 const isOwner = typeof client.isOwner === 'function' ? client.isOwner(user.id) : user.id === process.env.OWNER_ID;
                 if (!isOwner) {
                     return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
@@ -145,7 +144,9 @@ module.exports = (client) => {
 
                 await interaction.deferReply({ ephemeral: true });
 
-                const targetGuildId = options.getString('server_id') || guildId;
+                // 🛡️ TRIM SHIELD: Cleans up accidental spaces from copy-pasting IDs
+                const rawInputId = options.getString('server_id');
+                const targetGuildId = rawInputId ? rawInputId.trim() : guildId;
 
                 // Save permanently to MongoDB
                 await PremiumModel.findOneAndUpdate(
@@ -159,10 +160,38 @@ module.exports = (client) => {
 
                 return interaction.editReply({ content: `✅ **SUCCESS:** Premium has been enabled for server \`${targetGuildId}\`!` });
             } catch (error) {
-                console.error('Premium Command Error:', error);
-                return interaction.editReply({ content: '❌ An error occurred processing the premium command.' }).catch(()=>{});
+                console.error('Premium Activation Error:', error);
+                return interaction.editReply({ content: '❌ An error occurred processing the premium activation.' }).catch(()=>{});
             }
         }
+
+        // --- DEACTIVATE PREMIUM ---
+        if (commandName === 'deactivatepremium' || commandName === 'removepremium') {
+            try {
+                const isOwner = typeof client.isOwner === 'function' ? client.isOwner(user.id) : user.id === process.env.OWNER_ID;
+                if (!isOwner) {
+                    return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
+                }
+
+                await interaction.deferReply({ ephemeral: true });
+
+                // 🛡️ TRIM SHIELD: Cleans up accidental spaces from copy-pasting IDs
+                const rawInputId = options.getString('server_id');
+                const targetGuildId = rawInputId ? rawInputId.trim() : guildId;
+
+                // Remove permanently from MongoDB
+                await PremiumModel.deleteOne({ guildId: targetGuildId });
+
+                // Remove from memory cache instantly
+                premiumCache.delete(targetGuildId);
+
+                return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status has been removed from server \`${targetGuildId}\`.` });
+            } catch (error) {
+                console.error('Premium Deactivation Error:', error);
+                return interaction.editReply({ content: '❌ An error occurred processing the premium deactivation.' }).catch(()=>{});
+            }
+        }
+    });
 
         // --- DEACTIVATE PREMIUM ---
         if (commandName === 'deactivatepremium' || commandName === 'removepremium') {
