@@ -16,9 +16,6 @@ const blacklistedUsers = new Set();
 
 module.exports = (client) => {
 
-    // Load Premium Module 
-    require('./premium.js')(client);
-
     // ==========================================
     // 👑 MULTI-OWNER VERIFICATION HELPER
     // ==========================================
