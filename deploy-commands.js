@@ -68,24 +68,6 @@ const commands = [
     { name: 'clear', description: 'Delete up to 100 recent messages', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'amount', type: 4, required: true, description: 'Number of messages to delete', min_value: 1, max_value: 100 }
     ] },
-// Add a manual slash command to set a custom log channel
-client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
-
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-        return interaction.reply({ content: '❌ You need **Manage Server** permissions to configure the tracker.', ephemeral: true });
-    }
-
-    const channel = interaction.options.getChannel('channel');
-    const data = getTrackerData();
-    
-    if (!data[interaction.guildId]) data[interaction.guildId] = {};
-    data[interaction.guildId].customLogChannel = channel.id;
-    saveTrackerData();
-
-    return interaction.reply({ content: `✅ **Success!** 14-Day Inactivity dashboards and alerts will now be sent to ${channel}.` });
-});
-
     // ================= DEVELOPER PANEL =================
     {
         name: 'devpanel',
@@ -196,6 +178,8 @@ client.on('interactionCreate', async (interaction) => {
         { name: 'winners', type: 4, required: true, description: 'Number of winners', min_value: 1 },
         { name: 'prize', type: 3, required: true, description: 'Giveaway prize' }
     ] },
+    
+ 
     // ================= LEVELING / COMMUNITY =================
     { name: 'toggleleveling', description: 'Enable or disable the leveling system', default_member_permissions: ADMIN, options: [
         { name: 'state', type: 3, required: false, description: 'Desired state; omit to toggle', choices: [
