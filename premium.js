@@ -96,11 +96,11 @@ module.exports = (client) => {
 
         const components = [];
         const row = new ActionRowBuilder();
-        
+
         if (['ban', 'timeout'].includes(actionType) && appealLink) {
             row.addComponents(new ButtonBuilder().setLabel('Submit Appeal').setURL(appealLink).setStyle(ButtonStyle.Link).setEmoji('⚖️'));
         }
-        
+
         if (actionType !== 'ban') {
             row.addComponents(new ButtonBuilder().setLabel('Read Server Rules').setURL('https://discord.com').setStyle(ButtonStyle.Link).setEmoji('📜')); // Replace with your default rules link
         }
@@ -137,8 +137,10 @@ module.exports = (client) => {
         // --- ACTIVATE PREMIUM ---
         if (commandName === 'activatepremium') {
             try {
-                if (user.id !== process.env.OWNER_ID) {
-                    return interaction.reply({ content: '❌ Only the global Bot Owner can manage Premium activation.', ephemeral: true });
+                // 👑 MULTI-OWNER CHECK: Verified against client.isOwner()
+                const isOwner = typeof client.isOwner === 'function' ? client.isOwner(user.id) : user.id === process.env.OWNER_ID;
+                if (!isOwner) {
+                    return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
                 }
 
                 await interaction.deferReply({ ephemeral: true });
@@ -165,8 +167,10 @@ module.exports = (client) => {
         // --- DEACTIVATE PREMIUM ---
         if (commandName === 'deactivatepremium' || commandName === 'removepremium') {
             try {
-                if (user.id !== process.env.OWNER_ID) {
-                    return interaction.reply({ content: '❌ Only the global Bot Owner can manage Premium activation.', ephemeral: true });
+                // 👑 MULTI-OWNER CHECK: Verified against client.isOwner()
+                const isOwner = typeof client.isOwner === 'function' ? client.isOwner(user.id) : user.id === process.env.OWNER_ID;
+                if (!isOwner) {
+                    return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
                 }
 
                 await interaction.deferReply({ ephemeral: true });
