@@ -158,6 +158,10 @@ const commands = [
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [
         { name: 'channel', type: 7, required: true, description: 'Channel for logs' }
     ] },
+    { name: 'setlevelchannel', description: 'Set a specific channel for level-up notifications', default_member_permissions: ADMIN, options: [
+        { name: 'channel', type: 7, required: true, description: 'The channel to send level-up alerts to' }
+    ] },
+
     { name: 'setupvc', description: 'Configure a join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [
         { name: 'channel', type: 7, required: true, description: 'Voice channel to use as the hub' }
     ] },
