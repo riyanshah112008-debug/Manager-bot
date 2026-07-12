@@ -26,6 +26,7 @@ module.exports = (client) => {
         const owners = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
         return owners.includes(userId);
     };
+
     // ==========================================
     // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
     // ==========================================
@@ -72,12 +73,10 @@ module.exports = (client) => {
         return channel || null;
     };
 
-
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE (REPAIRED)
     // ==========================================
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
-        // Discord strictly prohibits DMing bots. Immediately abort to prevent API errors.
         if (member.user.bot) {
             console.log(`[Mod DM] Skipped DMing ${member.user.tag} because they are a bot.`);
             return false;
@@ -271,7 +270,6 @@ module.exports = (client) => {
     // 3. INTERACTIVE BUTTON & MODAL DEV PANEL
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        // 👑 MULTI-OWNER CHECK APPLIED HERE
         if (!client.isOwner(interaction.user.id)) {
             if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
             return;
@@ -349,10 +347,7 @@ module.exports = (client) => {
         const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
         const hasName = text.includes('starry');
-        
-        // 👑 MULTI-OWNER CHECK APPLIED HERE
         const isOwner = client.isOwner(message.author.id);
-        
         let isReplyToBot = false;
 
         if (message.reference) {
@@ -394,7 +389,8 @@ module.exports = (client) => {
         // 5. GEMINI EXECUTION & NLP MODERATION
         // ==========================================
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).\nRULE 5: For commands: [RUN:.imagine penguin]\nRULE 6: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+            // 🟢 UPDATED PROMPT: Added RULE 5 for CHECK_INACTIVE
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are Starry, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if the channel should be public).\nRULE 5: To check for inactive users who have sent 0 messages: [CMD:CHECK_INACTIVE]\nRULE 6: For commands: [RUN:.imagine penguin]\nRULE 7: Keep casual chat highly concise and direct. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
             const isCodingRequest = /(code|script|c\+\+|vb|vbscript|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
             let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
             let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
@@ -423,7 +419,8 @@ module.exports = (client) => {
                 client.emit('messageCreate', message); if (replyText.length === 0) return;
             }
 
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL)(?:\|(.*?))?\]/i);
+            // 🟢 UPDATED REGEX: Added CHECK_INACTIVE listener
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL|CHECK_INACTIVE)(?:\|(.*?))?\]/i);
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase(); const params = (cmdMatch[2] || '').split('|');
                 const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
@@ -441,14 +438,18 @@ module.exports = (client) => {
                 else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.roleId = getParam('ROLE_ID'); }
                 else if (action === 'USERALLOW' || action === 'USERDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.userId = getParam('USER_ID'); }
                 else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); args.roleId = getParam('ROLE_ID'); }
+                // 🟢 NEW ACTION ROUTE
+                else if (action === 'CHECK_INACTIVE') { functionName = 'check_inactive'; }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
                 const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
+
             // Moderation Action Execution
             if (functionName) {
                 const permErr = "❌ Missing permissions.";
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
+
                 if (['channel_allow', 'channel_deny', 'user_allow', 'user_deny', 'create_channel'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageChannels)) return message.reply(permErr);
                     if (functionName === 'create_channel') {
@@ -478,6 +479,31 @@ module.exports = (client) => {
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
                     await message.channel.bulkDelete(Math.min(args.amount || 0, 100) + 1, true).catch(()=>{});
                     return message.channel.send(`🧹 Cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete(), 3000));
+                }
+
+                // 🟢 INACTIVE USER SCANNER EXECUTION
+                if (functionName === 'check_inactive') {
+                    if (!hasPerm(PermissionFlagsBits.ModerateMembers)) return message.reply("❌ You need Moderate Members permissions to scan the database.");
+                    
+                    const gCache = client.trackerCache ? client.trackerCache[message.guild.id] : null;
+                    if (!gCache || Object.keys(gCache).length === 0) {
+                        return message.reply("📊 **Inactivity Scan:** The tracking database for this server is currently empty. I need to track users for up to 14 days first.");
+                    }
+
+                    let inactiveList = [];
+                    for (const userId in gCache) {
+                        const s = gCache[userId].stats;
+                        if ((s.msgs + s.media + s.links + s.voice + s.reacts + s.invites) === 0) {
+                            inactiveList.push(`<@${userId}>`);
+                        }
+                    }
+
+                    if (inactiveList.length === 0) {
+                        return message.reply("✅ **Inactivity Scan:** Everyone I am currently tracking has been active!");
+                    } else {
+                        const report = `⚠️ **Inactivity Scan:** I found **${inactiveList.length}** users currently being tracked who have 0 interactions:\n\n${inactiveList.join(', ')}`;
+                        return message.reply(report.substring(0, 1999));
+                    }
                 }
 
                 const tId = (args.userId||'').replace(/\D/g, '');
@@ -522,8 +548,6 @@ module.exports = (client) => {
             }
         } catch (error) {
             console.error("Gemini AI error:", error);
-            
-            // 👑 MULTI-OWNER ERROR LOGGING FIX
             if (error.status === 429) {
                 const ownerIds = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
                 for (const ownerId of ownerIds) {
@@ -536,9 +560,7 @@ module.exports = (client) => {
                 }
                 return message.reply("⏳ **Starry is taking a quick breather!** We hit the free-tier rate limit. Try again in a minute!").catch(console.error);
             }
-            
             return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\``).catch(console.error);
         }
     }); 
-}; // <--- Module correctly closed
-
+};
