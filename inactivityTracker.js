@@ -18,7 +18,7 @@ function saveTrackerData() {
         if (err) console.error('❌ Failed to save tracker data:', err);
     });
 }
-setInterval(saveTrackerData, 60 * 1000);
+setInterval(saveTrackerData, 60 * 1000); // Auto-save every 60 seconds
 
 function getAccountAge(createdAt) {
     const diffDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
@@ -28,6 +28,9 @@ function getAccountAge(createdAt) {
 }
 
 module.exports = (client) => {
+    // 🟢 DATA BRIDGE: Attach cache to client so starry.js can run [CMD:CHECK_INACTIVE]
+    client.trackerCache = trackerCache;
+
     const invitesCache = new Map();
 
     client.on('clientReady', async () => {
@@ -37,13 +40,8 @@ module.exports = (client) => {
                 invitesCache.set(guild.id, new Map(invites.map(inv => [inv.code, inv.uses])));
             } catch (err) {}
         });
-        console.log('✅ Premium 14-Day Activity Tracker Loaded (Using Global Router).');
+        console.log('✅ Premium 14-Day Activity Tracker Loaded (Universal Router & AI Bridge Active).');
     });
-module.exports = (client) => {
-    client.trackerCache = trackerCache; // 🟢 Add this line!
-    
-    const invitesCache = new Map();
-    // ... rest of your code ...
 
     client.on('inviteCreate', (invite) => {
         if (!invitesCache.has(invite.guild.id)) invitesCache.set(invite.guild.id, new Map());
@@ -51,7 +49,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 📥 1. USER JOINS: START LIVE TRACKING
+    // 📥 1. USER JOINS: START LIVE TRACKING (PREMIUM ONLY)
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
@@ -80,7 +78,7 @@ module.exports = (client) => {
         // 🧭 GLOBAL SMART ROUTE: Request the 'access' log channel
         const logChannel = trackerCache[guild.id]?.customLogChannel 
             ? guild.channels.cache.get(trackerCache[guild.id].customLogChannel) 
-            : client.getLogChannel(guild, 'access');
+            : (typeof client.getLogChannel === 'function' ? client.getLogChannel(guild, 'access') : null);
 
         let trackingMsgId = null;
         const joinedAtMs = Date.now();
@@ -140,7 +138,6 @@ module.exports = (client) => {
             } catch (err) {}
         }
     }
-
     // ==========================================
     // 🎧 3. EVENT LISTENERS
     // ==========================================
@@ -173,10 +170,9 @@ module.exports = (client) => {
             const guild = client.guilds.cache.get(guildId);
             if (!guild) continue;
 
-            // 🧭 GLOBAL SMART ROUTE: Request the 'access' log channel
             const logChannel = trackerCache[guildId]?.customLogChannel 
                 ? guild.channels.cache.get(trackerCache[guildId].customLogChannel) 
-                : client.getLogChannel(guild, 'access');
+                : (typeof client.getLogChannel === 'function' ? client.getLogChannel(guild, 'access') : null);
 
             for (const userId in trackerCache[guildId]) {
                 const userRecord = trackerCache[guildId][userId];
@@ -245,10 +241,9 @@ module.exports = (client) => {
         const mockJoinUnix = Math.floor((Date.now() - (14 * 24 * 60 * 60 * 1000)) / 1000); 
         const accountAge = getAccountAge(targetMember.user.createdAt);
 
-        // Test the Global Smart Router in this server
         const logChannel = trackerCache[message.guild.id]?.customLogChannel 
             ? message.guild.channels.cache.get(trackerCache[message.guild.id].customLogChannel) 
-            : client.getLogChannel(message.guild, 'access');
+            : (typeof client.getLogChannel === 'function' ? client.getLogChannel(message.guild, 'access') : null);
             
         const destinationText = logChannel ? `**Destination Channel:** ${logChannel}` : `**Destination Channel:** ❌ None found!`;
 
@@ -262,4 +257,4 @@ module.exports = (client) => {
 
         await message.channel.send({ content: `<@${mockInviter.id}>\nThe user <@${targetMember.id}> had no interaction within 14 days after joining.`, embeds: [testEmbed] });
     });
-};
+}; // <--- Correctly closed!
