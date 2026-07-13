@@ -100,7 +100,7 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // ==========================================
-// 5. MASTER MODULE LOADER
+// 5. HELPER FUNCTION TO LOAD MODULES
 // ==========================================
 const loadModule = (name, filePath) => {
     try {
@@ -111,69 +111,79 @@ const loadModule = (name, filePath) => {
     }
 };
 
-loadModule('Moderation', './moderation.js');
-loadModule('Automod', './automod.js');
-loadModule('Media Only', './mediaOnly.js');
-loadModule('Premium', './premium.js');
-loadModule('Translator', './translator.js');
-loadModule('Reaction Roles', './reactionRoles.js'); 
-loadModule('Music', './music.js');
-loadModule('Help', './help.js');
-loadModule('Leveling', './leveling.js');
-loadModule('Starry Protocol', './starry.js');
-loadModule('Link Blocker', './linkBlocker.js');
-loadModule('Truth or Dare', './truthOrDare.js');
-loadModule('Support Tickets', './tickets.js');
-loadModule('Warnings DB', './warnings.js');
-loadModule('Invite Tracker', './inviteTracker.js');
-loadModule('Sus Account Detector', './susAccount.js');
-loadModule('Whois Lookup', './whois.js');
-loadModule('Emoji Blocker', './emojiBlocker.js');
-loadModule('Message Purger', './clear.js');
-loadModule('Bump Tracker', './bumpTracker.js');
-loadModule('Server Stats', './serverStats.js');
-loadModule('AFK System', './afk.js');
-loadModule('Server Logs', './logs.js'); 
-loadModule('Giveaway', './giveaway.js'); 
-loadModule('Counting Game', './count.js');
-loadModule('Advanced Mod & Security', './advancedMod.js');
-loadModule('Interactive Mod Panel', './modPanel.js');
-loadModule('Reputation System', './rep.js');
-loadModule('Voice Channel Manager', './voiceManager.js');
-loadModule('Emoji Stealer', './steal.js');
-loadModule('Welcome System', './welcome.js');
-loadModule('User Protection', './protect.js');
-loadModule('Goodbye System', './goodbye.js');
-loadModule('Role Manager', './roleManager.js');
-loadModule('Anti-Abuse', './antiAbuse.js');
-loadModule('Inactivity Tracker ', './inactivityTracker.js');
 // ==========================================
-// 6. CONNECT TO MONGODB
+// 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
-if (!process.env.MONGO_URI) {
-    console.error("🛑 CRITICAL ERROR: The MONGO_URI is missing from the Environment Variables!");
-    process.exit(1);
+async function startBot() {
+    // 1. Validate Environment Variables
+    if (!process.env.MONGO_URI) {
+        console.error("🛑 CRITICAL ERROR: The MONGO_URI is missing from the Environment Variables!");
+        process.exit(1);
+    }
+    if (!process.env.TOKEN) {
+        console.error("🛑 CRITICAL ERROR: The TOKEN is missing from the Environment Variables!");
+        process.exit(1);
+    }
+
+    try {
+        // 2. Connect to MongoDB FIRST and wait for it to finish
+        await mongoose.connect(process.env.MONGO_URI);
+        console.log('🍃 Successfully connected to MongoDB Cloud!');
+
+        // 3. Load modules ONLY AFTER the database is ready
+        loadModule('Moderation', './moderation.js');
+        loadModule('Automod', './automod.js');
+        loadModule('Media Only', './mediaOnly.js');
+        loadModule('Premium', './premium.js');
+        loadModule('Translator', './translator.js');
+        loadModule('Reaction Roles', './reactionRoles.js'); 
+        loadModule('Music', './music.js');
+        loadModule('Help', './help.js');
+        loadModule('Leveling', './leveling.js');
+        loadModule('Starry Protocol', './starry.js');
+        loadModule('Link Blocker', './linkBlocker.js');
+        loadModule('Truth or Dare', './truthOrDare.js');
+        loadModule('Support Tickets', './tickets.js');
+        loadModule('Warnings DB', './warnings.js');
+        loadModule('Invite Tracker', './inviteTracker.js');
+        loadModule('Sus Account Detector', './susAccount.js');
+        loadModule('Whois Lookup', './whois.js');
+        loadModule('Emoji Blocker', './emojiBlocker.js');
+        loadModule('Message Purger', './clear.js');
+        loadModule('Bump Tracker', './bumpTracker.js');
+        loadModule('Server Stats', './serverStats.js');
+        loadModule('AFK System', './afk.js');
+        loadModule('Server Logs', './logs.js'); 
+        loadModule('Giveaway', './giveaway.js'); 
+        loadModule('Counting Game', './count.js');
+        loadModule('Advanced Mod & Security', './advancedMod.js');
+        loadModule('Interactive Mod Panel', './modPanel.js');
+        loadModule('Reputation System', './rep.js');
+        loadModule('Voice Channel Manager', './voiceManager.js');
+        loadModule('Emoji Stealer', './steal.js');
+        loadModule('Welcome System', './welcome.js');
+        loadModule('User Protection', './protect.js');
+        loadModule('Goodbye System', './goodbye.js');
+        loadModule('Role Manager', './roleManager.js');
+        loadModule('Anti-Abuse', './antiAbuse.js');
+        loadModule('Inactivity Tracker ', './inactivityTracker.js');
+
+        // 4. Auto-deploy slash commands if configured
+        console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
+        if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
+            console.log("🔄 Auto-deploying commands...");
+            const { deployCommands } = require('./deploy-commands.js');
+            await deployCommands().catch(err => console.error("❌ Auto-deploy failed:", err));
+        }
+
+        // 5. Finally, log in to Discord
+        await client.login(process.env.TOKEN);
+
+    } catch (error) {
+        console.error("🛑 FATAL BOOTSTRAP ERROR:", error.message || error);
+        process.exit(1);
+    }
 }
 
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('🍃 Successfully connected to MongoDB Cloud!'))
-    .catch((err) => console.error('❌ MongoDB Connection Error:', err));
-// ==========================================
-// 7. LOGIN TO DISCORD
-// ==========================================
-if (!process.env.TOKEN) {
-    console.error("🛑 CRITICAL ERROR: The TOKEN is missing from the Environment Variables!");
-    process.exit(1);
-}
-
-console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
-
-if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
-    console.log("🔄 Auto-deploying commands...");
-    const { deployCommands } = require('./deploy-commands.js');
-    deployCommands().catch(err => console.error("❌ Auto-deploy failed:", err));
-} // <--- THIS WAS THE MISSING BRACKET
-
-client.login(process.env.TOKEN).catch(err => {
-    console.error("🛑 DISCORD LOGIN FAILED:", err.message || err);
-});
+// Start the bot!
+startBot();
