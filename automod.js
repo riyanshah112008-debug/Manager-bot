@@ -23,8 +23,10 @@ module.exports = (client) => {
     const linkPattern = /https?:\/\/\S+/g;
     const emojiPattern = /<a?:[a-zA-Z0-9_]+:[0-9]+>|[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
 
+    // ✨ EXPANDED: Added shorteners (tenor.co, gph.is), Imgur, and Klipy
     const allowedDomains = [
-        'tenor.com', 'giphy.com', 'discord.com', 'discordapp.com', 
+        'tenor.com', 'tenor.co', 'giphy.com', 'gph.is', 'imgur.com', 'klipy.co',
+        'gfycat.com', 'redgifs.com', 'discord.com', 'discordapp.com', 
         'discordapp.net', 'media.discordapp.net', 'cdn.discordapp.com'
     ];
 
@@ -32,7 +34,7 @@ module.exports = (client) => {
         try {
             const gSettings = await AutomodGuild.find();
             gSettings.forEach(s => guildCache.set(s.guildId, s.enabled));
-            
+
             const cSettings = await AutomodChannel.find();
             cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
             console.log('✅ Automod Module Loaded (MongoDB Synced & Staff Bypass Active)');
@@ -44,10 +46,10 @@ module.exports = (client) => {
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
-        
+
         const isOwner = typeof client.isOwner === 'function' ? client.isOwner(interaction.user.id) : interaction.user.id === OWNER_ID;
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
-        
+
         if (['automod', 'ignore', 'unignore'].includes(interaction.commandName) && !isAdmin && !isOwner) {
             return interaction.reply({ content: '❌ You need **Administrator** permissions.', ephemeral: true }).catch(()=>{});
         }
@@ -56,7 +58,7 @@ module.exports = (client) => {
 
         if (interaction.commandName === 'automod') {
             const action = interaction.options.getString('action');
-            
+
             if (action === 'status') {
                 const isEnabled = guildCache.has(guildId) ? guildCache.get(guildId) : true;
                 return interaction.reply(`📢 **Server-Wide Automod Status:** ${isEnabled ? '🟢 Enabled' : '🔴 Disabled'}`).catch(()=>{});
@@ -65,7 +67,7 @@ module.exports = (client) => {
             const targetState = action === 'enable';
             await AutomodGuild.findOneAndUpdate({ guildId }, { enabled: targetState }, { upsert: true });
             guildCache.set(guildId, targetState);
-            
+
             return interaction.reply(`${targetState ? '✅' : '🚫'} Automod has been **${action.toUpperCase()}D** for this entire server.`).catch(()=>{});
         }
 
@@ -83,7 +85,7 @@ module.exports = (client) => {
             const targetState = interaction.commandName === 'ignore';
             if (type === 'links' || type === 'all') cSettings.links = targetState;
             if (type === 'emojis' || type === 'all') cSettings.emojis = targetState;
-            
+
             await AutomodChannel.findOneAndUpdate({ channelId }, { links: cSettings.links, emojis: cSettings.emojis }, { upsert: true });
             channelCache.set(channelId, cSettings);
 
@@ -105,7 +107,7 @@ module.exports = (client) => {
             message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)
         );
         const isOwner = typeof client.isOwner === 'function' ? client.isOwner(message.author.id) : message.author.id === OWNER_ID;
-        
+
         if (isStaff || isOwner || message.author.id === message.guild.ownerId) return;
 
         // Ignore prefix commands
@@ -122,7 +124,11 @@ module.exports = (client) => {
         const links = rawLinks.filter(link => {
             const url = link.toLowerCase();
             const isSafeDomain = allowedDomains.some(domain => url.includes(domain));
-            return !isSafeDomain && !url.endsWith('.gif');
+            
+            // ✨ FIXED: Checks for .gif, .gifv, .webp, or .mp4 extensions while safely ignoring query parameters (?xyz), fragments (#xyz), and trailing punctuation
+            const isGifOrMedia = /\.(gif|gifv|webp|mp4)(?:[?#.!>),]|$)/i.test(url);
+            
+            return !isSafeDomain && !isGifOrMedia;
         });
 
         const emojis = message.content.match(emojiPattern) || [];
