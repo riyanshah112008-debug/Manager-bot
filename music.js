@@ -11,7 +11,7 @@ module.exports = (client) => {
         if (!extractorLoadPromise) {
             extractorLoadPromise = (async () => {
                 try {
-                    // Load all default extractors (bypasses Render's IP blocks by offering multiple fallback bridges)
+                    // Load all default extractors
                     await player.extractors.loadMulti(DefaultExtractors);
                     console.log('✅ All Cloud-Friendly Audio Extractors loaded successfully.');
                 } catch (error) {
@@ -148,8 +148,8 @@ module.exports = (client) => {
                 try {
                     const result = await player.play(voiceChannel, query, {
                         requestedBy: interaction.user,
-                        // 🔧 CRITICAL FIX: Explicitly set the search engine instead of prefixing the string!
-                        searchEngine: isUrl(query) ? 'auto' : 'spotifySearch', 
+                        // 🔧 CRITICAL FIX: Use Apple Music for searches. Spotify requires an API key in v7!
+                        searchEngine: isUrl(query) ? 'auto' : 'appleMusicSearch', 
                         nodeOptions: {
                             metadata: { 
                                 channel: interaction.channel, 
