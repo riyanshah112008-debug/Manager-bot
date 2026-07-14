@@ -27,6 +27,7 @@
     "mediaplex": "^0.0.9",
     "mongoose": "^8.4.0",
     "opusscript": "^0.1.1",
-    "undici": "^6.19.8"
+    "undici": "^6.19.8",
+    "@snazzah/davey": "^0.1.2"
   }
 }
