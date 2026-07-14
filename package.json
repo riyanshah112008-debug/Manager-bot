@@ -24,7 +24,9 @@
     "google-translate-api-x": "^10.6.0",
     "husky": "latest",
     "libsodium-wrappers": "^0.7.13",
+    "mediaplex": "^0.0.9",
     "mongoose": "^8.4.0",
+    "opusscript": "^0.1.1",
     "undici": "^6.19.8"
   }
 }
