@@ -148,8 +148,8 @@ module.exports = (client) => {
                 try {
                     const result = await player.play(voiceChannel, query, {
                         requestedBy: interaction.user,
-                        // 🔧 CRITICAL FIX: Use Apple Music for searches. Spotify requires an API key in v7!
-                        searchEngine: isUrl(query) ? 'auto' : 'appleMusicSearch', 
+                        // 🔧 CRITICAL FIX: Use SoundCloud for text searches to bypass Render IP blocks
+                        searchEngine: isUrl(query) ? 'auto' : 'soundcloudSearch', 
                         nodeOptions: {
                             metadata: { 
                                 channel: interaction.channel, 
