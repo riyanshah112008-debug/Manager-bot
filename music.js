@@ -41,23 +41,25 @@ module.exports = (client) => {
         return extractorLoadPromise;
     };
 
-    client.once('ready', () => {
+    client.once('clientReady', () => {
         ensureExtractors().catch((error) => {
             console.error('❌ Failed to load music extractors on startup:', error);
         });
     });
 
-    // Log all player events for debugging
+    // =====================================================================
+    // 🔊 PLAYER EVENT LISTENERS (With Enhanced Debugging)
+    // =====================================================================
     player.events.on('error', (queue, error) => {
-        console.error('🔴 [Player Error]', error.message || error);
+        console.error('🔴 [Player Error]:', error.message || error);
     });
-    
+
     player.events.on('playerError', (queue, error) => {
-        console.error('🔴 [Audio Stream Error]', error.message || error);
+        console.error('🔴 [Audio Stream Error]:', error.message || error);
     });
-    
+
     player.events.on('playerStart', (queue, track) => {
-        console.log('🎵 [playerStart Event] Track:', track.title);
+        console.log('🎵 [playerStart Event] Track started:', track.title);
         const metadata = queue.metadata || {};
         const textChannel = metadata.channel;
         if (!textChannel?.send) {
@@ -91,7 +93,6 @@ module.exports = (client) => {
         const permissions = channel.permissionsFor(botMember);
         const hasConnect = permissions?.has(PermissionsBitField.Flags.Connect);
         const hasSpeak = permissions?.has(PermissionsBitField.Flags.Speak);
-        console.log(`✓ Channel Permissions - Connect: ${hasConnect}, Speak: ${hasSpeak}`);
         return hasConnect && hasSpeak;
     };
 
@@ -99,6 +100,9 @@ module.exports = (client) => {
     const isUrl = (query) => /^https?:\/\//i.test(query);
     const getPlayableQuery = (query) => isUrl(query) ? query : `scsearch:${query}`;
 
+    // =====================================================================
+    // 🎮 SLASH COMMAND HANDLING
+    // =====================================================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
@@ -146,31 +150,18 @@ module.exports = (client) => {
                     return interaction.editReply({ content: '❌ Music system failed to initialize. Please try again later.' });
                 }
 
-                // Check if server-muted
                 const botVoiceState = interaction.guild.members.me?.voice;
                 if (botVoiceState?.serverMute) {
                     return interaction.editReply({ content: '❌ The bot is server-muted. Ask a server administrator to unmute the bot in the voice channel.' });
                 }
 
                 const playableQuery = getPlayableQuery(query);
-                console.log(`🔍 [PLAY] Playable query: "${playableQuery}"`);
+                console.log(`🔍 [PLAY] Executing instant play for: "${playableQuery}"`);
 
                 try {
-                    // 🔧 FIX: Use player.search() FIRST to validate the track exists
-                    console.log('🔍 Searching for track...');
-                    const searchResult = await player.search(playableQuery, {
-                        requestedBy: interaction.user
-                    });
-
-                    if (!searchResult || searchResult.tracks.length === 0) {
-                        console.log('❌ No tracks found in search');
-                        return interaction.editReply({ content: '❌ No tracks found. Try a different search term.' });
-                    }
-
-                    console.log(`✅ Found ${searchResult.tracks.length} track(s). Playing first: ${searchResult.tracks[0].title}`);
-
-                    // 🔧 FIX: Now play the track
-                    const result = await player.play(voiceChannel, searchResult.tracks[0], {
+                    // ⚡ SPEED & STREAM FIX: Pass playableQuery directly into player.play()!
+                    // This eliminates the redundant search step and starts stream extraction immediately.
+                    const result = await player.play(voiceChannel, playableQuery, {
                         requestedBy: interaction.user,
                         nodeOptions: {
                             metadata: { 
@@ -179,7 +170,7 @@ module.exports = (client) => {
                                 guildId: interaction.guildId
                             },
                             volume: 80,
-                            selfDeaf: false,
+                            selfDeaf: true, // 🔧 CRITICAL FIX: Must be true to prevent Discord UDP handshake stalls!
                             bufferingTimeout: 15000,
                             leaveOnEmpty: true,
                             leaveOnEmptyCooldown: 300000,
@@ -190,18 +181,22 @@ module.exports = (client) => {
                         }
                     });
 
-                    console.log('✅ Track queued:', result?.track?.title);
+                    const track = result.track;
+                    if (!track) {
+                        return interaction.editReply({ content: '❌ Could not find or stream any track matching your search.' });
+                    }
 
-                    const trackTitle = result?.track?.title || 'Unknown track';
+                    console.log('✅ Track queued successfully:', track.title);
+
                     return interaction.editReply({
                         embeds: [new EmbedBuilder()
                             .setColor('#3BA55C')
-                            .setDescription(`✅ Added **${trackTitle}** to the queue.`)]
+                            .setDescription(`✅ Added **${track.title}** to the queue.`)]
                     });
 
                 } catch (playError) {
-                    console.error('🔴 Play error:', playError.message);
-                    return interaction.editReply({ content: `❌ Failed to play track: \`${playError.message.slice(0, 200)}\`` });
+                    console.error('🔴 Play error:', playError);
+                    return interaction.editReply({ content: `❌ Failed to play track: \`${playError.message?.slice(0, 200) || 'Stream extraction failed'}\`` });
                 }
             }
 
