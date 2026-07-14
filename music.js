@@ -1,7 +1,8 @@
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { SoundCloudExtractor, SpotifyExtractor } = require('@discord-player/extractor');
+// 🔧 FIX: Import DefaultExtractors to unlock cloud-friendly streaming providers
+const { DefaultExtractors } = require('@discord-player/extractor');
 
 module.exports = (client) => {
     const player = client.player;
@@ -11,24 +12,10 @@ module.exports = (client) => {
         if (!extractorLoadPromise) {
             extractorLoadPromise = (async () => {
                 try {
-                    // 1. Register SoundCloud (with fallback if credentials missing)
-                    await player.extractors.register(SoundCloudExtractor, {
-                        clientId: process.env.SOUNDCLOUD_CLIENT_ID || undefined,
-                        oauthToken: process.env.SOUNDCLOUD_OAUTH_TOKEN || undefined
-                    });
-                    console.log('🎶 SoundCloud Extractor loaded');
-
-                    // 2. Register Spotify (only if credentials available)
-                    if (process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET) {
-                        await player.extractors.register(SpotifyExtractor, {
-                            clientId: process.env.SPOTIFY_CLIENT_ID,
-                            clientSecret: process.env.SPOTIFY_CLIENT_SECRET
-                        });
-                        console.log('🎶 Spotify Extractor loaded');
-                    } else {
-                        console.warn('⚠️ Spotify credentials missing - Spotify URLs will not work');
-                    }
-                    console.log('✅ Audio Extractors ready (YouTube fully bypassed).');
+                    // 🔧 FIX: Load all default extractors (Apple Music, JioSaavn, Deezer, etc.)
+                    // This bypasses SoundCloud's data-center IP blocks on Render!
+                    await player.extractors.loadMulti(DefaultExtractors);
+                    console.log('✅ All Cloud-Friendly Audio Extractors loaded successfully.');
                 } catch (error) {
                     console.error('❌ Extractor registration error:', error);
                     throw error;
@@ -58,7 +45,6 @@ module.exports = (client) => {
         console.error('🔴 [Audio Stream Error]:', error.message || error);
     });
 
-    // 🔧 ADDED: Internal player debugging to capture stream transitions and silent errors
     player.events.on('debug', (queue, message) => {
         console.log(`🪲 [Player Debug]: ${message}`);
     });
@@ -103,7 +89,9 @@ module.exports = (client) => {
 
     const isYouTubeUrl = (query) => /(?:youtube\.com|youtu\.be)/i.test(query);
     const isUrl = (query) => /^https?:\/\//i.test(query);
-    const getPlayableQuery = (query) => isUrl(query) ? query : `scsearch:${query}`;
+    
+    // 🔧 FIX: Swapped 'scsearch:' for 'appleMusicSearch:' to prevent IP-blocks on Render!
+    const getPlayableQuery = (query) => isUrl(query) ? query : `appleMusicSearch:${query}`;
 
     // =====================================================================
     // 🎮 SLASH COMMAND HANDLING
