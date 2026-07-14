@@ -1,7 +1,6 @@
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-// 🔧 FIX: Import DefaultExtractors to unlock cloud-friendly streaming providers
 const { DefaultExtractors } = require('@discord-player/extractor');
 
 module.exports = (client) => {
@@ -12,8 +11,7 @@ module.exports = (client) => {
         if (!extractorLoadPromise) {
             extractorLoadPromise = (async () => {
                 try {
-                    // 🔧 FIX: Load all default extractors (Apple Music, JioSaavn, Deezer, etc.)
-                    // This bypasses SoundCloud's data-center IP blocks on Render!
+                    // Load all default extractors (bypasses Render's IP blocks by offering multiple fallback bridges)
                     await player.extractors.loadMulti(DefaultExtractors);
                     console.log('✅ All Cloud-Friendly Audio Extractors loaded successfully.');
                 } catch (error) {
@@ -89,9 +87,6 @@ module.exports = (client) => {
 
     const isYouTubeUrl = (query) => /(?:youtube\.com|youtu\.be)/i.test(query);
     const isUrl = (query) => /^https?:\/\//i.test(query);
-    
-    // 🔧 FIX: Swapped 'scsearch:' for 'appleMusicSearch:' to prevent IP-blocks on Render!
-    const getPlayableQuery = (query) => isUrl(query) ? query : `appleMusicSearch:${query}`;
 
     // =====================================================================
     // 🎮 SLASH COMMAND HANDLING
@@ -148,12 +143,13 @@ module.exports = (client) => {
                     return interaction.editReply({ content: '❌ The bot is server-muted. Ask a server administrator to unmute the bot in the voice channel.' });
                 }
 
-                const playableQuery = getPlayableQuery(query);
-                console.log(`🔍 [PLAY] Executing instant play for: "${playableQuery}"`);
+                console.log(`🔍 [PLAY] Executing instant play for: "${query}"`);
 
                 try {
-                    const result = await player.play(voiceChannel, playableQuery, {
+                    const result = await player.play(voiceChannel, query, {
                         requestedBy: interaction.user,
+                        // 🔧 CRITICAL FIX: Explicitly set the search engine instead of prefixing the string!
+                        searchEngine: isUrl(query) ? 'auto' : 'spotifySearch', 
                         nodeOptions: {
                             metadata: { 
                                 channel: interaction.channel, 
