@@ -58,6 +58,11 @@ module.exports = (client) => {
         console.error('🔴 [Audio Stream Error]:', error.message || error);
     });
 
+    // 🔧 ADDED: Internal player debugging to capture stream transitions and silent errors
+    player.events.on('debug', (queue, message) => {
+        console.log(`🪲 [Player Debug]: ${message}`);
+    });
+
     player.events.on('playerStart', (queue, track) => {
         console.log('🎵 [playerStart Event] Track started:', track.title);
         const metadata = queue.metadata || {};
@@ -159,8 +164,6 @@ module.exports = (client) => {
                 console.log(`🔍 [PLAY] Executing instant play for: "${playableQuery}"`);
 
                 try {
-                    // ⚡ SPEED & STREAM FIX: Pass playableQuery directly into player.play()!
-                    // This eliminates the redundant search step and starts stream extraction immediately.
                     const result = await player.play(voiceChannel, playableQuery, {
                         requestedBy: interaction.user,
                         nodeOptions: {
@@ -170,7 +173,7 @@ module.exports = (client) => {
                                 guildId: interaction.guildId
                             },
                             volume: 80,
-                            selfDeaf: true, // 🔧 CRITICAL FIX: Must be true to prevent Discord UDP handshake stalls!
+                            selfDeaf: true,
                             bufferingTimeout: 15000,
                             leaveOnEmpty: true,
                             leaveOnEmptyCooldown: 300000,
