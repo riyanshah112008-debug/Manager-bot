@@ -23,7 +23,41 @@ const commands = [
     ] },
 
     // ================= UNIFIED MODERATION =================
-    {
+ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('tracker')
+        .setDescription('Manage the 14-day inactivity tracker and historical scraper')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        
+        // Subcommand 1: Setup
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('setup')
+                .setDescription('Setup the 14-day inactivity log channel')
+                .addChannelOption(option =>
+                    option.setName('channel')
+                        .setDescription('The channel to send 14-day inactivity alerts to')
+                        .setRequired(true)))
+                        
+        // Subcommand 2: Scrape (Premium)
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('scrape')
+                .setDescription('Premium: Scrape historical messages into MongoDB')
+                .addChannelOption(option =>
+                    option.setName('private_channel')
+                        .setDescription('The private channel for the live scraping dashboard')
+                        .setRequired(true))),
+                        
+    async execute(interaction) {
+        // Leave this empty or standard if your execution logic 
+        // is being handled inside inactivityTracker.js
+    }
+};
+
+   {
         name: 'moderate',
         description: 'Configure moderation and protection modules',
         default_member_permissions: ADMIN,
