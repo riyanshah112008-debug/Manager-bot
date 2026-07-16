@@ -145,7 +145,7 @@ async function startBot() {
         loadModule('Truth or Dare', './truthOrDare.js');
         loadModule('Support Tickets', './tickets.js');
         loadModule('Warnings DB', './warnings.js');
-        loadModule('Invite Tracker', './inviteTracker.js');
+        loadModule('Tracker', './tracker.js');
         loadModule('Sus Account Detector', './susAccount.js');
         loadModule('Whois Lookup', './whois.js');
         loadModule('Emoji Blocker', './emojiBlocker.js');
@@ -166,8 +166,7 @@ async function startBot() {
         loadModule('Goodbye System', './goodbye.js');
         loadModule('Role Manager', './roleManager.js');
         loadModule('Anti-Abuse', './antiAbuse.js');
-        loadModule('Inactivity Tracker ', './inactivityTracker.js');
-
+        
         // 4. Auto-deploy slash commands if configured
         console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
         if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
