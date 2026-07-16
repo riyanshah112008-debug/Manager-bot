@@ -18,21 +18,8 @@ module.exports = (client) => {
         return await UserActivity.findOne({ guildId, userId });
     };
 
-    const invitesCache = new Map();
-
-    client.on('clientReady', async () => {
-        client.guilds.cache.forEach(async (guild) => {
-            try {
-                const invites = await guild.invites.fetch();
-                invitesCache.set(guild.id, new Map(invites.map(inv => [inv.code, inv.uses])));
-            } catch (err) {}
-        });
-        console.log('✅ Premium 14-Day Tracker & Historical Scraper Loaded (MongoDB + Universal Router Active).');
-    });
-
-    client.on('inviteCreate', (invite) => {
-        if (!invitesCache.has(invite.guild.id)) invitesCache.set(invite.guild.id, new Map());
-        invitesCache.get(invite.guild.id).set(invite.code, invite.uses);
+    client.on('clientReady', () => {
+        console.log('✅ Premium 14-Day Tracker & Historical Scraper Loaded (MongoDB Active | Invite Cache Stripped for API Safety).');
     });
 
     // ==========================================
@@ -45,22 +32,10 @@ module.exports = (client) => {
         const isGuildPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
         if (!isGuildPremium) return;
 
-        let inviterId = 'Unknown';
-        let inviteCode = 'Direct/Vanity';
-
-        try {
-            const newInvites = await guild.invites.fetch();
-            const oldInvites = invitesCache.get(guild.id);
-            const usedInvite = newInvites.find(inv => {
-                const oldUses = oldInvites ? oldInvites.get(inv.code) || 0 : 0;
-                return inv.uses > oldUses;
-            });
-            if (usedInvite) {
-                inviterId = usedInvite.inviter ? usedInvite.inviter.id : 'Unknown';
-                inviteCode = usedInvite.code;
-            }
-            invitesCache.set(guild.id, new Map(newInvites.map(inv => [inv.code, inv.uses])));
-        } catch (err) {}
+        // ⚡ API SAFE: We let your standalone Invite Tracker Module handle invite fetching!
+        // This prevents duplicate API calls and stops HTTP 429 rate limit errors.
+        let inviterId = member.inviterId || 'Unknown';
+        let inviteCode = member.inviteCode || 'Tracked by Invite Module';
 
         const settings = await GuildTrackerSettings.findOne({ guildId: guild.id });
         const logChannel = settings?.customLogChannel 
@@ -147,6 +122,7 @@ module.exports = (client) => {
         if (!user.bot && reaction.message.guild) updateActivity(reaction.message.guild, user, { reacts: 1 });
     });
     client.on('inviteCreate', (invite) => {
+        // We only track that the user CREATED an invite as part of their activity score!
         if (invite.inviter && !invite.inviter.bot) updateActivity(invite.guild, invite.inviter, { invites: 1 });
     });
     // ==========================================
