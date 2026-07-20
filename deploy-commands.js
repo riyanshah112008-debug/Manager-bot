@@ -23,41 +23,7 @@ const commands = [
     ] },
 
     // ================= UNIFIED MODERATION =================
- const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('tracker')
-        .setDescription('Manage the 14-day inactivity tracker and historical scraper')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        
-        // Subcommand 1: Setup
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('setup')
-                .setDescription('Setup the 14-day inactivity log channel')
-                .addChannelOption(option =>
-                    option.setName('channel')
-                        .setDescription('The channel to send 14-day inactivity alerts to')
-                        .setRequired(true)))
-                        
-        // Subcommand 2: Scrape (Premium)
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('scrape')
-                .setDescription('Premium: Scrape historical messages into MongoDB')
-                .addChannelOption(option =>
-                    option.setName('private_channel')
-                        .setDescription('The private channel for the live scraping dashboard')
-                        .setRequired(true))),
-                        
-    async execute(interaction) {
-        // Leave this empty or standard if your execution logic 
-        // is being handled inside inactivityTracker.js
-    }
-};
-
-   {
+    {
         name: 'moderate',
         description: 'Configure moderation and protection modules',
         default_member_permissions: ADMIN,
@@ -102,12 +68,12 @@ module.exports = {
     { name: 'clear', description: 'Delete up to 100 recent messages', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'amount', type: 4, required: true, description: 'Number of messages to delete', min_value: 1, max_value: 100 }
     ] },
+    
     // ================= DEVELOPER PANEL =================
     {
         name: 'devpanel',
         description: '💻 Open the interactive developer control panel with clickable buttons'
     },
-
     // ================= WARNINGS =================
     { name: 'warn', description: 'Warn a member', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'target', type: 6, required: true, description: 'Member to warn' },
@@ -119,6 +85,7 @@ module.exports = {
     { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'id', type: 4, required: true, description: 'Warning ID' }
     ] },
+    
     // ================= AUTOMOD =================
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [
         { name: 'action', type: 3, required: true, description: 'Automod action', choices: [
@@ -216,8 +183,7 @@ module.exports = {
         { name: 'winners', type: 4, required: true, description: 'Number of winners', min_value: 1 },
         { name: 'prize', type: 3, required: true, description: 'Giveaway prize' }
     ] },
-    
- 
+
     // ================= LEVELING / COMMUNITY =================
     { name: 'toggleleveling', description: 'Enable or disable the leveling system', default_member_permissions: ADMIN, options: [
         { name: 'state', type: 3, required: false, description: 'Desired state; omit to toggle', choices: [
@@ -274,11 +240,31 @@ module.exports = {
         { name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }
     ] },
     { name: 'premiumcheck', description: 'Check whether this server has Premium' },
-    
-    // NEW TRACKER COMMAND ADDED HERE:
-    { name: 'tracker', description: 'Set a custom log channel for the inactivity tracker', default_member_permissions: MANAGE_GUILD, options: [
-        { name: 'channel', type: 7, required: true, description: 'The channel to send the 14-day inactivity logs to' }
-    ] }
+
+    // CORRECTLY FORMATTED TRACKER COMMAND
+    { 
+        name: 'tracker', 
+        description: 'Manage the 14-day inactivity tracker and historical scraper', 
+        default_member_permissions: MANAGE_GUILD, 
+        options: [
+            {
+                name: 'setup',
+                description: 'Setup the 14-day inactivity log channel',
+                type: 1, // 1 = Subcommand
+                options: [
+                    { name: 'channel', type: 7, required: true, description: 'The channel to send 14-day inactivity alerts to' }
+                ]
+            },
+            {
+                name: 'scrape',
+                description: 'Premium: Scrape historical messages into MongoDB',
+                type: 1, // 1 = Subcommand
+                options: [
+                    { name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' }
+                ]
+            }
+        ] 
+    }
 ];
 
 async function deployCommands() {
