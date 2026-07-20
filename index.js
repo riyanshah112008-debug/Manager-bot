@@ -22,10 +22,10 @@ app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web server listening on port ${port}`);
 
+    // Self-ping every 14 minutes to prevent Render from sleeping
     setInterval(() => {
         const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-hglf.onrender.com';
-        const options = { headers: { 'User-Agent': 'Mozilla/5.0' } };
-        https.get(`${appUrl}/health`, options).on('error', (err) => {
+        https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => {
             console.error('⚠️ Self-ping failed:', err.message);
         });
     }, 840000); 
@@ -61,6 +61,10 @@ const player = new Player(client, {
 });
 client.player = player;
 
+// Added standard player error handlers so music doesn't crash the bot silently
+player.events.on('error', (queue, error) => console.error(`❌ Player Error: ${error.message}`));
+player.events.on('playerError', (queue, error) => console.error(`❌ Audio Engine Error: ${error.message}`));
+
 console.log('🎵 Discord Player initialized with universal bridge enabled');
 
 // ==========================================
@@ -69,8 +73,8 @@ console.log('🎵 Discord Player initialized with universal bridge enabled');
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
 client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
-process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error));
-process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error));
+process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
+process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
 
 // ==========================================
 // 4. BOT READY & INTERACTION LISTENER
@@ -89,12 +93,12 @@ client.on(Events.InteractionCreate, async interaction => {
     try {
         await command.execute(interaction);
     } catch (error) {
-        console.error(error);
+        console.error(`❌ Error executing ${interaction.commandName}:`, error);
         const replyPayload = { content: 'There was an error executing this command!', ephemeral: true };
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(replyPayload);
+            await interaction.followUp(replyPayload).catch(() => {});
         } else {
-            await interaction.reply(replyPayload);
+            await interaction.reply(replyPayload).catch(() => {});
         }
     }
 });
@@ -107,7 +111,8 @@ const loadModule = (name, filePath) => {
         require(filePath)(client);
         console.log(`✅ ${name} Module Loaded`);
     } catch (err) {
-        console.error(`❌ Failed to load ${name}:`, err.message);
+        // UPGRADE: This will now print the exact line where a module is broken!
+        console.error(`❌ Failed to load ${name}:`, err.stack || err);
     }
 };
 
@@ -166,20 +171,21 @@ async function startBot() {
         loadModule('Goodbye System', './goodbye.js');
         loadModule('Role Manager', './roleManager.js');
         loadModule('Anti-Abuse', './antiAbuse.js');
-        
+
         // 4. Auto-deploy slash commands if configured
         console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
         if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
             console.log("🔄 Auto-deploying commands...");
             const { deployCommands } = require('./deploy-commands.js');
-            await deployCommands().catch(err => console.error("❌ Auto-deploy failed:", err));
+            await deployCommands().catch(err => console.error("❌ Auto-deploy failed:\n", err.stack || err));
         }
 
         // 5. Finally, log in to Discord
         await client.login(process.env.TOKEN);
 
     } catch (error) {
-        console.error("🛑 FATAL BOOTSTRAP ERROR:", error.message || error);
+        // UPGRADE: This is the critical fix. It will now print the EXACT FILE and LINE NUMBER causing the crash.
+        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
         process.exit(1);
     }
 }
