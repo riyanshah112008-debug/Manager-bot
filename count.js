@@ -1,20 +1,36 @@
 const { PermissionsBitField } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-const dbPath = path.join(__dirname, 'countData.json');
+const mongoose = require('mongoose');
+
+// 🗄️ MONGODB SCHEMA (Replaces countData.json)
+const CountSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    channelId: { type: String, required: true },
+    currentNumber: { type: Number, default: 1 },
+    lastUser: { type: String, default: null }
+});
+
+const CountGuild = mongoose.models.CountGuild || mongoose.model('CountGuild', CountSchema);
 
 module.exports = (client) => {
     const PREFIX = '.';
 
-    // Helper Functions for Database
-    function getCountData() {
-        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
-        return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-    }
+    // 🧠 FAST MEMORY CACHE (Prevents file locking and database spam)
+    const countCache = new Map();
 
-    function saveCountData(data) {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-    }
+    // Fetch database into memory immediately when the module loads
+    (async () => {
+        try {
+            const data = await CountGuild.find();
+            data.forEach(g => countCache.set(g.guildId, {
+                channelId: g.channelId,
+                currentNumber: g.currentNumber,
+                lastUser: g.lastUser
+            }));
+            console.log('✅ Counting Game Module Loaded (MongoDB Synced)');
+        } catch (err) {
+            console.error('❌ Failed to load counting data:', err);
+        }
+    })();
 
     // ==========================================
     // 1. SETUP COMMAND LOGIC
@@ -25,9 +41,11 @@ module.exports = (client) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setupcount') return;
 
         const channel = interaction.options.getChannel('channel');
-        let data = getCountData();
-        data[interaction.guild.id] = { channelId: channel.id, currentNumber: 1, lastUser: null };
-        saveCountData(data);
+        const newData = { channelId: channel.id, currentNumber: 1, lastUser: null };
+        
+        // Update Cache & Database
+        countCache.set(interaction.guild.id, newData);
+        await CountGuild.findOneAndUpdate({ guildId: interaction.guild.id }, newData, { upsert: true });
 
         await interaction.reply({ content: `✅ <#${channel.id}> is now the Counting Game channel! Start by typing \`1\`.`, ephemeral: true }).catch(() => {});
         await channel.send('🔢 **Counting Game Started!** The next number is **1**.');
@@ -41,13 +59,14 @@ module.exports = (client) => {
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
             
             const channel = message.mentions.channels.first() || message.channel;
-            let data = getCountData();
-            data[message.guild.id] = { channelId: channel.id, currentNumber: 1, lastUser: null };
-            saveCountData(data);
+            const newData = { channelId: channel.id, currentNumber: 1, lastUser: null };
+            
+            // Update Cache & Database
+            countCache.set(message.guild.id, newData);
+            await CountGuild.findOneAndUpdate({ guildId: message.guild.id }, newData, { upsert: true });
 
             await message.reply(`✅ <#${channel.id}> is now the Counting Game channel! Start by typing \`1\`.`).catch(() => {});
             
-            // Announce it in the target channel if they set it up from a different channel
             if (channel.id !== message.channel.id) {
                 await channel.send('🔢 **Counting Game Started!** The next number is **1**.');
             }
@@ -57,8 +76,7 @@ module.exports = (client) => {
         // ==========================================
         // 2. THE COUNTING GAME RULES
         // ==========================================
-        let data = getCountData();
-        const guildData = data[message.guild.id];
+        const guildData = countCache.get(message.guild.id);
 
         // If this isn't the counting channel, ignore the message
         if (!guildData || message.channel.id !== guildData.channelId) return;
@@ -73,7 +91,7 @@ module.exports = (client) => {
         const numberMatch = msgText.match(/^\d+/);
 
         if (!numberMatch) {
-            // They typed normal text, delete it to keep the counting channel perfectly clean
+            // Normal text — delete to keep the counting channel clean
             return message.delete().catch(() => {});
         }
 
@@ -82,9 +100,17 @@ module.exports = (client) => {
         if (typedNumber === expectedNumber && message.author.id !== guildData.lastUser) {
             // ✅ CORRECT NUMBER
             message.react('✅').catch(() => {});
+            
             guildData.currentNumber++;
             guildData.lastUser = message.author.id;
-            saveCountData(data);
+            countCache.set(message.guild.id, guildData);
+            
+            // Save to DB in the background (does not block the bot)
+            CountGuild.updateOne(
+                { guildId: message.guild.id }, 
+                { currentNumber: guildData.currentNumber, lastUser: guildData.lastUser }
+            ).catch(() => {});
+
         } else {
             // ❌ WRONG NUMBER OR SAME PERSON TWICE
             message.react('❌').catch(() => {});
@@ -95,14 +121,19 @@ module.exports = (client) => {
 
             await message.channel.send(`🚨 **STREAK RUINED BY <@${message.author.id}>!** 🚨\n${reason}\n\nThe count has been reset. Start again at **1**.`);
             
-            // Delete the incorrect message after 2 seconds
             setTimeout(() => message.delete().catch(() => {}), 2000);
             
-            // Reset the streak
+            // Reset the streak in memory
             guildData.currentNumber = 1;
             guildData.lastUser = null;
-            saveCountData(data);
+            countCache.set(message.guild.id, guildData);
+            
+            // Sync reset to DB
+            CountGuild.updateOne(
+                { guildId: message.guild.id }, 
+                { currentNumber: 1, lastUser: null }
+            ).catch(() => {});
         }
     });
 };
-                                                
+            
