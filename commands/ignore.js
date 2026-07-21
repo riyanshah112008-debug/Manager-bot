@@ -1,27 +1,19 @@
-const fs = require('fs');
-const path = require('path');
-const filePath = path.join(__dirname, '../ignoredChannels.json');
+const mongoose = require('mongoose');
 
-// Helper function to read the current settings
-function readSettings() {
-    if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, JSON.stringify({}));
-    }
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-}
-
-// Helper function to save settings
-function saveSettings(settings) {
-    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2));
-}
+// 🗄️ Fetch the exact same MongoDB schema used in automod.js
+const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', new mongoose.Schema({
+    channelId: { type: String, required: true, unique: true },
+    links: { type: Boolean, default: false },
+    emojis: { type: Boolean, default: false }
+}));
 
 module.exports = {
     name: 'ignore',
     description: 'Turn off automod filters for a specific channel',
-    execute(message, args) {
+    async execute(message, args) {
         // Check if the user has administrator permissions
         if (!message.member.permissions.has('Administrator')) {
-            return message.reply('❌ You need Administrator permissions to use this command.');
+            return message.reply('❌ You need **Administrator** permissions to use this command.');
         }
 
         // Target type: 'links', 'emojis', or 'all'
@@ -33,39 +25,43 @@ module.exports = {
         // Target channel: Mentioned channel, or the current channel if none mentioned
         const channel = message.mentions.channels.first() || message.channel;
         const channelId = channel.id;
-        const settings = readSettings();
 
-        if (!settings[channelId]) {
-            settings[channelId] = { links: false, emojis: false };
+        // 🍃 Fetch current settings from MongoDB (instead of a local JSON file)
+        let channelData = await AutomodChannel.findOne({ channelId });
+        
+        // If the channel isn't in the database yet, create a default entry for it
+        if (!channelData) {
+            channelData = new AutomodChannel({ channelId, links: false, emojis: false });
         }
 
         // Handle the check/status view
         if (type === 'status') {
-            const linkStatus = settings[channelId].links ? '❌ Ignored (No Filter)' : '✅ Active (Filtering)';
-            const emojiStatus = settings[channelId].emojis ? '❌ Ignored (No Filter)' : '✅ Active (Filtering)';
+            const linkStatus = channelData.links ? '❌ Ignored (No Filter)' : '✅ Active (Filtering)';
+            const emojiStatus = channelData.emojis ? '❌ Ignored (No Filter)' : '✅ Active (Filtering)';
             return message.reply(`📢 **Automod Status for ${channel}:**\n🔗 Links: ${linkStatus}\n😀 Emojis: ${emojiStatus}`);
         }
 
-        // Toggle the settings
+        // Toggle the settings in memory
         if (type === 'links') {
-            settings[channelId].links = !settings[channelId].links;
-            saveSettings(settings);
-            return message.reply(`${settings[channelId].links ? '🚫' : '✅'} Automod **links** filter is now **${settings[channelId].links ? 'DISABLED' : 'ENABLED'}** in ${channel}.`);
+            channelData.links = !channelData.links;
+        } else if (type === 'emojis') {
+            channelData.emojis = !channelData.emojis;
+        } else if (type === 'all') {
+            const newState = !(channelData.links && channelData.emojis);
+            channelData.links = newState;
+            channelData.emojis = newState;
         }
 
-        if (type === 'emojis') {
-            settings[channelId].emojis = !settings[channelId].emojis;
-            saveSettings(settings);
-            return message.reply(`${settings[channelId].emojis ? '🚫' : '✅'} Automod **emojis** filter is now **${settings[channelId].emojis ? 'DISABLED' : 'ENABLED'}** in ${channel}.`);
-        }
+        // 💾 Save the new settings permanently to MongoDB
+        await channelData.save();
 
-        if (type === 'all') {
-            const currentState = !(settings[channelId].links && settings[channelId].emojis);
-            settings[channelId].links = currentState;
-            settings[channelId].emojis = currentState;
-            saveSettings(settings);
-            return message.reply(`${currentState ? '🚫' : '✅'} **All** Automod filters are now **${currentState ? 'DISABLED' : 'ENABLED'}** in ${channel}.`);
+        // Send the confirmation message
+        if (type === 'links') {
+            return message.reply(`${channelData.links ? '🚫' : '✅'} Automod **links** filter is now **${channelData.links ? 'DISABLED' : 'ENABLED'}** in ${channel}.`);
+        } else if (type === 'emojis') {
+            return message.reply(`${channelData.emojis ? '🚫' : '✅'} Automod **emojis** filter is now **${channelData.emojis ? 'DISABLED' : 'ENABLED'}** in ${channel}.`);
+        } else if (type === 'all') {
+            return message.reply(`${channelData.links ? '🚫' : '✅'} **All** Automod filters are now **${channelData.links ? 'DISABLED' : 'ENABLED'}** in ${channel}.`);
         }
     }
 };
-              
