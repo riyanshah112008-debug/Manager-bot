@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 // 🗄️ MONGODB SCHEMAS FOR PERMANENT SETTINGS
 const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuild', new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true } // Defaults to true, but saves permanently when turned off
+    enabled: { type: Boolean, default: true }
 }));
 
 const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', new mongoose.Schema({
@@ -15,20 +15,65 @@ const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('Automod
 
 const OWNER_ID = '1465049039153135639'; 
 
+// ==========================================
+// 🔗 ULTIMATE MEDIA & GIF URL CHECKER
+// ==========================================
+function isAllowedUrl(linkString) {
+    try {
+        // Strip trailing punctuation (e.g. if a user types: "Look at this! https://tenor.com/view/...")
+        const cleanLink = linkString.replace(/[.,!?>)]+$/, '');
+        const parsed = new URL(cleanLink);
+        const host = parsed.hostname.toLowerCase();
+        const pathname = parsed.pathname.toLowerCase();
+
+        // 1. MASSIVE Safe Domain List (Covers Klipy, Tenor, CDNs, and all major media hosts)
+        const safeDomains = [
+            // Discord Native Domains
+            'discord.com', 'discordapp.com', 'discordapp.net',
+            
+            // Klipy (GIFs, Clips, Stickers)
+            'klipy.com', 'klipy.co', 
+            
+            // Tenor & Giphy
+            'tenor.com', 'tenor.co', 'tenor.googleapis.com',
+            'giphy.com', 'gph.is',
+            
+            // Imgur, Reddit & Twitter Media
+            'imgur.com', 'imgur.io', 'redd.it', 'reddit.com', 'twimg.com',
+            
+            // Gfycat, RedGifs & NSFW media hosts
+            'gfycat.com', 'redgifs.com',
+            
+            // Other Popular GIF & Image Hosts
+            'ezgif.com', 'gyazo.com', 'imgflip.com', 'coub.com', 
+            'gifdb.com', 'gifer.com', 'makeagif.com', 'streamable.com', 
+            'catbox.moe', 'icegif.com', 'cliply.co', 'tumblr.com', 'pinimg.com'
+        ];
+
+        // Check if the host matches any safe domain or a subdomain (like media.tenor.com or api.klipy.com)
+        const isSafeDomain = safeDomains.some(domain => host === domain || host.endsWith('.' + domain));
+        if (isSafeDomain) return true;
+
+        // 2. Direct File Extensions (Catch-all for random websites hosting media)
+        const mediaExtensions = ['.gif', '.gifv', '.webp', '.mp4', '.webm', '.png', '.jpg', '.jpeg'];
+        if (mediaExtensions.some(ext => pathname.endsWith(ext))) return true;
+
+        // 3. Common View Paths (Catch-all for UI pages that host GIFs but hide the extension)
+        const safePaths = ['/view/', '/gifs/', '/watch/', '/gif/', '/gallery/', '/clip/', '/sticker/'];
+        if (safePaths.some(path => pathname.includes(path))) return true;
+
+        return false; // If it fails all 3 checks, it is an unauthorized link
+    } catch {
+        return false; // If the URL is broken and fails to parse, treat it as unsafe
+    }
+}
+
 module.exports = (client) => {
-    // 🧠 FAST MEMORY CACHES (Prevents database spam)
     const guildCache = new Map();
     const channelCache = new Map();
 
     const linkPattern = /https?:\/\/\S+/g;
     const emojiPattern = /<a?:[a-zA-Z0-9_]+:[0-9]+>|[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
-
-    // ✨ EXPANDED: Added shorteners (tenor.co, gph.is), Imgur, and Klipy
-    const allowedDomains = [
-        'tenor.com', 'tenor.co', 'giphy.com', 'gph.is', 'imgur.com', 'klipy.co',
-        'gfycat.com', 'redgifs.com', 'discord.com', 'discordapp.com', 
-        'discordapp.net', 'media.discordapp.net', 'cdn.discordapp.com'
-    ];
 
     client.on('clientReady', async () => {
         try {
@@ -37,7 +82,7 @@ module.exports = (client) => {
 
             const cSettings = await AutomodChannel.find();
             cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
-            console.log('✅ Automod Module Loaded (MongoDB Synced & Staff Bypass Active)');
+            console.log('✅ Automod Module Loaded (MongoDB Synced & Media Allowed)');
         } catch (err) {}
     });
 
@@ -100,7 +145,7 @@ module.exports = (client) => {
     client.on("messageCreate", async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        // 🛡️ STAFF BYPASS SHIELD: Admins and Mods are completely immune to Automod!
+        // 🛡️ STAFF BYPASS SHIELD
         const isStaff = message.member && (
             message.member.permissions.has(PermissionsBitField.Flags.Administrator) ||
             message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers) ||
@@ -109,31 +154,30 @@ module.exports = (client) => {
         const isOwner = typeof client.isOwner === 'function' ? client.isOwner(message.author.id) : message.author.id === OWNER_ID;
 
         if (isStaff || isOwner || message.author.id === message.guild.ownerId) return;
-
-        // Ignore prefix commands
         if (message.content.startsWith('.')) return;
 
-        // Check if Automod is toggled off for the server
         const isServerEnabled = guildCache.has(message.guild.id) ? guildCache.get(message.guild.id) : true;
         if (!isServerEnabled) return;
 
-        // Check if the channel is ignored
-        const channelSettings = channelCache.get(message.channel.id) || { links: false, emojis: false };
+        let channelSettings = channelCache.get(message.channel.id);
+        if (!channelSettings) {
+            try {
+                const dbSetting = await AutomodChannel.findOne({ channelId: message.channel.id });
+                channelSettings = dbSetting ? { links: dbSetting.links, emojis: dbSetting.emojis } : { links: false, emojis: false };
+                channelCache.set(message.channel.id, channelSettings);
+            } catch {
+                channelSettings = { links: false, emojis: false };
+            }
+        }
 
+        // Check for links and filter out the safe media URLs
         const rawLinks = message.content.match(linkPattern) || [];
-        const links = rawLinks.filter(link => {
-            const url = link.toLowerCase();
-            const isSafeDomain = allowedDomains.some(domain => url.includes(domain));
-            
-            // ✨ FIXED: Checks for .gif, .gifv, .webp, or .mp4 extensions while safely ignoring query parameters (?xyz), fragments (#xyz), and trailing punctuation
-            const isGifOrMedia = /\.(gif|gifv|webp|mp4)(?:[?#.!>),]|$)/i.test(url);
-            
-            return !isSafeDomain && !isGifOrMedia;
-        });
+        const unauthorizedLinks = rawLinks.filter(link => !isAllowedUrl(link));
 
         const emojis = message.content.match(emojiPattern) || [];
 
-        const isLinkSpam = !channelSettings.links && links.length >= 1;
+        // Triggers ONLY if the link is unauthorized OR if there are 5+ emojis
+        const isLinkSpam = !channelSettings.links && unauthorizedLinks.length >= 1;
         const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
 
         if (isLinkSpam || isEmojiSpam) {
@@ -141,8 +185,8 @@ module.exports = (client) => {
 
             if (isLinkSpam) {
                 try {
-                    await message.member.timeout(10 * 60 * 1000, "Automod: Link Spam");
-                    await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 10 minutes for link spam.`);
+                    await message.member.timeout(10 * 60 * 1000, "Automod: Unauthorized Link Spam");
+                    await message.channel.send(`⚠️ ${message.author.toString()} has been timed out for 10 minutes for sending an unauthorized link.`);
                 } catch (error) {}
             } else if (isEmojiSpam) {
                 try {
