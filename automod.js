@@ -1,5 +1,6 @@
 const { PermissionsBitField } = require('discord.js');
 const mongoose = require('mongoose');
+const { AutomodGuild, AutomodChannel } = require('../models/AutomodSchema');
 
 // 🗄️ MONGODB SCHEMAS FOR PERMANENT SETTINGS
 const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuild', new mongoose.Schema({
