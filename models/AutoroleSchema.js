@@ -7,7 +7,7 @@ const configSchema = new mongoose.Schema({
     stickyRolesEnabled: { type: Boolean, default: true }
 });
 
-// Stores the roles of a user when they leave
+// Stores the automatic backup of a user's roles when they leave
 const stickySchema = new mongoose.Schema({
     guildId: { type: String, required: true },
     userId: { type: String, required: true },
@@ -18,4 +18,3 @@ module.exports = {
     AutoroleConfig: mongoose.models.AutoroleConfig || mongoose.model('AutoroleConfig', configSchema),
     StickyRole: mongoose.models.StickyRole || mongoose.model('StickyRole', stickySchema)
 };
-      
