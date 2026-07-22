@@ -1,4 +1,4 @@
-const { PermissionsBitField, ActionRowBuilder, RoleSelectMenuBuilder } = require('discord.js');
+const { PermissionsBitField } = require('discord.js');
 const { AutoroleConfig, StickyRole } = require('../../models/AutoroleSchema');
 
 module.exports = (client) => {
@@ -37,8 +37,6 @@ module.exports = (client) => {
         try {
             const config = await AutoroleConfig.findOne({ guildId: member.guild.id });
             let rolesToApply = [];
-            
-            // Wait for cache to ensure bot role position is accurate
             const botHighestRole = member.guild.members.me.roles.highest.position;
 
             if (!config || config.stickyRolesEnabled !== false) {
@@ -72,78 +70,62 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 3. ADMIN SETUP COMMAND (DROPDOWN MENU)
+    // 3. ADMIN SETUP COMMAND (ROLE1, ROLE2...)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        
-        // --- A. Handle the initial /autorole command ---
-        if (interaction.isChatInputCommand() && interaction.commandName === 'autorole') {
-            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                return interaction.reply({ content: '❌ You need **Administrator** permissions to use this.', ephemeral: true });
-            }
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'autorole') return;
 
-            const sticky = interaction.options.getBoolean('sticky_roles');
-
-            // If they only want to toggle sticky roles, update and return
-            if (sticky !== null) {
-                await AutoroleConfig.findOneAndUpdate(
-                    { guildId: interaction.guild.id }, 
-                    { stickyRolesEnabled: sticky }, 
-                    { upsert: true }
-                );
-                return interaction.reply({ content: `✅ Sticky Roles is now **${sticky ? 'Enabled' : 'Disabled'}**.`, ephemeral: true });
-            }
-
-            // If no option is provided, send the Role Select Menu!
-            const row = new ActionRowBuilder().addComponents(
-                new RoleSelectMenuBuilder()
-                    .setCustomId('autorole_menu')
-                    .setPlaceholder('Select all your autoroles here...')
-                    .setMinValues(0) // 0 allows them to clear the list if they want
-                    .setMaxValues(25) // Strictly caps at Discord's 25 limit
-            );
-
-            await interaction.reply({ 
-                content: 'Use the dropdown below to select up to **25 roles** you want to assign when a member joins:', 
-                components: [row], 
-                ephemeral: true 
-            });
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({ content: '❌ You need **Administrator** permissions to use this.', ephemeral: true });
         }
 
-        // --- B. Handle the Dropdown Menu Selection ---
-        if (interaction.isRoleSelectMenu() && interaction.customId === 'autorole_menu') {
-            const selectedRoleIds = interaction.values; // This is an array of up to 25 role IDs
-            const botHighestRole = interaction.guild.members.me.roles.highest.position;
-            
-            const validRoleIds = [];
-            const invalidRoles = [];
+        let config = await AutoroleConfig.findOne({ guildId: interaction.guild.id });
+        if (!config) config = new AutoroleConfig({ guildId: interaction.guild.id, roleIds: [] });
 
-            // Double check hierarchy so the bot doesn't crash trying to assign roles above it
-            for (const roleId of selectedRoleIds) {
-                const role = interaction.guild.roles.cache.get(roleId);
-                if (role && role.position >= botHighestRole) {
+        let replyMessage = "";
+        let rolesAdded = 0;
+        const invalidRoles = [];
+        const botHighestRole = interaction.guild.members.me.roles.highest.position;
+
+        // Loop through role1 up to role24 to see which ones were filled out
+        for (let i = 1; i <= 24; i++) {
+            const role = interaction.options.getRole(`role${i}`);
+            
+            if (role) {
+                if (role.position >= botHighestRole) {
                     invalidRoles.push(role.name);
-                } else {
-                    validRoleIds.push(roleId);
+                } else if (!config.roleIds.includes(role.id)) {
+                    // Check if we hit the limit before adding
+                    if (config.roleIds.length >= 25) {
+                        replyMessage += `\n⚠️ **Limit Reached:** Stopped adding roles because the 25 limit was hit.`;
+                        break; 
+                    }
+                    config.roleIds.push(role.id);
+                    rolesAdded++;
                 }
             }
-
-            // Save the array to the database instantly
-            await AutoroleConfig.findOneAndUpdate(
-                { guildId: interaction.guild.id },
-                { roleIds: validRoleIds },
-                { upsert: true }
-            );
-
-            // Give feedback
-            let replyMessage = `✅ Successfully saved **${validRoleIds.length}** autoroles!`;
-            
-            if (invalidRoles.length > 0) {
-                replyMessage += `\n⚠️ **Skipped roles (higher than my bot role):** ${invalidRoles.join(', ')}. Please drag my bot role higher in your server settings and try again.`;
-            }
-
-            // Update the message so the dropdown menu goes away
-            await interaction.update({ content: replyMessage, components: [] });
         }
+
+        const sticky = interaction.options.getBoolean('sticky_roles');
+
+        if (rolesAdded > 0) {
+            replyMessage += `✅ Successfully added **${rolesAdded}** new roles to the autorole list! (Total: ${config.roleIds.length}/25)\n`;
+        }
+        
+        if (invalidRoles.length > 0) {
+            replyMessage += `⚠️ **Skipped roles (higher than bot):** ${invalidRoles.join(', ')}.\n`;
+        }
+
+        if (sticky !== null) {
+            config.stickyRolesEnabled = sticky;
+            replyMessage += `✅ Sticky Roles is now **${sticky ? 'Enabled' : 'Disabled'}**.\n`;
+        }
+
+        if (rolesAdded === 0 && invalidRoles.length === 0 && sticky === null) {
+            return interaction.reply({ content: "⚠️ You didn't provide any valid settings or roles to change!", ephemeral: true });
+        }
+
+        await config.save();
+        await interaction.reply({ content: replyMessage.trim(), ephemeral: true });
     });
 };
