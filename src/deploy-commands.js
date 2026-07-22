@@ -86,25 +86,28 @@ const commands = [
         { name: 'id', type: 4, required: true, description: 'Warning ID' }
     ] },
     //---------------------AUTOROLE--------------------
-    {
-    name: 'autorole',
-    description: 'Configure the autorole and automatic role backup system',
-    default_member_permissions: String(PermissionFlagsBits.Administrator),
-    options: [
-        {
-            name: 'role',
-            description: 'The default role to automatically give to new members',
-            type: 8, 
-            required: false
-        },
-        {
-            name: 'sticky_roles',
-            description: 'Should the bot automatically save and restore roles when people leave/rejoin?',
-            type: 5, 
-            required: false
-        }
-    ]
-},
+ const { SlashCommandBuilder } = require('discord.js');
+
+const autoroleCommand = new SlashCommandBuilder()
+    .setName('autorole')
+    .setDescription('Set up multiple autoroles for when members join')
+    .addBooleanOption(option => 
+        option.setName('sticky_roles')
+        .setDescription('Enable or disable restoring previous roles on rejoin')
+        .setRequired(false)
+    );
+
+// Programmatically add role1 through role24 to save time
+for (let i = 1; i <= 24; i++) {
+    autoroleCommand.addRoleOption(option => 
+        option.setName(`role${i}`)
+        .setDescription(`Select role #${i} to add to the autorole list`)
+        .setRequired(false) // Keep false so you don't HAVE to fill all 24
+    );
+}
+
+module.exports = { data: autoroleCommand }; // Or however you export your commands
+
     
     // ================= AUTOMOD =================
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [
