@@ -8,6 +8,36 @@ const MANAGE_GUILD = PermissionFlagsBits.ManageGuild.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
+// =======================================================
+// PROGRAMMATICALLY BUILD AUTOROLE OPTIONS TO SAVE SPACE
+// =======================================================
+const autoroleOptions = [
+    {
+        name: 'sticky_roles',
+        type: 5, // 5 = BOOLEAN
+        required: false,
+        description: 'Enable or disable restoring previous roles on rejoin'
+    }
+];
+
+// Add role1 through role24
+for (let i = 1; i <= 24; i++) {
+    autoroleOptions.push({
+        name: `role${i}`,
+        type: 8, // 8 = ROLE
+        required: false,
+        description: `Select role #${i} to add to the autorole list`
+    });
+}
+
+const autoroleCommandDef = {
+    name: 'autorole',
+    description: 'Set up multiple autoroles for when members join',
+    default_member_permissions: ADMIN,
+    options: autoroleOptions
+};
+// =======================================================
+
 const commands = [
     // ================= MUSIC =================
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [
@@ -68,7 +98,7 @@ const commands = [
     { name: 'clear', description: 'Delete up to 100 recent messages', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'amount', type: 4, required: true, description: 'Number of messages to delete', min_value: 1, max_value: 100 }
     ] },
-    
+
     // ================= DEVELOPER PANEL =================
     {
         name: 'devpanel',
@@ -85,30 +115,11 @@ const commands = [
     { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [
         { name: 'id', type: 4, required: true, description: 'Warning ID' }
     ] },
+
     //---------------------AUTOROLE--------------------
- const { SlashCommandBuilder } = require('discord.js');
+    autoroleCommandDef, // ✅ Correctly inserted as a single object reference!
+    //-------------------------------------------------
 
-const autoroleCommand = new SlashCommandBuilder()
-    .setName('autorole')
-    .setDescription('Set up multiple autoroles for when members join')
-    .addBooleanOption(option => 
-        option.setName('sticky_roles')
-        .setDescription('Enable or disable restoring previous roles on rejoin')
-        .setRequired(false)
-    );
-
-// Programmatically add role1 through role24 to save time
-for (let i = 1; i <= 24; i++) {
-    autoroleCommand.addRoleOption(option => 
-        option.setName(`role${i}`)
-        .setDescription(`Select role #${i} to add to the autorole list`)
-        .setRequired(false) // Keep false so you don't HAVE to fill all 24
-    );
-}
-
-module.exports = { data: autoroleCommand }; // Or however you export your commands
-
-    
     // ================= AUTOMOD =================
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [
         { name: 'action', type: 3, required: true, description: 'Automod action', choices: [
