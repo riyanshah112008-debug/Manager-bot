@@ -1,16 +1,8 @@
+const { PermissionsBitField } = require('discord.js');
+
+// 🗄️ IMPORT MONGODB SCHEMAS (Fixed duplicate declaration)
+// Note: If your models folder is completely outside the src folder, change this to '../../models/AutomodSchema'
 const { AutomodGuild, AutomodChannel } = require('../models/AutomodSchema');
-
-// 🗄️ MONGODB SCHEMAS FOR PERMANENT SETTINGS
-const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuild', new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true }
-}));
-
-const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', new mongoose.Schema({
-    channelId: { type: String, required: true, unique: true },
-    links: { type: Boolean, default: false },
-    emojis: { type: Boolean, default: false }
-}));
 
 const OWNER_ID = '1465049039153135639'; 
 
@@ -49,7 +41,7 @@ function isAllowedUrl(linkString) {
             'catbox.moe', 'icegif.com', 'cliply.co', 'tumblr.com', 'pinimg.com'
         ];
 
-        // Check if the host matches any safe domain or a subdomain (like media.tenor.com or api.klipy.com)
+        // Check if the host matches any safe domain or a subdomain
         const isSafeDomain = safeDomains.some(domain => host === domain || host.endsWith('.' + domain));
         if (isSafeDomain) return true;
 
@@ -66,7 +58,6 @@ function isAllowedUrl(linkString) {
         return false; // If the URL is broken and fails to parse, treat it as unsafe
     }
 }
-
 module.exports = (client) => {
     const guildCache = new Map();
     const channelCache = new Map();
