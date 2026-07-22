@@ -2,7 +2,7 @@ const { PermissionsBitField } = require('discord.js');
 
 // 🗄️ IMPORT MONGODB SCHEMAS (Fixed duplicate declaration)
 // Note: If your models folder is completely outside the src folder, change this to '../../models/AutomodSchema'
-const { AutomodGuild, AutomodChannel } = require('../models/AutomodSchema');
+const { AutomodGuild, AutomodChannel } = require('../../models/AutomodSchema');
 
 const OWNER_ID = '1465049039153135639'; 
 
