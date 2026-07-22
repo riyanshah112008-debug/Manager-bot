@@ -207,7 +207,8 @@ async function startBot() {
         loadModule('Goodbye System', './modules/goodbye.js');
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
-
+        loadModule('Autorole & Sticky Roles', './modules/autorole.js');
+        
         // Added from your screenshot
         if (fs.existsSync('./modules/modApply.js')) {
             loadModule('Mod Apply', './modules/modApply.js'); 
