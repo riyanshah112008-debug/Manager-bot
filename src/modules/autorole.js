@@ -3,36 +3,35 @@ const { AutoroleConfig, StickyRole } = require('../../models/AutoroleSchema');
 
 module.exports = (client) => {
     // ==========================================
-    // 1. SAVE ROLES WHEN A MEMBER LEAVES
+    // 1. AUTOMATIC BACKGROUND BACKUP (ON LEAVE)
     // ==========================================
     client.on('guildMemberRemove', async (member) => {
-        if (member.user.bot) return; // Ignore bots
+        if (member.user.bot) return; // We don't need to save bot roles
 
         try {
-            // Check if this server has sticky roles enabled
             const config = await AutoroleConfig.findOne({ guildId: member.guild.id });
-            if (config && config.stickyRolesEnabled === false) return;
+            if (config && config.stickyRolesEnabled === false) return; // Skip if disabled
 
-            // Get all role IDs they had, except the @everyone role
+            // Automatically fetch all roles the user had (ignoring the @everyone role)
             const roleIds = member.roles.cache
                 .filter(role => role.id !== member.guild.id)
                 .map(role => role.id);
 
-            if (roleIds.length === 0) return; // Nothing to save
+            if (roleIds.length === 0) return;
 
-            // Save to database
+            // Silently store the role data in MongoDB
             await StickyRole.findOneAndUpdate(
                 { guildId: member.guild.id, userId: member.user.id },
                 { roles: roleIds },
                 { upsert: true }
             );
         } catch (error) {
-            console.error(`❌ Sticky Role Save Error:`, error);
+            console.error(`❌ Sticky Role Auto-Save Error:`, error);
         }
     });
 
     // ==========================================
-    // 2. ASSIGN ROLES WHEN A MEMBER JOINS
+    // 2. AUTOMATIC RESTORE & ASSIGN (ON JOIN)
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return; 
@@ -40,38 +39,32 @@ module.exports = (client) => {
         try {
             const config = await AutoroleConfig.findOne({ guildId: member.guild.id });
             let rolesToApply = [];
+            const botHighestRole = member.guild.members.me.roles.highest.position;
 
-            // A. Check for Sticky Roles (Previous roles)
+            // A. Fetch from MongoDB and restore previous roles
             if (!config || config.stickyRolesEnabled !== false) {
                 const previousData = await StickyRole.findOne({ guildId: member.guild.id, userId: member.user.id });
                 
                 if (previousData && previousData.roles.length > 0) {
-                    const botHighestRole = member.guild.members.me.roles.highest.position;
-                    
-                    // Filter out deleted roles or roles higher than the bot
                     const validStickyRoles = previousData.roles.filter(roleId => {
                         const role = member.guild.roles.cache.get(roleId);
-                        return role && role.position < botHighestRole;
+                        return role && role.position < botHighestRole; // Only restore roles the bot can actually give
                     });
-
                     rolesToApply.push(...validStickyRoles);
                 }
             }
 
-            // B. Add the Default Autorole (if configured)
+            // B. Add the Default Autorole (e.g., @Member)
             if (config && config.roleId) {
                 const autoRole = member.guild.roles.cache.get(config.roleId);
-                const botHighestRole = member.guild.members.me.roles.highest.position;
-                
-                // Make sure the role exists, the bot can assign it, and the user doesn't already have it queued
                 if (autoRole && autoRole.position < botHighestRole && !rolesToApply.includes(config.roleId)) {
                     rolesToApply.push(config.roleId);
                 }
             }
 
-            // C. Apply all roles at once
+            // C. Apply all roles instantly
             if (rolesToApply.length > 0) {
-                await member.roles.add(rolesToApply, "Autorole / Sticky Role Restore").catch(() => {});
+                await member.roles.add(rolesToApply, "Starry Automod: Restored previous roles & assigned default role").catch(() => {});
             }
 
         } catch (error) {
@@ -80,7 +73,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 3. SLASH COMMAND TO SET IT UP
+    // 3. ADMIN SETUP COMMAND
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'autorole') return;
@@ -101,12 +94,12 @@ module.exports = (client) => {
                 return interaction.reply({ content: `❌ I cannot assign ${role} because it is higher than my own role! Move my role higher in the server settings.`, ephemeral: true });
             }
             updateData.roleId = role.id;
-            replyMessage += `✅ Autorole set to ${role}.\n`;
+            replyMessage += `✅ Autorole set to ${role}. New members will get this automatically.\n`;
         }
 
         if (sticky !== null) {
             updateData.stickyRolesEnabled = sticky;
-            replyMessage += `✅ Sticky Roles (restoring old roles) is now **${sticky ? 'Enabled' : 'Disabled'}**.`;
+            replyMessage += `✅ Sticky Roles (auto-restoring old roles from database) is now **${sticky ? 'Enabled' : 'Disabled'}**.`;
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -122,4 +115,4 @@ module.exports = (client) => {
         await interaction.reply({ content: replyMessage, ephemeral: true });
     });
 };
-              
+            
