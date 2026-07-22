@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "deploy": "node src/deploy-commands.js"
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
   },
   "engines": {
     "node": ">=20.0.0"
