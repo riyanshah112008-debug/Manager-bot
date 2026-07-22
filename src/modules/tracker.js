@@ -3,8 +3,8 @@
 // ==========================================
 const { EmbedBuilder, PermissionsBitField, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const UserActivity = require('../../models/UserActivity');
-const ChannelScrapeState = require('./models/ChannelScrapeState');
-const GuildTrackerSettings = require('./models/GuildTrackerSettings');
+const ChannelScrapeState = require('../../models/ChannelScrapeState');
+const GuildTrackerSettings = require('../../models/GuildTrackerSettings');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
