@@ -44,7 +44,7 @@ module.exports = (client) => {
             // A. Fetch from MongoDB and restore previous roles
             if (!config || config.stickyRolesEnabled !== false) {
                 const previousData = await StickyRole.findOne({ guildId: member.guild.id, userId: member.user.id });
-                
+
                 if (previousData && previousData.roles.length > 0) {
                     const validStickyRoles = previousData.roles.filter(roleId => {
                         const role = member.guild.roles.cache.get(roleId);
@@ -54,17 +54,19 @@ module.exports = (client) => {
                 }
             }
 
-            // B. Add the Default Autorole (e.g., @Member)
-            if (config && config.roleId) {
-                const autoRole = member.guild.roles.cache.get(config.roleId);
-                if (autoRole && autoRole.position < botHighestRole && !rolesToApply.includes(config.roleId)) {
-                    rolesToApply.push(config.roleId);
+            // B. Add Multiple Default Autoroles (Limit 25)
+            if (config && config.roleIds && config.roleIds.length > 0) {
+                for (const rId of config.roleIds) {
+                    const autoRole = member.guild.roles.cache.get(rId);
+                    if (autoRole && autoRole.position < botHighestRole && !rolesToApply.includes(rId)) {
+                        rolesToApply.push(rId);
+                    }
                 }
             }
 
             // C. Apply all roles instantly
             if (rolesToApply.length > 0) {
-                await member.roles.add(rolesToApply, "Starry Automod: Restored previous roles & assigned default role").catch(() => {});
+                await member.roles.add(rolesToApply, "Starry Automod: Restored previous roles & assigned default roles").catch(() => {});
             }
 
         } catch (error) {
@@ -77,7 +79,7 @@ module.exports = (client) => {
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'autorole') return;
-        
+
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return interaction.reply({ content: '❌ You need **Administrator** permissions to use this.', ephemeral: true });
         }
@@ -85,34 +87,47 @@ module.exports = (client) => {
         const role = interaction.options.getRole('role');
         const sticky = interaction.options.getBoolean('sticky_roles');
 
-        let updateData = {};
         let replyMessage = "";
+
+        // Fetch or create config document
+        let config = await AutoroleConfig.findOne({ guildId: interaction.guild.id });
+        if (!config) {
+            config = new AutoroleConfig({ guildId: interaction.guild.id, roleIds: [] });
+        }
+        if (!config.roleIds) config.roleIds = []; // Ensure array exists for legacy docs
 
         if (role) {
             const botHighestRole = interaction.guild.members.me.roles.highest.position;
             if (role.position >= botHighestRole) {
                 return interaction.reply({ content: `❌ I cannot assign ${role} because it is higher than my own role! Move my role higher in the server settings.`, ephemeral: true });
             }
-            updateData.roleId = role.id;
-            replyMessage += `✅ Autorole set to ${role}. New members will get this automatically.\n`;
+
+            // Toggle Logic & 25 Limit Check
+            if (config.roleIds.includes(role.id)) {
+                // If role is already in the list, REMOVE IT
+                config.roleIds = config.roleIds.filter(id => id !== role.id);
+                replyMessage += `✅ Removed ${role} from the autorole list.\n`;
+            } else {
+                // If role is NOT in the list, ADD IT (if under limit)
+                if (config.roleIds.length >= 25) {
+                    return interaction.reply({ content: `❌ You cannot add more than **25** autoroles. Please remove some first by selecting them again.`, ephemeral: true });
+                }
+                config.roleIds.push(role.id);
+                replyMessage += `✅ Added ${role} to the autorole list. Starry currently has ${config.roleIds.length}/25 roles configured.\n`;
+            }
         }
 
         if (sticky !== null) {
-            updateData.stickyRolesEnabled = sticky;
-            replyMessage += `✅ Sticky Roles (auto-restoring old roles from database) is now **${sticky ? 'Enabled' : 'Disabled'}**.`;
+            config.stickyRolesEnabled = sticky;
+            replyMessage += `✅ Sticky Roles (auto-restoring old roles) is now **${sticky ? 'Enabled' : 'Disabled'}**.\n`;
         }
 
-        if (Object.keys(updateData).length === 0) {
+        if (!role && sticky === null) {
             return interaction.reply({ content: "⚠️ You didn't provide any settings to change!", ephemeral: true });
         }
 
-        await AutoroleConfig.findOneAndUpdate(
-            { guildId: interaction.guild.id }, 
-            updateData, 
-            { upsert: true }
-        );
+        await config.save(); // Save the updated document
 
         await interaction.reply({ content: replyMessage, ephemeral: true });
     });
 };
-            
