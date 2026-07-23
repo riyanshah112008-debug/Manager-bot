@@ -52,10 +52,12 @@ const client = new Client({
 client.setMaxListeners(50);
 client.commands = new Collection(); 
 client.prefixCommands = new Collection(); // Stores commands like .ignore
-
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
+// 1. Require the Spotify Plugin at the top of this section
+const KazagumoSpotify = require('kazagumo-spotify');
+
 const Nodes = [{
     name: 'Jirayu Public Node',
     url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
@@ -64,8 +66,17 @@ const Nodes = [{
 }];
 
 client.manager = new Kazagumo({
-    // 🔧 FIX: Change default from "youtube" to "soundcloud" to bypass YouTube IP blocks
     defaultSearchEngine: "soundcloud",
+    // 2. Register the Spotify Plugin
+    plugins: [
+        new KazagumoSpotify({
+            clientId: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            playlistPageLimit: 2, // Limits massive playlists to 200 songs so the bot doesn't freeze
+            albumPageLimit: 1,
+            searchMarket: 'US'
+        })
+    ],
     send: (guildId, payload) => {
         const guild = client.guilds.cache.get(guildId);
         if (guild) guild.shard.send(payload);
@@ -80,12 +91,12 @@ client.manager.on('playerStart', (player, track) => {
     if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
 });
 
-// 🔧 FIX: Add Exception Trackers so the bot doesn't fail silently
+// Exception Trackers
 client.manager.on('playerException', (player, data) => {
     console.error(`[Lavalink] Track crashed:`, data);
     const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('⚠️ **Stream dropped!** YouTube blocked the public node. Skipping to the next song...');
-    player.skip(); // Auto-skip if YouTube kills the stream
+    if (channel) channel.send('⚠️ **Stream dropped!** Skipping to the next song...');
+    player.skip(); 
 });
 
 client.manager.on('playerClosed', (player, data) => {
@@ -100,7 +111,6 @@ client.manager.on('playerEmpty', async player => {
     if (autoplay) {
         const previousTrack = player.queue.previous[player.queue.previous.length - 1];
         if (previousTrack) {
-            // Changed fallback autoplay search to SoundCloud to prevent cutoff
             let result = await client.manager.search(`scsearch:${previousTrack.author} songs`);
 
             if (result && result.tracks.length) {
@@ -118,6 +128,7 @@ client.manager.on('playerEmpty', async player => {
 });
 
 console.log('🎵 Lavalink Music Engine initialized');
+
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
