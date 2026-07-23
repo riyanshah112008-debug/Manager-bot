@@ -59,13 +59,13 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
     {
-        name: 'Jirayu Public Node', // Your original working node
+        name: 'Jirayu Public Node', 
         url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
         auth: process.env.LAVALINK_AUTH || 'youshallnotpass', 
         secure: false
     },
     {
-        name: 'AjieDev EU Node', // The backup node that successfully connected in your logs
+        name: 'AjieDev EU Node', 
         url: 'lava-v4.ajieblogs.eu.org:443',
         auth: 'https://dsc.gg/ajidevserver',
         secure: true
@@ -73,7 +73,7 @@ const Nodes = [
 ];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "spotify",
+    defaultSearchEngine: "spotify", // Keeps Spotify as your main search engine!
     plugins: [
         new KazagumoSpotify({
             clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -81,7 +81,7 @@ client.manager = new Kazagumo({
             playlistPageLimit: 2, 
             albumPageLimit: 1,
             searchMarket: 'IN',
-            searchPrefix: 'scsearch:' // Forces Spotify to pull un-blocked audio from SoundCloud
+            searchPrefix: 'ytmsearch:' // <--- THE FIX: Bridges the audio from YouTube Music!
         })
     ],
     send: (guildId, payload) => {
@@ -118,7 +118,6 @@ client.manager.on('playerEmpty', player => {
 });
 
 console.log('🎵 Lavalink Music Engine initialized');
-
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
