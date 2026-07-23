@@ -118,7 +118,6 @@ client.manager.on('playerEmpty', async player => {
 });
 
 console.log('🎵 Lavalink Music Engine initialized');
-
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
