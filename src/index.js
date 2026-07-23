@@ -56,27 +56,72 @@ client.prefixCommands = new Collection(); // Stores commands like .ignore
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
-const Nodes = [{
-    name: 'Main Node',
-    url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
-    auth: process.env.LAVALINK_AUTH || 'youshallnotpass', 
-    secure: false
-}];
+const KazagumoSpotify = require('kazagumo-spotify');
+
+const Nodes = [
+    {
+        name: 'Horizxon India Node',
+        url: 'lava4.horizxon.studio:80',
+        auth: 'horizxon.studio',
+        secure: false
+    },
+    {
+        name: 'Horizxon Singapore Node',
+        url: 'lava1.horizxon.studio:80',
+        auth: 'horizxon.studio',
+        secure: false
+    },
+    {
+        name: 'AjieDev EU Node',
+        url: 'lava-v4.ajieblogs.eu.org:443',
+        auth: 'https://dsc.gg/ajidevserver',
+        secure: true
+    }
+];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "youtube",
+    defaultSearchEngine: "soundcloud",
+    plugins: [
+        new KazagumoSpotify({
+            clientId: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            playlistPageLimit: 2, 
+            albumPageLimit: 1,
+            searchMarket: 'IN',
+            searchPrefix: 'scsearch:' // Forces Spotify to pull un-blocked audio from SoundCloud
+        })
+    ],
     send: (guildId, payload) => {
         const guild = client.guilds.cache.get(guildId);
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes);
 
+// --- Lavalink Node Events ---
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
 
+// --- Music Player Events ---
 client.manager.on('playerStart', (player, track) => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
+});
+
+client.manager.on('playerException', (player, data) => {
+    console.error(`[Lavalink] Track crashed:`, data);
+    const channel = client.channels.cache.get(player.textId);
+    if (channel) channel.send('⚠️ **Stream dropped!** The public node blocked this track. Try adding "lyrics" to your search.');
+    player.skip(); 
+});
+
+client.manager.on('playerClosed', (player, data) => {
+    console.error(`[Lavalink] Voice connection closed unexpectedly:`, data);
+});
+
+// === AUTOPLAY LOGIC REMOVED ===
+client.manager.on('playerEmpty', player => {
+    const channel = client.channels.cache.get(player.textId);
+    if (channel) channel.send('📭 The queue has ended.');
 });
 
 console.log('🎵 Lavalink Music Engine initialized');
