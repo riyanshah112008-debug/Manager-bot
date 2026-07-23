@@ -52,7 +52,6 @@ const client = new Client({
 client.setMaxListeners(50);
 client.commands = new Collection(); 
 client.prefixCommands = new Collection(); // Stores commands like .ignore
-
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -60,15 +59,21 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
     {
-        name: 'India Node (DevamOP)',
-        url: process.env.LAVALINK_URL || 'lavalink.devamop.in:443', 
-        auth: process.env.LAVALINK_AUTH || 'DevamOP', 
-        secure: true
+        name: 'TriniumHost Public Node',
+        url: 'lavalink.triniumhost.com:2333',
+        auth: 'kirito',
+        secure: false
     },
     {
-        name: 'Global Node (HeavenCloud)',
-        url: '89.106.84.59:4000', 
-        auth: 'heavencloud.in', 
+        name: 'NyxBot SG1 Node',
+        url: 'sg1-nodelink.nyxbot.app:3000',
+        auth: 'nyxbot.app/support',
+        secure: false
+    },
+    {
+        name: 'NexCloud India Node',
+        url: 'n3.nexcloud.in:2026',
+        auth: 'nexcloud',
         secure: false
     }
 ];
