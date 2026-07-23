@@ -23,7 +23,6 @@
     "google-translate-api-x": "^10.6.0",
     "husky": "latest",
     "kazagumo": "^3.0.0",
-    "kazagumo-spotify": "latest",
     "libsodium-wrappers": "^0.7.13",
     "mongoose": "^8.4.0",
     "shoukaku": "^4.0.0",
