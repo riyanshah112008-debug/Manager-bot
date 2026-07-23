@@ -57,12 +57,11 @@ client.prefixCommands = new Collection(); // Stores commands like .ignore
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [{
-    name: 'Jirayu Public Node',
-    url: 'lavalink.jirayu.net:13592', 
-    auth: 'youshallnotpass', 
+    name: 'Main Node',
+    url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
+    auth: process.env.LAVALINK_AUTH || 'youshallnotpass', 
     secure: false
 }];
-
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
@@ -109,6 +108,20 @@ if (fs.existsSync(commandsPath)) {
         if ('name' in command && 'execute' in command) {
             client.prefixCommands.set(command.name, command);
             console.log(`✅ Loaded Prefix Command: .${command.name}`);
+        }
+    }
+}
+
+// --- C. Slash Command Loader (for Music in subfolder) ---
+const musicCommandsPath = path.join(__dirname, 'commands', 'music');
+if (fs.existsSync(musicCommandsPath)) {
+    const musicFiles = fs.readdirSync(musicCommandsPath).filter(file => file.endsWith('.js'));
+    for (const file of musicFiles) {
+        const filePath = path.join(musicCommandsPath, file);
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
         }
     }
 }
@@ -190,13 +203,10 @@ async function startBot() {
         loadModule('Premium', './modules/premium.js');
         loadModule('Translator', './modules/translator.js');
         loadModule('Reaction Roles', './modules/reactionRoles.js'); 
-       // loadModule('Music', './modules/music.js');
+        // loadModule('Music', './modules/music.js'); // Disabled since Lavalink is global now
         loadModule('Help', './modules/help.js');
         loadModule('Leveling', './modules/leveling.js');
         loadModule('Starry Protocol', './modules/starry.js');
-
-        // Disabled to prevent conflicts with automod.js media bypass
-        // loadModule('Link Blocker', './modules/linkBlocker.js');
 
         loadModule('Truth or Dare', './modules/truthOrDare.js');
         loadModule('Support Tickets', './modules/tickets.js');
