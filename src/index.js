@@ -57,9 +57,9 @@ client.prefixCommands = new Collection(); // Stores commands like .ignore
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [{
-    name: 'Main Node',
-    url: process.env.LAVALINK_URL || 'lavalink.oops.wtf:2000', 
-    auth: process.env.LAVALINK_AUTH || 'www.freelavalink.pw', 
+    name: 'HeavenCloud Node',
+    url: '89.106.84.59:4000', 
+    auth: 'heavencloud.in', 
     secure: false
 }];
 
