@@ -9,10 +9,10 @@ module.exports = {
                 .setDescription('Song name, SoundCloud URL, or Spotify URL')
                 .setRequired(true)
         ),
-    
+
     async execute(interaction, client) {
         const query = interaction.options.getString('song');
-        
+
         // Safely check for the voice channel to prevent crashes
         const voiceChannel = interaction.member.voice?.channel;
         if (!voiceChannel) return interaction.reply({ content: 'You must be in a voice channel!', ephemeral: true });
@@ -39,7 +39,7 @@ module.exports = {
             if (!query.startsWith('http') && (!result || result.type === 'EXCEPTION' || result.type === 'NO_MATCHES' || !result.tracks.length)) {
                 console.log(`[Music] SoundCloud failed to find "${query}". Trying YouTube Music...`);
                 result = await client.manager.search(`ytmsearch:${query}`, interaction.user);
-                
+
                 // 3. Final Fallback to standard YouTube
                 if (!result || result.type === 'EXCEPTION' || result.type === 'NO_MATCHES' || !result.tracks.length) {
                     console.log(`[Music] YouTube Music failed. Trying standard YouTube...`);
