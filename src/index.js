@@ -216,6 +216,19 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
+    // ==========================================
+    // 👑 MASTER GATEKEEPER (CENTRALIZED LOCK)
+    // ==========================================
+    // Put your actual Discord User ID inside these quotes
+    const botOwners = ['1465049039153135639,1257676837249617971']; 
+
+    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
+        return interaction.reply({ 
+            content: '❌ Access Denied: You are not recognized as a bot owner!', 
+            ephemeral: true 
+        });
+    }
+
     try {
         await command.execute(interaction, client);
     } catch (error) {
