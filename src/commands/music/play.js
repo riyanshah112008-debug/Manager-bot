@@ -5,18 +5,19 @@ module.exports = {
         .setName('play')
         .setDescription('Play a song via Lavalink')
         .addStringOption(option => 
-            option.setName('query')
+            option.setName('song')
                 .setDescription('The song name or URL')
                 .setRequired(true)
         ),
     
     async execute(interaction, client) {
-        const query = interaction.options.getString('query');
+        // Fetching 'song' to match your deploy-commands.js structure
+        const query = interaction.options.getString('song');
         const { channel } = interaction.member.voice;
 
         if (!channel) return interaction.reply({ content: 'You must be in a voice channel!', ephemeral: true });
 
-        // Defer reply since Lavalink searching might take a second
+        // Defer reply prevents the "application did not respond" timeout
         await interaction.deferReply();
 
         // Create or get the player for this server
@@ -27,7 +28,7 @@ module.exports = {
             volume: 100
         });
 
-        // Search for the track
+        // Search for the track using Lavalink
         const result = await client.manager.search(query, interaction.user);
 
         if (!result.tracks.length) return interaction.editReply('❌ No results found.');
