@@ -7,7 +7,8 @@ const { Client, GatewayIntentBits, Partials, Collection, Events } = require('dis
 const express = require('express');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
-const { Player } = require('discord-player'); 
+const { Connectors } = require('shoukaku');
+const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
 
@@ -50,23 +51,35 @@ const client = new Client({
 
 client.setMaxListeners(50);
 client.commands = new Collection(); 
-client.prefixCommands = new Collection(); // NEW: Stores commands like .ignore
+client.prefixCommands = new Collection(); // Stores commands like .ignore
 
 // ==========================================
-// 2.5 MUSIC PLAYER & SPOTIFY SETUP
+// 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
-const player = new Player(client, { 
-    ffmpegPath: process.env.FFMPEG_PATH,
-    useUniversalBridge: true,  
-    enableBlockedExtractors: false,  
-    skipFFmpegCheck: false
+const Nodes = [{
+    name: 'Main Node',
+    url: process.env.LAVALINK_URL || 'lavalink.oops.wtf:2000', 
+    auth: process.env.LAVALINK_AUTH || 'www.freelavalink.pw', 
+    secure: false
+}];
+
+client.manager = new Kazagumo({
+    defaultSearchEngine: "youtube",
+    send: (guildId, payload) => {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) guild.shard.send(payload);
+    }
+}, new Connectors.DiscordJS(client), Nodes);
+
+client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
+client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
+
+client.manager.on('playerStart', (player, track) => {
+    const channel = client.channels.cache.get(player.textId);
+    if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
 });
-client.player = player;
 
-player.events.on('error', (queue, error) => console.error(`❌ Player Error: ${error.message}`));
-player.events.on('playerError', (queue, error) => console.error(`❌ Audio Engine Error: ${error.message}`));
-
-console.log('🎵 Discord Player initialized with universal bridge enabled');
+console.log('🎵 Lavalink Music Engine initialized');
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
@@ -102,7 +115,7 @@ if (fs.existsSync(commandsPath)) {
 // Handler for Prefix Commands (.ignore, etc.)
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
-    
+
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
 
@@ -128,7 +141,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (!command) return;
 
     try {
-        await command.execute(interaction);
+        await command.execute(interaction, client);
     } catch (error) {
         console.error(`❌ Error executing ${interaction.commandName}:`, error);
         const replyPayload = { content: 'There was an error executing this command!', ephemeral: true };
@@ -139,6 +152,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
+
 // ==========================================
 // 5. HELPER FUNCTION TO LOAD MODULES
 // ==========================================
@@ -179,10 +193,10 @@ async function startBot() {
         loadModule('Help', './modules/help.js');
         loadModule('Leveling', './modules/leveling.js');
         loadModule('Starry Protocol', './modules/starry.js');
-        
+
         // Disabled to prevent conflicts with automod.js media bypass
         // loadModule('Link Blocker', './modules/linkBlocker.js');
-        
+
         loadModule('Truth or Dare', './modules/truthOrDare.js');
         loadModule('Support Tickets', './modules/tickets.js');
         loadModule('Warnings DB', './modules/warnings.js');
@@ -208,8 +222,7 @@ async function startBot() {
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
         loadModule('Autorole & Sticky Roles', './modules/autorole.js');
-        
-        // Added from your screenshot
+
         if (fs.existsSync('./modules/modApply.js')) {
             loadModule('Mod Apply', './modules/modApply.js'); 
         }
