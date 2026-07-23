@@ -57,11 +57,12 @@ client.prefixCommands = new Collection(); // Stores commands like .ignore
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [{
-    name: 'HeavenCloud Node',
-    url: '89.106.84.59:4000', 
-    auth: 'heavencloud.in', 
+    name: 'Jirayu Public Node',
+    url: 'lavalink.jirayu.net:13592', 
+    auth: 'youshallnotpass', 
     secure: false
 }];
+
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
