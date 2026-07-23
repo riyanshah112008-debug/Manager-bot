@@ -79,6 +79,40 @@ client.manager.on('playerStart', (player, track) => {
     if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
 });
 
+// === NEW AUTOPLAY LOGIC ===
+client.manager.on('playerEmpty', async player => {
+    const channel = client.channels.cache.get(player.textId);
+    const autoplay = player.data.get('autoplay');
+
+    // If autoplay is enabled, find related songs
+    if (autoplay) {
+        const previousTrack = player.queue.previous[player.queue.previous.length - 1];
+        
+        if (previousTrack) {
+            // Search for a YouTube Mix using the last played track's ID
+            let result = await client.manager.search(`https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`);
+            
+            // Fallback search if the YouTube Mix fails
+            if (!result || !result.tracks.length) {
+                result = await client.manager.search(`ytsearch:${previousTrack.author} songs`);
+            }
+
+            if (result && result.tracks.length) {
+                // Filter out the exact same song so it doesn't repeat immediately
+                const tracks = result.tracks.filter(t => t.identifier !== previousTrack.identifier);
+                const nextTrack = tracks.length ? tracks[0] : result.tracks[0];
+                
+                player.queue.add(nextTrack);
+                if (!player.playing && !player.paused) player.play();
+                return; // Stop the execution here so it doesn't say "queue ended"
+            }
+        }
+    }
+    
+    // If autoplay is off or fails to find a track, let the server know
+    if (channel) channel.send('📭 The queue has ended.');
+});
+
 console.log('🎵 Lavalink Music Engine initialized');
 
 // ==========================================
