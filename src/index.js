@@ -190,7 +190,7 @@ async function startBot() {
         loadModule('Premium', './modules/premium.js');
         loadModule('Translator', './modules/translator.js');
         loadModule('Reaction Roles', './modules/reactionRoles.js'); 
-        loadModule('Music', './modules/music.js');
+       // loadModule('Music', './modules/music.js');
         loadModule('Help', './modules/help.js');
         loadModule('Leveling', './modules/leveling.js');
         loadModule('Starry Protocol', './modules/starry.js');
