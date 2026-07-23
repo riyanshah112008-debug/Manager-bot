@@ -111,13 +111,37 @@ client.manager.on('playerClosed', (player, data) => {
     console.error(`[Lavalink] Voice connection closed unexpectedly:`, data);
 });
 
-// === AUTOPLAY LOGIC REMOVED ===
-client.manager.on('playerEmpty', player => {
+// === AUTOPLAY LOGIC (Upgraded for YouTube Music) ===
+client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
+    const autoplay = player.data.get('autoplay');
+
+    if (autoplay) {
+        // Look at the last song that just played
+        const previousTrack = player.queue.previous[player.queue.previous.length - 1];
+        
+        if (previousTrack) {
+            // Search YouTube Music for more songs by that same artist
+            let result = await client.manager.search(`ytmsearch:${previousTrack.author} songs`);
+
+            if (result && result.tracks.length) {
+                // Filter out the exact song we just listened to so it doesn't repeat
+                const tracks = result.tracks.filter(t => t.title !== previousTrack.title);
+                const nextTrack = tracks.length ? tracks[0] : result.tracks[0];
+                
+                player.queue.add(nextTrack);
+                if (!player.playing && !player.paused) player.play();
+                
+                // Optional: Announce the auto-played track
+                if (channel) channel.send(`📻 **Autoplay:** Up next is **${nextTrack.title}**`);
+                return;
+            }
+        }
+    }
+    
+    // If autoplay is off or fails, end normally
     if (channel) channel.send('📭 The queue has ended.');
 });
-
-console.log('🎵 Lavalink Music Engine initialized');
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
