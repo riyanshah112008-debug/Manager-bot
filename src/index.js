@@ -57,14 +57,15 @@ client.prefixCommands = new Collection(); // Stores commands like .ignore
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [{
-    name: 'Main Node',
+    name: 'Jirayu Public Node',
     url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
     auth: process.env.LAVALINK_AUTH || 'youshallnotpass', 
     secure: false
 }];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "youtube",
+    // 🔧 FIX: Change default from "youtube" to "soundcloud" to bypass YouTube IP blocks
+    defaultSearchEngine: "soundcloud",
     send: (guildId, payload) => {
         const guild = client.guilds.cache.get(guildId);
         if (guild) guild.shard.send(payload);
@@ -79,37 +80,40 @@ client.manager.on('playerStart', (player, track) => {
     if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
 });
 
-// === NEW AUTOPLAY LOGIC ===
+// 🔧 FIX: Add Exception Trackers so the bot doesn't fail silently
+client.manager.on('playerException', (player, data) => {
+    console.error(`[Lavalink] Track crashed:`, data);
+    const channel = client.channels.cache.get(player.textId);
+    if (channel) channel.send('⚠️ **Stream dropped!** YouTube blocked the public node. Skipping to the next song...');
+    player.skip(); // Auto-skip if YouTube kills the stream
+});
+
+client.manager.on('playerClosed', (player, data) => {
+    console.error(`[Lavalink] Voice connection closed unexpectedly:`, data);
+});
+
+// === AUTOPLAY LOGIC ===
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     const autoplay = player.data.get('autoplay');
 
-    // If autoplay is enabled, find related songs
     if (autoplay) {
         const previousTrack = player.queue.previous[player.queue.previous.length - 1];
-        
         if (previousTrack) {
-            // Search for a YouTube Mix using the last played track's ID
-            let result = await client.manager.search(`https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`);
-            
-            // Fallback search if the YouTube Mix fails
-            if (!result || !result.tracks.length) {
-                result = await client.manager.search(`ytsearch:${previousTrack.author} songs`);
-            }
+            // Changed fallback autoplay search to SoundCloud to prevent cutoff
+            let result = await client.manager.search(`scsearch:${previousTrack.author} songs`);
 
             if (result && result.tracks.length) {
-                // Filter out the exact same song so it doesn't repeat immediately
                 const tracks = result.tracks.filter(t => t.identifier !== previousTrack.identifier);
                 const nextTrack = tracks.length ? tracks[0] : result.tracks[0];
                 
                 player.queue.add(nextTrack);
                 if (!player.playing && !player.paused) player.play();
-                return; // Stop the execution here so it doesn't say "queue ended"
+                return;
             }
         }
     }
     
-    // If autoplay is off or fails to find a track, let the server know
     if (channel) channel.send('📭 The queue has ended.');
 });
 
