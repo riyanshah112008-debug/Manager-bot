@@ -52,7 +52,6 @@ const client = new Client({
 client.setMaxListeners(50);
 client.commands = new Collection(); 
 client.prefixCommands = new Collection(); // Stores commands like .ignore
-
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -60,19 +59,13 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
     {
-        name: 'Horizxon India Node',
-        url: 'lava4.horizxon.studio:80',
-        auth: 'horizxon.studio',
+        name: 'Jirayu Public Node', // Your original working node
+        url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
+        auth: process.env.LAVALINK_AUTH || 'youshallnotpass', 
         secure: false
     },
     {
-        name: 'Horizxon Singapore Node',
-        url: 'lava1.horizxon.studio:80',
-        auth: 'horizxon.studio',
-        secure: false
-    },
-    {
-        name: 'AjieDev EU Node',
+        name: 'AjieDev EU Node', // The backup node that successfully connected in your logs
         url: 'lava-v4.ajieblogs.eu.org:443',
         auth: 'https://dsc.gg/ajidevserver',
         secure: true
@@ -125,6 +118,7 @@ client.manager.on('playerEmpty', player => {
 });
 
 console.log('🎵 Lavalink Music Engine initialized');
+
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
