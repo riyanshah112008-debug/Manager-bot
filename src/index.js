@@ -55,26 +55,32 @@ client.prefixCommands = new Collection(); // Stores commands like .ignore
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
-// 1. Require the Spotify Plugin at the top of this section
 const KazagumoSpotify = require('kazagumo-spotify');
 
-const Nodes = [{
-    name: 'Jirayu Public Node',
-    url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', 
-    auth: process.env.LAVALINK_AUTH || 'youshallnotpass', 
-    secure: false
-}];
+const Nodes = [
+    {
+        name: 'India Node (DevamOP)',
+        url: process.env.LAVALINK_URL || 'lavalink.devamop.in:443', 
+        auth: process.env.LAVALINK_AUTH || 'DevamOP', 
+        secure: true
+    },
+    {
+        name: 'Global Node (HeavenCloud)',
+        url: '89.106.84.59:4000', 
+        auth: 'heavencloud.in', 
+        secure: false
+    }
+];
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "soundcloud",
-    // 2. Register the Spotify Plugin
     plugins: [
         new KazagumoSpotify({
             clientId: process.env.SPOTIFY_CLIENT_ID,
             clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-            playlistPageLimit: 2, // Limits massive playlists to 200 songs so the bot doesn't freeze
+            playlistPageLimit: 2, 
             albumPageLimit: 1,
-            searchMarket: 'US'
+            searchMarket: 'IN' // Changed to IN since you are based in India
         })
     ],
     send: (guildId, payload) => {
@@ -82,52 +88,6 @@ client.manager = new Kazagumo({
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes);
-
-client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
-
-client.manager.on('playerStart', (player, track) => {
-    const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
-});
-
-// Exception Trackers
-client.manager.on('playerException', (player, data) => {
-    console.error(`[Lavalink] Track crashed:`, data);
-    const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('⚠️ **Stream dropped!** Skipping to the next song...');
-    player.skip(); 
-});
-
-client.manager.on('playerClosed', (player, data) => {
-    console.error(`[Lavalink] Voice connection closed unexpectedly:`, data);
-});
-
-// === AUTOPLAY LOGIC ===
-client.manager.on('playerEmpty', async player => {
-    const channel = client.channels.cache.get(player.textId);
-    const autoplay = player.data.get('autoplay');
-
-    if (autoplay) {
-        const previousTrack = player.queue.previous[player.queue.previous.length - 1];
-        if (previousTrack) {
-            let result = await client.manager.search(`scsearch:${previousTrack.author} songs`);
-
-            if (result && result.tracks.length) {
-                const tracks = result.tracks.filter(t => t.identifier !== previousTrack.identifier);
-                const nextTrack = tracks.length ? tracks[0] : result.tracks[0];
-                
-                player.queue.add(nextTrack);
-                if (!player.playing && !player.paused) player.play();
-                return;
-            }
-        }
-    }
-    
-    if (channel) channel.send('📭 The queue has ended.');
-});
-
-console.log('🎵 Lavalink Music Engine initialized');
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
