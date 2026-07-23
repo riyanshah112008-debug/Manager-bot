@@ -73,7 +73,7 @@ const Nodes = [
 ];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "soundcloud",
+    defaultSearchEngine: "spotify",
     plugins: [
         new KazagumoSpotify({
             clientId: process.env.SPOTIFY_CLIENT_ID,
