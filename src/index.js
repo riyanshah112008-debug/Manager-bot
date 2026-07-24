@@ -525,6 +525,8 @@ async function startBot() {
 
         loadModule('Truth or Dare', './modules/truthOrDare.js');
         loadModule('Support Tickets', './modules/tickets.js');
+        loadModule('Admin Help Text Trigger', './modules/ahelpText.js');
+
         loadModule('Warnings DB', './modules/warnings.js');
         loadModule('Tracker', './modules/tracker.js');
         loadModule('Sus Account Detector', './modules/susAccount.js');
