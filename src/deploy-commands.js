@@ -166,7 +166,12 @@ const commands = [
     },
 
     // ================= UNIFIED MODERATION =================
-      {
+        {
+        name: 'emergency-nuke',
+        description: '⚠️ EMERGENCY: Deletes all channels except General. (Admins Only)',
+        default_member_permissions: '8' // Locks it to Administrators
+    },
+  {
         name: 'set-name',
         description: 'Change the bot\'s trigger word/name for this server (Admins Only)',
         default_member_permissions: '8',
