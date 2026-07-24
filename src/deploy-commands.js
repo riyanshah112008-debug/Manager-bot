@@ -166,7 +166,12 @@ const commands = [
     },
 
     // ================= UNIFIED MODERATION =================
-     {
+      {
+        name: 'ahelp',
+        description: 'Displays the complete Admin & Moderation Command Menu',
+        default_member_permissions: '8192' // '8192' = Manage Messages Permission
+    },
+   {
         name: 'emergency-lockdown',
         description: '🚨 EMERGENCY: Freezes the entire server. Nobody can type or join VC. (Admins Only)',
         default_member_permissions: '8'
