@@ -166,7 +166,22 @@ const commands = [
     },
 
     // ================= UNIFIED MODERATION =================
-        {
+     {
+        name: 'emergency-lockdown',
+        description: '🚨 EMERGENCY: Freezes the entire server. Nobody can type or join VC. (Admins Only)',
+        default_member_permissions: '8'
+    },
+    {
+        name: 'emergency-secure',
+        description: '🛡️ EMERGENCY: Strips all dangerous permissions from all roles. (Admins Only)',
+        default_member_permissions: '8'
+    },
+    {
+        name: 'emergency-unban',
+        description: '🏥 EMERGENCY: Unbans every single user in the server ban list. (Admins Only)',
+        default_member_permissions: '8'
+    },
+       {
         name: 'emergency-nuke',
         description: '⚠️ EMERGENCY: Deletes all channels except General. (Admins Only)',
         default_member_permissions: '8' // Locks it to Administrators
