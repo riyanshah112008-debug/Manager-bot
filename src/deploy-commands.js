@@ -238,8 +238,21 @@ const commands = [
     {
         name: 'bump',
         description: 'Bump this server to the top of the Starry Global Web List!'
+    },
+    {
+        name: 'bump-setup',
+        description: 'Configure the auto-bump reminder system.',
+        default_member_permissions: ADMIN,
+        options: [
+            { name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' },
+            { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }
+        ]
     }
 ];
+
+async function deployCommands() {
+// ... the rest of your file remains exactly the same ...
+
 async function deployCommands() {
     const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
