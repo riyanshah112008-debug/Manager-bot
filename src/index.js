@@ -6,26 +6,120 @@ process.env.FFMPEG_PATH = require('ffmpeg-static');
 const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 
 const express = require('express');
+const cors = require('cors'); // Required for the Web Dashboard
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
+const ServerListing = require('./models/ServerListing'); // Database for Web Dashboard
 
 // ==========================================
-// 1. WEB SERVER (KEEPS RENDER ALIVE)
+// 1. WEB SERVER & DASHBOARD HOSTING
 // ==========================================
 const app = express();
 const port = process.env.PORT || 10000;
 
+app.use(cors());
+app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Required for Web Verification Forms
 
-app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
+// --- THE WEB DASHBOARD API ENDPOINT ---
+app.get('/api/servers', async (req, res) => {
+    try {
+        const servers = await ServerListing.find().sort({ lastBump: -1 }).limit(50);
+        res.json(servers);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch servers' });
+    }
+});
+
+// --- THE WEB DASHBOARD FRONTEND ---
+app.get('/', (req, res) => {
+    const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Starry | Global Server List</title>
+        <style>
+            body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1f22; color: #dcddde; display: flex; flex-direction: column; align-items: center; }
+            header { width: 100%; background-color: #2b2d31; padding: 20px 0; text-align: center; border-bottom: 2px solid #5865F2; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+            h1 { margin: 0; color: #fff; font-size: 2.5rem; }
+            h1 span { color: #5865F2; }
+            .container { width: 90%; max-width: 1200px; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-bottom: 50px; }
+            .card { background-color: #2b2d31; border-radius: 12px; width: 320px; padding: 20px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; text-align: center; border: 1px solid transparent; }
+            .card:hover { transform: translateY(-5px); border-bottom: 1px solid #5865F2; }
+            .icon { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; background-color: #1e1f22; border: 2px solid #5865F2; }
+            .name { font-size: 1.4rem; font-weight: bold; color: #fff; margin: 0 0 10px 0; }
+            .desc { font-size: 0.95rem; color: #b5bac1; margin-bottom: 15px; height: 60px; overflow: hidden; }
+            .stats { display: flex; gap: 15px; font-size: 0.9rem; font-weight: bold; color: #949ba4; margin-bottom: 15px; }
+            .tags { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+            .tag { background-color: #1e1f22; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; color: #5865F2; }
+            .join-btn { background-color: #5865F2; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; width: 80%; transition: background 0.2s; }
+            .join-btn:hover { background-color: #4752c4; }
+            .bump-time { font-size: 0.8rem; color: #80848e; margin-top: 15px; }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1><span>Starry</span> Global Network</h1>
+            <p>Discover the best communities across Discord</p>
+        </header>
+        <div class="container" id="server-list">
+            <p style="font-size: 1.2rem;">Loading servers...</p>
+        </div>
+        <script>
+            async function loadServers() {
+                try {
+                    const res = await fetch('/api/servers');
+                    const servers = await res.json();
+                    const container = document.getElementById('server-list');
+                    container.innerHTML = '';
+                    
+                    if(servers.length === 0) { 
+                        container.innerHTML = '<p>No servers bumped yet. Add Starry and run /bump!</p>'; 
+                        return; 
+                    }
+                    
+                    servers.forEach(s => {
+                        const defaultIcon = 'https://cdn.discordapp.com/embed/avatars/0.png';
+                        const timeAgo = new Date(s.lastBump).toLocaleString();
+                        let tagsHtml = s.tags.map(t => \`<span class="tag">\${t}</span>\`).join('');
+                        container.innerHTML += \`
+                            <div class="card">
+                                <img src="\${s.iconUrl || defaultIcon}" class="icon" alt="Icon">
+                                <h2 class="name">\${s.name}</h2>
+                                <p class="desc">\${s.description}</p>
+                                <div class="stats">
+                                    <span>👥 \${s.memberCount} Members</span>
+                                    <span>🚀 \${s.bumps} Bumps</span>
+                                </div>
+                                <div class="tags">\${tagsHtml}</div>
+                                <a href="\${s.inviteLink}" target="_blank" class="join-btn">Join Server</a>
+                                <span class="bump-time">Last bumped: \${timeAgo}</span>
+                            </div>
+                        \`;
+                    });
+                } catch(e) {
+                    document.getElementById('server-list').innerHTML = '<p>Error loading servers. Check back later!</p>';
+                }
+            }
+            loadServers();
+        </script>
+    </body>
+    </html>
+    `;
+    res.send(html);
+});
+
+// --- RENDER KEEP-ALIVE PING ---
 app.get('/health', (req, res) => res.status(200).send('awake'));
 
 app.listen(port, '0.0.0.0', () => {
-    console.log(`🌐 Web server listening on port ${port}`);
+    console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
 
     setInterval(() => {
         const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-hglf.onrender.com';
@@ -87,16 +181,16 @@ app.get('/verify', (req, res) => {
 app.post('/verify', async (req, res) => {
     const token = req.body.token;
     const data = client.verifyMap.get(token);
-    
+
     if (!data) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Token expired or invalid.</h1>');
 
     try {
         const guild = client.guilds.cache.get(data.guildId);
         const member = await guild.members.fetch(data.userId);
-        
+
         await member.roles.add(data.roleId);
         client.verifyMap.delete(token); // Destroy the one-time token
-        
+
         res.send(`
             <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:20vh;">
                 <h1 style="color:#23a559; font-size:50px; margin-bottom:10px;">✅ Success!</h1>
@@ -108,7 +202,6 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -248,6 +341,7 @@ client.manager.on('playerEmpty', async player => {
     }
     if (channel) channel.send('📭 The queue has ended.');
 });
+
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
@@ -307,12 +401,25 @@ if (fs.existsSync(modCommandsPath)) {
     }
 }
 
-// 🔥 Load Economy Slash Commands (Chest, Prestige, Shop)
+// 🔥 Load Economy & Setup Slash Commands
 const ecoCommandsPath = path.join(__dirname, 'commands', 'economy');
 if (fs.existsSync(ecoCommandsPath)) {
     const ecoFiles = fs.readdirSync(ecoCommandsPath).filter(file => file.endsWith('.js'));
     for (const file of ecoFiles) {
         const filePath = path.join(ecoCommandsPath, file);
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+        }
+    }
+}
+
+const setupCommandsPath = path.join(__dirname, 'commands', 'setup');
+if (fs.existsSync(setupCommandsPath)) {
+    const setupFiles = fs.readdirSync(setupCommandsPath).filter(file => file.endsWith('.js'));
+    for (const file of setupFiles) {
+        const filePath = path.join(setupCommandsPath, file);
         const command = require(filePath);
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
@@ -337,7 +444,6 @@ client.on(Events.MessageCreate, async message => {
         message.reply('There was an error trying to execute that command!').catch(() => {});
     }
 });
-
 // --- B. Interaction Handler (Commands, Buttons, Menus) ---
 client.on(Events.InteractionCreate, async interaction => {
 
@@ -351,7 +457,6 @@ client.on(Events.InteractionCreate, async interaction => {
         const User = require('./models/User');
         const ShopItem = require('./models/ShopItem');
 
-        // Fetch item from database using the ID
         const item = await ShopItem.findById(itemId);
         if (!item) return interaction.editReply('❌ That item no longer exists in the shop!');
 
@@ -360,28 +465,26 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.editReply(`❌ You do not have enough credits! You need 💳 **${item.price.toLocaleString()} Credits**.`);
         }
 
-        // --- HANDLE ROLE PURCHASES ---
         if (item.type === 'role') {
             const role = interaction.guild.roles.cache.get(item.roleId);
             if (!role) return interaction.editReply('❌ That role was deleted from the server settings. Contact an admin!');
             if (interaction.member.roles.cache.has(role.id)) return interaction.editReply('✅ You already own this role!');
-            
+
             userData.credits -= item.price;
             await userData.save();
             await interaction.member.roles.add(role);
             return interaction.editReply(`🎉 Success! You purchased the **${role.name}** role!`);
         }
-        
-        // --- HANDLE PET PURCHASES ---
+
         if (item.type === 'pet') {
             if (userData.inventory.includes(item.name)) return interaction.editReply(`✅ You already own the **${item.name}** pet!`);
-            
+
             userData.credits -= item.price;
             userData.inventory.push(item.name);
-            userData.activePet = item.name; // Auto-equips the new pet
-            userData.petHappiness = 50; // Starts halfway happy!
+            userData.activePet = item.name; 
+            userData.petHappiness = 50; 
             await userData.save();
-            
+
             return interaction.editReply(`🐾 **Adoption Successful!** You are now the proud owner of a **${item.name}**!\n\n*(Tip: Talk in chat to keep its happiness meter high!)*`);
         }
     }
@@ -483,6 +586,7 @@ client.on(Events.InteractionCreate, async interaction => {
         else await interaction.reply(replyPayload).catch(() => {});
     }
 });
+
 // ==========================================
 // 5. HELPER FUNCTION TO LOAD MODULES
 // ==========================================
@@ -535,6 +639,7 @@ async function startBot() {
         loadModule('Message Purger', './modules/clear.js');
         loadModule('Master Setup Engine', './modules/masterSetupText.js');
 
+        // Note: webDashboard.js is deleted because it is now securely built into index.js!
         loadModule('Bump Tracker', './modules/bumpTracker.js');
         loadModule('Server Stats', './modules/serverStats.js');
         loadModule('AFK System', './modules/afk.js');
