@@ -1,24 +1,23 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 
+// Helper function to slow down the bot and prevent Discord Rate Limits
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setup-server')
-        .setDescription('Automatically generates a professional server layout (Roles, Categories, Channels)!')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // Strictly Admins Only
+        .setDescription('Builds the FULL massive server layout (Roles & Channels) safely over 3-5 minutes.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction, client) {
-        // 1. Send Confirmation Prompt
         const embed = new EmbedBuilder()
             .setColor('#3498db')
-            .setTitle('🏗️ Server Auto-Builder')
+            .setTitle('🏗️ Full Server Auto-Builder')
             .setDescription(
-                '**Are you sure you want to run the Server Builder?**\n\n' +
-                'This will automatically create:\n' +
-                '🛡️ Basic Roles (Admin, Moderator, Member)\n' +
-                '📢 Information Category (Rules, Announcements)\n' +
-                '💬 Community Category (General, Media, Commands)\n' +
-                '🔒 Staff Category (Private Mod Chat)\n\n' +
-                '*Note: This will not delete your existing channels, it just adds new ones.*'
+                '**WARNING: This will generate over 75 channels, 15 categories, and a full Role Hierarchy!**\n\n' +
+                'To protect the bot from Discord API rate limits, Starry will build this slowly in the background.\n\n' +
+                '⏳ **Estimated Time:** 4 to 5 minutes.\n' +
+                'Do you want to proceed?'
             );
 
         const row = new ActionRowBuilder().addComponents(
@@ -28,7 +27,6 @@ module.exports = {
 
         const response = await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
 
-        // 2. Wait for Button Click
         const filter = i => i.user.id === interaction.user.id;
         try {
             const confirmation = await response.awaitMessageComponent({ filter, time: 60000 });
@@ -37,85 +35,172 @@ module.exports = {
                 return confirmation.update({ content: '🚫 Server build canceled.', embeds: [], components: [] });
             }
 
-            // --- 🚀 STARTING THE BUILD PROCESS ---
-            await confirmation.update({ content: '⏳ **Building your server... Please wait!**', embeds: [], components: [] });
+            await confirmation.update({ 
+                content: '⏳ **Building your server in the background!**\n\nStarry is creating your Roles and Channels now. You will receive a notification in `#staff-chat` when it is 100% complete.', 
+                embeds: [], 
+                components: [] 
+            });
+            
             const guild = interaction.guild;
 
-            // 3. Create Roles
-            const adminRole = await guild.roles.create({ name: 'Admin', color: '#e74c3c', permissions: [PermissionFlagsBits.Administrator], reason: 'Auto-Setup' });
-            const modRole = await guild.roles.create({ name: 'Moderator', color: '#3498db', permissions: [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.KickMembers, PermissionFlagsBits.BanMembers], reason: 'Auto-Setup' });
-            const memberRole = await guild.roles.create({ name: 'Member', color: '#2ecc71', reason: 'Auto-Setup' });
+            // ==========================================
+            // 1. CREATE PREMIUM ROLE HIERARCHY
+            // ==========================================
+            
+            const adminRole = await guild.roles.create({ name: '👑 Admin', color: '#ff0000', permissions: [PermissionFlagsBits.Administrator], hoist: true });
+            await delay(2000);
+            
+            const modRole = await guild.roles.create({ name: '🛡️ Moderator', color: '#3498db', permissions: [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.KickMembers, PermissionFlagsBits.BanMembers, PermissionFlagsBits.ModerateMembers], hoist: true });
+            await delay(2000);
+            
+            const vipRole = await guild.roles.create({ name: '💎 VIP', color: '#f1c40f', hoist: true });
+            await delay(2000);
+            
+            const memberRole = await guild.roles.create({ name: '⭐ Member', color: '#2ecc71', hoist: true });
+            await delay(2000);
+            
+            const botRole = await guild.roles.create({ name: '🤖 Bots', color: '#95a5a6', hoist: true });
+            await delay(2000);
 
-            // 4. Create Categories & Channels
+            // ==========================================
+            // 2. DEFINE THE MASSIVE LAYOUT
+            // ==========================================
+            const layout = [
+                {
+                    name: '🛠️ STAFF', type: 'private',
+                    channels: ['📄-staff-rules', '💬-staff-chat', '💭-staff-plus', '🤔-hire', '💡-ideas', '🗃️-proofs', '🏛️-appeals', '🚨-emergency', '🧪-testing', '🧪-froozze-testing', '📓-docs']
+                },
+                { name: '📝 APPLICATIONS', type: 'private', channels: [] },
+                {
+                    name: '🗂️ LOGS', type: 'private',
+                    channels: ['📄-logs-server', '📄-logs-access', '📄-logs-moderate', '📄-logs-messages', '📄-logs-channels', '📄-logs-voice', '📄-logs-members', '📄-logs-roles', '📄-logs-misc']
+                },
+                { name: '❓ OPENED TICKETS', type: 'private', channels: [] },
+                { name: '❓ CLOSED TICKETS', type: 'private', channels: [] },
+                {
+                    name: '📢 INFOR', type: 'read-only',
+                    channels: ['📢-announcements', '📝-applications', '📱-social-networks', '❓-about-us', '📜-rules', '🚀-boosters', '🤝-invites']
+                },
+                {
+                    name: '🏁 START HERE', type: 'read-only',
+                    channels: ['❄️-welcome', '🛡️-verification', '👋-intros']
+                },
+                {
+                    name: '💬 COMMUNITY', type: 'public',
+                    channels: ['💬-general', '☕-cafe-chat', '🌎-international', '🛡️-secure-chat', '🗣️-ask-to-dev', '🖼️-quotes', '❓-support', '💡-suggestions', '👀-confessions', '🎂-birthday', '⭐-starboard', '🎲-spam']
+                },
+                { 
+                    name: '💎 VIP', type: 'vip-only', 
+                    channels: ['💎-vip-lounge', '📸-vip-media'] // Added a couple so the category isn't totally empty!
+                },
+                { name: '🎉 EVENTS & REWARDS', type: 'public', channels: [] },
+                {
+                    name: '🎨 HOBBIES', type: 'public',
+                    channels: ['📄-ads', '🌸-blossom', '🏠-home-bound-crew', '🎨-art', '🖼️-gfx', '🍕-food', '🐾-pets', '🚗-peto-auto', '📕-mangas', '🤖-mangas-auto', '💻-computers', '🎮-gaming', '🎵-music', '🎬-medias', '📝-the-inkwell', '🎬-movies', '📸-photos', '🤳-selfies']
+                },
+                { name: '🌍 GLOBAL YUID', type: 'public', channels: [] },
+                { name: '🤖 FUN BOTS', type: 'public', channels: [] },
+                { name: '🧠 AI BOTS', type: 'public', channels: [] },
+                { name: '⭐ STARS', type: 'public', channels: [] }
+            ];
 
-            // --- CATEGORY: INFORMATION ---
-            const infoCategory = await guild.channels.create({
-                name: '📌 INFORMATION',
-                type: ChannelType.GuildCategory,
-                position: 1
-            });
+            let staffChatId = null;
 
-            // Rules Channel (Locked for members, Admins can type)
-            await guild.channels.create({
-                name: '📜-rules',
-                type: ChannelType.GuildText,
-                parent: infoCategory.id,
-                permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionFlagsBits.SendMessages] }, // @everyone can't type
-                    { id: adminRole.id, allow: [PermissionFlagsBits.SendMessages] }
-                ]
-            });
+            // ==========================================
+            // 3. BACKGROUND SEQUENTIAL BUILDER
+            // ==========================================
+            for (const categoryData of layout) {
+                
+                // Determine Category Permissions using the new roles!
+                let overwrites = [];
+                if (categoryData.type === 'private') {
+                    overwrites = [
+                        { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] }, 
+                        { id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+                        { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                    ];
+                } else if (categoryData.type === 'read-only') {
+                    overwrites = [
+                        { id: guild.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+                        { id: adminRole.id, allow: [PermissionFlagsBits.SendMessages] },
+                        { id: modRole.id, allow: [PermissionFlagsBits.SendMessages] }
+                    ];
+                } else if (categoryData.type === 'vip-only') {
+                    overwrites = [
+                        { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                        { id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+                        { id: vipRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                    ];
+                } else if (categoryData.type === 'public') {
+                    overwrites = [
+                        { id: guild.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                    ];
+                }
 
-            // Announcements Channel
-            await guild.channels.create({
-                name: '📢-announcements',
-                type: ChannelType.GuildText,
-                parent: infoCategory.id,
-                permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionFlagsBits.SendMessages] },
-                    { id: adminRole.id, allow: [PermissionFlagsBits.SendMessages] }
-                ]
-            });
+                const category = await guild.channels.create({
+                    name: categoryData.name,
+                    type: ChannelType.GuildCategory,
+                    permissionOverwrites: overwrites
+                });
+                await delay(3000); 
 
-            // --- CATEGORY: COMMUNITY ---
-            const communityCategory = await guild.channels.create({
-                name: '💬 COMMUNITY',
-                type: ChannelType.GuildCategory,
-                position: 2
-            });
+                for (const channelName of categoryData.channels) {
+                    const newChannel = await guild.channels.create({
+                        name: channelName,
+                        type: ChannelType.GuildText,
+                        parent: category.id
+                    });
 
-            await guild.channels.create({ name: '💬-general', type: ChannelType.GuildText, parent: communityCategory.id });
-            await guild.channels.create({ name: '📷-media', type: ChannelType.GuildText, parent: communityCategory.id });
-            await guild.channels.create({ name: '🤖-bot-commands', type: ChannelType.GuildText, parent: communityCategory.id });
-            await guild.channels.create({ name: '🔊 General Voice', type: ChannelType.GuildVoice, parent: communityCategory.id });
+                    if (channelName === '💬-staff-chat') staffChatId = newChannel.id;
+                    await delay(3000); 
+                }
+            }
 
-            // --- CATEGORY: STAFF ONLY ---
-            const staffCategory = await guild.channels.create({
-                name: '🛡️ STAFF AREA',
-                type: ChannelType.GuildCategory,
-                position: 3,
-                permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] }, // Hide from everyone
-                    { id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel] }, // Allow Admins
-                    { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel] } // Allow Mods
-                ]
-            });
+            // ==========================================
+            // 4. CREATE VOICE CATEGORY
+            // ==========================================
+            const voiceCategory = await guild.channels.create({ name: '🎙️ VOICE', type: ChannelType.GuildCategory });
+            await delay(3000);
 
-            await guild.channels.create({ name: '🔒-staff-chat', type: ChannelType.GuildText, parent: staffCategory.id });
-            await guild.channels.create({ name: '🔒 Staff Voice', type: ChannelType.GuildVoice, parent: staffCategory.id });
+            const voiceChannels = [
+                { name: '🎤-no-mic', type: ChannelType.GuildText },
+                { name: '📱-vc-control', type: ChannelType.GuildText },
+                { name: '🗣️ General', type: ChannelType.GuildVoice },
+                { name: '➕ Duo (2)', type: ChannelType.GuildVoice, limit: 2 },
+                { name: '➕ Trio (3)', type: ChannelType.GuildVoice, limit: 3 }
+            ];
 
-            // 5. Success Message!
-            const successEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setTitle('✅ Server Built Successfully!')
-                .setDescription('Starry has finished setting up your server. You can now tweak the channels and roles to your liking!\n\n**Tip:** Give yourself the new `Admin` role in Server Settings!')
-                .setFooter({ text: 'Starry Auto-Builder', iconURL: client.user.displayAvatarURL() });
+            for (const vChannel of voiceChannels) {
+                await guild.channels.create({
+                    name: vChannel.name,
+                    type: vChannel.type,
+                    parent: voiceCategory.id,
+                    userLimit: vChannel.limit || 0
+                });
+                await delay(3000);
+            }
 
-            await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
+            // ==========================================
+            // 5. SUCCESS PING
+            // ==========================================
+            if (staffChatId) {
+                const staffChannel = guild.channels.cache.get(staffChatId);
+                if (staffChannel) {
+                    const successEmbed = new EmbedBuilder()
+                        .setColor('#2ecc71')
+                        .setTitle('✅ Massive Server Build Complete!')
+                        .setDescription(`Starry has successfully created all Categories, Channels, and **Roles**!\n\n**Action Required:** Go to your Server Settings -> Roles, and give yourself the new **${adminRole.name}** role so you can see the Staff and Logs categories!`)
+                        .setFooter({ text: 'Starry Auto-Builder', iconURL: client.user.displayAvatarURL() });
+                    
+                    await staffChannel.send({ content: `<@${interaction.user.id}>`, embeds: [successEmbed] });
+                }
+            }
 
         } catch (e) {
-            console.error(e);
-            await interaction.editReply({ content: '⚠️ You took too long to confirm, or an error occurred. Please try again.', embeds: [], components: [] });
+            console.error('Builder Error:', e);
+            try {
+                await interaction.followUp({ content: '⚠️ An error occurred during the build process. Check the console for details.', ephemeral: true });
+            } catch (err) {}
         }
     }
 };
