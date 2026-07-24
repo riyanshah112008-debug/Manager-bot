@@ -19,6 +19,8 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 10000;
 
+app.use(express.urlencoded({ extended: true })); // Required for Web Verification Forms
+
 app.get('/', (req, res) => res.send('Starry Bot is alive and running!'));
 app.get('/health', (req, res) => res.status(200).send('awake'));
 
@@ -52,6 +54,60 @@ const client = new Client({
 client.setMaxListeners(50);
 client.commands = new Collection(); 
 client.prefixCommands = new Collection();
+
+// ==========================================
+// 2.2 SECURE WEB VERIFICATION ROUTES
+// ==========================================
+client.verifyMap = new Map(); // Memory bank for secure tokens
+
+app.get('/verify', (req, res) => {
+    const token = req.query.token;
+    if (!client.verifyMap.has(token)) {
+        return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif; margin-top:50px;">❌ Invalid or Expired Link. Please generate a new one in Discord.</h1>');
+    }
+
+    res.send(`
+        <html>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:10vh;">
+            <img src="https://i.imgur.com/13w1J4L.png" width="100" style="border-radius:50%; margin-bottom:20px;">
+            <h2>Starry Security Protocol</h2>
+            <p style="color:#b5bac1; margin-bottom:40px;">To protect our server from automated bots, please verify you are human.</p>
+            <form action="/verify" method="POST">
+                <input type="hidden" name="token" value="${token}">
+                <button type="submit" style="padding:15px 40px; font-size:18px; font-weight:bold; background-color:#23a559; color:white; border:none; border-radius:8px; cursor:pointer; box-shadow: 0 4px 15px rgba(35,165,89,0.4);">
+                    I am human (Verify)
+                </button>
+            </form>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/verify', async (req, res) => {
+    const token = req.body.token;
+    const data = client.verifyMap.get(token);
+    
+    if (!data) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Token expired or invalid.</h1>');
+
+    try {
+        const guild = client.guilds.cache.get(data.guildId);
+        const member = await guild.members.fetch(data.userId);
+        
+        await member.roles.add(data.roleId);
+        client.verifyMap.delete(token); // Destroy the one-time token
+        
+        res.send(`
+            <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:20vh;">
+                <h1 style="color:#23a559; font-size:50px; margin-bottom:10px;">✅ Success!</h1>
+                <h3>You are now verified. You may close this tab and return to Discord.</h3>
+            </body>
+        `);
+    } catch (error) {
+        console.error('Web Verification Error:', error);
+        res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
+    }
+});
 
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
@@ -94,7 +150,6 @@ client.manager = new Kazagumo({
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
 
-// --- Music Player Events (Upgraded UI) ---
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
     if (!channel) return;
@@ -138,7 +193,6 @@ client.manager.on('playerStart', async (player, track) => {
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
-    // 🔥 EXPANDED FILTER MENU 🔥
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId('music_filter')
@@ -292,7 +346,6 @@ client.on(Events.InteractionCreate, async interaction => {
             const filter = interaction.values[0];
             await interaction.deferReply({ ephemeral: true });
 
-            // 🔥 MASSIVE FILTER LOGIC IMPLEMENTATION 🔥
             if (filter === 'clear') {
                 player.shoukaku.clearFilters();
                 return interaction.editReply('🚫 All audio filters cleared.');
@@ -355,8 +408,6 @@ client.on(Events.InteractionCreate, async interaction => {
         else await interaction.reply(replyPayload).catch(() => {});
     }
 });
-
-
 // ==========================================
 // 5. HELPER FUNCTION TO LOAD MODULES
 // ==========================================
@@ -420,6 +471,7 @@ async function startBot() {
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
         loadModule('Autorole & Sticky Roles', './modules/autorole.js');
+        loadModule('Verification System', './modules/verification.js'); // ADDED VERIFICATION MODULE
 
         if (fs.existsSync('./modules/modApply.js')) {
             loadModule('Mod Apply', './modules/modApply.js'); 
