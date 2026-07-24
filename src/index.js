@@ -549,6 +549,8 @@ async function startBot() {
         loadModule('Welcome System', './modules/welcome.js');
         loadModule('User Protection', './modules/protect.js');
         loadModule('Goodbye System', './modules/goodbye.js');
+        loadModule('Server Backup Engine', './modules/backupEngine.js');
+
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
         loadModule('Random Chest Drops', './modules/chestDrop.js');
