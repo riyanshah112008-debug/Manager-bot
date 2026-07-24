@@ -94,10 +94,11 @@ module.exports = {
                     channels: ['💎-vip-lounge', '📸-vip-media'] // Added a couple so the category isn't totally empty!
                 },
                 { name: '🎉 EVENTS & REWARDS', type: 'public', channels: [] },
-                {
+                           {
                     name: '🎨 HOBBIES', type: 'public',
-                    channels: ['📄-ads', '🌸-blossom', '🏠-home-bound-crew', '🎨-art', '🖼️-gfx', '🍕-food', '🐾-pets', '🚗-peto-auto', '📕-mangas', '🤖-mangas-auto', '💻-computers', '🎮-gaming', '🎵-music', '🎬-medias', '📝-the-inkwell', '🎬-movies', '📸-photos', '🤳-selfies']
+                    channels: ['📄-ads', '🎨-art', '🖼️-gfx', '🍕-food', '🐾-pets', '🚗-peto-auto', '📕-mangas', '🤖-mangas-auto', '💻-computers', '🎮-gaming', '🎵-music', '🎬-medias', '📝-the-inkwell', '🎬-movies', '📸-photos', '🤳-selfies']
                 },
+
                 { name: '🌍 GLOBAL YUID', type: 'public', channels: [] },
                 { name: '🤖 FUN BOTS', type: 'public', channels: [] },
                 { name: '🧠 AI BOTS', type: 'public', channels: [] },
