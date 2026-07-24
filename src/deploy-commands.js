@@ -58,27 +58,43 @@ const commands = [
     // ================= UNIFIED MODERATION =================
     // ... [rest of your commands] ...
 
-
-    // ================= UNIFIED MODERATION =================
-       {
+    // ================= MODERATION & SECURITY =================
+    {
         name: 'verify-setup',
         description: 'Set up the server verification panel (Admins Only)',
-        default_member_permissions: '8', // '8' is the Administrator permission code
+        default_member_permissions: '8', // Locks it to Administrators
         options: [
             { 
                 name: 'channel', 
-                type: 7, // 7 = Channel
+                type: 7, // Channel type
                 required: true, 
                 description: 'The channel to send the verification panel' 
             },
             { 
                 name: 'role', 
-                type: 8, // 8 = Role
+                type: 8, // Role type
                 required: true, 
                 description: 'The role to give users when they verify' 
             }
         ]
     },
+
+    // ================= ECONOMY & XP =================
+    {
+        name: 'chest',
+        description: 'Claim your timed loot chest for free XP and Credits!'
+    },
+    {
+        name: 'shop',
+        description: 'Open the server shop to buy exclusive roles with your Credits!'
+    },
+    {
+        name: 'prestige',
+        description: 'Reset your level to gain Prestige 👑 and permanent bonus multipliers!'
+    },
+
+    // ================= UNIFIED MODERATION =================
+   
  {
         name: 'moderate',
         description: 'Configure moderation and protection modules',
