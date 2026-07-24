@@ -167,6 +167,19 @@ const commands = [
 
     // ================= UNIFIED MODERATION =================
       {
+        name: 'set-name',
+        description: 'Change the bot\'s trigger word/name for this server (Admins Only)',
+        default_member_permissions: '8',
+        options: [
+            { 
+                name: 'name', 
+                description: 'The new trigger word (e.g., Jarvis, HelperBot)', 
+                type: 3, // STRING type
+                required: true 
+            }
+        ]
+    },
+    {
         name: 'boost-setup',
         description: 'Set the channel for server boost announcements (Admins Only)',
         default_member_permissions: '8',
