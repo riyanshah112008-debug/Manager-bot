@@ -1,64 +1,66 @@
 const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../models/User');
+const ChestChannel = require('../models/ChestChannel');
 
 // Memory bank to track the precise time of the last drop per channel
 const chestTimers = new Map();
 
 module.exports = (client) => {
     client.on(Events.MessageCreate, async message => {
-        // Ignore bots and DM messages
         if (message.author.bot || !message.guild) return;
 
+        // 1. BOOT UP THE MEMORY CACHE (Only runs once)
+        if (!client.chestChannelsCache) {
+            client.chestChannelsCache = new Set();
+            const channels = await ChestChannel.find();
+            channels.forEach(c => client.chestChannelsCache.add(c.channelId));
+        }
+
         const channelId = message.channel.id;
+
+        // 2. 🛑 SECURITY CHECK: If this channel isn't enabled by an Admin, ignore the message!
+        if (!client.chestChannelsCache.has(channelId)) return;
+
         const now = Date.now();
         
-        // If this channel hasn't been tracked yet, start the timer!
+        // 3. Start the timer if it hasn't started yet
         if (!chestTimers.has(channelId)) {
             chestTimers.set(channelId, { 
                 lastDrop: now, 
-                cooldown: Math.floor(Math.random() * 5000) + 15000 // Random time between 15s (15000ms) and 20s (20000ms)
+                cooldown: Math.floor(Math.random() * 10000) + 30000 // Random 30s to 40s
             });
-            return; // Wait for the next message after the timer finishes
+            return;
         }
 
         const channelData = chestTimers.get(channelId);
         const timePassed = now - channelData.lastDrop;
 
-        // 👀 Prints to Render logs so you can monitor the timer!
-        console.log(`[Chest System] ${Math.floor(timePassed / 1000)}s passed. Target: ${channelData.cooldown / 1000}s`);
+        console.log(`[Chest System - ${message.channel.name}] ${Math.floor(timePassed / 1000)}s passed. Target: ${Math.floor(channelData.cooldown / 1000)}s`);
 
-        // If enough time has passed (15-20 seconds) and someone just typed a message...
+        // 4. Drop the chest if enough time has passed!
         if (timePassed >= channelData.cooldown) {
             
-            // 1. Reset the timer instantly so it starts counting the next 15-20 seconds
+            // Reset the timer for the next drop
             channelData.lastDrop = now;
-            channelData.cooldown = Math.floor(Math.random() * 5000) + 15000;
+            channelData.cooldown = Math.floor(Math.random() * 10000) + 30000; // Random 30s to 40s
             chestTimers.set(channelId, channelData);
 
-            // 2. Create the "Unclaimed" Chest Alert
             const dropEmbed = new EmbedBuilder()
                 .setColor('#2b2d31')
                 .setTitle('🎁 A wild Loot Chest appeared!')
                 .setDescription('Be the first to click the key below to claim its contents!')
                 .setThumbnail('https://i.imgur.com/8QJ8zuz.png'); 
 
-            // The Emoji Reaction Button
             const claimButton = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('claim_chest')
-                    .setEmoji('🗝️')
-                    .setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId('claim_chest').setEmoji('🗝️').setStyle(ButtonStyle.Success)
             );
 
-            // Send the chest to the chat
             const chestMessage = await message.channel.send({ embeds: [dropEmbed], components: [claimButton] });
-
-            // 3. Create a high-speed collector that only accepts ONE click
-            const collector = chestMessage.createMessageComponentCollector({ max: 1, time: 60000 }); // Expires in 60 seconds
+            const collector = chestMessage.createMessageComponentCollector({ max: 1, time: 60000 }); 
 
             collector.on('collect', async interaction => {
                 if (interaction.customId === 'claim_chest') {
-                    await interaction.deferUpdate(); // Silently pause interaction
+                    await interaction.deferUpdate(); 
 
                     const userId = interaction.user.id;
                     const guildId = interaction.guild.id;
@@ -77,13 +79,9 @@ module.exports = (client) => {
                     const roll = Math.random() * 100;
                     let cumulative = 0;
                     let selectedRarity = rarities[0];
-
                     for (const r of rarities) {
                         cumulative += r.chance;
-                        if (roll <= cumulative) {
-                            selectedRarity = r;
-                            break;
-                        }
+                        if (roll <= cumulative) { selectedRarity = r; break; }
                     }
 
                     const prestigeBonus = 1 + ((userData.prestige || 0) * 0.15);
@@ -97,7 +95,6 @@ module.exports = (client) => {
                     if (userData.activePet && userData.petHappiness > 0) {
                         petBonusCred = Math.floor(baseCred * (userData.petHappiness / 100) * 0.35);
                     }
-                    
                     const finalCred = baseCred + petBonusCred;
 
                     userData.xp = (userData.xp || 0) + finalXp;
@@ -121,13 +118,9 @@ module.exports = (client) => {
                 }
             });
 
-            // 4. Handle expired chests (if no one clicks within 60 seconds)
             collector.on('end', collected => {
                 if (collected.size === 0) {
-                    const expiredEmbed = new EmbedBuilder()
-                        .setColor('#ff0000')
-                        .setTitle('💨 The chest vanished...')
-                        .setDescription('Nobody claimed the chest in time! Keep chatting to find another one.');
+                    const expiredEmbed = new EmbedBuilder().setColor('#ff0000').setTitle('💨 The chest vanished...').setDescription('Nobody claimed the chest in time! Keep chatting to find another one.');
                     chestMessage.edit({ embeds: [expiredEmbed], components: [] }).catch(() => {});
                 }
             });
