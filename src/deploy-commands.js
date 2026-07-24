@@ -166,11 +166,12 @@ const commands = [
     },
 
     // ================= UNIFIED MODERATION =================
-     {
+       {
         name: 'setup-starry',
-        description: '🧠 MASTER COMMAND: Automatically scans your server and configures all bot features.',
-        default_member_permissions: '8' // Admins Only
+        description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.',
+        default_member_permissions: '8' // Locks it to Administrators
     },
+
      {
         name: 'ahelp',
         description: 'Displays the complete Admin & Moderation Command Menu',
