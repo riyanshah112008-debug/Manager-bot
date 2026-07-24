@@ -1,5 +1,5 @@
 const { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
-// Make sure this path points correctly to your ServerBackup model!
+
 let ServerBackup;
 try { ServerBackup = require('../models/ServerBackup'); } catch(e) {}
 
@@ -142,3 +142,4 @@ module.exports = (client) => {
         }
     });
 };
+                                 
