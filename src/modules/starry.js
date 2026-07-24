@@ -287,44 +287,7 @@ module.exports = (client) => {
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         
-        // 🎁 --- LOOT CHEST BUTTON HANDLER (Crash-Proof for all users) --- 🎁
-        if (interaction.isButton() && interaction.customId.startsWith('claim_chest')) {
-            try {
-                // 1. Immediately defer to beat the 3-second Discord timeout rule
-                await interaction.deferReply({ ephemeral: true }).catch(() => {});
-
-                // 2. Fetch chest from DB (Survives Bot Restarts)
-                let chest;
-                if (ChestModel) {
-                    chest = await ChestModel.findOne({ messageId: interaction.message.id });
-                }
-                
-                if (chest && chest.claimed) {
-                    return interaction.editReply({ content: `❌ **Too late!** This chest was already claimed by <@${chest.claimedBy}>!` });
-                }
-
-                if (chest) {
-                    chest.claimed = true;
-                    chest.claimedBy = interaction.user.id;
-                    await chest.save();
-                }
-
-                // 3. Update Original Embed (Disable the button visually)
-                const claimedEmbed = new EmbedBuilder(interaction.message.embeds[0].data)
-                    .setColor('#2ecc71')
-                    .setDescription(`🎉 **Chest Claimed!**\n\n**Winner:** ${interaction.user}`);
-                
-                await interaction.message.edit({ embeds: [claimedEmbed], components: [] }).catch(() => {});
-
-                // 4. Confirm to Winner
-                return interaction.editReply({ content: `🎁 **Congratulations!** You opened the chest and claimed the loot!` });
-            } catch (error) {
-                console.error('Chest Error:', error);
-                if (interaction.deferred || interaction.replied) return interaction.editReply({ content: '❌ An error occurred while opening this chest.' }).catch(() => {});
-            }
-        }
-
-        // ====================================================
+      ====================================================
         // 🛑 STOP: EVERYTHING BELOW THIS POINT IS DEVELOPER ONLY 
         // ====================================================
         if (!client.isOwner(interaction.user.id)) {
