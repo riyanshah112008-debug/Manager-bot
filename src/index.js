@@ -25,7 +25,6 @@ app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web server listening on port ${port}`);
 
-    // Self-ping every 14 minutes to prevent Render from sleeping
     setInterval(() => {
         const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-hglf.onrender.com';
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => {
@@ -52,7 +51,8 @@ const client = new Client({
 
 client.setMaxListeners(50);
 client.commands = new Collection(); 
-client.prefixCommands = new Collection(); // Stores commands like .ignore
+client.prefixCommands = new Collection();
+
 // ==========================================
 // 2.5 LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -74,7 +74,7 @@ const Nodes = [
 ];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "spotify", // Keeps Spotify as your main search engine!
+    defaultSearchEngine: "spotify",
     plugins: [
         new KazagumoSpotify({
             clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -82,7 +82,7 @@ client.manager = new Kazagumo({
             playlistPageLimit: 2, 
             albumPageLimit: 1,
             searchMarket: 'IN',
-            searchPrefix: 'ytmsearch:' // <--- THE FIX: Bridges the audio from YouTube Music!
+            searchPrefix: 'ytmsearch:' 
         })
     ],
     send: (guildId, payload) => {
@@ -91,17 +91,14 @@ client.manager = new Kazagumo({
     }
 }, new Connectors.DiscordJS(client), Nodes);
 
-// --- Lavalink Node Events ---
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
 
-// --- Music Player Events ---
 // --- Music Player Events (Upgraded UI) ---
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
     if (!channel) return;
 
-    // Helper to format milliseconds into minutes and seconds
     const formatTime = (ms) => {
         if (!ms) return '0:00';
         const totalSeconds = Math.floor(ms / 1000);
@@ -115,9 +112,8 @@ client.manager.on('playerStart', async (player, track) => {
     const source = track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown';
     const loopStatus = player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue';
 
-    // 1. Build the Main Embed
     const embed = new EmbedBuilder()
-        .setColor('#2b2d31') // Dark aesthetic color
+        .setColor('#2b2d31')
         .setAuthor({ name: 'Now Playing', iconURL: 'https://i.imgur.com/13w1J4L.png' })
         .setTitle(track.title)
         .setURL(track.uri)
@@ -135,7 +131,6 @@ client.manager.on('playerStart', async (player, track) => {
         )
         .setFooter({ text: 'Starry Music Player • Use /help for commands', iconURL: client.user.displayAvatarURL() });
 
-    // 2. Build the Playback Buttons (Row 1)
     const playbackRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
@@ -143,7 +138,6 @@ client.manager.on('playerStart', async (player, track) => {
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
-    // 3. Build the Audio Filters Menu (Row 2)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId('music_filter')
@@ -156,10 +150,7 @@ client.manager.on('playerStart', async (player, track) => {
             ])
     );
 
-    // Send the beautiful UI
     const msg = await channel.send({ embeds: [embed], components: [playbackRow, filterRow] });
-    
-    // Save message ID to the player so we can delete it when the song ends (optional but keeps chat clean)
     player.data.set('nowPlayingMessage', msg);
 });
 
@@ -174,38 +165,26 @@ client.manager.on('playerClosed', (player, data) => {
     console.error(`[Lavalink] Voice connection closed unexpectedly:`, data);
 });
 
-// === AUTOPLAY LOGIC (Upgraded for YouTube Music) ===
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     const autoplay = player.data.get('autoplay');
 
     if (autoplay) {
-        // Look at the last song that just played
         const previousTrack = player.queue.previous[player.queue.previous.length - 1];
-        
         if (previousTrack) {
-            // Search YouTube Music for more songs by that same artist
             let result = await client.manager.search(`ytmsearch:${previousTrack.author} songs`);
-
             if (result && result.tracks.length) {
-                // Filter out the exact song we just listened to so it doesn't repeat
                 const tracks = result.tracks.filter(t => t.title !== previousTrack.title);
                 const nextTrack = tracks.length ? tracks[0] : result.tracks[0];
-                
                 player.queue.add(nextTrack);
                 if (!player.playing && !player.paused) player.play();
-                
-                // Optional: Announce the auto-played track
                 if (channel) channel.send(`📻 **Autoplay:** Up next is **${nextTrack.title}**`);
                 return;
             }
         }
     }
-    
-    // If autoplay is off or fails, end normally
     if (channel) channel.send('📭 The queue has ended.');
 });
-
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
@@ -220,10 +199,9 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 // ==========================================
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
-    console.log('ℹ️ Slash commands are deployed with `npm run deploy` (or DEPLOY_COMMANDS_ON_STARTUP=true).');
+    console.log('ℹ️ Slash commands are deployed with `npm run deploy`.');
 });
 
-// --- A. Dynamic Prefix Command Loader ---
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
     const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -237,7 +215,6 @@ if (fs.existsSync(commandsPath)) {
     }
 }
 
-// --- C. Slash Command Loader (for Music in subfolder) ---
 const musicCommandsPath = path.join(__dirname, 'commands', 'music');
 if (fs.existsSync(musicCommandsPath)) {
     const musicFiles = fs.readdirSync(musicCommandsPath).filter(file => file.endsWith('.js'));
@@ -251,16 +228,12 @@ if (fs.existsSync(musicCommandsPath)) {
     }
 }
 
-// Handler for Prefix Commands (.ignore, etc.)
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
-
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
-
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
-
     const command = client.prefixCommands.get(commandName);
     if (!command) return;
 
@@ -272,25 +245,22 @@ client.on(Events.MessageCreate, async message => {
     }
 });
 
-// --- B. Slash Command Handler ---
 // --- B. Interaction Handler (Commands, Buttons, Menus) ---
 client.on(Events.InteractionCreate, async interaction => {
-    
+
     // ==========================================
     // 🎛️ MUSIC UI BUTTON & MENU HANDLER
     // ==========================================
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (!interaction.customId.startsWith('music_')) return;
-        
+
         const player = client.manager.getPlayer(interaction.guild.id);
         if (!player) return interaction.reply({ content: '❌ No music is currently playing.', ephemeral: true });
-        
-        // Ensure user is in the same voice channel
+
         if (interaction.member.voice.channelId !== player.voiceId) {
             return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
         }
 
-        // Handle Playback Buttons
         if (interaction.isButton()) {
             switch (interaction.customId) {
                 case 'music_pause':
@@ -309,7 +279,6 @@ client.on(Events.InteractionCreate, async interaction => {
             }
         }
 
-        // Handle Audio Filters Menu
         if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
             const filter = interaction.values[0];
             await interaction.deferReply({ ephemeral: true });
@@ -338,8 +307,8 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
-    // MASTER GATEKEEPER (CENTRALIZED LOCK)
-    const botOwners = ['YOUR_DISCORD_USER_ID']; 
+    // 👑 MASTER GATEKEEPER (CENTRALIZED LOCK) - Array formatting fixed!
+    const botOwners = ['1465049039153135639', '1257676837249617971']; 
     if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
         return interaction.reply({ content: '❌ Access Denied: You are not recognized as a bot owner!', ephemeral: true });
     }
@@ -353,37 +322,6 @@ client.on(Events.InteractionCreate, async interaction => {
         else await interaction.reply(replyPayload).catch(() => {});
     }
 });
-
-
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
-
-    // ==========================================
-    // 👑 MASTER GATEKEEPER (CENTRALIZED LOCK)
-    // ==========================================
-    // Put your actual Discord User ID inside these quotes
-    const botOwners = ['1465049039153135639,1257676837249617971']; 
-
-    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
-        return interaction.reply({ 
-            content: '❌ Access Denied: You are not recognized as a bot owner!', 
-            ephemeral: true 
-        });
-    }
-
-    try {
-        await command.execute(interaction, client);
-    } catch (error) {
-        console.error(`❌ Error executing ${interaction.commandName}:`, error);
-        const replyPayload = { content: 'There was an error executing this command!', ephemeral: true };
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(replyPayload).catch(() => {});
-        } else {
-            await interaction.reply(replyPayload).catch(() => {});
-        }
-    }
-});
-
 // ==========================================
 // 5. HELPER FUNCTION TO LOAD MODULES
 // ==========================================
@@ -413,18 +351,15 @@ async function startBot() {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-        // 3. Load modules relative to the src/ folder
         loadModule('Moderation', './modules/moderation.js');
         loadModule('Automod', './modules/automod.js');
         loadModule('Media Only', './modules/mediaOnly.js');
         loadModule('Premium', './modules/premium.js');
         loadModule('Translator', './modules/translator.js');
         loadModule('Reaction Roles', './modules/reactionRoles.js'); 
-        // loadModule('Music', './modules/music.js'); // Disabled since Lavalink is global now
         loadModule('Help', './modules/help.js');
         loadModule('Leveling', './modules/leveling.js');
         loadModule('Starry Protocol', './modules/starry.js');
-
         loadModule('Truth or Dare', './modules/truthOrDare.js');
         loadModule('Support Tickets', './modules/tickets.js');
         loadModule('Warnings DB', './modules/warnings.js');
@@ -455,7 +390,6 @@ async function startBot() {
             loadModule('Mod Apply', './modules/modApply.js'); 
         }
 
-        // 4. Auto-deploy slash commands if configured
         console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
         if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
             console.log("🔄 Auto-deploying commands...");
@@ -463,7 +397,6 @@ async function startBot() {
             await deployCommands().catch(err => console.error("❌ Auto-deploy failed:\n", err.stack || err));
         }
 
-        // 5. Finally, log in to Discord
         await client.login(process.env.TOKEN);
 
     } catch (error) {
@@ -472,5 +405,4 @@ async function startBot() {
     }
 }
 
-// Start the bot!
 startBot();
