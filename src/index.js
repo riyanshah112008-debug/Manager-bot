@@ -265,6 +265,7 @@ client.once(Events.ClientReady, async () => {
     console.log('ℹ️ Slash commands are deployed with `npm run deploy`.');
 });
 
+// Load Prefix Commands
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
     const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -278,11 +279,26 @@ if (fs.existsSync(commandsPath)) {
     }
 }
 
+// Load Music Slash Commands
 const musicCommandsPath = path.join(__dirname, 'commands', 'music');
 if (fs.existsSync(musicCommandsPath)) {
     const musicFiles = fs.readdirSync(musicCommandsPath).filter(file => file.endsWith('.js'));
     for (const file of musicFiles) {
         const filePath = path.join(musicCommandsPath, file);
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+        }
+    }
+}
+
+// 🔥 Load Moderation Slash Commands (Verification, etc.)
+const modCommandsPath = path.join(__dirname, 'commands', 'moderation');
+if (fs.existsSync(modCommandsPath)) {
+    const modFiles = fs.readdirSync(modCommandsPath).filter(file => file.endsWith('.js'));
+    for (const file of modFiles) {
+        const filePath = path.join(modCommandsPath, file);
         const command = require(filePath);
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
@@ -471,7 +487,7 @@ async function startBot() {
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
         loadModule('Autorole & Sticky Roles', './modules/autorole.js');
-        loadModule('Verification System', './modules/verification.js'); // ADDED VERIFICATION MODULE
+        loadModule('Verification System', './modules/verification.js'); // VERIFICATION MODULE INCLUDED
 
         if (fs.existsSync('./modules/modApply.js')) {
             loadModule('Mod Apply', './modules/modApply.js'); 
