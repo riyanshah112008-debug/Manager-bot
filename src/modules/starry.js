@@ -8,7 +8,7 @@ const {
     TextInputBuilder, 
     TextInputStyle 
 } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Safely load the Chest model for the new crash-proof chest system
 let ChestModel;
@@ -17,13 +17,13 @@ try { ChestModel = require('../models/Chest'); } catch(e) {}
 // ==========================================
 // 🚀 INITIALIZATION & CACHING
 // ==========================================
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const blacklistedUsers = new Set();
 
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
-        console.log('✅ Starry Protocol Module Loaded (Powered by upgraded Gemini Engine!)'); 
+        console.log('✅ Starry Protocol Module Loaded (Powered by Gemini 1.5 Flash!)'); 
     });
 
     // ==========================================
@@ -55,6 +55,8 @@ module.exports = (client) => {
         const owners = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
         return owners.includes(userId);
     };
+
+
 
     // ==========================================
     // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
@@ -411,7 +413,7 @@ module.exports = (client) => {
             }
         }
     });
-    // ==========================================
+       // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE
     // ==========================================
     client.on('messageCreate', async (message) => {
@@ -428,9 +430,7 @@ module.exports = (client) => {
                     triggerWord = settings.triggerWord.toLowerCase();
                     displayName = settings.triggerWord;
                 }
-            } catch (err) {
-                console.error("Could not fetch trigger word:", err);
-            }
+            } catch (err) { }
         }
 
         const text = message.content.toLowerCase();
@@ -483,36 +483,18 @@ module.exports = (client) => {
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if public).\nRULE 5: To check for inactive users (0 messages): [CMD:CHECK_INACTIVE]\nRULE 6: For commands: [RUN:.imagine penguin]\nRULE 7: Keep casual chat highly concise. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+            // Updated Prompt to teach her how to use Colors!
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, DELETEROLE). To create a role: [CMD:CREATEROLE|NAME:RoleName|COLOR:#hexcode]\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if public).\nRULE 5: To check for inactive users (0 messages): [CMD:CHECK_INACTIVE]\nRULE 6: Keep casual chat highly concise. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+            
             const isCodingRequest = /(code|script|c\+\+|vb|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
-            let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
-            let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
+            const selectedModel = isCodingRequest ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
 
-            let geminiResponse;
-            let attempts = 0;
-            while (attempts < 4) {
-                try {
-                    geminiResponse = await ai.models.generateContent({ model: selectedModel, contents: prompt });
-                    break; 
-                } catch (apiError) {
-                    attempts++;
-                    if (apiError.status === 503 && attempts < 4) {
-                        if (attempts === 3) selectedModel = fallbackModel; 
-                        await new Promise(resolve => setTimeout(resolve, attempts * 2000));
-                    } else throw apiError; 
-                }
-            }
-
-            let replyText = geminiResponse.text || "";
+            // Use the correct Generative AI syntax
+            const model = genAI.getGenerativeModel({ model: selectedModel });
+            const result = await model.generateContent(prompt);
+            let replyText = result.response.text() || "";
+            
             let functionName = null; let args = {};
-
-            const runMatch = replyText.match(/\[.*?RUN:(.*?)\]/i);
-            if (runMatch) {
-                message.content = runMatch[1].trim(); 
-                replyText = replyText.replace(runMatch[0], '').trim();
-                client.emit('messageCreate', message); 
-                if (replyText.length === 0) return;
-            }
 
             const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL|CHECK_INACTIVE)(?:\|(.*?))?\]/i);
             if (cmdMatch) {
@@ -534,18 +516,14 @@ module.exports = (client) => {
                 else if (action === 'UNBAN') { functionName = 'unban_member'; args.userId = getParam('ID'); }
                 else if (action === 'KICK' || action === 'BAN') { functionName = action.toLowerCase() + '_member'; args.userId = getParam('ID'); args.reason = getParam('REASON') || "AI Moderation"; }
                 else if (action === 'GIVEROLE' || action === 'REMOVEROLE') { functionName = action === 'GIVEROLE' ? 'give_role' : 'remove_role'; args.userId = getParam('USER_ID'); args.roleId = getParam('ROLE_ID'); }
-                else if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME'); args.permissions = getParam('PERMISSIONS'); }
+                else if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME'); args.color = getParam('COLOR'); }
                 else if (action === 'DELETEROLE') { functionName = 'delete_role'; args.roleId = getParam('ROLE_ID'); }
-                else if (action === 'LISTROLES') { functionName = 'list_roles'; args.userId = getParam('USER_ID') || getParam('ID'); }
-                else if (action === 'LISTSERVERROLES') { functionName = 'list_server_roles'; }
                 else if (action === 'CHANNELALLOW' || action === 'CHANNELDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.roleId = getParam('ROLE_ID'); }
                 else if (action === 'USERALLOW' || action === 'USERDENY') { functionName = action.toLowerCase(); args.channelId = getParam('CHANNEL_ID'); args.userId = getParam('USER_ID'); }
                 else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.channelName = getParam('NAME'); args.roleId = getParam('ROLE_ID'); }
                 else if (action === 'CHECK_INACTIVE') { functionName = 'check_inactive'; }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
-                const rogueRunMatch = replyText.match(/\(RUN:.*?\)/i); 
-                if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
 
             if (functionName) {
@@ -573,10 +551,19 @@ module.exports = (client) => {
 
                 if (['give_role', 'remove_role', 'create_role', 'delete_role'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageRoles)) return message.reply(permErr);
+                    
                     if (functionName === 'create_role') { 
-                        const newRole = await message.guild.roles.create({ name: args.roleName || 'New Role' }); 
-                        return message.reply(`✅ Created the role **${newRole.name}**!`); 
+                        let roleColor = args.color ? args.color.replace(/[^a-fA-F0-9]/g, '') : null;
+                        if (roleColor && roleColor.length === 6) roleColor = `#${roleColor}`;
+                        else roleColor = null;
+
+                        const newRole = await message.guild.roles.create({ 
+                            name: args.roleName || 'New Role',
+                            color: roleColor 
+                        }); 
+                        return message.reply(`✅ Created the role <@&${newRole.id}>!`); 
                     }
+
                     if (functionName === 'delete_role') { 
                         const role = message.guild.roles.cache.get((args.roleId||'').replace(/\D/g, '')); 
                         if (!role) return message.reply("❌ Role not found."); 
@@ -590,7 +577,7 @@ module.exports = (client) => {
                 }
 
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
-                    if (args.amount <= 0) return message.reply(`❌ Please specify how many messages to clear (e.g., \`${displayName} clear 10\`).`);
+                    if (args.amount <= 0) return message.reply(`❌ Please specify how many messages to clear.`);
                     const deleteCount = Math.min(args.amount, 99) + 1;
                     await message.channel.bulkDelete(deleteCount, true).catch(()=>{});
                     return message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete(), 3500));
@@ -599,20 +586,15 @@ module.exports = (client) => {
                 if (functionName === 'check_inactive') {
                     if (!hasPerm(PermissionFlagsBits.ModerateMembers)) return message.reply("❌ You need Moderate Members permissions to scan the tracker database.");
                     const gCache = client.trackerCache ? client.trackerCache[message.guild.id] : null;
-                    if (!gCache || Object.keys(gCache).length === 0) {
-                        return message.reply("📊 **Inactivity Scan:** The tracking database for this server is currently empty. I need to track users for a few days first.");
-                    }
+                    if (!gCache || Object.keys(gCache).length === 0) return message.reply("📊 **Inactivity Scan:** The tracking database is empty.");
+                    
                     let inactiveList = [];
                     for (const userId in gCache) {
                         const s = gCache[userId].stats;
                         if ((s.msgs + s.media + s.links + s.voice + s.reacts + s.invites) === 0) inactiveList.push(`<@${userId}>`);
                     }
-                    if (inactiveList.length === 0) {
-                        return message.reply("✅ **Inactivity Scan:** Everyone currently tracked by the database has been active!");
-                    } else {
-                        const report = `⚠️ **Inactivity Scan:** Found **${inactiveList.length}** tracked users with 0 interactions:\n\n${inactiveList.join(', ')}`;
-                        return message.reply(report.substring(0, 1999));
-                    }
+                    if (inactiveList.length === 0) return message.reply("✅ **Inactivity Scan:** Everyone currently tracked by the database has been active!");
+                    else return message.reply(`⚠️ **Inactivity Scan:** Found **${inactiveList.length}** tracked users with 0 interactions:\n\n${inactiveList.join(', ').substring(0, 1900)}`);
                 }
 
                 const tId = (args.userId||'').replace(/\D/g, '');
@@ -625,24 +607,24 @@ module.exports = (client) => {
 
                 if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
                     const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
+                    if (typeof client.sendPremiumModDM === 'function') await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
                     await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(()=>{}); 
-                    return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                    return message.reply(`✅ Timed out <@${tId}> for ${args.minutes}m.`);
                 }
                 if (functionName === "untimeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
                     await tMember.timeout(null).catch(()=>{}); return message.reply(`✅ Removed timeout from <@${tId}>.`);
                 }
                 if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
                     const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
+                    if (typeof client.sendPremiumModDM === 'function') await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
                     await tMember.kick(args.reason).catch(()=>{}); 
-                    return message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                    return message.reply(`👢 Kicked <@${tId}>.`);
                 }
                 if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
                     const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
+                    if (typeof client.sendPremiumModDM === 'function') await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
                     await tMember.ban({ reason: args.reason }).catch(() => {});
-                    return message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                    return message.reply(`🔨 Banned <@${tId}>.`);
                 }
             }
 
@@ -650,22 +632,13 @@ module.exports = (client) => {
                 const cleanedText = replyText.trim();
                 const textChunks = cleanedText.match(/[\s\S]{1,1950}/g) || [];
                 for (const chunk of textChunks) await message.reply(chunk).catch(console.error); 
-            } else if (!functionName && !runMatch) {
+            } else if (!functionName) {
                 await message.reply("⚠️ **Debug Error:** Processed prompt successfully, but text output was empty!").catch(console.error);
             }
 
         } catch (error) {
             console.error("Gemini AI error:", error);
             if (error.status === 429) {
-                const ownerIds = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
-                for (const ownerId of ownerIds) {
-                    try { 
-                        const owner = await client.users.fetch(ownerId); 
-                        await owner.send(`⚠️ **API Quota Exhausted!**\nStarry hit the rate limit.\n**Location:** ${message.guild ? message.guild.name : 'DMs'}\n**Triggered by:** ${message.author.username}`); 
-                    } catch (dmError) { 
-                        console.error(`Failed to DM owner ${ownerId}.`); 
-                    }
-                }
                 return message.reply("⏳ **I'm taking a quick breather!** We hit the free-tier rate limit. Try again in a minute!").catch(console.error);
             }
             return message.reply(`❌ **AI Crash Report:** \`${error.message || error}\``).catch(console.error);
