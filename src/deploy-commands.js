@@ -92,6 +92,31 @@ const commands = [
         name: 'prestige',
         description: 'Reset your level to gain Prestige 👑 and permanent bonus multipliers!'
     },
+    {
+        name: 'pet',
+        description: 'Manage your virtual pets!',
+        options: [
+            {
+                name: 'status',
+                description: 'Check your active pet and its happiness level',
+                type: 1 // SUB_COMMAND
+            },
+            {
+                name: 'equip',
+                description: 'Equip a different pet from your inventory',
+                type: 1, // SUB_COMMAND
+                options: [
+                    {
+                        name: 'name',
+                        description: 'The exact name of the pet you want to equip',
+                        type: 3, // STRING
+                        required: true
+                    }
+                ]
+            }
+        ]
+    },
+
 
     // ================= UNIFIED MODERATION =================
    
