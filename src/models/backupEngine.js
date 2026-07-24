@@ -1,5 +1,7 @@
 const { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
-const ServerBackup = require('../models/ServerBackup');
+// Make sure this path points correctly to your ServerBackup model!
+let ServerBackup;
+try { ServerBackup = require('../models/ServerBackup'); } catch(e) {}
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -12,12 +14,12 @@ module.exports = (client) => {
         // ==========================================
         if (message.content.toLowerCase() === '.backup') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Admins only.');
+            if (!ServerBackup) return message.reply('❌ Backup database model not found.');
 
             const msg = await message.reply('💾 **Scanning server architecture and creating backup...**');
             const guild = message.guild;
 
             try {
-                // 1. Backup Roles (Ignore everyone, bot roles, and managed roles)
                 const rolesData = guild.roles.cache
                     .filter(r => !r.managed && r.name !== '@everyone' && r.id !== guild.id)
                     .map(r => ({
@@ -25,17 +27,14 @@ module.exports = (client) => {
                         permissions: r.permissions.bitfield.toString(), position: r.position
                     }));
 
-                // Helper to map permissions safely
                 const getOverwrites = (channel) => channel.permissionOverwrites.cache.map(ow => ({
                     id: ow.id, type: ow.type, allow: ow.allow.bitfield.toString(), deny: ow.deny.bitfield.toString()
                 }));
 
-                // 2. Backup Categories
                 const categoriesData = guild.channels.cache
                     .filter(c => c.type === ChannelType.GuildCategory)
                     .map(c => ({ id: c.id, name: c.name, overwrites: getOverwrites(c) }));
 
-                // 3. Backup Channels
                 const channelsData = guild.channels.cache
                     .filter(c => c.type !== ChannelType.GuildCategory)
                     .map(c => ({
@@ -44,7 +43,6 @@ module.exports = (client) => {
                         userLimit: c.userLimit, overwrites: getOverwrites(c)
                     }));
 
-                // 4. Save to MongoDB
                 await ServerBackup.findOneAndUpdate(
                     { guildId: guild.id },
                     { timestamp: Date.now(), roles: rolesData, categories: categoriesData, channels: channelsData },
@@ -69,6 +67,7 @@ module.exports = (client) => {
         // ==========================================
         if (message.content.toLowerCase() === '.restore') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Admins only.');
+            if (!ServerBackup) return message.reply('❌ Backup database model not found.');
 
             const backup = await ServerBackup.findOne({ guildId: message.guild.id });
             if (!backup) return message.reply('❌ No backup found for this server! Run `.backup` first.');
@@ -93,28 +92,18 @@ module.exports = (client) => {
                 await confirmation.update({ content: '🔄 **REBUILDING SERVER...** This may take a few minutes.', embeds: [], components: [] });
                 
                 const guild = message.guild;
-                let roleMap = new Map(); // Maps old Role IDs to New Role IDs
-                let categoryMap = new Map(); // Maps old Category IDs to New Category IDs
+                let roleMap = new Map();
+                let categoryMap = new Map(); 
 
-                // --- 1. RESTORE ROLES ---
                 for (const bRole of backup.roles) {
                     let existing = guild.roles.cache.find(r => r.name === bRole.name);
                     if (!existing) {
-                        try {
-                            existing = await guild.roles.create({
-                                name: bRole.name, color: bRole.color, hoist: bRole.hoist,
-                                permissions: BigInt(bRole.permissions), position: bRole.position
-                            });
-                            await delay(300);
-                        } catch (e) { continue; }
-                    } else {
-                        // Overwrite existing permissions to match backup
-                        await existing.setPermissions(BigInt(bRole.permissions)).catch(()=>{});
-                    }
+                        try { existing = await guild.roles.create({ name: bRole.name, color: bRole.color, hoist: bRole.hoist, permissions: BigInt(bRole.permissions), position: bRole.position }); await delay(300); } 
+                        catch (e) { continue; }
+                    } else { await existing.setPermissions(BigInt(bRole.permissions)).catch(()=>{}); }
                     roleMap.set(bRole.id, existing.id);
                 }
 
-                // Helper: Convert saved Overwrites to correct new IDs
                 const parseOverwrites = (savedOverwrites) => {
                     return savedOverwrites.map(ow => {
                         let targetId = ow.id;
@@ -123,37 +112,23 @@ module.exports = (client) => {
                     });
                 };
 
-                // --- 2. RESTORE CATEGORIES ---
                 for (const bCat of backup.categories) {
                     let existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === bCat.name);
                     const mappedOverwrites = parseOverwrites(bCat.overwrites);
-                    
                     if (!existing) {
-                        try {
-                            existing = await guild.channels.create({ name: bCat.name, type: ChannelType.GuildCategory, permissionOverwrites: mappedOverwrites });
-                            await delay(400);
-                        } catch (e) { continue; }
-                    } else {
-                        await existing.permissionOverwrites.set(mappedOverwrites).catch(()=>{});
-                    }
+                        try { existing = await guild.channels.create({ name: bCat.name, type: ChannelType.GuildCategory, permissionOverwrites: mappedOverwrites }); await delay(400); } 
+                        catch (e) { continue; }
+                    } else { await existing.permissionOverwrites.set(mappedOverwrites).catch(()=>{}); }
                     categoryMap.set(bCat.id, existing.id);
                 }
 
-                // --- 3. RESTORE CHANNELS ---
                 for (const bChan of backup.channels) {
                     let existing = guild.channels.cache.find(c => c.type === bChan.type && c.name === bChan.name);
                     const mappedOverwrites = parseOverwrites(bChan.overwrites);
                     const newParentId = bChan.parentId ? categoryMap.get(bChan.parentId) : null;
-
                     if (!existing) {
-                        try {
-                            await guild.channels.create({
-                                name: bChan.name, type: bChan.type, parent: newParentId,
-                                topic: bChan.topic, nsfw: bChan.nsfw, rateLimitPerUser: bChan.rateLimitPerUser,
-                                userLimit: bChan.userLimit, permissionOverwrites: mappedOverwrites
-                            });
-                            await delay(400);
-                        } catch (e) {}
+                        try { await guild.channels.create({ name: bChan.name, type: bChan.type, parent: newParentId, topic: bChan.topic, nsfw: bChan.nsfw, rateLimitPerUser: bChan.rateLimitPerUser, userLimit: bChan.userLimit, permissionOverwrites: mappedOverwrites }); await delay(400); } 
+                        catch (e) {}
                     } else {
                         await existing.permissionOverwrites.set(mappedOverwrites).catch(()=>{});
                         if (newParentId && existing.parentId !== newParentId) await existing.setParent(newParentId).catch(()=>{});
@@ -161,7 +136,6 @@ module.exports = (client) => {
                 }
 
                 await message.channel.send('✅ **RESTORE COMPLETE!**\nAll missing channels and roles have been regenerated, and permissions have been overwritten to match the backup!');
-
             } catch (e) {
                 await response.edit({ content: '⚠️ Command timed out or error occurred.', embeds: [], components: [] });
             }
