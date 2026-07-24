@@ -342,42 +342,48 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.InteractionCreate, async interaction => {
 
     // ==========================================
-    // 🛍️ SHOP PURCHASE HANDLER
+    // 🛍️ DYNAMIC SHOP PURCHASE HANDLER
     // ==========================================
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
 
-        const selectedValue = interaction.values[0];
+        const itemId = interaction.values[0];
         const User = require('./models/User');
-        const shopModule = require('./commands/economy/shop');
-        const SHOP_ITEMS = shopModule.SHOP_ITEMS || [];
+        const ShopItem = require('./models/ShopItem');
 
-        const item = SHOP_ITEMS.find(i => i.value === selectedValue);
-        if (!item) return interaction.editReply('❌ Item not found in shop configuration.');
+        // Fetch item from database using the ID
+        const item = await ShopItem.findById(itemId);
+        if (!item) return interaction.editReply('❌ That item no longer exists in the shop!');
 
         let userData = await User.findOne({ userId: interaction.user.id, guildId: interaction.guild.id });
         if (!userData || userData.credits < item.price) {
             return interaction.editReply(`❌ You do not have enough credits! You need 💳 **${item.price.toLocaleString()} Credits**.`);
         }
 
-        let role = interaction.guild.roles.cache.find(r => r.name === item.roleName);
-        if (!role) {
-            try {
-                role = await interaction.guild.roles.create({ name: item.roleName, color: '#f1c40f', reason: 'Starry Shop Purchase' });
-            } catch (e) {
-                return interaction.editReply('❌ Failed to assign role. Ensure my bot role is higher than user roles and has `Manage Roles` permission!');
-            }
+        // --- HANDLE ROLE PURCHASES ---
+        if (item.type === 'role') {
+            const role = interaction.guild.roles.cache.get(item.roleId);
+            if (!role) return interaction.editReply('❌ That role was deleted from the server settings. Contact an admin!');
+            if (interaction.member.roles.cache.has(role.id)) return interaction.editReply('✅ You already own this role!');
+            
+            userData.credits -= item.price;
+            await userData.save();
+            await interaction.member.roles.add(role);
+            return interaction.editReply(`🎉 Success! You purchased the **${role.name}** role!`);
         }
-
-        if (interaction.member.roles.cache.has(role.id)) {
-            return interaction.editReply('✅ You already own this role!');
+        
+        // --- HANDLE PET PURCHASES ---
+        if (item.type === 'pet') {
+            if (userData.inventory.includes(item.name)) return interaction.editReply(`✅ You already own the **${item.name}** pet!`);
+            
+            userData.credits -= item.price;
+            userData.inventory.push(item.name);
+            userData.activePet = item.name; // Auto-equips the new pet
+            userData.petHappiness = 50; // Starts halfway happy!
+            await userData.save();
+            
+            return interaction.editReply(`🐾 **Adoption Successful!** You are now the proud owner of a **${item.name}**!\n\n*(Tip: Talk in chat to keep its happiness meter high!)*`);
         }
-
-        userData.credits -= item.price;
-        await userData.save();
-        await interaction.member.roles.add(role);
-
-        return interaction.editReply(`🎉 Success! You purchased **${role.name}** for 💳 **${item.price.toLocaleString()} Credits**!`);
     }
 
     // ==========================================
