@@ -56,8 +56,6 @@ module.exports = (client) => {
         return owners.includes(userId);
     };
 
-
-
     // ==========================================
     // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
     // ==========================================
@@ -240,7 +238,6 @@ module.exports = (client) => {
                 blacklistedUsers.add(targetId); return message.reply(`🚫 Added \`${targetId}\` to the blacklist.`).catch(()=>{});
             }
         }
-
         if (text.startsWith('.leaveserver ')) {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const guildToLeave = client.guilds.cache.get(message.content.split(' ')[1]);
@@ -288,8 +285,8 @@ module.exports = (client) => {
     // 🎛️ INTERACTIVE BUTTONS, MODALS & GAMES
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        
-      ====================================================
+
+        // ====================================================
         // 🛑 STOP: EVERYTHING BELOW THIS POINT IS DEVELOPER ONLY 
         // ====================================================
         if (!client.isOwner(interaction.user.id)) {
@@ -413,7 +410,7 @@ module.exports = (client) => {
             }
         }
     });
-       // ==========================================
+    // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE
     // ==========================================
     client.on('messageCreate', async (message) => {
@@ -485,7 +482,7 @@ module.exports = (client) => {
         try {
             // Updated Prompt to teach her how to use Colors!
             const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, DELETEROLE). To create a role: [CMD:CREATEROLE|NAME:RoleName|COLOR:#hexcode]\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if public).\nRULE 5: To check for inactive users (0 messages): [CMD:CHECK_INACTIVE]\nRULE 6: Keep casual chat highly concise. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-            
+
             const isCodingRequest = /(code|script|c\+\+|vb|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
             const selectedModel = isCodingRequest ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
 
@@ -493,7 +490,7 @@ module.exports = (client) => {
             const model = genAI.getGenerativeModel({ model: selectedModel });
             const result = await model.generateContent(prompt);
             let replyText = result.response.text() || "";
-            
+
             let functionName = null; let args = {};
 
             const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|LISTROLES|LISTSERVERROLES|CHANNELALLOW|CHANNELDENY|USERALLOW|USERDENY|CREATECHANNEL|CHECK_INACTIVE)(?:\|(.*?))?\]/i);
@@ -551,7 +548,7 @@ module.exports = (client) => {
 
                 if (['give_role', 'remove_role', 'create_role', 'delete_role'].includes(functionName)) {
                     if (!hasPerm(PermissionFlagsBits.ManageRoles)) return message.reply(permErr);
-                    
+
                     if (functionName === 'create_role') { 
                         let roleColor = args.color ? args.color.replace(/[^a-fA-F0-9]/g, '') : null;
                         if (roleColor && roleColor.length === 6) roleColor = `#${roleColor}`;
@@ -587,7 +584,7 @@ module.exports = (client) => {
                     if (!hasPerm(PermissionFlagsBits.ModerateMembers)) return message.reply("❌ You need Moderate Members permissions to scan the tracker database.");
                     const gCache = client.trackerCache ? client.trackerCache[message.guild.id] : null;
                     if (!gCache || Object.keys(gCache).length === 0) return message.reply("📊 **Inactivity Scan:** The tracking database is empty.");
-                    
+
                     let inactiveList = [];
                     for (const userId in gCache) {
                         const s = gCache[userId].stats;
@@ -596,7 +593,6 @@ module.exports = (client) => {
                     if (inactiveList.length === 0) return message.reply("✅ **Inactivity Scan:** Everyone currently tracked by the database has been active!");
                     else return message.reply(`⚠️ **Inactivity Scan:** Found **${inactiveList.length}** tracked users with 0 interactions:\n\n${inactiveList.join(', ').substring(0, 1900)}`);
                 }
-
                 const tId = (args.userId||'').replace(/\D/g, '');
                 if (functionName === "unban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
                     await message.guild.members.unban(tId).catch(()=>{}); return message.reply("✅ User Unbanned.");
