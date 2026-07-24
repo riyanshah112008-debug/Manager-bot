@@ -10,6 +10,10 @@ const {
 } = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
 
+// Safely load the Chest model for the new crash-proof chest system
+let ChestModel;
+try { ChestModel = require('../models/Chest'); } catch(e) {}
+
 // ==========================================
 // 🚀 INITIALIZATION & CACHING
 // ==========================================
@@ -21,27 +25,23 @@ module.exports = (client) => {
     client.on('clientReady', () => { 
         console.log('✅ Starry Protocol Module Loaded (Powered by upgraded Gemini Engine!)'); 
     });
+
     // ==========================================
     // 🚀 FORCE COMMAND REGISTRATION
     // ==========================================
     client.on('ready', async () => {
         try {
             console.log('🔄 Forcing Slash Command Sync with Discord API...');
-            
-            // Force register the Master Setup command
             await client.application.commands.create({
                 name: 'setup-starry',
                 description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.',
                 default_member_permissions: '8' // Admins only
             });
-
-            // Let's also force register the ahelp command just in case!
             await client.application.commands.create({
                 name: 'ahelp',
                 description: 'Displays the complete Admin & Moderation Command Menu',
                 default_member_permissions: '8192' 
             });
-
             console.log('✅ Commands successfully pushed to Discord!');
         } catch (err) {
             console.error('❌ Failed to register commands:', err);
@@ -59,12 +59,6 @@ module.exports = (client) => {
     // ==========================================
     // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
     // ==========================================
-    /**
-     * Automatically analyzes a server's channels to find the perfect log destination.
-     * @param {Guild} guild - The Discord Server object
-     * @param {String} logType - 'access', 'moderate', 'messages', 'voice', 'channels', 'members', 'roles', or 'misc'
-     * @returns {TextChannel|null} - The best matching channel, or null if none exists.
-     */
     client.getLogChannel = (guild, logType = 'misc') => {
         if (!guild || !guild.channels) return null;
 
@@ -81,22 +75,11 @@ module.exports = (client) => {
 
         const targetNames = typeMap[logType.toLowerCase()] || typeMap['misc'];
 
-        // 1. Try to find the exact specialized channel
-        let channel = guild.channels.cache.find(c => 
-            c.type === 0 && targetNames.some(name => c.name.includes(name))
-        );
+        let channel = guild.channels.cache.find(c => c.type === 0 && targetNames.some(name => c.name.includes(name)));
         if (channel) return channel;
 
-        // 2. Fallback to a general server log channel
         channel = guild.channels.cache.find(c => 
-            c.type === 0 && (
-                c.name === 'logs-server' ||
-                c.name === 'server-logs' ||
-                c.name === 'mod-logs' ||
-                c.name === 'bot-logs' ||
-                c.name === 'system-logs' ||
-                c.name === 'logs'
-            )
+            c.type === 0 && (c.name === 'logs-server' || c.name === 'server-logs' || c.name === 'mod-logs' || c.name === 'bot-logs' || c.name === 'system-logs' || c.name === 'logs')
         );
 
         return channel || null;
@@ -108,7 +91,7 @@ module.exports = (client) => {
     const generateServerDump = async (guild) => {
         await guild.members.fetch();
         let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n- Generated At  : ${new Date().toUTCString()}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
-        
+
         const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
         const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
         const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
@@ -118,24 +101,20 @@ module.exports = (client) => {
             textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
             dump += `\n`;
         });
-        
-        // Append orphaned channels (no category)
+
         const orphaned = textAndVoice.filter(c => !c.parentId);
         if (orphaned.size > 0) {
             dump += `[📁 UNCATEGORIZED]\n`;
             orphaned.forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
         }
-        
+
         return Buffer.from(dump, 'utf-8');
     };
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE
     // ==========================================
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
-        if (member.user.bot) {
-            console.log(`[Mod DM] Skipped DMing ${member.user.tag} because they are a bot.`);
-            return false;
-        }
+        if (member.user.bot) return false;
 
         const actionType = action.toLowerCase();
         const isGuildPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
@@ -156,7 +135,6 @@ module.exports = (client) => {
                 await member.send({ embeds: [basicEmbed] }); 
                 return true; 
             } catch (err) { 
-                console.error(`🚨 [DM FAILED - FREE TIER] Target: ${member.user.tag} | Reason:`, err.message);
                 return false; 
             }
         }
@@ -201,7 +179,6 @@ module.exports = (client) => {
             await member.send({ embeds: [modEmbed], components: components }); 
             return true; 
         } catch (error) { 
-            console.error(`🚨 [DM FAILED - PREMIUM TIER] Target: ${member.user.tag} | Reason:`, error.message);
             return false; 
         }
     };
@@ -251,7 +228,6 @@ module.exports = (client) => {
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
             return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms\n- **Servers:** ${client.guilds.cache.size}`).catch(()=>{});
         }
-
         if (text.startsWith('.blacklist ')) {
             if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const targetId = message.content.split(' ')[1];
@@ -307,11 +283,55 @@ module.exports = (client) => {
         }
     });
     // ==========================================
-    // 🎛️ INTERACTIVE DEV PANEL (UI)
+    // 🎛️ INTERACTIVE BUTTONS, MODALS & GAMES
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
+        
+        // 🎁 --- LOOT CHEST BUTTON HANDLER (Crash-Proof for all users) --- 🎁
+        if (interaction.isButton() && interaction.customId.startsWith('claim_chest')) {
+            try {
+                // 1. Immediately defer to beat the 3-second Discord timeout rule
+                await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+                // 2. Fetch chest from DB (Survives Bot Restarts)
+                let chest;
+                if (ChestModel) {
+                    chest = await ChestModel.findOne({ messageId: interaction.message.id });
+                }
+                
+                if (chest && chest.claimed) {
+                    return interaction.editReply({ content: `❌ **Too late!** This chest was already claimed by <@${chest.claimedBy}>!` });
+                }
+
+                if (chest) {
+                    chest.claimed = true;
+                    chest.claimedBy = interaction.user.id;
+                    await chest.save();
+                }
+
+                // 3. Update Original Embed (Disable the button visually)
+                const claimedEmbed = new EmbedBuilder(interaction.message.embeds[0].data)
+                    .setColor('#2ecc71')
+                    .setDescription(`🎉 **Chest Claimed!**\n\n**Winner:** ${interaction.user}`);
+                
+                await interaction.message.edit({ embeds: [claimedEmbed], components: [] }).catch(() => {});
+
+                // 4. Confirm to Winner
+                return interaction.editReply({ content: `🎁 **Congratulations!** You opened the chest and claimed the loot!` });
+            } catch (error) {
+                console.error('Chest Error:', error);
+                if (interaction.deferred || interaction.replied) return interaction.editReply({ content: '❌ An error occurred while opening this chest.' }).catch(() => {});
+            }
+        }
+
+        // ====================================================
+        // 🛑 STOP: EVERYTHING BELOW THIS POINT IS DEVELOPER ONLY 
+        // ====================================================
         if (!client.isOwner(interaction.user.id)) {
-            if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
+            // Ignore non-dev interactions (like normal server buttons). If they explicitly typed /devpanel, tell them no.
+            if (interaction.isChatInputCommand() && interaction.commandName === 'devpanel') {
+                return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
+            }
             return;
         }
 
@@ -345,8 +365,8 @@ module.exports = (client) => {
             return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
         }
 
-        // --- BUTTON HANDLING ---
-        if (interaction.isButton()) {
+        // --- DEV BUTTON HANDLING ---
+        if (interaction.isButton() && interaction.customId.startsWith('dev_')) {
             const id = interaction.customId;
             if (id === 'dev_sysinfo') {
                 const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
@@ -374,7 +394,7 @@ module.exports = (client) => {
                 await interaction.reply({ content: 'Leaving this server. Goodbye! 👋', ephemeral: true }); 
                 return interaction.guild.leave(); 
             }
-            
+
             // Trigger Modals
             if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
             if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
@@ -383,8 +403,8 @@ module.exports = (client) => {
             if (id === 'dev_leaveserver_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true))));
         }
 
-        // --- MODAL SUBMIT HANDLING ---
-        if (interaction.isModalSubmit()) {
+        // --- DEV MODAL SUBMIT HANDLING ---
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_')) {
             const id = interaction.customId;
             if (id === 'modal_eval') { 
                 await interaction.deferReply({ ephemeral: true }); 
@@ -428,19 +448,17 @@ module.exports = (client) => {
             }
         }
     });
-    //     // ==========================================
+    // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
-        // 1. FETCH CUSTOM TRIGGER WORD FROM DATABASE
-        let triggerWord = 'starry'; // Default
+        let triggerWord = 'starry'; 
         let displayName = 'Starry'; 
-        
+
         if (message.guild) {
             try {
-                // Ensure this path matches where your models folder is located!
                 const ServerSettings = require('../models/ServerSettings'); 
                 const settings = await ServerSettings.findOne({ guildId: message.guild.id });
                 if (settings && settings.triggerWord) {
@@ -455,7 +473,7 @@ module.exports = (client) => {
         const text = message.content.toLowerCase();
         const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes(triggerWord); // 👈 NOW IT LISTENS FOR CUSTOM NAME
+        const hasName = text.includes(triggerWord);
         const isOwner = client.isOwner(message.author.id);
         let isReplyToBot = false;
 
@@ -464,15 +482,12 @@ module.exports = (client) => {
             if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
         }
 
-        // Only trigger AI if explicitly invoked
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // Premium Check
         if (!isOwner && (!message.guild || (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id)))) {
             return message.reply('❌ **AI is a Premium feature!** Use `.premium` to learn how to upgrade your server.').catch(() => {});
         }
 
-        // --- IMAGE GENERATION (POLLINATIONS) ---
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -501,14 +516,11 @@ module.exports = (client) => {
             }
         }
 
-        // --- GEMINI TEXT & NLP PROCESSING ---
         if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** API Key missing!");        
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            // 👈 PROMPT UPDATED: We inject the 'displayName' so Gemini knows its own custom name!
             const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE, LISTROLES).\nRULE 3: To manage channels: [CMD:CHANNELALLOW|CHANNEL_ID:123|ROLE_ID:456] (Supported: CHANNELALLOW, CHANNELDENY, USERALLOW, USERDENY). \nRULE 4: To create channels: [CMD:CREATECHANNEL|NAME:chat|ROLE_ID:123] (Omit ROLE_ID if public).\nRULE 5: To check for inactive users (0 messages): [CMD:CHECK_INACTIVE]\nRULE 6: For commands: [RUN:.imagine penguin]\nRULE 7: Keep casual chat highly concise. Shorter text ensures faster API response times!\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-            
             const isCodingRequest = /(code|script|c\+\+|vb|javascript|python|html|css|debug|error|function|api)/i.test(message.content);
             let selectedModel = isCodingRequest ? 'gemini-3.5-flash' : 'gemini-3.1-flash-lite';
             let fallbackModel = isCodingRequest ? 'gemini-3.1-flash-lite' : 'gemini-3.5-flash';
@@ -573,7 +585,6 @@ module.exports = (client) => {
                 if (rogueRunMatch) replyText = replyText.replace(rogueRunMatch[0], '').trim();
             }
 
-            // --- EXECUTE NLP MODERATION ---
             if (functionName) {
                 const permErr = "❌ I or you lack the necessary permissions to execute this command.";
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && message.guild.members.me.permissions.has(perm);
@@ -672,7 +683,6 @@ module.exports = (client) => {
                 }
             }
 
-            // --- CHUNK & DELIVER AI RESPONSE ---
             if (replyText && replyText.trim().length > 0) {
                 const cleanedText = replyText.trim();
                 const textChunks = cleanedText.match(/[\s\S]{1,1950}/g) || [];
