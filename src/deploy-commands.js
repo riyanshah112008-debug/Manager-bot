@@ -166,7 +166,15 @@ const commands = [
     },
 
     // ================= UNIFIED MODERATION =================
-     {
+      {
+        name: 'boost-setup',
+        description: 'Set the channel for server boost announcements (Admins Only)',
+        default_member_permissions: '8',
+        options: [
+            { name: 'channel', description: 'The channel to send boost messages in', type: 7, required: true }
+        ]
+    },
+   {
         name: 'setup-server',
         description: 'Automatically generates a professional server layout (Roles, Categories, Channels)!',
         default_member_permissions: '8' // Locks it to Administrators
