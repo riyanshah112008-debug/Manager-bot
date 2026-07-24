@@ -533,6 +533,8 @@ async function startBot() {
         loadModule('Whois Lookup', './modules/whois.js');
         loadModule('Emoji Blocker', './modules/emojiBlocker.js');
         loadModule('Message Purger', './modules/clear.js');
+        loadModule('Master Setup Engine', './modules/masterSetupText.js');
+
         loadModule('Bump Tracker', './modules/bumpTracker.js');
         loadModule('Server Stats', './modules/serverStats.js');
         loadModule('AFK System', './modules/afk.js');
