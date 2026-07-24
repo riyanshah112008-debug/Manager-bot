@@ -12,22 +12,11 @@ const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 // PROGRAMMATICALLY BUILD AUTOROLE OPTIONS TO SAVE SPACE
 // =======================================================
 const autoroleOptions = [
-    {
-        name: 'sticky_roles',
-        type: 5, // 5 = BOOLEAN
-        required: false,
-        description: 'Enable or disable restoring previous roles on rejoin'
-    }
+    { name: 'sticky_roles', type: 5, required: false, description: 'Enable or disable restoring previous roles on rejoin' }
 ];
 
-// Add role1 through role24
 for (let i = 1; i <= 24; i++) {
-    autoroleOptions.push({
-        name: `role${i}`,
-        type: 8, // 8 = ROLE
-        required: false,
-        description: `Select role #${i} to add to the autorole list`
-    });
+    autoroleOptions.push({ name: `role${i}`, type: 8, required: false, description: `Select role #${i} to add to the autorole list` });
 }
 
 const autoroleCommandDef = {
@@ -36,88 +25,28 @@ const autoroleCommandDef = {
     default_member_permissions: ADMIN,
     options: autoroleOptions
 };
-// =======================================================
 
 const commands = [
     // ================= MUSIC =================
-    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [
-        { name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }
-    ] },
+    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
     { name: 'pause', description: 'Pause the currently playing song' },
     { name: 'resume', description: 'Resume the paused song' },
     { name: 'skip', description: 'Skip the current song' },
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View the current music queue' },
-    { name: 'volume', description: 'Change the music volume', options: [
-        { name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }
-    ] },
+    { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
     // ================= MODERATION & SECURITY =================
-    {
-        name: 'verify-setup',
-        description: 'Set up the server verification panel (Admins Only)',
-        default_member_permissions: '8',
-        options: [
-            { name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' },
-            { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }
-        ]
-    },
+    { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] },
 
     // ================= ECONOMY & XP =================
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
     { name: 'prestige', description: 'Reset your level to gain Prestige 👑 and permanent bonus multipliers!' },
-    {
-        name: 'pet',
-        description: 'Manage your virtual pets!',
-        options: [
-            { name: 'status', description: 'Check your active pet and its happiness level', type: 1 },
-            {
-                name: 'equip', description: 'Equip a different pet from your inventory', type: 1,
-                options: [{ name: 'name', description: 'The exact name of the pet you want to equip', type: 3, required: true }]
-            }
-        ]
-    },
-    {
-        name: 'shop-admin',
-        description: 'Manage the server economy shop (Admins Only)',
-        default_member_permissions: '8',
-        options: [
-            {
-                name: 'add-role', description: 'Add a role to the shop', type: 1,
-                options: [
-                    { name: 'role', description: 'The role to sell', type: 8, required: true },
-                    { name: 'price', description: 'Price in credits', type: 10, required: true },
-                    { name: 'description', description: 'Item description', type: 3, required: true }
-                ]
-            },
-            {
-                name: 'add-pet', description: 'Add a pet to the shop', type: 1,
-                options: [
-                    { name: 'name', description: 'Name of the pet', type: 3, required: true },
-                    { name: 'price', description: 'Price in credits', type: 10, required: true },
-                    { name: 'description', description: 'Pet description', type: 3, required: true },
-                    { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }
-                ]
-            }
-        ]
-    },
-    {
-        name: 'chest-setup',
-        description: 'Enable or disable automatic chest drops in a channel (Admins Only)',
-        default_member_permissions: '8',
-        options: [
-            {
-                name: 'enable', description: 'Enable chest drops in a specific channel', type: 1,
-                options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }]
-            },
-            {
-                name: 'disable', description: 'Disable chest drops in a specific channel', type: 1,
-                options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }]
-            }
-        ]
-    },
+    { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check your active pet and its happiness level', type: 1 }, { name: 'equip', description: 'Equip a different pet from your inventory', type: 1, options: [{ name: 'name', description: 'The exact name of the pet you want to equip', type: 3, required: true }] }] },
+    { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
+    { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
     // ================= UNIFIED MODERATION =================
     { name: 'setup-starry', description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.', default_member_permissions: '8' },
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
@@ -125,45 +54,10 @@ const commands = [
     { name: 'emergency-secure', description: '🛡️ EMERGENCY: Strips all dangerous permissions from all roles. (Admins Only)', default_member_permissions: '8' },
     { name: 'emergency-unban', description: '🏥 EMERGENCY: Unbans every single user in the server ban list. (Admins Only)', default_member_permissions: '8' },
     { name: 'emergency-nuke', description: '⚠️ EMERGENCY: Deletes all channels except General. (Admins Only)', default_member_permissions: '8' },
-    {
-        name: 'set-name', description: 'Change the bot\'s trigger word/name for this server (Admins Only)', default_member_permissions: '8',
-        options: [{ name: 'name', description: 'The new trigger word (e.g., Jarvis, HelperBot)', type: 3, required: true }]
-    },
-    {
-        name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8',
-        options: [{ name: 'channel', description: 'The channel to send boost messages in', type: 7, required: true }]
-    },
+    { name: 'set-name', description: 'Change the bot\'s trigger word/name for this server (Admins Only)', default_member_permissions: '8', options: [{ name: 'name', description: 'The new trigger word (e.g., Jarvis, HelperBot)', type: 3, required: true }] },
+    { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', description: 'The channel to send boost messages in', type: 7, required: true }] },
     { name: 'setup-server', description: 'Automatically generates a professional server layout (Roles, Categories, Channels)!', default_member_permissions: '8' },
-    {
-        name: 'moderate', description: 'Configure moderation and protection modules', default_member_permissions: ADMIN,
-        options: [
-            {
-                name: 'toggle', type: 1, description: 'Enable or disable a moderation module', options: [
-                    { name: 'module', type: 3, required: true, description: 'Module to configure', choices: [
-                        { name: 'Wick anti-nuke', value: 'wick' }, { name: 'Beemo anti-raid', value: 'beemo' },
-                        { name: 'AltDentifier', value: 'altdentifier' }, { name: 'Dyno/Carl automod', value: 'dyno' }
-                    ] },
-                    { name: 'status', type: 5, required: true, description: 'Whether the module should be enabled' }
-                ]
-            },
-            {
-                name: 'autokick', type: 1, description: 'Configure automatic kicks for new accounts', options: [
-                    { name: 'enabled', type: 5, required: true, description: 'Enable or disable automatic kicks' },
-                    { name: 'account_age', type: 4, required: false, description: 'Minimum account age in days', min_value: 0 }
-                ]
-            },
-            {
-                name: 'autoban', type: 1, description: 'Enable or disable automatic bans', options: [
-                    { name: 'enabled', type: 5, required: true, description: 'Enable or disable automatic bans' }
-                ]
-            },
-            {
-                name: 'ownerbypass', type: 1, description: 'Configure owner immunity', options: [
-                    { name: 'bypass', type: 5, required: true, description: 'Whether server owners bypass protection checks' }
-                ]
-            }
-        ]
-    },
+    { name: 'moderate', description: 'Configure moderation and protection modules', default_member_permissions: ADMIN, options: [{ name: 'toggle', type: 1, description: 'Enable or disable a moderation module', options: [{ name: 'module', type: 3, required: true, description: 'Module to configure', choices: [{ name: 'Wick anti-nuke', value: 'wick' }, { name: 'Beemo anti-raid', value: 'beemo' }, { name: 'AltDentifier', value: 'altdentifier' }, { name: 'Dyno/Carl automod', value: 'dyno' }] }, { name: 'status', type: 5, required: true, description: 'Whether the module should be enabled' }] }, { name: 'autokick', type: 1, description: 'Configure automatic kicks for new accounts', options: [{ name: 'enabled', type: 5, required: true, description: 'Enable or disable automatic kicks' }, { name: 'account_age', type: 4, required: false, description: 'Minimum account age in days', min_value: 0 }] }, { name: 'autoban', type: 1, description: 'Enable or disable automatic bans', options: [{ name: 'enabled', type: 5, required: true, description: 'Enable or disable automatic bans' }] }, { name: 'ownerbypass', type: 1, description: 'Configure owner immunity', options: [{ name: 'bypass', type: 5, required: true, description: 'Whether server owners bypass protection checks' }] }] },
     { name: 'modpanel', description: 'Open the interactive moderation dashboard', default_member_permissions: MODERATE_MEMBERS, options: [{ name: 'user', type: 6, required: true, description: 'The user to moderate' }] },
     { name: 'lockdown', description: 'Lock or unlock the current channel', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Lock or unlock the channel', choices: [{ name: 'Lock', value: 'lock' }, { name: 'Unlock', value: 'unlock' }] }] },
     { name: 'clear', description: 'Delete up to 100 recent messages', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'amount', type: 4, required: true, description: 'Number of messages to delete', min_value: 1, max_value: 100 }] },
@@ -225,6 +119,7 @@ const commands = [
             { name: 'scrape', description: 'Premium: Scrape historical messages into MongoDB', type: 1, options: [{ name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' }] }
         ] 
     },
+
     // ✨ THE NEW SERVER DIRECTORY COMMANDS ✨
     {
         name: 'set-listing',
@@ -251,13 +146,9 @@ const commands = [
 ];
 
 async function deployCommands() {
-// ... the rest of your file remains exactly the same ...
-
-async function deployCommands() {
     const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
 
-    // Hardcoded fallback so you don't have to rely entirely on the .env file during testing
     const guildId = process.env.GUILD_ID || 'PASTE_YOUR_SERVER_ID_HERE';
 
     if (!token || !clientId) {
@@ -266,7 +157,6 @@ async function deployCommands() {
 
     const rest = new REST({ version: '10' }).setToken(token);
 
-    // Forces GLOBAL deployment by default so it shows up everywhere instantly!
     const route = guildId !== 'PASTE_YOUR_SERVER_ID_HERE'
         ? Routes.applicationGuildCommands(clientId, guildId)
         : Routes.applicationCommands(clientId);
