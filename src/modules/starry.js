@@ -21,6 +21,32 @@ module.exports = (client) => {
     client.on('clientReady', () => { 
         console.log('✅ Starry Protocol Module Loaded (Powered by upgraded Gemini Engine!)'); 
     });
+    // ==========================================
+    // 🚀 FORCE COMMAND REGISTRATION
+    // ==========================================
+    client.on('ready', async () => {
+        try {
+            console.log('🔄 Forcing Slash Command Sync with Discord API...');
+            
+            // Force register the Master Setup command
+            await client.application.commands.create({
+                name: 'setup-starry',
+                description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.',
+                default_member_permissions: '8' // Admins only
+            });
+
+            // Let's also force register the ahelp command just in case!
+            await client.application.commands.create({
+                name: 'ahelp',
+                description: 'Displays the complete Admin & Moderation Command Menu',
+                default_member_permissions: '8192' 
+            });
+
+            console.log('✅ Commands successfully pushed to Discord!');
+        } catch (err) {
+            console.error('❌ Failed to register commands:', err);
+        }
+    });
 
     // ==========================================
     // 👑 MULTI-OWNER VERIFICATION HELPER
