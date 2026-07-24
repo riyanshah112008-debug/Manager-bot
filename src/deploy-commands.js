@@ -60,7 +60,26 @@ const commands = [
 
 
     // ================= UNIFIED MODERATION =================
-    {
+       {
+        name: 'verify-setup',
+        description: 'Set up the server verification panel (Admins Only)',
+        default_member_permissions: '8', // '8' is the Administrator permission code
+        options: [
+            { 
+                name: 'channel', 
+                type: 7, // 7 = Channel
+                required: true, 
+                description: 'The channel to send the verification panel' 
+            },
+            { 
+                name: 'role', 
+                type: 8, // 8 = Role
+                required: true, 
+                description: 'The role to give users when they verify' 
+            }
+        ]
+    },
+ {
         name: 'moderate',
         description: 'Configure moderation and protection modules',
         default_member_permissions: ADMIN,
