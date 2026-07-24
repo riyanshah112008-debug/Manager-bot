@@ -138,15 +138,24 @@ client.manager.on('playerStart', async (player, track) => {
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
+    // 🔥 EXPANDED FILTER MENU 🔥
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId('music_filter')
             .setPlaceholder('Select audio filter...')
             .addOptions([
                 { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
+                { label: 'Karaoke', description: 'Reduces vocal volume', value: 'karaoke', emoji: '🎤' },
+                { label: 'Timescale', description: 'Changes speed and pitch', value: 'timescale', emoji: '⏱️' },
+                { label: 'Tremolo', description: 'Modulates volume', value: 'tremolo', emoji: '🌊' },
+                { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' },
+                { label: '3D', description: '3D audio rotation effect', value: '3d', emoji: '🌀' },
+                { label: 'Distortion', description: 'Distorts the audio', value: 'distortion', emoji: '📢' },
+                { label: 'Channel Mix', description: 'Mixes left and right channels', value: 'channelmix', emoji: '🎛️' },
+                { label: 'Low Pass', description: 'Filters out high frequencies', value: 'lowpass', emoji: '🔈' },
                 { label: 'Bassboost', description: 'Boosts the low frequencies', value: 'bassboost', emoji: '🎸' },
-                { label: 'Nightcore', description: 'Speeds up the track and raises pitch', value: 'nightcore', emoji: '✨' },
-                { label: 'Vaporwave', description: 'Slows down the track (Lofi style)', value: 'vaporwave', emoji: '🌫️' }
+                { label: 'Nightcore', description: 'Speeds up track and raises pitch', value: 'nightcore', emoji: '✨' },
+                { label: 'Daycore', description: 'Slows down track and lowers pitch', value: 'daycore', emoji: '🌅' }
             ])
     );
 
@@ -283,18 +292,43 @@ client.on(Events.InteractionCreate, async interaction => {
             const filter = interaction.values[0];
             await interaction.deferReply({ ephemeral: true });
 
+            // 🔥 MASSIVE FILTER LOGIC IMPLEMENTATION 🔥
             if (filter === 'clear') {
                 player.shoukaku.clearFilters();
                 return interaction.editReply('🚫 All audio filters cleared.');
+            } else if (filter === 'karaoke') {
+                player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } });
+                return interaction.editReply('🎤 Karaoke filter applied!');
+            } else if (filter === 'timescale') {
+                player.shoukaku.setFilters({ timescale: { speed: 1.1, pitch: 1.1, rate: 1.0 } });
+                return interaction.editReply('⏱️ Timescale filter applied!');
+            } else if (filter === 'tremolo') {
+                player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } });
+                return interaction.editReply('🌊 Tremolo filter applied!');
+            } else if (filter === 'vibrato') {
+                player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } });
+                return interaction.editReply('〰️ Vibrato filter applied!');
+            } else if (filter === '3d') {
+                player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } });
+                return interaction.editReply('🌀 3D audio filter applied!');
+            } else if (filter === 'distortion') {
+                player.shoukaku.setFilters({ distortion: { sinOffset: 0.2, sinScale: 0.9, cosOffset: 0.2, cosScale: 0.9, tanOffset: 0.2, tanScale: 0.9, offset: 0, scale: 1 } });
+                return interaction.editReply('📢 Distortion filter applied!');
+            } else if (filter === 'channelmix') {
+                player.shoukaku.setFilters({ channelMix: { leftToLeft: 0.5, leftToRight: 0.5, rightToLeft: 0.5, rightToRight: 0.5 } });
+                return interaction.editReply('🎛️ Channel Mix filter applied!');
+            } else if (filter === 'lowpass') {
+                player.shoukaku.setFilters({ lowPass: { smoothing: 20.0 } });
+                return interaction.editReply('🔈 Low Pass filter applied!');
             } else if (filter === 'bassboost') {
                 player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] });
                 return interaction.editReply('🎸 Bassboost applied!');
             } else if (filter === 'nightcore') {
                 player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } });
                 return interaction.editReply('✨ Nightcore applied!');
-            } else if (filter === 'vaporwave') {
+            } else if (filter === 'daycore') {
                 player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } });
-                return interaction.editReply('🌫️ Vaporwave applied!');
+                return interaction.editReply('🌅 Daycore applied!');
             }
         }
     }
@@ -307,7 +341,6 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
-    // 👑 MASTER GATEKEEPER (CENTRALIZED LOCK) - Array formatting fixed!
     const botOwners = ['1465049039153135639', '1257676837249617971']; 
     if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
         return interaction.reply({ content: '❌ Access Denied: You are not recognized as a bot owner!', ephemeral: true });
@@ -322,6 +355,8 @@ client.on(Events.InteractionCreate, async interaction => {
         else await interaction.reply(replyPayload).catch(() => {});
     }
 });
+
+
 // ==========================================
 // 5. HELPER FUNCTION TO LOAD MODULES
 // ==========================================
