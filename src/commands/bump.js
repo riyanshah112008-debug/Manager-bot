@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const ServerListing = require('../../models/ServerListing');
+// FIXED: Changed ../../ to ../ so it correctly finds the models folder!
+const ServerListing = require('../models/ServerListing');
 
 module.exports = {
     data: new SlashCommandBuilder()
