@@ -116,6 +116,34 @@ const commands = [
             }
         ]
     },
+    {
+        name: 'shop-admin',
+        description: 'Manage the server economy shop (Admins Only)',
+        default_member_permissions: '8', // '8' locks it to Administrators
+        options: [
+            {
+                name: 'add-role',
+                description: 'Add a role to the shop',
+                type: 1, // SUB_COMMAND
+                options: [
+                    { name: 'role', description: 'The role to sell', type: 8, required: true },
+                    { name: 'price', description: 'Price in credits', type: 10, required: true },
+                    { name: 'description', description: 'Item description', type: 3, required: true }
+                ]
+            },
+            {
+                name: 'add-pet',
+                description: 'Add a pet to the shop',
+                type: 1, // SUB_COMMAND
+                options: [
+                    { name: 'name', description: 'Name of the pet', type: 3, required: true },
+                    { name: 'price', description: 'Price in credits', type: 10, required: true },
+                    { name: 'description', description: 'Pet description', type: 3, required: true },
+                    { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }
+                ]
+            }
+        ]
+    },
 
 
     // ================= UNIFIED MODERATION =================
