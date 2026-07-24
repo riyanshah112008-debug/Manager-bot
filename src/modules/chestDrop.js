@@ -1,8 +1,8 @@
 const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../models/User');
 
-// Memory bank to track counts AND random thresholds per channel
-const messageTracker = new Map();
+// Memory bank to track the precise time of the last drop per channel
+const chestTimers = new Map();
 
 module.exports = (client) => {
     client.on(Events.MessageCreate, async message => {
@@ -10,26 +10,32 @@ module.exports = (client) => {
         if (message.author.bot || !message.guild) return;
 
         const channelId = message.channel.id;
+        const now = Date.now();
         
-        // If this channel hasn't been tracked yet, set it up
-        if (!messageTracker.has(channelId)) {
-            // 🎯 Spawn threshold set between 5 and 10 messages
-            const nextThreshold = Math.floor(Math.random() * 6) + 5; 
-            messageTracker.set(channelId, { count: 0, threshold: nextThreshold });
+        // If this channel hasn't been tracked yet, start the timer!
+        if (!chestTimers.has(channelId)) {
+            chestTimers.set(channelId, { 
+                lastDrop: now, 
+                cooldown: Math.floor(Math.random() * 5000) + 15000 // Random time between 15s (15000ms) and 20s (20000ms)
+            });
+            return; // Wait for the next message after the timer finishes
         }
 
-        const channelData = messageTracker.get(channelId);
-        channelData.count += 1; // Add 1 to the message count
+        const channelData = chestTimers.get(channelId);
+        const timePassed = now - channelData.lastDrop;
 
-        // 👀 Prints to Render logs so you can monitor activity live!
-        console.log(`[Chest System] ${message.author.username} typed. Count: ${channelData.count}/${channelData.threshold}`);
+        // 👀 Prints to Render logs so you can monitor the timer!
+        console.log(`[Chest System] ${Math.floor(timePassed / 1000)}s passed. Target: ${channelData.cooldown / 1000}s`);
 
-        if (channelData.count >= channelData.threshold) {
-            // Reset the tracker with a new random threshold between 5 and 10
-            const newThreshold = Math.floor(Math.random() * 6) + 5; 
-            messageTracker.set(channelId, { count: 0, threshold: newThreshold });
+        // If enough time has passed (15-20 seconds) and someone just typed a message...
+        if (timePassed >= channelData.cooldown) {
+            
+            // 1. Reset the timer instantly so it starts counting the next 15-20 seconds
+            channelData.lastDrop = now;
+            channelData.cooldown = Math.floor(Math.random() * 5000) + 15000;
+            chestTimers.set(channelId, channelData);
 
-            // 1. Create the "Unclaimed" Chest Alert
+            // 2. Create the "Unclaimed" Chest Alert
             const dropEmbed = new EmbedBuilder()
                 .setColor('#2b2d31')
                 .setTitle('🎁 A wild Loot Chest appeared!')
@@ -47,7 +53,7 @@ module.exports = (client) => {
             // Send the chest to the chat
             const chestMessage = await message.channel.send({ embeds: [dropEmbed], components: [claimButton] });
 
-            // 2. Create a high-speed collector that only accepts ONE click
+            // 3. Create a high-speed collector that only accepts ONE click
             const collector = chestMessage.createMessageComponentCollector({ max: 1, time: 60000 }); // Expires in 60 seconds
 
             collector.on('collect', async interaction => {
