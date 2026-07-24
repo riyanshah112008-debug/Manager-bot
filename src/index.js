@@ -662,6 +662,8 @@ async function startBot() {
 
         loadModule('Autorole & Sticky Roles', './modules/autorole.js');
         loadModule('Verification System', './modules/verification.js');
+loadModule('Auto Bump Engine', './modules/bumpEngine.js');
+
 
         if (fs.existsSync('./modules/modApply.js')) {
             loadModule('Mod Apply', './modules/modApply.js'); 
