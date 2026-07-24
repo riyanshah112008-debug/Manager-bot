@@ -293,12 +293,26 @@ if (fs.existsSync(musicCommandsPath)) {
     }
 }
 
-// 🔥 Load Moderation Slash Commands (Verification, etc.)
+// Load Moderation Slash Commands
 const modCommandsPath = path.join(__dirname, 'commands', 'moderation');
 if (fs.existsSync(modCommandsPath)) {
     const modFiles = fs.readdirSync(modCommandsPath).filter(file => file.endsWith('.js'));
     for (const file of modFiles) {
         const filePath = path.join(modCommandsPath, file);
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+        }
+    }
+}
+
+// 🔥 Load Economy Slash Commands (Chest, Prestige, Shop)
+const ecoCommandsPath = path.join(__dirname, 'commands', 'economy');
+if (fs.existsSync(ecoCommandsPath)) {
+    const ecoFiles = fs.readdirSync(ecoCommandsPath).filter(file => file.endsWith('.js'));
+    for (const file of ecoFiles) {
+        const filePath = path.join(ecoCommandsPath, file);
         const command = require(filePath);
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
@@ -326,6 +340,45 @@ client.on(Events.MessageCreate, async message => {
 
 // --- B. Interaction Handler (Commands, Buttons, Menus) ---
 client.on(Events.InteractionCreate, async interaction => {
+
+    // ==========================================
+    // 🛍️ SHOP PURCHASE HANDLER
+    // ==========================================
+    if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const selectedValue = interaction.values[0];
+        const User = require('./models/User');
+        const shopModule = require('./commands/economy/shop');
+        const SHOP_ITEMS = shopModule.SHOP_ITEMS || [];
+
+        const item = SHOP_ITEMS.find(i => i.value === selectedValue);
+        if (!item) return interaction.editReply('❌ Item not found in shop configuration.');
+
+        let userData = await User.findOne({ userId: interaction.user.id, guildId: interaction.guild.id });
+        if (!userData || userData.credits < item.price) {
+            return interaction.editReply(`❌ You do not have enough credits! You need 💳 **${item.price.toLocaleString()} Credits**.`);
+        }
+
+        let role = interaction.guild.roles.cache.find(r => r.name === item.roleName);
+        if (!role) {
+            try {
+                role = await interaction.guild.roles.create({ name: item.roleName, color: '#f1c40f', reason: 'Starry Shop Purchase' });
+            } catch (e) {
+                return interaction.editReply('❌ Failed to assign role. Ensure my bot role is higher than user roles and has `Manage Roles` permission!');
+            }
+        }
+
+        if (interaction.member.roles.cache.has(role.id)) {
+            return interaction.editReply('✅ You already own this role!');
+        }
+
+        userData.credits -= item.price;
+        await userData.save();
+        await interaction.member.roles.add(role);
+
+        return interaction.editReply(`🎉 Success! You purchased **${role.name}** for 💳 **${item.price.toLocaleString()} Credits**!`);
+    }
 
     // ==========================================
     // 🎛️ MUSIC UI BUTTON & MENU HANDLER
@@ -487,7 +540,7 @@ async function startBot() {
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
         loadModule('Autorole & Sticky Roles', './modules/autorole.js');
-        loadModule('Verification System', './modules/verification.js'); // VERIFICATION MODULE INCLUDED
+        loadModule('Verification System', './modules/verification.js');
 
         if (fs.existsSync('./modules/modApply.js')) {
             loadModule('Mod Apply', './modules/modApply.js'); 
