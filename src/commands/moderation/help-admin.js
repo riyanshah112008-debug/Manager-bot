@@ -1,65 +1,69 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
-// 1. We build the embed as a reusable function
 const buildAdminHelpEmbed = (client) => {
     return new EmbedBuilder()
         .setColor('#2b2d31')
-        .setTitle('🛡️ Starry Admin & Moderation Panel')
-        .setDescription('Here is the complete list of management, moderation, and emergency commands compiled from the Manager-Bot suite and Starry Custom Modules.')
+        .setTitle('🛡️ Starry Management & Emergency Suite')
+        .setDescription('Complete command index for server administration, emergency lockdown, disaster recovery, and automated setup.')
         .addFields(
             {
                 name: '🚨 Emergency Protocols (Admins Only)',
                 value: 
-                '`/emergency-nuke` - Vaporizes all channels & roles.\n' +
-                '`/emergency-lockdown` - Freezes the entire server.\n' +
-                '`/emergency-secure` - Strips dangerous permissions from roles.\n' +
-                '`/emergency-unban` - Mass unbans everyone in the server.'
+                '`/emergency-nuke` — Vaporizes all channels & custom roles (spares General).\n' +
+                '`/emergency-lockdown` — Freezes typing & voice access for `@everyone` across all channels.\n' +
+                '`/emergency-secure` — Strips dangerous permissions (Admin, Kick, Ban, Manage) from roles.\n' +
+                '`/emergency-unban` — Mass unbans every user in the server ban list.\n' +
+                '`/emergency-webhooks` — Deletes all webhooks across the server to stop bypass spam.\n' +
+                '`/emergency-vckick` — Forcefully disconnects everyone from all voice channels.\n' +
+                '`/emergency-quarantine` — Applies a 7-day timeout to all members who joined in the last 24h.'
             },
             {
-                name: '⚙️ Server Configuration',
+                name: '💾 Backup & Disaster Recovery',
                 value: 
-                '`/setup-server` - Auto-builds a premium server layout.\n' +
-                '`/set-name` - Changes the bot\'s custom trigger word.\n' +
-                '`/boost-setup` - Sets the server boost announcement channel.\n' +
-                '`/chest-setup` - Enables automatic loot chest drops.'
+                '`.backup` — Saves a full MongoDB snapshot of all roles, categories, channels & permission overwrites.\n' +
+                '`.restore` — Reconstructs missing channels/roles and re-applies saved permission overwrites.'
             },
             {
-                name: '🔨 Manager-Bot Moderation Suite',
+                name: '⚙️ Master Setup & Configuration',
                 value: 
-                '`/ban` & `/unban` - Ban or unban a member.\n' +
-                '`/kick` - Removes a member from the server.\n' +
-                '`/timeout` & `/untimeout` - Mutes a member for a set duration.\n' +
-                '`/warn` & `/warnings` - Warns a user / checks their history.\n' +
-                '`/purge` or `/clear` - Bulk deletes messages.\n' +
-                '`/lock` & `/unlock` - Locks/unlocks a specific channel.\n' +
-                '`/slowmode` - Adjusts the channel chat delay.\n' +
-                '`/role` - Manually add or remove roles from a user.'
+                '`.setup-starry` / `/setup-starry` — Scans server channels and auto-links all modules (Logs, Tickets, Boosts, Chests, etc.).\n' +
+                '`/setup-server` — Auto-builds the complete premium category, channel & role structure.\n' +
+                '`/set-name` — Customizes the bot\'s trigger word/identity for your server.\n' +
+                '`/boost-setup` — Configures the dedicated channel for server boost announcements.'
+            },
+            {
+                name: '🔨 Moderation Suite',
+                value: 
+                '`/ban` & `/unban` — Ban or unban a user.\n' +
+                '`/kick` — Kick a user from the server.\n' +
+                '`/timeout` & `/untimeout` — Mute or unmute a member for a duration.\n' +
+                '`/warn` & `/warnings` — Issue a formal warning or check a member\'s log.\n' +
+                '`/purge` / `/clear` — Bulk deletes a specified number of chat messages.\n' +
+                '`/lock` & `/unlock` — Lock or unlock a specific channel.'
             },
             {
                 name: '🤖 AI Natural Language Moderation',
                 value: 
-                'You don\'t even need slash commands! Just chat with Starry:\n' +
-                '*"`Starry, timeout @user for 10 minutes for spamming.`"*\n' +
-                '*"`Starry, clear 50 messages in this channel.`"*\n' +
-                '*"`Starry, give @user the VIP role.`"*'
+                'Interact directly with Starry via natural messages:\n' +
+                '> *"Starry timeout @user for 10 minutes for spamming."*\n' +
+                '> *"Starry clear 30 messages."*\n' +
+                '> *"Starry give @user the VIP role."*'
             }
         )
-        .setFooter({ text: 'Starry Management System', iconURL: client.user.displayAvatarURL() })
+        .setFooter({ text: 'Starry Protocol • Admin Control Panel', iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
 };
 
 module.exports = {
-    // 2. The Slash Command Configuration
     data: new SlashCommandBuilder()
         .setName('ahelp')
         .setDescription('Displays the complete Admin & Moderation Command Menu')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages), // Locks it to Mods & Admins
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
     async execute(interaction) {
         const embed = buildAdminHelpEmbed(interaction.client);
         return interaction.reply({ embeds: [embed], ephemeral: true });
     },
     
-    // Export the embed builder so the text command can use it!
     buildAdminHelpEmbed
 };
