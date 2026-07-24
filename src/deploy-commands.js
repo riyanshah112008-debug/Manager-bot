@@ -145,6 +145,25 @@ const commands = [
         ]
     },
 
+    {
+        name: 'chest-setup',
+        description: 'Enable or disable automatic chest drops in a channel (Admins Only)',
+        default_member_permissions: '8', // '8' = Administrator
+        options: [
+            {
+                name: 'enable',
+                description: 'Enable chest drops in a specific channel',
+                type: 1, // SUB_COMMAND
+                options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }]
+            },
+            {
+                name: 'disable',
+                description: 'Disable chest drops in a specific channel',
+                type: 1, // SUB_COMMAND
+                options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }]
+            }
+        ]
+    },
 
     // ================= UNIFIED MODERATION =================
    
