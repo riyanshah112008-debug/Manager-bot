@@ -166,7 +166,12 @@ const commands = [
     },
 
     // ================= UNIFIED MODERATION =================
-   
+     {
+        name: 'setup-server',
+        description: 'Automatically generates a professional server layout (Roles, Categories, Channels)!',
+        default_member_permissions: '8' // Locks it to Administrators
+    },
+  
  {
         name: 'moderate',
         description: 'Configure moderation and protection modules',
