@@ -3,7 +3,8 @@
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
-const { Client, GatewayIntentBits, Partials, Collection, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+
 const express = require('express');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
@@ -95,9 +96,71 @@ client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected 
 client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
 
 // --- Music Player Events ---
-client.manager.on('playerStart', (player, track) => {
+// --- Music Player Events (Upgraded UI) ---
+client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send(`🎶 Now playing: **${track.title}**`);
+    if (!channel) return;
+
+    // Helper to format milliseconds into minutes and seconds
+    const formatTime = (ms) => {
+        if (!ms) return '0:00';
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+    };
+
+    const duration = track.isStream ? '🔴 LIVE' : formatTime(track.length);
+    const requester = track.requester ? `<@${track.requester.id}>` : 'Unknown';
+    const source = track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown';
+    const loopStatus = player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue';
+
+    // 1. Build the Main Embed
+    const embed = new EmbedBuilder()
+        .setColor('#2b2d31') // Dark aesthetic color
+        .setAuthor({ name: 'Now Playing', iconURL: 'https://i.imgur.com/13w1J4L.png' })
+        .setTitle(track.title)
+        .setURL(track.uri)
+        .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
+        .setDescription(
+            `**ℹ️ Song Details**\n` +
+            `▶️ **Status:** Playing\n` +
+            `⚙️ **Loop:** ${loopStatus}\n` +
+            `🕒 **Duration:** ${duration}\n` +
+            `👤 **Requester:** ${requester}\n` +
+            `🌐 **Source:** ${source}\n` +
+            `🔠 **Queue:** ${player.queue.length} songs in queue\n\n` +
+            `**⚙️ Playback & Filters**\n` +
+            `Use the interactive controls below to manage your audio session.`
+        )
+        .setFooter({ text: 'Starry Music Player • Use /help for commands', iconURL: client.user.displayAvatarURL() });
+
+    // 2. Build the Playback Buttons (Row 1)
+    const playbackRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
+    );
+
+    // 3. Build the Audio Filters Menu (Row 2)
+    const filterRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('music_filter')
+            .setPlaceholder('Select audio filter...')
+            .addOptions([
+                { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
+                { label: 'Bassboost', description: 'Boosts the low frequencies', value: 'bassboost', emoji: '🎸' },
+                { label: 'Nightcore', description: 'Speeds up the track and raises pitch', value: 'nightcore', emoji: '✨' },
+                { label: 'Vaporwave', description: 'Slows down the track (Lofi style)', value: 'vaporwave', emoji: '🌫️' }
+            ])
+    );
+
+    // Send the beautiful UI
+    const msg = await channel.send({ embeds: [embed], components: [playbackRow, filterRow] });
+    
+    // Save message ID to the player so we can delete it when the song ends (optional but keeps chat clean)
+    player.data.set('nowPlayingMessage', msg);
 });
 
 client.manager.on('playerException', (player, data) => {
@@ -210,8 +273,87 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // --- B. Slash Command Handler ---
+// --- B. Interaction Handler (Commands, Buttons, Menus) ---
 client.on(Events.InteractionCreate, async interaction => {
+    
+    // ==========================================
+    // 🎛️ MUSIC UI BUTTON & MENU HANDLER
+    // ==========================================
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        if (!interaction.customId.startsWith('music_')) return;
+        
+        const player = client.manager.getPlayer(interaction.guild.id);
+        if (!player) return interaction.reply({ content: '❌ No music is currently playing.', ephemeral: true });
+        
+        // Ensure user is in the same voice channel
+        if (interaction.member.voice.channelId !== player.voiceId) {
+            return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
+        }
+
+        // Handle Playback Buttons
+        if (interaction.isButton()) {
+            switch (interaction.customId) {
+                case 'music_pause':
+                    player.pause(!player.paused);
+                    return interaction.reply({ content: `⏯️ Music has been **${player.paused ? 'Paused' : 'Resumed'}**.`, ephemeral: true });
+                case 'music_skip':
+                    player.skip();
+                    return interaction.reply({ content: '⏭️ Skipped to the next track.', ephemeral: true });
+                case 'music_stop':
+                    player.destroy();
+                    return interaction.reply({ content: '⏹️ Playback stopped and queue cleared.', ephemeral: true });
+                case 'music_loop':
+                    const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
+                    player.setLoop(nextLoop);
+                    return interaction.reply({ content: `🔁 Loop mode set to: **${nextLoop.toUpperCase()}**`, ephemeral: true });
+            }
+        }
+
+        // Handle Audio Filters Menu
+        if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
+            const filter = interaction.values[0];
+            await interaction.deferReply({ ephemeral: true });
+
+            if (filter === 'clear') {
+                player.shoukaku.clearFilters();
+                return interaction.editReply('🚫 All audio filters cleared.');
+            } else if (filter === 'bassboost') {
+                player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] });
+                return interaction.editReply('🎸 Bassboost applied!');
+            } else if (filter === 'nightcore') {
+                player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } });
+                return interaction.editReply('✨ Nightcore applied!');
+            } else if (filter === 'vaporwave') {
+                player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } });
+                return interaction.editReply('🌫️ Vaporwave applied!');
+            }
+        }
+    }
+
+    // ==========================================
+    // 💻 STANDARD COMMAND HANDLER
+    // ==========================================
     if (!interaction.isChatInputCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
+
+    // MASTER GATEKEEPER (CENTRALIZED LOCK)
+    const botOwners = ['YOUR_DISCORD_USER_ID']; 
+    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Access Denied: You are not recognized as a bot owner!', ephemeral: true });
+    }
+
+    try {
+        await command.execute(interaction, client);
+    } catch (error) {
+        console.error(`❌ Error executing ${interaction.commandName}:`, error);
+        const replyPayload = { content: 'There was an error executing this command!', ephemeral: true };
+        if (interaction.replied || interaction.deferred) await interaction.followUp(replyPayload).catch(() => {});
+        else await interaction.reply(replyPayload).catch(() => {});
+    }
+});
+
 
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
