@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-// Path updated to ../../ because we moved it into the economy folder!
 const ServerListing = require('../../models/ServerListing');
 
 module.exports = {
@@ -12,7 +11,7 @@ module.exports = {
         const guild = interaction.guild;
 
         if (!guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
-            return interaction.editReply('❌ I need the **Create Invites** permission to list this server!');
+            return interaction.editReply('❌ I need the **Create Invites** permission in this channel to list this server!');
         }
 
         let listing = await ServerListing.findOne({ guildId: guild.id });
@@ -20,7 +19,7 @@ module.exports = {
 
         if (listing && listing.lastBump && (Date.now() - listing.lastBump.getTime() < cooldown)) {
             const nextBump = Math.floor((listing.lastBump.getTime() + cooldown) / 1000);
-            return interaction.editReply(`⏳ **Cooldown Active!** You can bump this server again <t:${nextBump}:R>.`);
+            return interaction.editReply(`⏳ **Cooldown Active!** You can bump Starry's directory again <t:${nextBump}:R>.`);
         }
 
         let invite;
@@ -34,7 +33,7 @@ module.exports = {
 
         listing.name = guild.name;
         listing.iconUrl = guild.iconURL({ extension: 'png', size: 256 }) || null;
-        listing.inviteLink = invite.url;
+        listing.inviteLink = invite.url; // This makes the Join button on your website work!
         listing.memberCount = guild.memberCount;
         listing.bumps += 1;
         listing.lastBump = new Date();
@@ -55,4 +54,3 @@ module.exports = {
         return interaction.editReply({ embeds: [embed] });
     }
 };
-            
