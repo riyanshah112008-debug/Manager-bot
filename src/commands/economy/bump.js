@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-// FIXED: Changed ../../ to ../ so it correctly finds the models folder!
-const ServerListing = require('../models/ServerListing');
+// Path updated to ../../ because we moved it into the economy folder!
+const ServerListing = require('../../models/ServerListing');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,7 +11,6 @@ module.exports = {
         await interaction.deferReply();
         const guild = interaction.guild;
 
-        // Check if bot can create invites
         if (!guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
             return interaction.editReply('❌ I need the **Create Invites** permission to list this server!');
         }
@@ -24,7 +23,6 @@ module.exports = {
             return interaction.editReply(`⏳ **Cooldown Active!** You can bump this server again <t:${nextBump}:R>.`);
         }
 
-        // Generate a fresh invite link that never expires
         let invite;
         try {
             invite = await interaction.channel.createInvite({ maxAge: 0, maxUses: 0, reason: 'Starry Server Listing' });
@@ -34,7 +32,6 @@ module.exports = {
 
         if (!listing) listing = new ServerListing({ guildId: guild.id });
 
-        // Update Server Stats
         listing.name = guild.name;
         listing.iconUrl = guild.iconURL({ extension: 'png', size: 256 }) || null;
         listing.inviteLink = invite.url;
@@ -58,3 +55,4 @@ module.exports = {
         return interaction.editReply({ embeds: [embed] });
     }
 };
+            
