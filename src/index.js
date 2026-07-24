@@ -521,6 +521,8 @@ async function startBot() {
         loadModule('Help', './modules/help.js');
         loadModule('Leveling', './modules/leveling.js');
         loadModule('Starry Protocol', './modules/starry.js');
+        loadModule('Boost Tracker', './modules/boostTracker.js');
+
         loadModule('Truth or Dare', './modules/truthOrDare.js');
         loadModule('Support Tickets', './modules/tickets.js');
         loadModule('Warnings DB', './modules/warnings.js');
