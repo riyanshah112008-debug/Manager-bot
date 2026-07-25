@@ -19,10 +19,10 @@ function getGif() {
     });
 }
 
-async function trackPat(userId, guildId, isGiven) {
+function trackPat(userId, guildId, isGiven) {
     if (!userId) return;
     const updateField = isGiven ? { patsGiven: 1 } : { patsReceived: 1 };
-    await User.findOneAndUpdate(
+    User.findOneAndUpdate(
         { userId: userId, guildId: guildId },
         { $inc: updateField },
         { upsert: true, new: true }
@@ -45,10 +45,10 @@ module.exports = {
         await interaction.deferReply();
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
-        const gifUrl = await getGif();
 
-        await trackPat(interaction.user.id, guildId, true);
-        await trackPat(target.id, guildId, false);
+        const gifUrl = await getGif();
+        trackPat(interaction.user.id, guildId, true);
+        trackPat(target.id, guildId, false);
 
         const embed = new EmbedBuilder()
             .setColor('#A7C7E7')
@@ -75,8 +75,8 @@ module.exports = {
                 return i.reply({ content: 'Only the person who received the pat can pat back!', ephemeral: true });
             }
 
-            await trackPat(target.id, guildId, true);
-            await trackPat(interaction.user.id, guildId, false);
+            trackPat(target.id, guildId, true);
+            trackPat(interaction.user.id, guildId, false);
 
             const returnGif = await getGif();
             const returnEmbed = new EmbedBuilder()
