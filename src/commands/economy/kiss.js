@@ -19,10 +19,10 @@ function getGif() {
     });
 }
 
-async function trackKiss(userId, guildId, isGiven) {
+function trackKiss(userId, guildId, isGiven) {
     if (!userId) return;
     const updateField = isGiven ? { kissesGiven: 1 } : { kissesReceived: 1 };
-    await User.findOneAndUpdate(
+    User.findOneAndUpdate(
         { userId: userId, guildId: guildId },
         { $inc: updateField },
         { upsert: true, new: true }
@@ -45,10 +45,10 @@ module.exports = {
         await interaction.deferReply();
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
-        const gifUrl = await getGif();
 
-        await trackKiss(interaction.user.id, guildId, true);
-        await trackKiss(target.id, guildId, false);
+        const gifUrl = await getGif();
+        trackKiss(interaction.user.id, guildId, true);
+        trackKiss(target.id, guildId, false);
 
         const embed = new EmbedBuilder()
             .setColor('#FFB6C1')
@@ -75,8 +75,8 @@ module.exports = {
                 return i.reply({ content: 'Only the person who was kissed can kiss back!', ephemeral: true });
             }
 
-            await trackKiss(target.id, guildId, true);
-            await trackKiss(interaction.user.id, guildId, false);
+            trackKiss(target.id, guildId, true);
+            trackKiss(interaction.user.id, guildId, false);
 
             const returnGif = await getGif();
             const returnEmbed = new EmbedBuilder()
