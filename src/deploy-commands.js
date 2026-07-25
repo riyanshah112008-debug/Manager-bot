@@ -25,6 +25,23 @@ const autoroleCommandDef = {
     default_member_permissions: ADMIN,
     options: autoroleOptions
 };
+    {
+        name: 'telemetry',
+        description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.',
+        default_member_permissions: '8'
+    },
+    {
+        name: 'hug',
+        description: '🤗 Give someone a warm hug (Works in DMs too!)',
+        dm_permission: true,
+        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to hug' }]
+    },
+    {
+        name: 'kiss',
+        description: '💋 Give someone a sweet kiss (Works in DMs too!)',
+        dm_permission: true,
+        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }]
+    },
 
 const commands = [
     // ================= MUSIC =================
