@@ -4,16 +4,15 @@
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
 const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
-
 const express = require('express');
-const cors = require('cors'); // Required for the Web Dashboard
+const cors = require('cors'); 
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
-const ServerListing = require('./models/ServerListing'); // Database for Web Dashboard
+const ServerListing = require('./models/ServerListing'); 
 
 // ==========================================
 // 1. WEB SERVER & DASHBOARD HOSTING
@@ -23,9 +22,8 @@ const port = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Required for Web Verification Forms
+app.use(express.urlencoded({ extended: true })); 
 
-// --- THE WEB DASHBOARD API ENDPOINT ---
 app.get('/api/servers', async (req, res) => {
     try {
         const servers = await ServerListing.find().sort({ lastBump: -1 }).limit(50);
@@ -35,7 +33,6 @@ app.get('/api/servers', async (req, res) => {
     }
 });
 
-// --- THE WEB DASHBOARD FRONTEND ---
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -115,7 +112,6 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// --- RENDER KEEP-ALIVE PING ---
 app.get('/health', (req, res) => res.status(200).send('awake'));
 
 app.listen(port, '0.0.0.0', () => {
@@ -128,7 +124,6 @@ app.listen(port, '0.0.0.0', () => {
         });
     }, 840000); 
 });
-
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -140,7 +135,8 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildModeration,
-        GatewayIntentBits.GuildMessageReactions
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.DirectMessages // Required for DMs
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
 }); 
@@ -152,7 +148,7 @@ client.prefixCommands = new Collection();
 // ==========================================
 // 2.2 SECURE WEB VERIFICATION ROUTES
 // ==========================================
-client.verifyMap = new Map(); // Memory bank for secure tokens
+client.verifyMap = new Map(); 
 
 app.get('/verify', (req, res) => {
     const token = req.query.token;
@@ -189,7 +185,7 @@ app.post('/verify', async (req, res) => {
         const member = await guild.members.fetch(data.userId);
 
         await member.roles.add(data.roleId);
-        client.verifyMap.delete(token); // Destroy the one-time token
+        client.verifyMap.delete(token); 
 
         res.send(`
             <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:20vh;">
@@ -352,7 +348,7 @@ process.on('unhandledRejection', error => console.error('❌ Unhandled Promise R
 process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
 
 // ==========================================
-// 4. BOT READY & DYNAMIC COMMAND HANDLERS
+// 4. BOT READY & COMMAND HANDLERS
 // ==========================================
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
@@ -373,60 +369,25 @@ if (fs.existsSync(commandsPath)) {
     }
 }
 
-// Load Music Slash Commands
-const musicCommandsPath = path.join(__dirname, 'commands', 'music');
-if (fs.existsSync(musicCommandsPath)) {
-    const musicFiles = fs.readdirSync(musicCommandsPath).filter(file => file.endsWith('.js'));
-    for (const file of musicFiles) {
-        const filePath = path.join(musicCommandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+// Helper to Load Slash Commands dynamically
+const loadSlashCommands = (dir) => {
+    const fullPath = path.join(__dirname, 'commands', dir);
+    if (fs.existsSync(fullPath)) {
+        const files = fs.readdirSync(fullPath).filter(file => file.endsWith('.js'));
+        for (const file of files) {
+            const command = require(path.join(fullPath, file));
+            if ('data' in command && 'execute' in command) {
+                client.commands.set(command.data.name, command);
+                console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+            }
         }
     }
-}
+};
 
-// Load Moderation Slash Commands
-const modCommandsPath = path.join(__dirname, 'commands', 'moderation');
-if (fs.existsSync(modCommandsPath)) {
-    const modFiles = fs.readdirSync(modCommandsPath).filter(file => file.endsWith('.js'));
-    for (const file of modFiles) {
-        const filePath = path.join(modCommandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-        }
-    }
-}
-
-// 🔥 Load Economy & Setup Slash Commands
-const ecoCommandsPath = path.join(__dirname, 'commands', 'economy');
-if (fs.existsSync(ecoCommandsPath)) {
-    const ecoFiles = fs.readdirSync(ecoCommandsPath).filter(file => file.endsWith('.js'));
-    for (const file of ecoFiles) {
-        const filePath = path.join(ecoCommandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-        }
-    }
-}
-
-const setupCommandsPath = path.join(__dirname, 'commands', 'setup');
-if (fs.existsSync(setupCommandsPath)) {
-    const setupFiles = fs.readdirSync(setupCommandsPath).filter(file => file.endsWith('.js'));
-    for (const file of setupFiles) {
-        const filePath = path.join(setupCommandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-        }
-    }
-}
+loadSlashCommands('music');
+loadSlashCommands('moderation');
+loadSlashCommands('economy');
+loadSlashCommands('setup');
 
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
@@ -444,12 +405,14 @@ client.on(Events.MessageCreate, async message => {
         message.reply('There was an error trying to execute that command!').catch(() => {});
     }
 });
-// --- B. Interaction Handler (Commands, Buttons, Menus) ---
+// ==========================================
+// 5. INTERACTION ENGINE
+// ==========================================
 client.on(Events.InteractionCreate, async interaction => {
+    // 🛡️ DM SAFETY GUARD FOR UI BUTTONS & MENUS
+    if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // ==========================================
     // 🛍️ DYNAMIC SHOP PURCHASE HANDLER
-    // ==========================================
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -489,9 +452,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // ==========================================
     // 🎛️ MUSIC UI BUTTON & MENU HANDLER
-    // ==========================================
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (!interaction.customId.startsWith('music_')) return;
 
@@ -564,15 +525,15 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // ==========================================
     // 💻 STANDARD COMMAND HANDLER
-    // ==========================================
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
     const botOwners = ['1465049039153135639', '1257676837249617971']; 
+    if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
+
     if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
         return interaction.reply({ content: '❌ Access Denied: You are not recognized as a bot owner!', ephemeral: true });
     }
@@ -588,7 +549,7 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // ==========================================
-// 5. HELPER FUNCTION TO LOAD MODULES
+// 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
 const loadModule = (name, filePath) => {
     try {
@@ -599,9 +560,6 @@ const loadModule = (name, filePath) => {
     }
 };
 
-// ==========================================
-// 6. MASTER BOOTSTRAP SEQUENCE
-// ==========================================
 async function startBot() {
     if (!process.env.MONGO_URI) {
         console.error("🛑 CRITICAL ERROR: The MONGO_URI is missing from the Environment Variables!");
@@ -626,11 +584,9 @@ async function startBot() {
         loadModule('Leveling', './modules/leveling.js');
         loadModule('Starry Protocol', './modules/starry.js');
         loadModule('Boost Tracker', './modules/boostTracker.js');
-
         loadModule('Truth or Dare', './modules/truthOrDare.js');
         loadModule('Support Tickets', './modules/tickets.js');
         loadModule('Admin Help Text Trigger', './modules/ahelpText.js');
-
         loadModule('Warnings DB', './modules/warnings.js');
         loadModule('Tracker', './modules/tracker.js');
         loadModule('Sus Account Detector', './modules/susAccount.js');
@@ -638,8 +594,6 @@ async function startBot() {
         loadModule('Emoji Blocker', './modules/emojiBlocker.js');
         loadModule('Message Purger', './modules/clear.js');
         loadModule('Master Setup Engine', './modules/masterSetupText.js');
-
-        // Note: webDashboard.js is deleted because it is now securely built into index.js!
         loadModule('Bump Tracker', './modules/bumpTracker.js');
         loadModule('Server Stats', './modules/serverStats.js');
         loadModule('AFK System', './modules/afk.js');
@@ -655,21 +609,15 @@ async function startBot() {
         loadModule('User Protection', './modules/protect.js');
         loadModule('Goodbye System', './modules/goodbye.js');
         loadModule('Server Backup Engine', './modules/backupEngine.js');
-
         loadModule('Role Manager', './modules/roleManager.js');
         loadModule('Anti-Abuse', './modules/antiAbuse.js');
         loadModule('Random Chest Drops', './modules/chestDrop.js');
-
         loadModule('Autorole & Sticky Roles', './modules/autorole.js');
         loadModule('Verification System', './modules/verification.js');
-loadModule('Auto Bump Engine', './modules/bumpEngine.js');
-loadModule('Network Telemetry Engine', './modules/telemetryEngine.js');
+        loadModule('Auto Bump Engine', './modules/bumpEngine.js');
+        loadModule('Network Telemetry Engine', './modules/telemetryEngine.js');
 
-
-
-        if (fs.existsSync('./modules/modApply.js')) {
-            loadModule('Mod Apply', './modules/modApply.js'); 
-        }
+        if (fs.existsSync('./modules/modApply.js')) loadModule('Mod Apply', './modules/modApply.js'); 
 
         console.log('DEPLOY_COMMANDS_ON_STARTUP =', process.env.DEPLOY_COMMANDS_ON_STARTUP);
         if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
