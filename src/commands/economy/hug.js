@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const User = require('../models/User');
+const User = require('../../models/User'); // 👈 Fixed relative path
 
 const HUG_GIFS = [
     'https://media1.tenor.com/m/kKvrHj-SAvMAAAAC/anime-hug.gif',
@@ -41,13 +41,12 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        await interaction.deferReply(); // Prevents Discord 3-second timeout error
-
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
 
-        await trackHug(interaction.user.id, guildId, true);
-        await trackHug(target.id, guildId, false);
+        // Track in database safely in the background
+        trackHug(interaction.user.id, guildId, true);
+        trackHug(target.id, guildId, false);
 
         const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
         const embed = new EmbedBuilder()
@@ -64,7 +63,7 @@ module.exports = {
         );
 
         const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.editReply({ embeds: [embed], components: components });
+        const response = await interaction.reply({ embeds: [embed], components: components });
 
         if (components.length === 0) return;
 
@@ -75,8 +74,8 @@ module.exports = {
                 return i.reply({ content: 'Only the person who was hugged can hug back!', ephemeral: true });
             }
 
-            await trackHug(target.id, guildId, true);
-            await trackHug(interaction.user.id, guildId, false);
+            trackHug(target.id, guildId, true);
+            trackHug(interaction.user.id, guildId, false);
 
             const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
