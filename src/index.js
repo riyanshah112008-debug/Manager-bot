@@ -240,9 +240,14 @@ client.manager.on('playerStart', async (player, track) => {
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
             { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
+            { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
+            { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
+            { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
+            { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
+            { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' },
             { label: 'Karaoke', description: 'Reduces vocal volume', value: 'karaoke', emoji: '🎤' },
-            { label: 'Nightcore', description: 'Speeds up track and raises pitch', value: 'nightcore', emoji: '✨' },
-            { label: 'Daycore', description: 'Slows down track and lowers pitch', value: 'daycore', emoji: '🌅' }
+            { label: 'Tremolo', description: 'Modulates volume', value: 'tremolo', emoji: '🌊' },
+            { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
         ])
     );
 
@@ -259,7 +264,6 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
@@ -318,8 +322,9 @@ client.on(Events.MessageCreate, async message => {
     try { await command.execute(message, args, client); } 
     catch (error) { console.error(`❌ Error executing prefix command ${commandName}:`, error); }
 });
+
 // ==========================================
-// 5. INTERACTION ENGINE (NO SYNTAX ERRORS)
+// 5. INTERACTION ENGINE
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     // 🛡️ DM Guard
@@ -457,20 +462,23 @@ client.on(Events.InteractionCreate, async interaction => {
             const filter = interaction.values[0];
             await interaction.deferReply({ ephemeral: true });
             if (filter === 'clear') { player.shoukaku.clearFilters(); return interaction.editReply('🚫 Filters cleared.'); }
-            else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 Karaoke applied!'); }
-            else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ Nightcore applied!'); }
-            else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 Daycore applied!'); }
+            else if (filter === 'bassboost') { player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] }); return interaction.editReply('🎸 **Bassboost** applied!'); }
+            else if (filter === '8d') { player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } }); return interaction.editReply('🌀 **8D Audio** applied!'); }
+            else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ **Nightcore** applied!'); }
+            else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 **Daycore** applied!'); }
+            else if (filter === 'vaporwave') { player.shoukaku.setFilters({ timescale: { speed: 0.85, pitch: 0.8, rate: 1.0 }, tremolo: { frequency: 14.0, depth: 0.3 } }); return interaction.editReply('🪩 **Vaporwave** applied!'); }
+            else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 **Karaoke** applied!'); }
+            else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
+            else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
         }
     }
+    // 💻 SLASH COMMAND HANDLER & RECURRING TELEMETRY
+    if (!interaction.isChatInputCommand()) return;
 
-        // --- 🚨 NATIVE RECURRING TELEMETRY DASHBOARD 🚨 ---
     if (interaction.commandName === 'telemetry') {
         const botOwners = ['1465049039153135639', '1257676837249617971']; 
         if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-
-        if (!botOwners.includes(interaction.user.id)) {
-            return interaction.reply({ content: '❌ Access Denied: Only the Bot Owner can access the network dashboard.', ephemeral: true });
-        }
+        if (!botOwners.includes(interaction.user.id)) return interaction.reply({ content: '❌ Access Denied.', ephemeral: true });
 
         await interaction.deferReply(); 
 
@@ -490,7 +498,6 @@ client.on(Events.InteractionCreate, async interaction => {
                 globalAutomod += t.modStats?.automodTriggers || 0;
             });
 
-            // Extract Top 5 Guilds & Owner Details safely from cache
             const topServers = [...client.guilds.cache.values()]
                 .sort((a, b) => b.memberCount - a.memberCount)
                 .slice(0, 5)
@@ -516,60 +523,63 @@ client.on(Events.InteractionCreate, async interaction => {
         };
 
         try {
-            // Initial post to capture the Message object
             const firstEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle (Updating every 15s)', '#23a559');
             const msg = await interaction.editReply({ embeds: [firstEmbed] });
 
-            // Helper function for delays
             const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-            // Start background recurring scheduling loop
             (async () => {
                 while (true) {
-                    // ==========================================
-                    // 1. ACTIVE PHASE (Runs for 3 Minutes)
-                    // ==========================================
                     const activeStartTime = Date.now();
-                    const threeMinutes = 3 * 60 * 1000; // 180,000 ms
+                    const threeMinutes = 3 * 60 * 1000;
 
                     while (Date.now() - activeStartTime < threeMinutes) {
-                        await sleep(15000); // Wait 15 seconds between updates
-                        
+                        await sleep(15000);
                         try {
                             const liveEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle (Updating every 15s)', '#23a559');
                             await msg.edit({ embeds: [liveEmbed] });
                         } catch (err) {
-                            if (err.code === 10008) return; // Stop loop quietly if message was deleted
+                            if (err.code === 10008) return;
                             console.error('Telemetry Edit Error:', err);
                         }
                     }
 
-                    // ==========================================
-                    // 2. PAUSE PHASE (Sleeps for 10 Minutes)
-                    // ==========================================
                     try {
                         const nextRunTime = Math.floor((Date.now() + (10 * 60 * 1000)) / 1000);
                         const pausedEmbed = await buildTelemetryEmbed(
-                            `⏸️ **PAUSED** — Resting for 10 minutes.\n Next 3-min live update cycle starts <t:${nextRunTime}:R>!`, 
-                            '#FEE75C' // Yellow for Standby
+                            `⏸️ **PAUSED** — Resting for 10 minutes.\nNext 3-min live update cycle starts <t:${nextRunTime}:R>!`, 
+                            '#FEE75C'
                         );
                         await msg.edit({ embeds: [pausedEmbed] });
                     } catch (err) {
                         if (err.code === 10008) return;
                     }
 
-                    // Sleep for 10 Minutes (600,000 ms)
                     await sleep(10 * 60 * 1000);
                 }
             })();
 
+            return;
         } catch (error) {
             console.error('Telemetry Schedule Error:', error);
-            return interaction.editReply({ content: '❌ Failed to initialize the scheduled telemetry dashboard.' });
+            return interaction.editReply({ content: '❌ Failed to initialize telemetry dashboard.' });
         }
     }
-    // --- END NATIVE TELEMETRY ---
 
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return interaction.reply({ content: `❌ **Command file not found!**`, ephemeral: true }).catch(console.error);
+
+    const botOwners = ['1465049039153135639', '1257676837249617971']; 
+    if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
+    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) return interaction.reply({ content: '❌ Access Denied: Not bot owner.', ephemeral: true });
+
+    try { await command.execute(interaction, client); } 
+    catch (error) {
+        console.error(`❌ Error executing ${interaction.commandName}:`, error);
+        if (interaction.replied || interaction.deferred) await interaction.followUp({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
+        else await interaction.reply({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
+    }
+});
 
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
@@ -618,4 +628,5 @@ async function startBot() {
         process.exit(1);
     }
 }
+
 startBot();
