@@ -208,7 +208,6 @@ client.manager = new Kazagumo({
 
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
-
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
     if (!channel) return;
@@ -280,7 +279,6 @@ client.manager.on('playerException', (player, data) => {
         console.error('Player recovery error:', e);
     }
 });
-
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
@@ -347,6 +345,12 @@ client.on(Events.MessageCreate, async message => {
 // 5. INTERACTION ENGINE
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
+    // 🚨 SOCIAL BUTTON VIP BYPASS SHIELD
+    // This instantly catches pat, hug, and kiss buttons and hands them to the command files!
+    if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
+        return; 
+    }
+
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
     if (interaction.isButton() && interaction.customId.startsWith('dj_')) {
