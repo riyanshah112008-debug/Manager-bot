@@ -1,16 +1,12 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const KISS_GIFS = [
-    'https://media1.tenor.com/m/gzaT07Fk4UoAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/F02Ep3b_dIgAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/etSTc3aWspcAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/lYHV1vwa-FkAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/I8kWjuAtX-QAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/I9Z44UqA4UIAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/PZc3XgM-a5IAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/1Gj23LpA7WMAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/QfL2Piv3K3wAAAAC/anime-kiss.gif',
-    'https://media1.tenor.com/m/h5e17uVzL7MAAAAC/anime-kiss.gif'
+    'https://i.imgur.com/u38XxAD.gif',
+    'https://i.imgur.com/eBfdfuJ.gif',
+    'https://i.imgur.com/buv50ov.gif',
+    'https://i.imgur.com/y4u84Y5.gif',
+    'https://i.imgur.com/Za8bcwK.gif',
+    'https://i.imgur.com/s42cmG8.gif'
 ];
 
 module.exports = {
