@@ -8,9 +8,6 @@ const MANAGE_GUILD = PermissionFlagsBits.ManageGuild.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
-// =======================================================
-// PROGRAMMATICALLY BUILD AUTOROLE OPTIONS TO SAVE SPACE
-// =======================================================
 const autoroleOptions = [
     { name: 'sticky_roles', type: 5, required: false, description: 'Enable or disable restoring previous roles on rejoin' }
 ];
@@ -25,28 +22,13 @@ const autoroleCommandDef = {
     default_member_permissions: ADMIN,
     options: autoroleOptions
 };
-    // ================= SOCIAL & TELEMETRY =================
-    {
-        name: 'hug',
-        description: '🤗 Give someone a warm anime hug (Works in DMs too!)',
-        dm_permission: true,
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to hug' }]
-    },
-    {
-        name: 'kiss',
-        description: '💋 Give someone a sweet anime kiss (Works in DMs too!)',
-        dm_permission: true,
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }]
-    },
-    {
-        name: 'telemetry',
-        description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.',
-        default_member_permissions: '8'
-    }
-];
-
 
 const commands = [
+    // ================= SOCIAL & TELEMETRY =================
+    { name: 'hug', description: '🤗 Give someone a warm anime hug (Works in DMs too!)', dm_permission: true, options: [{ name: 'target', type: 6, required: true, description: 'The user you want to hug' }] },
+    { name: 'kiss', description: '💋 Give someone a sweet anime kiss (Works in DMs too!)', dm_permission: true, options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }] },
+    { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
+
     // ================= MUSIC =================
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
     { name: 'pause', description: 'Pause the currently playing song' },
@@ -67,6 +49,7 @@ const commands = [
     { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check your active pet and its happiness level', type: 1 }, { name: 'equip', description: 'Equip a different pet from your inventory', type: 1, options: [{ name: 'name', description: 'The exact name of the pet you want to equip', type: 3, required: true }] }] },
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
+    
     // ================= UNIFIED MODERATION =================
     { name: 'setup-starry', description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.', default_member_permissions: '8' },
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
@@ -87,7 +70,6 @@ const commands = [
     { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'id', type: 4, required: true, description: 'Warning ID' }] },
     
     autoroleCommandDef,
-
     // ================= AUTOMOD & ROLES =================
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Automod action', choices: [{ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' }] }] },
     { name: 'ignore', description: 'Disable automod filters in a channel', default_member_permissions: ADMIN, options: [{ name: 'type', type: 3, required: true, description: 'Filter to ignore', choices: [{ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' }, { name: 'Status', value: 'status' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
@@ -130,45 +112,17 @@ const commands = [
     { name: 'deactivatepremium', description: 'Deactivate Premium for a server', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }] },
     { name: 'removepremium', description: 'Alias for deactivating Premium', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }] },
     { name: 'premiumcheck', description: 'Check whether this server has Premium' },
-    { 
-        name: 'tracker', 
-        description: 'Manage the 14-day inactivity tracker and historical scraper', 
-        default_member_permissions: MANAGE_GUILD, 
-        options: [
-            { name: 'setup', description: 'Setup the 14-day inactivity log channel', type: 1, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send 14-day inactivity alerts to' }] },
-            { name: 'scrape', description: 'Premium: Scrape historical messages into MongoDB', type: 1, options: [{ name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' }] }
-        ] 
-    },
+    { name: 'tracker', description: 'Manage the 14-day inactivity tracker and historical scraper', default_member_permissions: MANAGE_GUILD, options: [{ name: 'setup', description: 'Setup the 14-day inactivity log channel', type: 1, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send 14-day inactivity alerts to' }] }, { name: 'scrape', description: 'Premium: Scrape historical messages into MongoDB', type: 1, options: [{ name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' }] }] },
 
     // ✨ THE NEW SERVER DIRECTORY COMMANDS ✨
-    {
-        name: 'set-listing',
-        description: 'Configure how your server appears on the Starry Server Web List!',
-        default_member_permissions: ADMIN,
-        options: [
-            { name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' },
-            { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }
-        ]
-    },
-    {
-        name: 'bump',
-        description: 'Bump this server to the top of the Starry Global Web List!'
-    },
-    {
-        name: 'bump-setup',
-        description: 'Configure the auto-bump reminder system.',
-        default_member_permissions: ADMIN,
-        options: [
-            { name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' },
-            { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }
-        ]
-    }
+    { name: 'set-listing', description: 'Configure how your server appears on the Starry Server Web List!', default_member_permissions: ADMIN, options: [{ name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' }, { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }] },
+    { name: 'bump', description: 'Bump this server to the top of the Starry Global Web List!' },
+    { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
 ];
 
 async function deployCommands() {
     const token = process.env.TOKEN;
     const clientId = process.env.CLIENT_ID;
-
     const guildId = process.env.GUILD_ID || 'PASTE_YOUR_SERVER_ID_HERE';
 
     if (!token || !clientId) {
@@ -176,7 +130,6 @@ async function deployCommands() {
     }
 
     const rest = new REST({ version: '10' }).setToken(token);
-
     const route = guildId !== 'PASTE_YOUR_SERVER_ID_HERE'
         ? Routes.applicationGuildCommands(clientId, guildId)
         : Routes.applicationCommands(clientId);
