@@ -1,13 +1,28 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const User = require('../models/User');
 
 const KISS_GIFS = [
-    'https://i.imgur.com/u38XxAD.gif',
-    'https://i.imgur.com/eBfdfuJ.gif',
-    'https://i.imgur.com/buv50ov.gif',
-    'https://i.imgur.com/y4u84Y5.gif',
-    'https://i.imgur.com/Za8bcwK.gif',
-    'https://i.imgur.com/s42cmG8.gif'
+    'https://media1.tenor.com/m/gzaT07Fk4UoAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/F02Ep3b_dIgAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/etSTc3aWspcAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/lYHV1vwa-FkAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/I8kWjuAtX-QAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/I9Z44UqA4UIAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/PZc3XgM-a5IAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/1Gj23LpA7WMAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/QfL2Piv3K3wAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/h5e17uVzL7MAAAAC/anime-kiss.gif'
 ];
+
+function trackKiss(userId, guildId, isGiven) {
+    if (!userId) return;
+    const updateField = isGiven ? { kissesGiven: 1 } : { kissesReceived: 1 };
+    User.findOneAndUpdate(
+        { userId: userId, guildId: guildId },
+        { $inc: updateField },
+        { upsert: true, new: true }
+    ).catch(() => {});
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,8 +38,12 @@ module.exports = {
 
     async execute(interaction) {
         const target = interaction.options.getUser('target');
-        const randomGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
+        const guildId = interaction.guildId || 'DM';
 
+        trackKiss(interaction.user.id, guildId, true);
+        trackKiss(target.id, guildId, false);
+
+        const randomGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
         const embed = new EmbedBuilder()
             .setColor('#FFB6C1')
             .setDescription(`💋 **${interaction.user.username}** kissed **${target.username}**!`)
@@ -49,6 +68,9 @@ module.exports = {
             if (i.user.id !== target.id) {
                 return i.reply({ content: 'Only the person who was kissed can kiss back!', ephemeral: true });
             }
+
+            trackKiss(target.id, guildId, true);
+            trackKiss(interaction.user.id, guildId, false);
 
             const returnGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
