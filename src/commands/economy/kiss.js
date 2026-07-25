@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// 20 Reliable, Direct CDN Anime Kiss GIFs
 const KISS_GIFS = [
     'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
     'https://cdn.nekos.life/kiss/kiss_003.gif', 'https://cdn.nekos.life/kiss/kiss_004.gif',
@@ -37,7 +36,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_kiss_back')
+                .setCustomId('social_kiss_back') // Matched with starry.js bypass
                 .setLabel('Kiss back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('💋')
