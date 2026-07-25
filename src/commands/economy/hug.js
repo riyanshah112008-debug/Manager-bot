@@ -1,16 +1,21 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const HUG_GIFS = [
-    'https://cdn.nekos.life/hug/hug_001.gif', 'https://cdn.nekos.life/hug/hug_002.gif',
-    'https://cdn.nekos.life/hug/hug_003.gif', 'https://cdn.nekos.life/hug/hug_004.gif',
-    'https://cdn.nekos.life/hug/hug_005.gif', 'https://cdn.nekos.life/hug/hug_006.gif',
-    'https://cdn.nekos.life/hug/hug_007.gif', 'https://cdn.nekos.life/hug/hug_008.gif',
-    'https://cdn.nekos.life/hug/hug_009.gif', 'https://cdn.nekos.life/hug/hug_010.gif',
-    'https://cdn.nekos.life/hug/hug_011.gif', 'https://cdn.nekos.life/hug/hug_012.gif',
-    'https://cdn.nekos.life/hug/hug_013.gif', 'https://cdn.nekos.life/hug/hug_014.gif',
-    'https://cdn.nekos.life/hug/hug_015.gif', 'https://cdn.nekos.life/hug/hug_016.gif',
-    'https://cdn.nekos.life/hug/hug_017.gif', 'https://cdn.nekos.life/hug/hug_018.gif',
-    'https://cdn.nekos.life/hug/hug_019.gif', 'https://cdn.nekos.life/hug/hug_020.gif'
+    'https://media1.tenor.com/m/kKvrHj-SAvMAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/xIuXbMtA38sAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/G_RlGfqGlqcAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/9e1aE_x4Nc4AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/J7eIlqcG_2cAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/n7g1bQY1Y3UAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/X-L1s6T3-2wAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/X5nB-41Kav4AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/qF7mO4nnL0sAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/a97qP5P45hUAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/OxaEbqjG2OQAAAAC/anime-hug.gif'
 ];
 
 module.exports = {
@@ -36,7 +41,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_hug_back') // Matched with starry.js bypass
+                .setCustomId('social_hug_back')
                 .setLabel('Hug back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('🤗')
