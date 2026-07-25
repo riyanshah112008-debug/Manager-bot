@@ -112,7 +112,6 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
-
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -183,18 +182,28 @@ const Nodes = [
     }
 ];
 
-
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
+    searchFallbacks: {
+        google: "ytsearch",
+        soundcloud: "scsearch"
+    },
     plugins: [
-        new KazagumoSpotify({ clientId: process.env.SPOTIFY_CLIENT_ID, clientSecret: process.env.SPOTIFY_CLIENT_SECRET, playlistPageLimit: 2, albumPageLimit: 1, searchMarket: 'IN', searchPrefix: 'ytmsearch:' })
+        new KazagumoSpotify({ 
+            clientId: process.env.SPOTIFY_CLIENT_ID, 
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET, 
+            playlistPageLimit: 2, 
+            albumPageLimit: 1, 
+            searchMarket: 'IN', 
+            searchPrefix: 'ytmsearch:' 
+        })
     ],
     send: (guildId, payload) => {
         const guild = client.guilds.cache.get(guildId);
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes, {
-    voiceConnectionTimeout: 30000 // Gives Jirayu 30 seconds to connect instead of 15
+    voiceConnectionTimeout: 30000 
 });
 
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
@@ -256,22 +265,26 @@ client.manager.on('playerStart', async (player, track) => {
             { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
         ])
     );
-
     const msg = await channel.send({ embeds: [embed], components: [playbackRow, filterRow] });
     player.data.set('nowPlayingMessage', msg);
 });
 
 client.manager.on('playerException', (player, data) => {
+    console.error('[Lavalink Player Exception]:', data);
     const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('⚠️ **Stream dropped!** The public node blocked this track.');
-    player.skip(); 
+    if (channel) channel.send('⚠️ **Playback Exception:** Encountered a network/node stream block. Automatically attempting to skip to the next track.').catch(() => {});
+    try {
+        if (player.queue.size > 0) player.skip();
+        else player.destroy();
+    } catch (e) {
+        console.error('Player recovery error:', e);
+    }
 });
 
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
@@ -330,15 +343,12 @@ client.on(Events.MessageCreate, async message => {
     try { await command.execute(message, args, client); } 
     catch (error) { console.error(`❌ Error executing prefix command ${commandName}:`, error); }
 });
-
 // ==========================================
 // 5. INTERACTION ENGINE
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
-    // 🛡️ DM Guard
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // 🎛️ DJ PANEL HANDLER
     if (interaction.isButton() && interaction.customId.startsWith('dj_')) {
         const member = interaction.member;
         const voiceChannel = member.voice?.channel;
@@ -420,7 +430,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // 🛍️ SHOP PURCHASE HANDLER
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
         const itemId = interaction.values[0];
@@ -430,7 +439,7 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!item) return interaction.editReply('❌ That item no longer exists in the shop!');
         let userData = await User.findOne({ userId: interaction.user.id, guildId: interaction.guild.id });
         if (!userData || userData.credits < item.price) return interaction.editReply(`❌ You do not have enough credits! You need 💳 **${item.price.toLocaleString()} Credits**.`);
-        
+
         if (item.type === 'role') {
             const role = interaction.guild.roles.cache.get(item.roleId);
             if (!role) return interaction.editReply('❌ That role was deleted from the server settings.');
@@ -451,7 +460,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // 🎛️ MUSIC UI CONTROLS
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (!interaction.customId.startsWith('music_')) return;
         const player = client.manager.getPlayer(interaction.guild.id);
@@ -465,7 +473,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 case 'music_stop': player.destroy(); return interaction.reply({ content: '⏹️ Playback stopped.', ephemeral: true });
                 case 'music_loop': const nl = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none'; player.setLoop(nl); return interaction.reply({ content: `🔁 Loop set to: **${nl.toUpperCase()}**`, ephemeral: true });
             }
-        }
+        }        
         if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
             const filter = interaction.values[0];
             await interaction.deferReply({ ephemeral: true });
@@ -480,7 +488,7 @@ client.on(Events.InteractionCreate, async interaction => {
             else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
         }
     }
-    // 💻 SLASH COMMAND HANDLER & RECURRING TELEMETRY
+
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'telemetry') {
@@ -632,9 +640,9 @@ async function startBot() {
         }
         await client.login(process.env.TOKEN);
     } catch (error) {
-        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
-        process.exit(1);
-    }
+        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error. stack || error);
+process. exit(1);
 }
+
 
 startBot();
