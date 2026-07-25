@@ -81,6 +81,7 @@ module.exports = (client) => {
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
+        if (!interaction.guild || !interaction.member) return;
 
         const isOwner = typeof client.isOwner === 'function' ? client.isOwner(interaction.user.id) : interaction.user.id === OWNER_ID;
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
