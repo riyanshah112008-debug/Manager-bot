@@ -38,6 +38,14 @@ const commands = [
         integration_types: [0, 1],
         options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }] 
     },
+    { 
+        name: 'pat', 
+        description: '✋ Give someone a gentle anime headpat (Works in DMs too!)', 
+        contexts: [0, 1, 2],       
+        integration_types: [0, 1], 
+        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to pat' }] 
+    },
+
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
 
     // ================= MUSIC =================
