@@ -1,16 +1,21 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const KISS_GIFS = [
-    'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
-    'https://cdn.nekos.life/kiss/kiss_003.gif', 'https://cdn.nekos.life/kiss/kiss_004.gif',
-    'https://cdn.nekos.life/kiss/kiss_005.gif', 'https://cdn.nekos.life/kiss/kiss_006.gif',
-    'https://cdn.nekos.life/kiss/kiss_007.gif', 'https://cdn.nekos.life/kiss/kiss_008.gif',
-    'https://cdn.nekos.life/kiss/kiss_009.gif', 'https://cdn.nekos.life/kiss/kiss_010.gif',
-    'https://cdn.nekos.life/kiss/kiss_011.gif', 'https://cdn.nekos.life/kiss/kiss_012.gif',
-    'https://cdn.nekos.life/kiss/kiss_013.gif', 'https://cdn.nekos.life/kiss/kiss_014.gif',
-    'https://cdn.nekos.life/kiss/kiss_015.gif', 'https://cdn.nekos.life/kiss/kiss_016.gif',
-    'https://cdn.nekos.life/kiss/kiss_017.gif', 'https://cdn.nekos.life/kiss/kiss_018.gif',
-    'https://cdn.nekos.life/kiss/kiss_019.gif', 'https://cdn.nekos.life/kiss/kiss_020.gif'
+    'https://media1.tenor.com/m/gzaT07Fk4UoAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/F02Ep3b_dIgAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/etSTc3aWspcAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/lYHV1vwa-FkAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/I8kWjuAtX-QAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/I9Z44UqA4UIAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/PZc3XgM-a5IAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/1Gj23LpA7WMAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/QfL2Piv3K3wAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/h5e17uVzL7MAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/nEID0Jro6V8AAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/5J3mEaWpCMAAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/dpv2qQf-J8cAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/7sZ60E5g56IAAAAC/anime-kiss.gif',
+    'https://media1.tenor.com/m/X8B2hH861u8AAAAC/anime-kiss.gif'
 ];
 
 module.exports = {
@@ -36,7 +41,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_kiss_back') // Matched with starry.js bypass
+                .setCustomId('social_kiss_back')
                 .setLabel('Kiss back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('💋')
