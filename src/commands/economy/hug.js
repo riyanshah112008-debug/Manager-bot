@@ -1,22 +1,34 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const https = require('https');
+const User = require('../models/User'); // Adjust path if your commands folder has a different depth
 
-const HUG_GIFS = [
-    'https://media1.tenor.com/m/kKvrHj-SAvMAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/xIuXbMtA38sAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/G_RlGfqGlqcAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/9e1aE_x4Nc4AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/J7eIlqcG_2cAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/n7g1bQY1Y3UAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/X-L1s6T3-2wAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/X5nB-41Kav4AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/qF7mO4nnL0sAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/a97qP5P45hUAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/OxaEbqjG2OQAAAAC/anime-hug.gif'
-];
+function getGif() {
+    return new Promise((resolve) => {
+        https.get('https://api.waifu.pics/sfw/hug', (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    resolve(json.url);
+                } catch {
+                    resolve('https://i.imgur.com/13w1J4L.png');
+                }
+            });
+        }).on('error', () => resolve('https://i.imgur.com/13w1J4L.png'));
+    });
+}
+
+// Helper to update MongoDB stats safely
+async function trackHug(userId, guildId, isGiven) {
+    if (!userId) return;
+    const updateField = isGiven ? { hugsGiven: 1 } : { hugsReceived: 1 };
+    await User.findOneAndUpdate(
+        { userId: userId, guildId: guildId },
+        { $inc: updateField },
+        { upsert: true, new: true }
+    ).catch(err => console.error('DB Hug Track Error:', err));
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -31,13 +43,19 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        await interaction.deferReply();
         const target = interaction.options.getUser('target');
-        const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
+        const guildId = interaction.guildId || 'DM';
+        const gifUrl = await getGif();
+
+        // Save stats to MongoDB: Sender gives, Target receives
+        await trackHug(interaction.user.id, guildId, true);
+        await trackHug(target.id, guildId, false);
 
         const embed = new EmbedBuilder()
             .setColor('#FF9494')
             .setDescription(`🤗 **${interaction.user.username}** gave **${target.username}** a big warm hug!`)
-            .setImage(randomGif);
+            .setImage(gifUrl);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -48,7 +66,7 @@ module.exports = {
         );
 
         const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.reply({ embeds: [embed], components: components });
+        const response = await interaction.editReply({ embeds: [embed], components: components });
 
         if (components.length === 0) return;
 
@@ -59,7 +77,11 @@ module.exports = {
                 return i.reply({ content: 'Only the person who was hugged can hug back!', ephemeral: true });
             }
 
-            const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
+            // Swap stats for the button return action
+            await trackHug(target.id, guildId, true);
+            await trackHug(interaction.user.id, guildId, false);
+
+            const returnGif = await getGif();
             const returnEmbed = new EmbedBuilder()
                 .setColor('#FF9494')
                 .setDescription(`🤗 **${target.username}** hugged **${interaction.user.username}** back!`)
