@@ -1,32 +1,27 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
-// 25 Unique Anime Kiss GIFs
+// 20 Reliable, Direct CDN Anime Kiss GIFs (These won't get blocked by Discord)
 const KISS_GIFS = [
-    'https://media.tenor.com/gzaT07Fk4UoAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/F02Ep3b_dIgAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/etSTc3aWspcAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/lYHV1vwa-FkAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/I8kWjuAtX-QAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/I9Z44UqA4UIAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/PZc3XgM-a5IAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/1Gj23LpA7WMAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/QfL2Piv3K3wAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/h5e17uVzL7MAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/nEID0Jro6V8AAAAC/anime-kiss.gif',
-    'https://media.tenor.com/5J3mEaWpCMAAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/dpv2qQf-J8cAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/7sZ60E5g56IAAAAC/anime-kiss.gif',
-    'https://media.tenor.com/X8B2hH861u8AAAAC/anime-kiss.gif',
-    'https://media.tenor.com/WOV8L_k8F0YAAAAC/anime-kiss.gif',
-    'https://media.giphy.com/media/G3va39rn8E4A8/giphy.gif',
-    'https://media.giphy.com/media/bm2O3nXTcKJeU/giphy.gif',
-    'https://media.giphy.com/media/Fq1yAOHgP153q/giphy.gif',
-    'https://media.giphy.com/media/11k3oaUjSlzEQ/giphy.gif',
-    'https://media.giphy.com/media/wOtkVwroWEjpK/giphy.gif',
-    'https://media.giphy.com/media/12VXIxKaIEarL2/giphy.gif',
-    'https://media.giphy.com/media/KmeIYo9IGBoGY/giphy.gif',
-    'https://media.giphy.com/media/flqH15r2B4U9O/giphy.gif',
-    'https://media.tenor.com/_qE8iNq_pW8AAAAC/anime-kiss.gif'
+    'https://cdn.nekos.life/kiss/kiss_001.gif',
+    'https://cdn.nekos.life/kiss/kiss_002.gif',
+    'https://cdn.nekos.life/kiss/kiss_003.gif',
+    'https://cdn.nekos.life/kiss/kiss_004.gif',
+    'https://cdn.nekos.life/kiss/kiss_005.gif',
+    'https://cdn.nekos.life/kiss/kiss_006.gif',
+    'https://cdn.nekos.life/kiss/kiss_007.gif',
+    'https://cdn.nekos.life/kiss/kiss_008.gif',
+    'https://cdn.nekos.life/kiss/kiss_009.gif',
+    'https://cdn.nekos.life/kiss/kiss_010.gif',
+    'https://cdn.nekos.life/kiss/kiss_011.gif',
+    'https://cdn.nekos.life/kiss/kiss_012.gif',
+    'https://cdn.nekos.life/kiss/kiss_013.gif',
+    'https://cdn.nekos.life/kiss/kiss_014.gif',
+    'https://cdn.nekos.life/kiss/kiss_015.gif',
+    'https://cdn.nekos.life/kiss/kiss_016.gif',
+    'https://cdn.nekos.life/kiss/kiss_017.gif',
+    'https://cdn.nekos.life/kiss/kiss_018.gif',
+    'https://cdn.nekos.life/kiss/kiss_019.gif',
+    'https://cdn.nekos.life/kiss/kiss_020.gif'
 ];
 
 module.exports = {
