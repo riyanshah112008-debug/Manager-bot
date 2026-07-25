@@ -304,132 +304,140 @@ module.exports = (client) => {
             } catch (err) { return message.reply(`❌ Failed to compile dump: ${err.message}`).catch(()=>{}); }
         }
     });
-    // ==========================================
-    // 🎛️ INTERACTIVE DEV PANEL (UI)
-    // ==========================================
-    client.on('interactionCreate', async (interaction) => {
-        // 🚨 SOCIAL BUTTON BYPASS SHIELD: Prevents owner checks from breaking /hug, /kiss, and /pat buttons!
-        if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
-            return; 
-        }
+ // ==========================================
+// 🎛️ INTERACTIVE DEV PANEL (UI)
+// ==========================================
+client.on('interactionCreate', async (interaction) => {
+    // 🚨 SOCIAL BUTTON BYPASS SHIELD
+    if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
+        return; 
+    }
 
+    // Only enforce owner check for actual developer commands, buttons, or modals
+    const isDevCommand = interaction.isChatInputCommand() && interaction.commandName === 'devpanel';
+    const isDevButton = interaction.isButton() && interaction.customId.startsWith('dev_');
+    const isDevModal = interaction.isModalSubmit() && interaction.customId.startsWith('modal_');
+
+    if (isDevCommand || isDevButton || isDevModal) {
         if (!client.isOwner(interaction.user.id)) {
             if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
             return;
         }
+    }
 
-        // --- DASHBOARD RENDER ---
-        if (interaction.isChatInputCommand() && interaction.commandName === 'devpanel') {
-            const embed = new EmbedBuilder()
-                .setTitle('💻 Starry Developer Control Panel')
-                .setDescription('Select an operation below. Buttons with a **📝** will open a secure pop-up for parameter input.')
-                .setColor('#5865F2')
-                .setFooter({ text: 'Powered by Starry Protocol • Authorized Personnel Only' });
+    // --- DASHBOARD RENDER ---
+    if (isDevCommand) {
+        const embed = new EmbedBuilder()
+            .setTitle('💻 Starry Developer Control Panel')
+            .setDescription('Select an operation below. Buttons with a **📝** will open a secure pop-up for parameter input.')
+            .setColor('#5865F2')
+            .setFooter({ text: 'Powered by Starry Protocol • Authorized Personnel Only' });
 
-            const row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
-                new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
-                new ButtonBuilder().setCustomId('dev_dump').setLabel('Server Dump').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
-            );
-            const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
-                new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📝'),
-                new ButtonBuilder().setCustomId('dev_status_btn').setLabel('Set Status').setStyle(ButtonStyle.Secondary).setEmoji('📝')
-            );
-            const row3 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_blacklist_btn').setLabel('Blacklist User').setStyle(ButtonStyle.Danger).setEmoji('📝'),
-                new ButtonBuilder().setCustomId('dev_leaveserver_btn').setLabel('Leave Server (ID)').setStyle(ButtonStyle.Danger).setEmoji('📝'),
-                new ButtonBuilder().setCustomId('dev_emergencyleave').setLabel('Leave Current').setStyle(ButtonStyle.Danger).setEmoji('⚠️')
-            );
-            const row4 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot Process').setStyle(ButtonStyle.Danger).setEmoji('🔄')
-            );
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
+            new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
+            new ButtonBuilder().setCustomId('dev_dump').setLabel('Server Dump').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+        );
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('dev_status_btn').setLabel('Set Status').setStyle(ButtonStyle.Secondary).setEmoji('📝')
+        );
+        const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dev_blacklist_btn').setLabel('Blacklist User').setStyle(ButtonStyle.Danger).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('dev_leaveserver_btn').setLabel('Leave Server (ID)').setStyle(ButtonStyle.Danger).setEmoji('📝'),
+            new ButtonBuilder().setCustomId('dev_emergencyleave').setLabel('Leave Current').setStyle(ButtonStyle.Danger).setEmoji('⚠️')
+        );
+        const row4 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('dev_restart').setLabel('Reboot Bot Process').setStyle(ButtonStyle.Danger).setEmoji('🔄')
+        );
 
-            return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
+        return interaction.reply({ embeds: [embed], components: [row1, row2, row3, row4], ephemeral: true });
+    }
+
+    // --- BUTTON HANDLING ---
+    if (interaction.isButton() && interaction.customId.startsWith('dev_')) {
+        const id = interaction.customId;
+        if (id === 'dev_sysinfo') {
+            const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+            return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
+        }
+        if (id === 'dev_servers') {
+            let serverList = `🌐 **Starry is currently in ${client.guilds.cache.size} servers:**\n\n`;                
+            client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
+            return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
+        }
+        if (id === 'dev_dump') {
+            await interaction.deferReply({ ephemeral: true });
+            if (!interaction.guild) return interaction.editReply('❌ Must be used inside a server.');
+            try {
+                const buffer = await generateServerDump(interaction.guild);
+                return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${interaction.guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
+            } catch (err) { return interaction.editReply(`❌ Dump failed: ${err.message}`); }
+        }
+        if (id === 'dev_restart') { 
+            await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true }); 
+            process.exit(1); 
+        }
+        if (id === 'dev_emergencyleave') { 
+            if (!interaction.guild) return interaction.reply({ content: '❌ Not inside a server!', ephemeral: true }); 
+            await interaction.reply({ content: 'Leaving this server. Goodbye! 👋', ephemeral: true }); 
+            return interaction.guild.leave(); 
         }
 
-        // --- BUTTON HANDLING ---
-        if (interaction.isButton()) {
-            const id = interaction.customId;
-            if (id === 'dev_sysinfo') {
-                const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
-            }
-            if (id === 'dev_servers') {
-                let serverList = `🌐 **Starry is currently in ${client.guilds.cache.size} servers:**\n\n`;                
-                client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
-                return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
-            }
-            if (id === 'dev_dump') {
-                await interaction.deferReply({ ephemeral: true });
-                if (!interaction.guild) return interaction.editReply('❌ Must be used inside a server.');
-                try {
-                    const buffer = await generateServerDump(interaction.guild);
-                    return interaction.editReply({ content: `✅ **Dump Complete:**`, files: [{ attachment: buffer, name: `${interaction.guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_Dump.txt` }] });
-                } catch (err) { return interaction.editReply(`❌ Dump failed: ${err.message}`); }
-            }
-            if (id === 'dev_restart') { 
-                await interaction.reply({ content: '🔄 **Initiating remote reboot...**', ephemeral: true }); 
-                process.exit(1); 
-            }
-            if (id === 'dev_emergencyleave') { 
-                if (!interaction.guild) return interaction.reply({ content: '❌ Not inside a server!', ephemeral: true }); 
-                await interaction.reply({ content: 'Leaving this server. Goodbye! 👋', ephemeral: true }); 
-                return interaction.guild.leave(); 
-            }
+        // Trigger Modals
+        if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+        if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+        if (id === 'dev_status_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_status').setTitle('Change Bot Status').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('status_text').setLabel('New Status Text').setStyle(TextInputStyle.Short).setRequired(true))));
+        if (id === 'dev_blacklist_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_blacklist').setTitle('Toggle User Blacklist').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target_id').setLabel('Discord User ID').setStyle(TextInputStyle.Short).setRequired(true))));
+        if (id === 'dev_leaveserver_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true))));
+    }
+    // --- MODAL SUBMIT HANDLING ---
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_')) {
+        const id = interaction.customId;
+        if (id === 'modal_eval') { 
+            await interaction.deferReply({ ephemeral: true }); 
+            try { 
+                let evaled = eval(interaction.fields.getTextInputValue('eval_code')); 
+                if (typeof evaled !== "string") evaled = require("util").inspect(evaled); 
+                return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``); 
+            } catch (err) { 
+                return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); 
+            } 
+        }
+        if (id === 'modal_broadcast') { 
+            await interaction.deferReply({ ephemeral: true }); 
+            const msg = interaction.fields.getTextInputValue('broadcast_msg'); 
+            let count = 0; 
+            client.guilds.cache.forEach(guild => { 
+                const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages')); 
+                if (channel) { channel.send(`📢 **System Announcement:**\n\n>>> ${msg}`).catch(()=>{}); count++; } 
+            }); 
+            return interaction.editReply(`✅ Broadcast sent to ${count} servers!`); 
+        }
+        if (id === 'modal_status') { 
+            client.user.setActivity(interaction.fields.getTextInputValue('status_text'), { type: 4 }); 
+            return interaction.reply({ content: '✅ Status updated!', ephemeral: true }); 
+        }
+        if (id === 'modal_blacklist') { 
+            const targetId = interaction.fields.getTextInputValue('target_id').trim(); 
+            if (blacklistedUsers.has(targetId)) { 
+                blacklistedUsers.delete(targetId); 
+                return interaction.reply({ content: `✅ Removed \`${targetId}\` from the blacklist.`, ephemeral: true }); 
+            } else { 
+                blacklistedUsers.add(targetId); 
+                return interaction.reply({ content: `🚫 Added \`${targetId}\` to the blacklist.`, ephemeral: true }); 
+            } 
+        }
+        if (id === 'modal_leave') { 
+            const guildToLeave = client.guilds.cache.get(interaction.fields.getTextInputValue('server_id').trim()); 
+            if (!guildToLeave) return interaction.reply({ content: '❌ Not in a server with that ID.', ephemeral: true }); 
+            await guildToLeave.leave(); 
+            return interaction.reply({ content: `✅ Successfully left **${guildToLeave.name}**.`, ephemeral: true }); 
+        }
+    }
+});
 
-            // Trigger Modals
-            if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
-            if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
-            if (id === 'dev_status_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_status').setTitle('Change Bot Status').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('status_text').setLabel('New Status Text').setStyle(TextInputStyle.Short).setRequired(true))));
-            if (id === 'dev_blacklist_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_blacklist').setTitle('Toggle User Blacklist').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target_id').setLabel('Discord User ID').setStyle(TextInputStyle.Short).setRequired(true))));
-            if (id === 'dev_leaveserver_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_leave').setTitle('Force Leave Server').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_id').setLabel('Discord Server ID').setStyle(TextInputStyle.Short).setRequired(true))));
-        }
-        // --- MODAL SUBMIT HANDLING ---
-        if (interaction.isModalSubmit()) {
-            const id = interaction.customId;
-            if (id === 'modal_eval') { 
-                await interaction.deferReply({ ephemeral: true }); 
-                try { 
-                    let evaled = eval(interaction.fields.getTextInputValue('eval_code')); 
-                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled); 
-                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``); 
-                } catch (err) { 
-                    return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); 
-                } 
-            }
-            if (id === 'modal_broadcast') { 
-                await interaction.deferReply({ ephemeral: true }); 
-                const msg = interaction.fields.getTextInputValue('broadcast_msg'); 
-                let count = 0; 
-                client.guilds.cache.forEach(guild => { 
-                    const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages')); 
-                    if (channel) { channel.send(`📢 **System Announcement:**\n\n>>> ${msg}`).catch(()=>{}); count++; } 
-                }); 
-                return interaction.editReply(`✅ Broadcast sent to ${count} servers!`); 
-            }
-            if (id === 'modal_status') { 
-                client.user.setActivity(interaction.fields.getTextInputValue('status_text'), { type: 4 }); 
-                return interaction.reply({ content: '✅ Status updated!', ephemeral: true }); 
-            }
-            if (id === 'modal_blacklist') { 
-                const targetId = interaction.fields.getTextInputValue('target_id').trim(); 
-                if (blacklistedUsers.has(targetId)) { 
-                    blacklistedUsers.delete(targetId); 
-                    return interaction.reply({ content: `✅ Removed \`${targetId}\` from the blacklist.`, ephemeral: true }); 
-                } else { 
-                    blacklistedUsers.add(targetId); 
-                    return interaction.reply({ content: `🚫 Added \`${targetId}\` to the blacklist.`, ephemeral: true }); 
-                } 
-            }
-            if (id === 'modal_leave') { 
-                const guildToLeave = client.guilds.cache.get(interaction.fields.getTextInputValue('server_id').trim()); 
-                if (!guildToLeave) return interaction.reply({ content: '❌ Not in a server with that ID.', ephemeral: true }); 
-                await guildToLeave.leave(); 
-                return interaction.reply({ content: `✅ Successfully left **${guildToLeave.name}**.`, ephemeral: true }); 
-            }
-        }
-    });
     // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE
     // ==========================================
