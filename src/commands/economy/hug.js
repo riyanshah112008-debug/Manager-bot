@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const https = require('https');
-const User = require('../models/User'); // Adjust path if your commands folder has a different depth
+const User = require('../models/User'); // Change to './models/User' if your commands are in the root folder
 
 function getGif() {
     return new Promise((resolve) => {
@@ -19,11 +19,11 @@ function getGif() {
     });
 }
 
-// Helper to update MongoDB stats safely
-async function trackHug(userId, guildId, isGiven) {
+// Background DB tracker (Non-blocking)
+function trackHug(userId, guildId, isGiven) {
     if (!userId) return;
     const updateField = isGiven ? { hugsGiven: 1 } : { hugsReceived: 1 };
-    await User.findOneAndUpdate(
+    User.findOneAndUpdate(
         { userId: userId, guildId: guildId },
         { $inc: updateField },
         { upsert: true, new: true }
@@ -46,11 +46,11 @@ module.exports = {
         await interaction.deferReply();
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
+        
+        // Fetch GIF and fire-and-forget DB update simultaneously to prevent timeouts
         const gifUrl = await getGif();
-
-        // Save stats to MongoDB: Sender gives, Target receives
-        await trackHug(interaction.user.id, guildId, true);
-        await trackHug(target.id, guildId, false);
+        trackHug(interaction.user.id, guildId, true);
+        trackHug(target.id, guildId, false);
 
         const embed = new EmbedBuilder()
             .setColor('#FF9494')
@@ -77,9 +77,8 @@ module.exports = {
                 return i.reply({ content: 'Only the person who was hugged can hug back!', ephemeral: true });
             }
 
-            // Swap stats for the button return action
-            await trackHug(target.id, guildId, true);
-            await trackHug(interaction.user.id, guildId, false);
+            trackHug(target.id, guildId, true);
+            trackHug(interaction.user.id, guildId, false);
 
             const returnGif = await getGif();
             const returnEmbed = new EmbedBuilder()
