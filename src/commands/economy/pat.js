@@ -1,15 +1,33 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const https = require('https');
+const User = require('../models/User');
 
-const PAT_GIFS = [
-    'https://media1.tenor.com/m/Z71f28b2_fEAAAAC/anime-pat.gif',
-    'https://media1.tenor.com/m/IZfV3-S460EAAAAC/pat-anime.gif',
-    'https://media1.tenor.com/m/p7s5942rD6gAAAAC/anime-head-pat.gif',
-    'https://media1.tenor.com/m/OxaEbqjG2OQAAAAC/anime-pat.gif',
-    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif'
-];
+function getGif() {
+    return new Promise((resolve) => {
+        https.get('https://api.waifu.pics/sfw/pat', (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    resolve(json.url);
+                } catch {
+                    resolve('https://i.imgur.com/13w1J4L.png');
+                }
+            });
+        }).on('error', () => resolve('https://i.imgur.com/13w1J4L.png'));
+    });
+}
+
+async function trackPat(userId, guildId, isGiven) {
+    if (!userId) return;
+    const updateField = isGiven ? { patsGiven: 1 } : { patsReceived: 1 };
+    await User.findOneAndUpdate(
+        { userId: userId, guildId: guildId },
+        { $inc: updateField },
+        { upsert: true, new: true }
+    ).catch(err => console.error('DB Pat Track Error:', err));
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -24,13 +42,18 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        await interaction.deferReply();
         const target = interaction.options.getUser('target');
-        const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
+        const guildId = interaction.guildId || 'DM';
+        const gifUrl = await getGif();
+
+        await trackPat(interaction.user.id, guildId, true);
+        await trackPat(target.id, guildId, false);
 
         const embed = new EmbedBuilder()
             .setColor('#A7C7E7')
             .setDescription(`✋ **${interaction.user.username}** gave **${target.username}** a gentle headpat!`)
-            .setImage(randomGif);
+            .setImage(gifUrl);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -41,7 +64,7 @@ module.exports = {
         );
 
         const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.reply({ embeds: [embed], components: components });
+        const response = await interaction.editReply({ embeds: [embed], components: components });
 
         if (components.length === 0) return;
 
@@ -52,7 +75,10 @@ module.exports = {
                 return i.reply({ content: 'Only the person who received the pat can pat back!', ephemeral: true });
             }
 
-            const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
+            await trackPat(target.id, guildId, true);
+            await trackPat(interaction.user.id, guildId, false);
+
+            const returnGif = await getGif();
             const returnEmbed = new EmbedBuilder()
                 .setColor('#A7C7E7')
                 .setDescription(`⭐ **${target.username}** gave **${interaction.user.username}** a headpat back!`)
