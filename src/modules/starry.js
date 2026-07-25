@@ -55,7 +55,6 @@ module.exports = (client) => {
         const owners = (process.env.OWNER_ID || '').split(',').map(id => id.trim());
         return owners.includes(userId);
     };
-
     // ==========================================
     // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
     // ==========================================
@@ -220,7 +219,7 @@ module.exports = (client) => {
         }
 
         const lowerName = message.author.username.toLowerCase();
-        if (lowerName.includes('discardia') || lowerName.includes('discadia')) {
+        if (lowerName.includes('discardia') || lowerName.includes('discardia')) {
             const embed = message.embeds[0];
             if (embed && ((embed.description?.toLowerCase().includes('bump')) || (embed.title?.toLowerCase().includes('bump')))) {
                 const bumpEmbed = new EmbedBuilder().setColor('#5865F2').setTitle('🚀 Server Bumped on Discardia!').setDescription('Thank you for boosting our server! We will remind you when it is time to bump again.');
@@ -309,6 +308,11 @@ module.exports = (client) => {
     // 🎛️ INTERACTIVE DEV PANEL (UI)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
+        // 🚨 SOCIAL BUTTON BYPASS SHIELD: Prevents owner checks from breaking /hug, /kiss, and /pat buttons!
+        if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
+            return; 
+        }
+
         if (!client.isOwner(interaction.user.id)) {
             if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
             return;
@@ -498,7 +502,6 @@ module.exports = (client) => {
                 return replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
             }
         }
-
         // --- GEMINI TEXT & NLP PROCESSING ---
         if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** API Key missing!");        
         await message.channel.sendTyping().catch(() => {});
