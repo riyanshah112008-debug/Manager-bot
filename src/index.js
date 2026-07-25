@@ -175,8 +175,7 @@ app.post('/verify', async (req, res) => {
 const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
-    { name: 'Jirayu Public Node', url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', auth: process.env.LAVALINK_AUTH || 'youshallnotpass', secure: false },
-    { name: 'Lava.Link', url: 'lava.link:80', auth: 'youshallnotpass', secure: false }
+    { name: 'Jirayu Public Node', url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', auth: process.env.LAVALINK_AUTH || 'youshallnotpass', secure: false }
 ];
 
 client.manager = new Kazagumo({
