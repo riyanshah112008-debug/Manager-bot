@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const User = require('../models/User');
 
 const PAT_GIFS = [
     'https://media1.tenor.com/m/Z71f28b2_fEAAAAC/anime-pat.gif',
@@ -11,16 +10,6 @@ const PAT_GIFS = [
     'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
     'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif'
 ];
-
-function trackPat(userId, guildId, isGiven) {
-    if (!userId) return;
-    const updateField = isGiven ? { patsGiven: 1 } : { patsReceived: 1 };
-    User.findOneAndUpdate(
-        { userId: userId, guildId: guildId },
-        { $inc: updateField },
-        { upsert: true, new: true }
-    ).catch(() => {});
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -36,12 +25,8 @@ module.exports = {
 
     async execute(interaction) {
         const target = interaction.options.getUser('target');
-        const guildId = interaction.guildId || 'DM';
-
-        trackPat(interaction.user.id, guildId, true);
-        trackPat(target.id, guildId, false);
-
         const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
+
         const embed = new EmbedBuilder()
             .setColor('#A7C7E7')
             .setDescription(`✋ **${interaction.user.username}** gave **${target.username}** a gentle headpat!`)
@@ -66,9 +51,6 @@ module.exports = {
             if (i.user.id !== target.id) {
                 return i.reply({ content: 'Only the person who received the pat can pat back!', ephemeral: true });
             }
-
-            trackPat(target.id, guildId, true);
-            trackPat(interaction.user.id, guildId, false);
 
             const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
