@@ -175,8 +175,9 @@ app.post('/verify', async (req, res) => {
 const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
-    { name: 'Jirayu Public Node', url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', auth: process.env.LAVALINK_AUTH || 'youshallnotpass', secure: false }
+    { name: 'Serenetia SSL', url: 'lavalinkv4.serenetia.com:443', auth: 'https://dsc.gg/ajidevserver', secure: true }
 ];
+
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
