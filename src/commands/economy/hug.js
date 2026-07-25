@@ -1,6 +1,6 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// 20 Reliable, Direct CDN Anime Hug GIFs (These won't get blocked by Discord)
+// 20 Reliable, Direct CDN Anime Hug GIFs
 const HUG_GIFS = [
     'https://cdn.nekos.life/hug/hug_001.gif',
     'https://cdn.nekos.life/hug/hug_002.gif',
@@ -28,8 +28,8 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('hug')
         .setDescription('🤗 Give someone a warm anime hug (Works in DMs too!)')
-        .setContexts([0, 1, 2]) // 0: Guild, 1: Bot DM, 2: Private Channel
-        .setIntegrationTypes([0, 1]) // 0: Guild Install, 1: User Install
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
         .addUserOption(option => 
             option.setName('target')
                 .setDescription('The user you want to hug')
@@ -45,6 +45,41 @@ module.exports = {
             .setDescription(`🤗 **${interaction.user.username}** gave **${target.username}** a big warm hug!`)
             .setImage(randomGif);
 
-        return interaction.reply({ embeds: [embed] });
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('hug_back')
+                .setLabel('Hug back')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('🤗')
+        );
+
+        const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
+        const response = await interaction.reply({ embeds: [embed], components: components });
+
+        if (components.length === 0) return;
+
+        const collector = response.createMessageComponentCollector({ time: 60000 });
+
+        collector.on('collect', async (i) => {
+            if (i.user.id !== target.id) {
+                return i.reply({ content: 'Only the person who was hugged can hug back!', ephemeral: true });
+            }
+
+            const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
+            const returnEmbed = new EmbedBuilder()
+                .setColor('#FF9494')
+                .setDescription(`🤗 **${target.username}** hugged **${interaction.user.username}** back!`)
+                .setImage(returnGif);
+
+            row.components[0].setDisabled(true);
+            await interaction.editReply({ components: [row] }).catch(() => {});
+
+            await i.reply({ embeds: [returnEmbed] });
+        });
+
+        collector.on('end', () => {
+            row.components[0].setDisabled(true);
+            interaction.editReply({ components: [row] }).catch(() => {});
+        });
     }
 };
