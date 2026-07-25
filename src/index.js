@@ -176,7 +176,7 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
     { name: 'Jirayu Public Node', url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', auth: process.env.LAVALINK_AUTH || 'youshallnotpass', secure: false },
-    { name: 'AjieDev EU Node', url: 'lava-v4.ajieblogs.eu.org:443', auth: 'https://dsc.gg/ajidevserver', secure: true }
+    { name: 'Lava.Link', url: 'lava.link:80', auth: 'youshallnotpass', secure: false }
 ];
 
 client.manager = new Kazagumo({
