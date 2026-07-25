@@ -1,17 +1,14 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// 20 Reliable, Direct CDN Anime Pat GIFs
 const PAT_GIFS = [
-    'https://cdn.nekos.life/pat/pat_001.gif', 'https://cdn.nekos.life/pat/pat_002.gif',
-    'https://cdn.nekos.life/pat/pat_003.gif', 'https://cdn.nekos.life/pat/pat_004.gif',
-    'https://cdn.nekos.life/pat/pat_005.gif', 'https://cdn.nekos.life/pat/pat_006.gif',
-    'https://cdn.nekos.life/pat/pat_007.gif', 'https://cdn.nekos.life/pat/pat_008.gif',
-    'https://cdn.nekos.life/pat/pat_009.gif', 'https://cdn.nekos.life/pat/pat_010.gif',
-    'https://cdn.nekos.life/pat/pat_011.gif', 'https://cdn.nekos.life/pat/pat_012.gif',
-    'https://cdn.nekos.life/pat/pat_013.gif', 'https://cdn.nekos.life/pat/pat_014.gif',
-    'https://cdn.nekos.life/pat/pat_015.gif', 'https://cdn.nekos.life/pat/pat_016.gif',
-    'https://cdn.nekos.life/pat/pat_017.gif', 'https://cdn.nekos.life/pat/pat_018.gif',
-    'https://cdn.nekos.life/pat/pat_019.gif', 'https://cdn.nekos.life/pat/pat_020.gif'
+    'https://media1.tenor.com/m/Z71f28b2_fEAAAAC/anime-pat.gif',
+    'https://media1.tenor.com/m/IZfV3-S460EAAAAC/pat-anime.gif',
+    'https://media1.tenor.com/m/p7s5942rD6gAAAAC/anime-head-pat.gif',
+    'https://media1.tenor.com/m/OxaEbqjG2OQAAAAC/anime-pat.gif',
+    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif'
 ];
 
 module.exports = {
