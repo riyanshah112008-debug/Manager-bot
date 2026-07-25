@@ -183,6 +183,7 @@ const Nodes = [
     }
 ];
 
+
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
     plugins: [
