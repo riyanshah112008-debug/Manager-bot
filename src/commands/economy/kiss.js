@@ -33,7 +33,9 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('kiss')
         .setDescription('💋 Give someone a sweet anime kiss (Works in DMs too!)')
-        .setDMPermission(true)
+        // 🚨 UPGRADED: Modern DM and Context Handling
+        .setContexts([0, 1, 2]) // 0: Guild, 1: Bot DM, 2: Private Channel
+        .setIntegrationTypes([0, 1]) // 0: Guild Install, 1: User Install
         .addUserOption(option => 
             option.setName('target')
                 .setDescription('The user you want to kiss')
