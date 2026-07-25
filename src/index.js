@@ -175,9 +175,13 @@ app.post('/verify', async (req, res) => {
 const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
-    { name: 'Serenetia SSL', url: 'lavalinkv4.serenetia.com:443', auth: 'https://dsc.gg/ajidevserver', secure: true }
+    { 
+        name: 'My Android Phone Node', 
+        url: 'xxxx.a.free.pinggy.link:443', https://openssh.com/pq.html!
+        auth: 'youshallnotpass', 
+        secure: true 
+    }
 ];
-
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
