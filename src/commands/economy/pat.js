@@ -1,14 +1,12 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const PAT_GIFS = [
-    'https://media1.tenor.com/m/Z71f28b2_fEAAAAC/anime-pat.gif',
-    'https://media1.tenor.com/m/IZfV3-S460EAAAAC/pat-anime.gif',
-    'https://media1.tenor.com/m/p7s5942rD6gAAAAC/anime-head-pat.gif',
-    'https://media1.tenor.com/m/OxaEbqjG2OQAAAAC/anime-pat.gif',
-    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif'
+    'https://i.imgur.com/2gJNp1y.gif',
+    'https://i.imgur.com/5IUu6TZ.gif',
+    'https://i.imgur.com/ovvwW9W.gif',
+    'https://i.imgur.com/uR1g1a4.gif',
+    'https://i.imgur.com/e7G8i1g.gif',
+    'https://i.imgur.com/vH90uPi.gif'
 ];
 
 module.exports = {
