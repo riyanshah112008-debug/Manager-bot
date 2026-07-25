@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const User = require('../models/User');
+const User = require('../../models/User'); // 👈 Fixed relative path
 
 const PAT_GIFS = [
     'https://media1.tenor.com/m/Z71f28b2_fEAAAAC/anime-pat.gif',
@@ -39,13 +39,11 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        await interaction.deferReply(); // Prevents Discord 3-second timeout error
-
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
 
-        await trackPat(interaction.user.id, guildId, true);
-        await trackPat(target.id, guildId, false);
+        trackPat(interaction.user.id, guildId, true);
+        trackPat(target.id, guildId, false);
 
         const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
         const embed = new EmbedBuilder()
@@ -62,7 +60,7 @@ module.exports = {
         );
 
         const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.editReply({ embeds: [embed], components: components });
+        const response = await interaction.reply({ embeds: [embed], components: components });
 
         if (components.length === 0) return;
 
@@ -73,8 +71,8 @@ module.exports = {
                 return i.reply({ content: 'Only the person who received the pat can pat back!', ephemeral: true });
             }
 
-            await trackPat(target.id, guildId, true);
-            await trackPat(interaction.user.id, guildId, false);
+            trackPat(target.id, guildId, true);
+            trackPat(interaction.user.id, guildId, false);
 
             const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
