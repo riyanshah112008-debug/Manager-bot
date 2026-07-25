@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const User = require('../models/User');
 
 const KISS_GIFS = [
     'https://media1.tenor.com/m/gzaT07Fk4UoAAAAC/anime-kiss.gif',
@@ -13,16 +12,6 @@ const KISS_GIFS = [
     'https://media1.tenor.com/m/QfL2Piv3K3wAAAAC/anime-kiss.gif',
     'https://media1.tenor.com/m/h5e17uVzL7MAAAAC/anime-kiss.gif'
 ];
-
-function trackKiss(userId, guildId, isGiven) {
-    if (!userId) return;
-    const updateField = isGiven ? { kissesGiven: 1 } : { kissesReceived: 1 };
-    User.findOneAndUpdate(
-        { userId: userId, guildId: guildId },
-        { $inc: updateField },
-        { upsert: true, new: true }
-    ).catch(() => {});
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -38,12 +27,8 @@ module.exports = {
 
     async execute(interaction) {
         const target = interaction.options.getUser('target');
-        const guildId = interaction.guildId || 'DM';
-
-        trackKiss(interaction.user.id, guildId, true);
-        trackKiss(target.id, guildId, false);
-
         const randomGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
+
         const embed = new EmbedBuilder()
             .setColor('#FFB6C1')
             .setDescription(`💋 **${interaction.user.username}** kissed **${target.username}**!`)
@@ -68,9 +53,6 @@ module.exports = {
             if (i.user.id !== target.id) {
                 return i.reply({ content: 'Only the person who was kissed can kiss back!', ephemeral: true });
             }
-
-            trackKiss(target.id, guildId, true);
-            trackKiss(interaction.user.id, guildId, false);
 
             const returnGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
