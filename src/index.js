@@ -177,7 +177,7 @@ const KazagumoSpotify = require('kazagumo-spotify');
 const Nodes = [
     { 
         name: 'My Android Phone Node', 
-        url: 'https://d50be8130c3e7875-152-59-63-33.serveousercontent.com:443', 
+        url:'d50be8130c3e7875-152-59-63-33.serveousercontent.com:443', 
         auth: 'youshallnotpass', 
         secure: true 
     }
