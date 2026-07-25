@@ -2,26 +2,16 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 
 // 20 Reliable, Direct CDN Anime Kiss GIFs
 const KISS_GIFS = [
-    'https://cdn.nekos.life/kiss/kiss_001.gif',
-    'https://cdn.nekos.life/kiss/kiss_002.gif',
-    'https://cdn.nekos.life/kiss/kiss_003.gif',
-    'https://cdn.nekos.life/kiss/kiss_004.gif',
-    'https://cdn.nekos.life/kiss/kiss_005.gif',
-    'https://cdn.nekos.life/kiss/kiss_006.gif',
-    'https://cdn.nekos.life/kiss/kiss_007.gif',
-    'https://cdn.nekos.life/kiss/kiss_008.gif',
-    'https://cdn.nekos.life/kiss/kiss_009.gif',
-    'https://cdn.nekos.life/kiss/kiss_010.gif',
-    'https://cdn.nekos.life/kiss/kiss_011.gif',
-    'https://cdn.nekos.life/kiss/kiss_012.gif',
-    'https://cdn.nekos.life/kiss/kiss_013.gif',
-    'https://cdn.nekos.life/kiss/kiss_014.gif',
-    'https://cdn.nekos.life/kiss/kiss_015.gif',
-    'https://cdn.nekos.life/kiss/kiss_016.gif',
-    'https://cdn.nekos.life/kiss/kiss_017.gif',
-    'https://cdn.nekos.life/kiss/kiss_018.gif',
-    'https://cdn.nekos.life/kiss/kiss_019.gif',
-    'https://cdn.nekos.life/kiss/kiss_020.gif'
+    'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
+    'https://cdn.nekos.life/kiss/kiss_003.gif', 'https://cdn.nekos.life/kiss/kiss_004.gif',
+    'https://cdn.nekos.life/kiss/kiss_005.gif', 'https://cdn.nekos.life/kiss/kiss_006.gif',
+    'https://cdn.nekos.life/kiss/kiss_007.gif', 'https://cdn.nekos.life/kiss/kiss_008.gif',
+    'https://cdn.nekos.life/kiss/kiss_009.gif', 'https://cdn.nekos.life/kiss/kiss_010.gif',
+    'https://cdn.nekos.life/kiss/kiss_011.gif', 'https://cdn.nekos.life/kiss/kiss_012.gif',
+    'https://cdn.nekos.life/kiss/kiss_013.gif', 'https://cdn.nekos.life/kiss/kiss_014.gif',
+    'https://cdn.nekos.life/kiss/kiss_015.gif', 'https://cdn.nekos.life/kiss/kiss_016.gif',
+    'https://cdn.nekos.life/kiss/kiss_017.gif', 'https://cdn.nekos.life/kiss/kiss_018.gif',
+    'https://cdn.nekos.life/kiss/kiss_019.gif', 'https://cdn.nekos.life/kiss/kiss_020.gif'
 ];
 
 module.exports = {
@@ -47,7 +37,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('kiss_back')
+                .setCustomId('social_kiss_back')
                 .setLabel('Kiss back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('💋')
@@ -73,7 +63,6 @@ module.exports = {
 
             row.components[0].setDisabled(true);
             await interaction.editReply({ components: [row] }).catch(() => {});
-
             await i.reply({ embeds: [returnEmbed] });
         });
 
