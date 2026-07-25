@@ -175,15 +175,27 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 const KazagumoSpotify = require('kazagumo-spotify');
 
+// Your exact original Jirayu Node + A massive list of reliable backups!
 const Nodes = [
     { name: 'Jirayu Public Node', url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', auth: process.env.LAVALINK_AUTH || 'youshallnotpass', secure: false },
-
-
+    { name: 'AjieDev EU Node', url: 'lava-v4.ajieblogs.eu.org:443', auth: 'https://dsc.gg/ajidevserver', secure: true },
+    { name: 'Horizxon Mumbai', url: 'lava4.horizxon.studio:80', auth: 'horizxon.studio', secure: false },
+    { name: 'Horizxon Frankfurt', url: 'lava3.horizxon.studio:80', auth: 'horizxon.studio', secure: false },
+    { name: 'Horizxon US West', url: 'lava2.horizxon.studio:80', auth: 'horizxon.studio', secure: false },
+    { name: 'Serenetia SSL', url: 'lavalinkv4.serenetia.com:443', auth: 'https://dsc.gg/ajidevserver', secure: true }
+];
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
     plugins: [
-        new KazagumoSpotify({ clientId: process.env.SPOTIFY_CLIENT_ID, clientSecret: process.env.SPOTIFY_CLIENT_SECRET, playlistPageLimit: 2, albumPageLimit: 1, searchMarket: 'IN', searchPrefix: 'ytmsearch:' })
+        new KazagumoSpotify({ 
+            clientId: process.env.SPOTIFY_CLIENT_ID, 
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET, 
+            playlistPageLimit: 2, 
+            albumPageLimit: 1, 
+            searchMarket: 'IN', 
+            searchPrefix: 'ytmsearch:' 
+        })
     ],
     send: (guildId, payload) => {
         const guild = client.guilds.cache.get(guildId);
@@ -260,10 +272,12 @@ client.manager.on('playerException', (player, data) => {
     if (channel) channel.send('⚠️ **Stream dropped!** The public node blocked this track.');
     player.skip(); 
 });
+
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
+
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
 // ==========================================
