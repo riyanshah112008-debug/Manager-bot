@@ -176,11 +176,7 @@ app.post('/verify', async (req, res) => {
 const KazagumoSpotify = require('kazagumo-spotify');
 
 const Nodes = [
-    { name: 'Lexnet V4', url: 'lavalink.lexnet.cc:443', auth: 'lexnet', secure: true },
-    { name: 'Kitsune Node', url: 'lavalink.kitsune.tools:443', auth: 'youshallnotpass', secure: true },
-    { name: 'AjieDev EU V4', url: 'lava-v4.ajieblogs.eu.org:443', auth: 'https://dsc.gg/ajidevserver', secure: true },
-    { name: 'Lavadrop NA', url: 'na.lavadrop.net:2333', auth: 'youshallnotpass', secure: false }
-];
+    { name: 'Jirayu Public Node', url: process.env.LAVALINK_URL || 'lavalink.jirayu.net:13592', auth: process.env.LAVALINK_AUTH || 'youshallnotpass', secure: false },
 
 
 
