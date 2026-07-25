@@ -506,9 +506,9 @@ client.on(Events.InteractionCreate, async interaction => {
     // 💻 STANDARD COMMAND HANDLER
     if (!interaction.isChatInputCommand()) return;
 
-    // --- 🚨 NATIVE TELEMETRY CORE COMMAND 🚨 ---
-    // By building this directly into her core, it bypasses the command files entirely!
-    if (interaction.commandName === 'telemetry') {
+// --- 🚨 NATIVE TELEMETRY CORE COMMAND & LIVE REFRESH 🚨 ---
+    // This handles both the /telemetry command AND the Refresh Button!
+    if (interaction.commandName === 'telemetry' || (interaction.isButton() && interaction.customId === 'refresh_telemetry')) {
         const botOwners = ['1465049039153135639', '1257676837249617971']; 
         if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
 
@@ -516,7 +516,13 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.reply({ content: '❌ Access Denied: Only the Bot Owner can access the network dashboard.', ephemeral: true });
         }
 
-        await interaction.deferReply();
+        // Acknowledge the request so Discord doesn't timeout
+        if (interaction.isButton()) {
+            await interaction.deferUpdate(); 
+        } else {
+            await interaction.deferReply(); 
+        }
+
         try {
             const GuildTelemetry = require('./models/GuildTelemetry');
             const allData = await GuildTelemetry.find({});
@@ -545,17 +551,26 @@ client.on(Events.InteractionCreate, async interaction => {
                     { name: '🎙️ Voice Engagement', value: `• **${vcHours}** hours tracked globally`, inline: true },
                     { name: '🛡️ Global Enforcements', value: `• Warns: **${globalWarns}**\n• Kicks: **${globalKicks}**\n• Bans: **${globalBans}**\n• AutoMod Stops: **${globalAutomod}**`, inline: false }
                 )
-                .setFooter({ text: 'Starry Central Command', iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
+                .setFooter({ text: 'Starry Central Command • Last Synced', iconURL: client.user.displayAvatarURL() })
+                .setTimestamp(); // Automatically updates the timestamp to the exact second it was refreshed!
             
-            return interaction.editReply({ embeds: [embed] });
+            // Generate the Interactive Refresh Button
+            const refreshRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('refresh_telemetry')
+                    .setLabel('🔄 Refresh Live Data')
+                    .setStyle(ButtonStyle.Primary)
+            );
+            
+            // Push the update to the chat
+            return interaction.editReply({ embeds: [embed], components: [refreshRow] });
+
         } catch (error) {
             console.error('Telemetry Core Error:', error);
-            return interaction.editReply('❌ Failed to fetch the network dashboard from the database.');
+            return interaction.editReply({ content: '❌ Failed to fetch the network dashboard from the database.', components: [] });
         }
     }
     // --- END NATIVE TELEMETRY ---
-
     const command = client.commands.get(interaction.commandName);
     
     // 🚨 KILL SILENT FAILS: If the file is missing, TELL the user!
