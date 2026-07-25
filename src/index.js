@@ -3,7 +3,8 @@
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
-const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
+
 const express = require('express');
 const cors = require('cors'); 
 const https = require('https'); 
