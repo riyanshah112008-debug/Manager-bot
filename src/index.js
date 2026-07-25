@@ -522,6 +522,113 @@ client.on(Events.InteractionCreate, async interaction => {
     // 🛡️ DM SAFETY GUARD FOR UI BUTTONS & MENUS
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
+    // 🎛️ ULTIMATE DJ PANEL BUTTON HANDLER
+    if (interaction.isButton() && interaction.customId.startsWith('dj_')) {
+        const member = interaction.member;
+        const voiceChannel = member.voice?.channel;
+        const action = interaction.customId;
+
+        if (!voiceChannel && action !== 'dj_refresh_panel') {
+            return interaction.reply({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true });
+        }
+
+        if (action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+            return interaction.reply({ content: '❌ You need **Manage Channels** permission to execute this VC action!', ephemeral: true });
+        }
+
+        try {
+            if (action === 'dj_lock') {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
+                return interaction.reply({ content: '🔒 Voice channel has been **locked**. No new users can join.', ephemeral: true });
+            }
+
+            if (action === 'dj_unlock') {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
+                return interaction.reply({ content: '🔓 Voice channel has been **unlocked**. Users can join freely.', ephemeral: true });
+            }
+
+            if (action === 'dj_limit_plus') {
+                let newLimit = voiceChannel.userLimit + 5;
+                if (newLimit > 99) newLimit = 99;
+                await voiceChannel.setUserLimit(newLimit);
+                return interaction.reply({ content: `➕ Voice channel member limit increased to **${newLimit}**`, ephemeral: true });
+            }
+
+            if (action === 'dj_limit_minus') {
+                let newLimit = voiceChannel.userLimit - 5;
+                if (newLimit < 0) newLimit = 0;
+                await voiceChannel.setUserLimit(newLimit);
+                return interaction.reply({ content: `➖ Voice channel member limit decreased to **${newLimit === 0 ? 'Unlimited' : newLimit}**`, ephemeral: true });
+            }
+
+            if (action === 'dj_reset_limit') {
+                await voiceChannel.setUserLimit(0);
+                return interaction.reply({ content: '🔄 Voice channel member limit reset to **Unlimited**.', ephemeral: true });
+            }
+
+            if (action === 'dj_shuffle') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player || !player.queue.size) {
+                    return interaction.reply({ content: '❌ There are no songs in the queue to shuffle.', ephemeral: true });
+                }
+                player.queue.shuffle();
+                return interaction.reply({ content: '🔀 The music queue has been **shuffled**!', ephemeral: true });
+            }
+
+            if (action === 'dj_loop') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player) return interaction.reply({ content: '❌ No active music player found.', ephemeral: true });
+                const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
+                player.setLoop(nextLoop);
+                return interaction.reply({ content: `🔁 Music loop mode changed to: **${nextLoop.toUpperCase()}**`, ephemeral: true });
+            }
+
+            if (action === 'dj_vol_up' || action === 'dj_vol_down') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player) return interaction.reply({ content: '❌ No active music player found.', ephemeral: true });
+                
+                let newVol = player.volume + (action === 'dj_vol_up' ? 10 : -10);
+                if (newVol > 100) newVol = 100;
+                if (newVol < 0) newVol = 0;
+
+                await player.setVolume(newVol);
+                return interaction.reply({ content: `🔊 Volume adjusted to **${newVol}%**`, ephemeral: true });
+            }
+
+            if (action === 'dj_clear_queue') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player || !player.queue.size) {
+                    return interaction.reply({ content: '❌ The queue is already empty.', ephemeral: true });
+                }
+                player.queue.clear();
+                return interaction.reply({ content: '🗑️ The music queue has been **cleared**!', ephemeral: true });
+            }
+
+            if (action === 'dj_refresh_panel') {
+                if (!voiceChannel) return interaction.reply({ content: '❌ Join a voice channel to refresh panel stats for it!', ephemeral: true });
+                
+                const vcName = voiceChannel.name;
+                const vcLimit = voiceChannel.userLimit === 0 ? 'Unlimited' : voiceChannel.userLimit;
+                const vcStatus = voiceChannel.permissionsFor(interaction.guild.roles.everyone).has('Connect') ? '🔓 Unlocked' : '🔒 Locked';
+
+                const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setDescription(
+                        'Complete master command center for voice channel security, moderation, and music playback.\n\n' +
+                        `🎙️ **Active VC:** \`${vcName}\`\n` +
+                        `🔒 **Access Status:** ${vcStatus}\n` +
+                        `👥 **Member Capacity:** \`${voiceChannel.members.size} / ${vcLimit}\``
+                    );
+
+                await interaction.update({ embeds: [updatedEmbed] });
+                return;
+            }
+
+        } catch (err) {
+            console.error('Ultimate DJ Panel Error:', err);
+            return interaction.reply({ content: '❌ Failed to execute action. Verify my bot permissions.', ephemeral: true });
+        }
+    }
+
     // 🛍️ DYNAMIC SHOP PURCHASE HANDLER
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
@@ -616,8 +723,7 @@ client.on(Events.InteractionCreate, async interaction => {
     // 💻 STANDARD COMMAND HANDLER
     if (!interaction.isChatInputCommand()) return;
 
-// --- 🚨 NATIVE TELEMETRY CORE COMMAND & LIVE REFRESH 🚨 ---
-    // This handles both the /telemetry command AND the Refresh Button!
+    // --- 🚨 NATIVE TELEMETRY CORE COMMAND & LIVE REFRESH 🚨 ---
     if (interaction.commandName === 'telemetry' || (interaction.isButton() && interaction.customId === 'refresh_telemetry')) {
         const botOwners = ['1465049039153135639', '1257676837249617971']; 
         if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
@@ -626,7 +732,6 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.reply({ content: '❌ Access Denied: Only the Bot Owner can access the network dashboard.', ephemeral: true });
         }
 
-        // Acknowledge the request so Discord doesn't timeout
         if (interaction.isButton()) {
             await interaction.deferUpdate(); 
         } else {
@@ -662,9 +767,8 @@ client.on(Events.InteractionCreate, async interaction => {
                     { name: '🛡️ Global Enforcements', value: `• Warns: **${globalWarns}**\n• Kicks: **${globalKicks}**\n• Bans: **${globalBans}**\n• AutoMod Stops: **${globalAutomod}**`, inline: false }
                 )
                 .setFooter({ text: 'Starry Central Command • Last Synced', iconURL: client.user.displayAvatarURL() })
-                .setTimestamp(); // Automatically updates the timestamp to the exact second it was refreshed!
+                .setTimestamp();
             
-            // Generate the Interactive Refresh Button
             const refreshRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('refresh_telemetry')
@@ -672,7 +776,6 @@ client.on(Events.InteractionCreate, async interaction => {
                     .setStyle(ButtonStyle.Primary)
             );
             
-            // Push the update to the chat
             return interaction.editReply({ embeds: [embed], components: [refreshRow] });
 
         } catch (error) {
@@ -680,10 +783,9 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.editReply({ content: '❌ Failed to fetch the network dashboard from the database.', components: [] });
         }
     }
-    // --- END NATIVE TELEMETRY ---
+
     const command = client.commands.get(interaction.commandName);
     
-    // 🚨 KILL SILENT FAILS: If the file is missing, TELL the user!
     if (!command) {
         return interaction.reply({ 
             content: `❌ **Command file not found!** Starry received \`/${interaction.commandName}\`, but she couldn't find the underlying code file in her folders!`, 
