@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// 20 Reliable, Direct CDN Anime Hug GIFs
 const HUG_GIFS = [
     'https://cdn.nekos.life/hug/hug_001.gif', 'https://cdn.nekos.life/hug/hug_002.gif',
     'https://cdn.nekos.life/hug/hug_003.gif', 'https://cdn.nekos.life/hug/hug_004.gif',
@@ -37,7 +36,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_hug_back')
+                .setCustomId('social_hug_back') // Matched with starry.js bypass
                 .setLabel('Hug back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('🤗')
