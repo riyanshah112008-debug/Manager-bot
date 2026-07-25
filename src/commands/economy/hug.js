@@ -1,25 +1,19 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const https = require('https');
-const User = require('../models/User'); // Change to './models/User' if your commands are in the root folder
+const User = require('../models/User');
 
-function getGif() {
-    return new Promise((resolve) => {
-        https.get('https://api.waifu.pics/sfw/hug', (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    resolve(json.url);
-                } catch {
-                    resolve('https://i.imgur.com/13w1J4L.png');
-                }
-            });
-        }).on('error', () => resolve('https://i.imgur.com/13w1J4L.png'));
-    });
-}
+const HUG_GIFS = [
+    'https://media1.tenor.com/m/kKvrHj-SAvMAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/xIuXbMtA38sAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/G_RlGfqGlqcAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/9e1aE_x4Nc4AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/J7eIlqcG_2cAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/n7g1bQY1Y3UAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/X-L1s6T3-2wAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
+    'https://media1.tenor.com/m/X5nB-41Kav4AAAAC/anime-hug.gif'
+];
 
-// Background DB tracker (Non-blocking)
 function trackHug(userId, guildId, isGiven) {
     if (!userId) return;
     const updateField = isGiven ? { hugsGiven: 1 } : { hugsReceived: 1 };
@@ -27,7 +21,7 @@ function trackHug(userId, guildId, isGiven) {
         { userId: userId, guildId: guildId },
         { $inc: updateField },
         { upsert: true, new: true }
-    ).catch(err => console.error('DB Hug Track Error:', err));
+    ).catch(() => {});
 }
 
 module.exports = {
@@ -43,19 +37,18 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        await interaction.deferReply();
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
-        
-        // Fetch GIF and fire-and-forget DB update simultaneously to prevent timeouts
-        const gifUrl = await getGif();
+
+        // Instant DB update in background
         trackHug(interaction.user.id, guildId, true);
         trackHug(target.id, guildId, false);
 
+        const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
         const embed = new EmbedBuilder()
             .setColor('#FF9494')
             .setDescription(`🤗 **${interaction.user.username}** gave **${target.username}** a big warm hug!`)
-            .setImage(gifUrl);
+            .setImage(randomGif);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -66,7 +59,7 @@ module.exports = {
         );
 
         const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.editReply({ embeds: [embed], components: components });
+        const response = await interaction.reply({ embeds: [embed], components: components });
 
         if (components.length === 0) return;
 
@@ -80,7 +73,7 @@ module.exports = {
             trackHug(target.id, guildId, true);
             trackHug(interaction.user.id, guildId, false);
 
-            const returnGif = await getGif();
+            const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
                 .setColor('#FF9494')
                 .setDescription(`🤗 **${target.username}** hugged **${interaction.user.username}** back!`)
