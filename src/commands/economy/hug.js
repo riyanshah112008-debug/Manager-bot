@@ -1,32 +1,27 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
-// 25 Unique Anime Hug GIFs
+// 20 Reliable, Direct CDN Anime Hug GIFs (These won't get blocked by Discord)
 const HUG_GIFS = [
-    'https://media.tenor.com/kKvrHj-SAvMAAAAC/anime-hug.gif',
-    'https://media.tenor.com/xIuXbMtA38sAAAAC/anime-hug.gif',
-    'https://media.tenor.com/G_RlGfqGlqcAAAAC/anime-hug.gif',
-    'https://media.tenor.com/9e1aE_x4Nc4AAAAC/anime-hug.gif',
-    'https://media.tenor.com/J7eIlqcG_2cAAAAC/anime-hug.gif',
-    'https://media.tenor.com/8-aB6iM1H-0AAAAC/anime-hug.gif',
-    'https://media.tenor.com/n7g1bQY1Y3UAAAAC/anime-hug.gif',
-    'https://media.tenor.com/X-L1s6T3-2wAAAAC/anime-hug.gif',
-    'https://media.tenor.com/vi4kI35Z0JMAAAAC/anime-hug.gif',
-    'https://media.tenor.com/X5nB-41Kav4AAAAC/anime-hug.gif',
-    'https://media.tenor.com/B94vXzYqE70AAAAC/anime-hug.gif',
-    'https://media.tenor.com/qF7mO4nnL0sAAAAC/anime-hug.gif',
-    'https://media.tenor.com/a97qP5P45hUAAAAC/anime-hug.gif',
-    'https://media.tenor.com/z2QaiBZCLCQAAAAC/anime-hug.gif',
-    'https://media.tenor.com/OxaEbqjG2OQAAAAC/anime-hug.gif',
-    'https://media.giphy.com/media/lrr9cScdxKCE/giphy.gif',
-    'https://media.giphy.com/media/od5H3PmEG5EVq/giphy.gif',
-    'https://media.giphy.com/media/3M4NpbLCTxBqU/giphy.gif',
-    'https://media.giphy.com/media/wnsgren9NtITS/giphy.gif',
-    'https://media.giphy.com/media/qscdhWs5o3yb6/giphy.gif',
-    'https://media.giphy.com/media/143v0Z4767T15e/giphy.gif',
-    'https://media.giphy.com/media/kvKFM3UWg2P04/giphy.gif',
-    'https://media.giphy.com/media/u9BxQbM5bxvwY/giphy.gif',
-    'https://media.giphy.com/media/Vz58J8shFW6BvqnYTm/giphy.gif',
-    'https://media.giphy.com/media/svXXBgduBsJ1u/giphy.gif'
+    'https://cdn.nekos.life/hug/hug_001.gif',
+    'https://cdn.nekos.life/hug/hug_002.gif',
+    'https://cdn.nekos.life/hug/hug_003.gif',
+    'https://cdn.nekos.life/hug/hug_004.gif',
+    'https://cdn.nekos.life/hug/hug_005.gif',
+    'https://cdn.nekos.life/hug/hug_006.gif',
+    'https://cdn.nekos.life/hug/hug_007.gif',
+    'https://cdn.nekos.life/hug/hug_008.gif',
+    'https://cdn.nekos.life/hug/hug_009.gif',
+    'https://cdn.nekos.life/hug/hug_010.gif',
+    'https://cdn.nekos.life/hug/hug_011.gif',
+    'https://cdn.nekos.life/hug/hug_012.gif',
+    'https://cdn.nekos.life/hug/hug_013.gif',
+    'https://cdn.nekos.life/hug/hug_014.gif',
+    'https://cdn.nekos.life/hug/hug_015.gif',
+    'https://cdn.nekos.life/hug/hug_016.gif',
+    'https://cdn.nekos.life/hug/hug_017.gif',
+    'https://cdn.nekos.life/hug/hug_018.gif',
+    'https://cdn.nekos.life/hug/hug_019.gif',
+    'https://cdn.nekos.life/hug/hug_020.gif'
 ];
 
 module.exports = {
