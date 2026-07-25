@@ -488,7 +488,6 @@ client.on(Events.InteractionCreate, async interaction => {
             else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
         }
     }
-
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'telemetry') {
@@ -640,9 +639,9 @@ async function startBot() {
         }
         await client.login(process.env.TOKEN);
     } catch (error) {
-        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error. stack || error);
-process. exit(1);
+        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
+        process.exit(1);
+    }
 }
-
 
 startBot();
