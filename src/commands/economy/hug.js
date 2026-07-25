@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const User = require('../models/User');
 
 const HUG_GIFS = [
     'https://media1.tenor.com/m/kKvrHj-SAvMAAAAC/anime-hug.gif',
@@ -13,16 +12,6 @@ const HUG_GIFS = [
     'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
     'https://media1.tenor.com/m/X5nB-41Kav4AAAAC/anime-hug.gif'
 ];
-
-function trackHug(userId, guildId, isGiven) {
-    if (!userId) return;
-    const updateField = isGiven ? { hugsGiven: 1 } : { hugsReceived: 1 };
-    User.findOneAndUpdate(
-        { userId: userId, guildId: guildId },
-        { $inc: updateField },
-        { upsert: true, new: true }
-    ).catch(() => {});
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -38,13 +27,8 @@ module.exports = {
 
     async execute(interaction) {
         const target = interaction.options.getUser('target');
-        const guildId = interaction.guildId || 'DM';
-
-        // Instant DB update in background
-        trackHug(interaction.user.id, guildId, true);
-        trackHug(target.id, guildId, false);
-
         const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
+
         const embed = new EmbedBuilder()
             .setColor('#FF9494')
             .setDescription(`🤗 **${interaction.user.username}** gave **${target.username}** a big warm hug!`)
@@ -69,9 +53,6 @@ module.exports = {
             if (i.user.id !== target.id) {
                 return i.reply({ content: 'Only the person who was hugged can hug back!', ephemeral: true });
             }
-
-            trackHug(target.id, guildId, true);
-            trackHug(interaction.user.id, guildId, false);
 
             const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
