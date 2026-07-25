@@ -21,12 +21,17 @@ module.exports = {
         await interaction.deferReply();
 
         try {
-            // Quick intercept: Spotify Blend Invite Links
             if (query.includes('spotify.com/blend') && !query.includes('/playlist/')) {
-                return interaction.editReply('⚠️ **Spotify Blend Notice:** I cannot read Blend *invite* links. Please open the Blend in your app, tap the **3 dots (...)**, select **Share**, and copy the **Playlist Link**!');
+                return interaction.editReply('⚠️ **Spotify Blend Notice:** I cannot read Blend *invite* links. Please copy the actual **Playlist Link**!');
             }
 
-            const player = await client.manager.createPlayer({
+            // ⏱️ ANTI-HANG TIMEOUT (10 Seconds)
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('NODE_TIMEOUT')), 10000)
+            );
+
+            // Race the Lavalink connection against the 10-second timer
+            const playerPromise = client.manager.createPlayer({
                 guildId: interaction.guild.id,
                 textId: interaction.channel.id,
                 voiceId: voiceChannel.id,
@@ -34,51 +39,44 @@ module.exports = {
                 deaf: true
             });
 
+            const player = await Promise.race([playerPromise, timeoutPromise]);
+
             if (!player) return interaction.editReply('❌ Could not connect to the music node.');
 
-            // 1. Initial Search (Reverted to your original syntax for compatibility)
-            let result = await client.manager.search(query, interaction.user);
+            // Search for the track
+            let result = await Promise.race([
+                client.manager.search(query, interaction.user),
+                timeoutPromise
+            ]);
 
-            // 2. Fallbacks
+            // Fallbacks for direct text searches
             if (!query.startsWith('http') && (!result || result.type === 'EXCEPTION' || result.type === 'NO_MATCHES' || !result.tracks.length)) {
                 result = await client.manager.search(`ytmsearch:${query}`, interaction.user);
-                
-                if (!result || result.type === 'EXCEPTION' || result.type === 'NO_MATCHES' || !result.tracks.length) {
-                    result = await client.manager.search(`ytsearch:${query}`, interaction.user);
-                }
             }
 
             if (!result || !result.tracks.length) {
-                return interaction.editReply('❌ No results found. Ensure your playlist is Public, and check your Spotify IDs in Render.');
+                return interaction.editReply('❌ No results found. Ensure your playlist is Public!');
             }
 
-            // ==========================================
-            // 💿 PLAYLIST / ALBUM HANDLER
-            // ==========================================
+            // 💿 PLAYLIST HANDLER
             if (result.type === 'PLAYLIST' || result.type === 'PLAYLIST_LOADED') {
-                for (const track of result.tracks) {
-                    player.queue.add(track);
-                }
-                
+                for (const track of result.tracks) player.queue.add(track);
                 if (!player.playing && !player.paused) await player.play();
 
                 const embed = new EmbedBuilder()
                     .setColor('#1DB954')
                     .setAuthor({ name: 'Playlist Added to Queue', iconURL: interaction.user.displayAvatarURL() })
                     .setTitle(result.playlistName || 'Spotify Playlist')
-                    .setDescription(`✅ Successfully added **${result.tracks.length}** tracks to the queue!`)
+                    .setDescription(`✅ Added **${result.tracks.length}** tracks!`)
                     .setFooter({ text: 'Starry Music Engine' });
 
                 return interaction.editReply({ embeds: [embed] });
             } 
             
-            // ==========================================
             // 🎵 SINGLE TRACK HANDLER
-            // ==========================================
             else {
                 const track = result.tracks[0];
                 player.queue.add(track);
-                
                 if (!player.playing && !player.paused) await player.play();
 
                 const embed = new EmbedBuilder()
@@ -95,8 +93,13 @@ module.exports = {
 
         } catch (error) {
             console.error('❌ Play Command Error:', error);
-            // 🚨 CRASH REPORTER: This will print the EXACT error to Discord!
-            return interaction.editReply(`❌ **System Crash:** \`${error.message}\`\n\n*(If this says "No available nodes", your Lavalink servers are currently offline!)*`);
+            
+            // Catch our custom timeout error to give you a clean response
+            if (error.message === 'NODE_TIMEOUT') {
+                return interaction.editReply('🔴 **Server Offline:** The public Lavalink nodes are currently down and did not respond. Please try again later!');
+            }
+            
+            return interaction.editReply(`❌ **System Crash:** \`${error.message}\``);
         }
     }
 };
