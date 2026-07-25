@@ -337,6 +337,115 @@ client.manager.on('playerEmpty', async player => {
     }
     if (channel) channel.send('📭 The queue has ended.');
 });
+    // ==========================================
+    // 🎛️ ULTIMATE DJ PANEL BUTTON HANDLER
+    // ==========================================
+    if (interaction.isButton() && interaction.customId.startsWith('dj_')) {
+        const member = interaction.member;
+        const voiceChannel = member.voice?.channel;
+        const action = interaction.customId;
+
+        // Refresh panel doesn't strictly require you to be in the VC to check status, but management actions do
+        if (!voiceChannel && action !== 'dj_refresh_panel') {
+            return interaction.reply({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true });
+        }
+
+        if (action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+            return interaction.reply({ content: '❌ You need **Manage Channels** permission to execute this VC action!', ephemeral: true });
+        }
+
+        try {
+            if (action === 'dj_lock') {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
+                return interaction.reply({ content: '🔒 Voice channel has been **locked**. No new users can join.', ephemeral: true });
+            }
+
+            if (action === 'dj_unlock') {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
+                return interaction.reply({ content: '🔓 Voice channel has been **unlocked**. Users can join freely.', ephemeral: true });
+            }
+
+            if (action === 'dj_limit_plus') {
+                let newLimit = voiceChannel.userLimit + 5;
+                if (newLimit > 99) newLimit = 99;
+                await voiceChannel.setUserLimit(newLimit);
+                return interaction.reply({ content: `➕ Voice channel member limit increased to **${newLimit}**`, ephemeral: true });
+            }
+
+            if (action === 'dj_limit_minus') {
+                let newLimit = voiceChannel.userLimit - 5;
+                if (newLimit < 0) newLimit = 0;
+                await voiceChannel.setUserLimit(newLimit);
+                return interaction.reply({ content: `➖ Voice channel member limit decreased to **${newLimit === 0 ? 'Unlimited' : newLimit}**`, ephemeral: true });
+            }
+
+            if (action === 'dj_reset_limit') {
+                await voiceChannel.setUserLimit(0);
+                return interaction.reply({ content: '🔄 Voice channel member limit reset to **Unlimited**.', ephemeral: true });
+            }
+
+            if (action === 'dj_shuffle') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player || !player.queue.size) {
+                    return interaction.reply({ content: '❌ There are no songs in the queue to shuffle.', ephemeral: true });
+                }
+                player.queue.shuffle();
+                return interaction.reply({ content: '🔀 The music queue has been **shuffled**!', ephemeral: true });
+            }
+
+            if (action === 'dj_loop') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player) return interaction.reply({ content: '❌ No active music player found.', ephemeral: true });
+                const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
+                player.setLoop(nextLoop);
+                return interaction.reply({ content: `🔁 Music loop mode changed to: **${nextLoop.toUpperCase()}**`, ephemeral: true });
+            }
+
+            if (action === 'dj_vol_up' || action === 'dj_vol_down') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player) return interaction.reply({ content: '❌ No active music player found.', ephemeral: true });
+                
+                let newVol = player.volume + (action === 'dj_vol_up' ? 10 : -10);
+                if (newVol > 100) newVol = 100;
+                if (newVol < 0) newVol = 0;
+
+                await player.setVolume(newVol);
+                return interaction.reply({ content: `🔊 Volume adjusted to **${newVol}%**`, ephemeral: true });
+            }
+
+            if (action === 'dj_clear_queue') {
+                const player = client.manager.getPlayer(interaction.guild.id);
+                if (!player || !player.queue.size) {
+                    return interaction.reply({ content: '❌ The queue is already empty.', ephemeral: true });
+                }
+                player.queue.clear();
+                return interaction.reply({ content: '🗑️ The music queue has been **cleared**!', ephemeral: true });
+            }
+
+            if (action === 'dj_refresh_panel') {
+                if (!voiceChannel) return interaction.reply({ content: '❌ Join a voice channel to refresh panel stats for it!', ephemeral: true });
+                
+                const vcName = voiceChannel.name;
+                const vcLimit = voiceChannel.userLimit === 0 ? 'Unlimited' : voiceChannel.userLimit;
+                const vcStatus = voiceChannel.permissionsFor(interaction.guild.roles.everyone).has('Connect') ? '🔓 Unlocked' : '🔒 Locked';
+
+                const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setDescription(
+                        'Complete master command center for voice channel security, moderation, and music playback.\n\n' +
+                        `🎙️ **Active VC:** \`${vcName}\`\n` +
+                        `🔒 **Access Status:** ${vcStatus}\n` +
+                        `👥 **Member Capacity:** \`${voiceChannel.members.size} / ${vcLimit}\``
+                    );
+
+                await interaction.update({ embeds: [updatedEmbed] });
+                return;
+            }
+
+        } catch (err) {
+            console.error('Ultimate DJ Panel Error:', err);
+            return interaction.reply({ content: '❌ Failed to execute action. Verify my bot permissions.', ephemeral: true });
+        }
+    }
 
 // ==========================================
 // 3. GLOBAL ERROR CATCHERS
