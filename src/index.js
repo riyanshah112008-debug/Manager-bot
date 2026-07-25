@@ -463,57 +463,113 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // 💻 SLASH COMMAND HANDLER & TELEMETRY
-    if (!interaction.isChatInputCommand()) return;
-
-    if (interaction.commandName === 'telemetry' || (interaction.isButton() && interaction.customId === 'refresh_telemetry')) {
+        // --- 🚨 NATIVE RECURRING TELEMETRY DASHBOARD 🚨 ---
+    if (interaction.commandName === 'telemetry') {
         const botOwners = ['1465049039153135639', '1257676837249617971']; 
         if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-        if (!botOwners.includes(interaction.user.id)) return interaction.reply({ content: '❌ Access Denied.', ephemeral: true });
 
-        if (interaction.isButton()) await interaction.deferUpdate(); 
-        else await interaction.deferReply(); 
+        if (!botOwners.includes(interaction.user.id)) {
+            return interaction.reply({ content: '❌ Access Denied: Only the Bot Owner can access the network dashboard.', ephemeral: true });
+        }
 
-        try {
+        await interaction.deferReply(); 
+
+        const buildTelemetryEmbed = async (statusText, statusColor) => {
             const GuildTelemetry = require('./models/GuildTelemetry');
-            const allData = await GuildTelemetry.find({});
+            const allData = await GuildTelemetry.find({}).catch(() => []);
             const totalServers = client.guilds.cache.size;
             const totalGlobalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
 
             let globalJoins = 0, globalVc = 0, globalWarns = 0, globalKicks = 0, globalBans = 0, globalAutomod = 0;
             allData.forEach(t => {
-                globalJoins += t.joinsThisHour || 0; globalVc += t.totalVcSeconds || 0;
-                globalWarns += t.modStats?.warns || 0; globalKicks += t.modStats?.kicks || 0;
-                globalBans += t.modStats?.bans || 0; globalAutomod += t.modStats?.automodTriggers || 0;
+                globalJoins += t.joinsThisHour || 0;
+                globalVc += t.totalVcSeconds || 0;
+                globalWarns += t.modStats?.warns || 0;
+                globalKicks += t.modStats?.kicks || 0;
+                globalBans += t.modStats?.bans || 0;
+                globalAutomod += t.modStats?.automodTriggers || 0;
             });
 
-            const embed = new EmbedBuilder().setColor('#FFD700').setTitle('🌐 Starry Global Network Intelligence')
+            // Extract Top 5 Guilds & Owner Details safely from cache
+            const topServers = [...client.guilds.cache.values()]
+                .sort((a, b) => b.memberCount - a.memberCount)
+                .slice(0, 5)
+                .map(g => {
+                    const owner = client.users.cache.get(g.ownerId) || g.members.cache.get(g.ownerId)?.user;
+                    const ownerTag = owner ? owner.tag : 'Unknown/Uncached';
+                    return `**${g.name}**\n👑 Owner: ${ownerTag} (\`${g.ownerId}\`)\n👥 ${g.memberCount.toLocaleString()} Members`;
+                }).join('\n\n');
+
+            return new EmbedBuilder()
+                .setColor(statusColor)
+                .setTitle('🌐 Starry Global Network Intelligence')
+                .setDescription(statusText)
                 .addFields(
-                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Servers\n• **${totalGlobalMembers.toLocaleString()}** Users`, inline: true },
-                    { name: '👥 Network Joins', value: `• **${globalJoins}** /hr`, inline: true },
-                    { name: '🎙️ Voice', value: `• **${(globalVc / 3600).toFixed(1)}** hrs`, inline: true },
-                    { name: '🛡️ Enforcements', value: `Warns: **${globalWarns}** | Kicks: **${globalKicks}** | Bans: **${globalBans}** | AutoMod: **${globalAutomod}**`, inline: false }
-                ).setFooter({ text: 'Starry Central Command', iconURL: client.user.displayAvatarURL() }).setTimestamp();
-            
-            const refreshRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('refresh_telemetry').setLabel('🔄 Refresh').setStyle(ButtonStyle.Primary));
-            return interaction.editReply({ embeds: [embed], components: [refreshRow] });
-        } catch (error) { return interaction.editReply({ content: '❌ Failed to fetch telemetry.', components: [] }); }
+                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Active Servers\n• **${totalGlobalMembers.toLocaleString()}** Total Users`, inline: true },
+                    { name: '👥 Network Joins', value: `• **${globalJoins}** (Past Hour)`, inline: true },
+                    { name: '🎙️ Voice Tracking', value: `• **${(globalVc / 3600).toFixed(1)}** Hours Globally`, inline: true },
+                    { name: '🛡️ Global Enforcements', value: `Warns: **${globalWarns}** | Kicks: **${globalKicks}** | Bans: **${globalBans}** | AutoMod: **${globalAutomod}**`, inline: false },
+                    { name: '🏆 Top 5 Servers in Network', value: topServers || 'No data', inline: false }
+                )
+                .setFooter({ text: 'Starry Central Command • Auto Scheduled', iconURL: client.user.displayAvatarURL() })
+                .setTimestamp();
+        };
+
+        try {
+            // Initial post to capture the Message object
+            const firstEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle (Updating every 15s)', '#23a559');
+            const msg = await interaction.editReply({ embeds: [firstEmbed] });
+
+            // Helper function for delays
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            // Start background recurring scheduling loop
+            (async () => {
+                while (true) {
+                    // ==========================================
+                    // 1. ACTIVE PHASE (Runs for 3 Minutes)
+                    // ==========================================
+                    const activeStartTime = Date.now();
+                    const threeMinutes = 3 * 60 * 1000; // 180,000 ms
+
+                    while (Date.now() - activeStartTime < threeMinutes) {
+                        await sleep(15000); // Wait 15 seconds between updates
+                        
+                        try {
+                            const liveEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle (Updating every 15s)', '#23a559');
+                            await msg.edit({ embeds: [liveEmbed] });
+                        } catch (err) {
+                            if (err.code === 10008) return; // Stop loop quietly if message was deleted
+                            console.error('Telemetry Edit Error:', err);
+                        }
+                    }
+
+                    // ==========================================
+                    // 2. PAUSE PHASE (Sleeps for 10 Minutes)
+                    // ==========================================
+                    try {
+                        const nextRunTime = Math.floor((Date.now() + (10 * 60 * 1000)) / 1000);
+                        const pausedEmbed = await buildTelemetryEmbed(
+                            `⏸️ **PAUSED** — Resting for 10 minutes.\n Next 3-min live update cycle starts <t:${nextRunTime}:R>!`, 
+                            '#FEE75C' // Yellow for Standby
+                        );
+                        await msg.edit({ embeds: [pausedEmbed] });
+                    } catch (err) {
+                        if (err.code === 10008) return;
+                    }
+
+                    // Sleep for 10 Minutes (600,000 ms)
+                    await sleep(10 * 60 * 1000);
+                }
+            })();
+
+        } catch (error) {
+            console.error('Telemetry Schedule Error:', error);
+            return interaction.editReply({ content: '❌ Failed to initialize the scheduled telemetry dashboard.' });
+        }
     }
+    // --- END NATIVE TELEMETRY ---
 
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return interaction.reply({ content: `❌ **Command file not found!**`, ephemeral: true }).catch(console.error);
-
-    const botOwners = ['1465049039153135639', '1257676837249617971']; 
-    if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) return interaction.reply({ content: '❌ Access Denied: Not bot owner.', ephemeral: true });
-
-    try { await command.execute(interaction, client); } 
-    catch (error) {
-        console.error(`❌ Error executing ${interaction.commandName}:`, error);
-        if (interaction.replied || interaction.deferred) await interaction.followUp({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
-        else await interaction.reply({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
-    }
-});
 
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
