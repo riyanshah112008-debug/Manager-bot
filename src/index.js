@@ -355,41 +355,41 @@ client.once(Events.ClientReady, async () => {
     console.log('ℹ️ Slash commands are deployed with `npm run deploy`.');
 });
 
-// Load Prefix Commands
+// ==========================================
+// 🌟 UNIVERSAL COMMAND LOADER
+// ==========================================
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    for (const file of commandFiles) {
-        const filePath = path.join(commandsPath, file);
-        const command = require(filePath);
-        if ('name' in command && 'execute' in command) {
+    // 1. Scan root files (in src/commands/)
+    const rootFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+    for (const file of rootFiles) {
+        const command = require(path.join(commandsPath, file));
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+        } else if ('name' in command && 'execute' in command) {
             client.prefixCommands.set(command.name, command);
             console.log(`✅ Loaded Prefix Command: .${command.name}`);
         }
     }
-}
 
-// Helper to Load Slash Commands dynamically
-const loadSlashCommands = (dir) => {
-    const fullPath = path.join(__dirname, 'commands', dir);
-    if (fs.existsSync(fullPath)) {
-        const files = fs.readdirSync(fullPath).filter(file => file.endsWith('.js'));
+    // 2. Scan all subdirectories dynamically (economy, fun, moderation, etc.)
+    const folders = fs.readdirSync(commandsPath).filter(f => fs.statSync(path.join(commandsPath, f)).isDirectory());
+    for (const folder of folders) {
+        const folderPath = path.join(commandsPath, folder);
+        const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'));
         for (const file of files) {
-            const command = require(path.join(fullPath, file));
+            const command = require(path.join(folderPath, file));
             if ('data' in command && 'execute' in command) {
                 client.commands.set(command.data.name, command);
                 console.log(`✅ Loaded Slash Command: /${command.data.name}`);
+            } else if ('name' in command && 'execute' in command) {
+                client.prefixCommands.set(command.name, command);
+                console.log(`✅ Loaded Prefix Command: .${command.name}`);
             }
         }
     }
-};
-
-loadSlashCommands('music');
-loadSlashCommands('moderation');
-loadSlashCommands('economy');
-loadSlashCommands('setup');
-
-client.on(Events.MessageCreate, async message => {
+}client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
