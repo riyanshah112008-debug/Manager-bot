@@ -491,36 +491,14 @@ client.on(Events.InteractionCreate, async interaction => {
             } else if (filter === 'karaoke') {
                 player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } });
                 return interaction.editReply('🎤 Karaoke filter applied!');
-            } else if (filter === 'timescale') {
-                player.shoukaku.setFilters({ timescale: { speed: 1.1, pitch: 1.1, rate: 1.0 } });
-                return interaction.editReply('⏱️ Timescale filter applied!');
-            } else if (filter === 'tremolo') {
-                player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } });
-                return interaction.editReply('🌊 Tremolo filter applied!');
-            } else if (filter === 'vibrato') {
-                player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } });
-                return interaction.editReply('〰️ Vibrato filter applied!');
-            } else if (filter === '3d') {
-                player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } });
-                return interaction.editReply('🌀 3D audio filter applied!');
-            } else if (filter === 'distortion') {
-                player.shoukaku.setFilters({ distortion: { sinOffset: 0.2, sinScale: 0.9, cosOffset: 0.2, cosScale: 0.9, tanOffset: 0.2, tanScale: 0.9, offset: 0, scale: 1 } });
-                return interaction.editReply('📢 Distortion filter applied!');
-            } else if (filter === 'channelmix') {
-                player.shoukaku.setFilters({ channelMix: { leftToLeft: 0.5, leftToRight: 0.5, rightToLeft: 0.5, rightToRight: 0.5 } });
-                return interaction.editReply('🎛️ Channel Mix filter applied!');
-            } else if (filter === 'lowpass') {
-                player.shoukaku.setFilters({ lowPass: { smoothing: 20.0 } });
-                return interaction.editReply('🔈 Low Pass filter applied!');
-            } else if (filter === 'bassboost') {
-                player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] });
-                return interaction.editReply('🎸 Bassboost applied!');
             } else if (filter === 'nightcore') {
                 player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } });
                 return interaction.editReply('✨ Nightcore applied!');
             } else if (filter === 'daycore') {
                 player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } });
                 return interaction.editReply('🌅 Daycore applied!');
+            } else {
+                return interaction.editReply('✅ Filter processed.');
             }
         }
     }
@@ -528,8 +506,65 @@ client.on(Events.InteractionCreate, async interaction => {
     // 💻 STANDARD COMMAND HANDLER
     if (!interaction.isChatInputCommand()) return;
 
+    // --- 🚨 NATIVE TELEMETRY CORE COMMAND 🚨 ---
+    // By building this directly into her core, it bypasses the command files entirely!
+    if (interaction.commandName === 'telemetry') {
+        const botOwners = ['1465049039153135639', '1257676837249617971']; 
+        if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
+
+        if (!botOwners.includes(interaction.user.id)) {
+            return interaction.reply({ content: '❌ Access Denied: Only the Bot Owner can access the network dashboard.', ephemeral: true });
+        }
+
+        await interaction.deferReply();
+        try {
+            const GuildTelemetry = require('./models/GuildTelemetry');
+            const allData = await GuildTelemetry.find({});
+            const totalServers = client.guilds.cache.size;
+            const totalGlobalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+
+            let globalJoins = 0, globalVc = 0, globalWarns = 0, globalKicks = 0, globalBans = 0, globalAutomod = 0;
+            allData.forEach(t => {
+                globalJoins += t.joinsThisHour || 0;
+                globalVc += t.totalVcSeconds || 0;
+                globalWarns += t.modStats?.warns || 0;
+                globalKicks += t.modStats?.kicks || 0;
+                globalBans += t.modStats?.bans || 0;
+                globalAutomod += t.modStats?.automodTriggers || 0;
+            });
+
+            const vcHours = (globalVc / 3600).toFixed(1);
+
+            const embed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle('🌐 Starry Global Network Intelligence')
+                .setDescription(`Live overview of Starry's entire ecosystem.`)
+                .addFields(
+                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Active Servers\n• **${totalGlobalMembers.toLocaleString()}** Total Users`, inline: true },
+                    { name: '👥 Network Joins (Past Hour)', value: `• **${globalJoins}** new users globally`, inline: true },
+                    { name: '🎙️ Voice Engagement', value: `• **${vcHours}** hours tracked globally`, inline: true },
+                    { name: '🛡️ Global Enforcements', value: `• Warns: **${globalWarns}**\n• Kicks: **${globalKicks}**\n• Bans: **${globalBans}**\n• AutoMod Stops: **${globalAutomod}**`, inline: false }
+                )
+                .setFooter({ text: 'Starry Central Command', iconURL: client.user.displayAvatarURL() })
+                .setTimestamp();
+            
+            return interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+            console.error('Telemetry Core Error:', error);
+            return interaction.editReply('❌ Failed to fetch the network dashboard from the database.');
+        }
+    }
+    // --- END NATIVE TELEMETRY ---
+
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    
+    // 🚨 KILL SILENT FAILS: If the file is missing, TELL the user!
+    if (!command) {
+        return interaction.reply({ 
+            content: `❌ **Command file not found!** Starry received \`/${interaction.commandName}\`, but she couldn't find the underlying code file in her folders!`, 
+            ephemeral: true 
+        }).catch(console.error);
+    }
 
     const botOwners = ['1465049039153135639', '1257676837249617971']; 
     if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
