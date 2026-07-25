@@ -2,26 +2,16 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 
 // 20 Reliable, Direct CDN Anime Hug GIFs
 const HUG_GIFS = [
-    'https://cdn.nekos.life/hug/hug_001.gif',
-    'https://cdn.nekos.life/hug/hug_002.gif',
-    'https://cdn.nekos.life/hug/hug_003.gif',
-    'https://cdn.nekos.life/hug/hug_004.gif',
-    'https://cdn.nekos.life/hug/hug_005.gif',
-    'https://cdn.nekos.life/hug/hug_006.gif',
-    'https://cdn.nekos.life/hug/hug_007.gif',
-    'https://cdn.nekos.life/hug/hug_008.gif',
-    'https://cdn.nekos.life/hug/hug_009.gif',
-    'https://cdn.nekos.life/hug/hug_010.gif',
-    'https://cdn.nekos.life/hug/hug_011.gif',
-    'https://cdn.nekos.life/hug/hug_012.gif',
-    'https://cdn.nekos.life/hug/hug_013.gif',
-    'https://cdn.nekos.life/hug/hug_014.gif',
-    'https://cdn.nekos.life/hug/hug_015.gif',
-    'https://cdn.nekos.life/hug/hug_016.gif',
-    'https://cdn.nekos.life/hug/hug_017.gif',
-    'https://cdn.nekos.life/hug/hug_018.gif',
-    'https://cdn.nekos.life/hug/hug_019.gif',
-    'https://cdn.nekos.life/hug/hug_020.gif'
+    'https://cdn.nekos.life/hug/hug_001.gif', 'https://cdn.nekos.life/hug/hug_002.gif',
+    'https://cdn.nekos.life/hug/hug_003.gif', 'https://cdn.nekos.life/hug/hug_004.gif',
+    'https://cdn.nekos.life/hug/hug_005.gif', 'https://cdn.nekos.life/hug/hug_006.gif',
+    'https://cdn.nekos.life/hug/hug_007.gif', 'https://cdn.nekos.life/hug/hug_008.gif',
+    'https://cdn.nekos.life/hug/hug_009.gif', 'https://cdn.nekos.life/hug/hug_010.gif',
+    'https://cdn.nekos.life/hug/hug_011.gif', 'https://cdn.nekos.life/hug/hug_012.gif',
+    'https://cdn.nekos.life/hug/hug_013.gif', 'https://cdn.nekos.life/hug/hug_014.gif',
+    'https://cdn.nekos.life/hug/hug_015.gif', 'https://cdn.nekos.life/hug/hug_016.gif',
+    'https://cdn.nekos.life/hug/hug_017.gif', 'https://cdn.nekos.life/hug/hug_018.gif',
+    'https://cdn.nekos.life/hug/hug_019.gif', 'https://cdn.nekos.life/hug/hug_020.gif'
 ];
 
 module.exports = {
@@ -47,7 +37,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('hug_back')
+                .setCustomId('social_hug_back')
                 .setLabel('Hug back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('🤗')
@@ -73,7 +63,6 @@ module.exports = {
 
             row.components[0].setDisabled(true);
             await interaction.editReply({ components: [row] }).catch(() => {});
-
             await i.reply({ embeds: [returnEmbed] });
         });
 
