@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../../models/User'); 
 
-// 20 Verified, Unbreakable Direct GIF Links (Mix of Nekos & Purrbot)
 const KISS_GIFS = [
     'https://cdn.nekos.life/kiss/kiss_001.gif',
     'https://cdn.nekos.life/kiss/kiss_002.gif',
@@ -38,7 +37,6 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        // Prevents Discord "application did not respond" timeout error
         await interaction.deferReply(); 
         
         const target = interaction.options.getUser('target');
@@ -71,17 +69,19 @@ module.exports = {
 
         if (components.length === 0) return;
 
-        const collector = response.createMessageComponentCollector({ time: 60000 });
+        // Increased timeout to 5 minutes
+        const collector = response.createMessageComponentCollector({ time: 300000 });
 
         collector.on('collect', async (i) => {
-            if (i.user.id !== target.id) {
-                return i.reply({ content: 'Only the person who was kissed can kiss back!', ephemeral: true });
+            // Anyone can kiss back except the original sender
+            if (i.user.id === interaction.user.id) {
+                return i.reply({ content: "You can't kiss yourself back!", ephemeral: true });
             }
 
             await i.deferReply(); 
             let backTargetStats;
             try {
-                await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
+                await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
                 backTargetStats = await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { kissesReceived: 1 } }, { upsert: true, new: true });
             } catch (err) {}
 
@@ -89,7 +89,7 @@ module.exports = {
             const returnGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
                 .setColor('#FFB6C1')
-                .setDescription(`**${target.username}** kisses **${interaction.user.username}** back.\n*${interaction.user.username} has received ${backCount} kisses.*`)
+                .setDescription(`**${i.user.username}** kisses **${interaction.user.username}** back.\n*${interaction.user.username} has received ${backCount} kisses.*`)
                 .setImage(returnGif);
 
             row.components[0].setDisabled(true);
