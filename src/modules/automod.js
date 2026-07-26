@@ -1,7 +1,7 @@
 const { PermissionsBitField } = require('discord.js');
 const mongoose = require('mongoose');
 
-const OWNER_ID = '1465049039153135639';
+const OWNER_ID = '1465049039153135639,1257676837249617971';
 
 // ==========================================
 // 🍃 MONGOOSE SCHEMAS & MODELS (BUILT-IN)
