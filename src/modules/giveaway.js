@@ -44,7 +44,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🎨 SUPREME AESTHETIC GIVEAWAY CREATOR
+    // 🎨 ACTIVE GIVEAWAY EMBED (BEFORE)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
@@ -54,28 +54,22 @@ module.exports = (client) => {
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
 
-        // 🌟 Supreme Mobile-Responsive Aesthetic Embed
+        // 🌟 Ultra-Clean Mobile Responsive Active Embed
         const embed = new EmbedBuilder()
-            .setColor('#FF2A6D') // Vibrant Modern Neon Pink
+            .setColor('#9B51E0') // Vibrant Royal Violet
             .setAuthor({ 
-                name: '🎉 EXCLUSIVE GIVEAWAY', 
-                iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112905.png' 
-            })
-            .setTitle(`🎁  ${prize}`)
-            .setDescription([
-                `> React with 🎉 to enter the giveaway!`,
-                `> Make sure you stay in the server until it ends.`
-            ].join('\n'))
-            .addFields(
-                { name: '👑 Hosted By', value: `<@${author.id}>`, inline: true },
-                { name: '👥 Winners', value: `\`${winnerCount}\``, inline: true },
-                { name: '⏰ Ending', value: `<t:${endTimestamp}:R>\n(<t:${endTimestamp}:f>)`, inline: false }
-            )
-            .setThumbnail('https://cdn-icons-png.flaticon.com/512/4213/4213958.png')
-            .setFooter({ 
-                text: `Hosted by ${author.tag}`, 
+                name: '🎉 ACTIVE GIVEAWAY', 
                 iconURL: author.displayAvatarURL({ dynamic: true }) 
             })
+            .setTitle(`🎁 ${prize}`)
+            .setDescription([
+                `> React with 🎉 to enter this giveaway!`,
+                ``,
+                `⏰ **Ends:** <t:${endTimestamp}:R> (<t:${endTimestamp}:f>)`,
+                `👑 **Host:** <@${author.id}>`,
+                `👥 **Winners:** \`${winnerCount}\``
+            ].join('\n'))
+            .setFooter({ text: 'Ends at' })
             .setTimestamp(endsAt);
 
         const message = await channel.send({ embeds: [embed] }).catch(() => null);
@@ -147,7 +141,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🏁 ENDING ENGINE & WINNER SELECTOR
+    // 🏁 ENDED GIVEAWAY EMBED (AFTER)
     // ==========================================
     async function checkGiveaways() {
         let giveaways = getGiveaways();
@@ -176,17 +170,18 @@ module.exports = (client) => {
                 const users = await reaction.users.fetch();
                 const validUsers = users.filter(u => !u.bot).map(u => u.id);
 
+                // ❌ EXPIRED EMBED (No Winners)
                 if (validUsers.length === 0) {
                     const failEmbed = new EmbedBuilder()
-                        .setColor('#2B2D31') // Sleek dark grey
-                        .setAuthor({ name: '🎉 GIVEAWAY ENDED' })
+                        .setColor('#2B2D31') // Sleek Dark Discord Slate
+                        .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
-                        .setDescription('> 😭 **No valid participants entered the giveaway!**')
-                        .addFields(
-                            { name: '👑 Host', value: `<@${giveaway.hostId}>`, inline: true },
-                            { name: '🏆 Winners', value: '`None`', inline: true }
-                        )
-                        .setFooter({ text: 'Giveaway Concluded' })
+                        .setDescription([
+                            `> Could not determine a winner because no valid participants entered!`,
+                            ``,
+                            `👑 **Host:** <@${giveaway.hostId}>`
+                        ].join('\n'))
+                        .setFooter({ text: 'Ended at' })
                         .setTimestamp();
 
                     await message.edit({ embeds: [failEmbed] }).catch(() => {});
@@ -205,18 +200,18 @@ module.exports = (client) => {
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
-                // 🏆 Supreme Emerald Winner Embed
+                // 🏆 WINNER EMBED (AFTER)
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4') // Vibrant Cyan / Mint Emerald
-                    .setAuthor({ name: '🎊 GIVEAWAY WINNER(S)' })
-                    .setTitle(`🏆  ${giveaway.prize}`)
-                    .setDescription(`> Congratulations to the winner(s) of **${giveaway.prize}**!`)
-                    .addFields(
-                        { name: '🥳 Winner(s)', value: winnersText, inline: false },
-                        { name: '👑 Host', value: `<@${giveaway.hostId}>`, inline: true }
-                    )
-                    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112905.png')
-                    .setFooter({ text: 'Giveaway Ended' })
+                    .setColor('#2ECC71') // High-Contrast Emerald Green
+                    .setAuthor({ name: '🎊 GIVEAWAY CONCLUDED' })
+                    .setTitle(`🏆 ${giveaway.prize}`)
+                    .setDescription([
+                        `> Congratulations to the winner(s) of **${giveaway.prize}**!`,
+                        ``,
+                        `🥳 **Winner(s):** ${winnersText}`,
+                        `👑 **Host:** <@${giveaway.hostId}>`
+                    ].join('\n'))
+                    .setFooter({ text: 'Ended at' })
                     .setTimestamp();
 
                 await message.edit({ embeds: [winEmbed] }).catch(() => {});
