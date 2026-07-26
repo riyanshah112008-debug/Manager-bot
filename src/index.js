@@ -174,12 +174,13 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 const Nodes = [
     { 
-        name: 'Phone-Termux-Primary', 
-        url: '127.0.0.1:2333', 
+        name: 'Phone-Serveo-Node', 
+        url: '883f33f2fbac57b1-152-58-31-112.serveousercontent.com', 
         auth: 'youshallnotpass', 
-        secure: false 
+        secure: true 
     }
 ];
+
 
 
 client.manager = new Kazagumo({
