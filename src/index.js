@@ -1,5 +1,5 @@
 // ==========================================
-// 🔧 0. CRITICAL AUDIO ENGINE FIX
+// 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
@@ -13,6 +13,7 @@ const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
 const ServerListing = require('./models/ServerListing'); 
+const KazagumoSpotify = require('kazagumo-spotify');
 
 // ==========================================
 // 1. WEB SERVER & DASHBOARD HOSTING
@@ -169,10 +170,8 @@ app.post('/verify', async (req, res) => {
     }
 });
 // ==========================================
-// 2.5 LAVALINK MUSIC ENGINE SETUP
+// 3. LAVALINK MUSIC ENGINE SETUP
 // ==========================================
-const KazagumoSpotify = require('kazagumo-spotify');
-
 const Nodes = [
     { 
         name: 'My Android Phone Node', 
@@ -284,7 +283,7 @@ client.manager.on('playerEmpty', async player => {
     if (channel) channel.send('📭 The queue has ended.');
 });
 // ==========================================
-// 3. GLOBAL ERROR CATCHERS
+// 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -292,61 +291,74 @@ client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:'
 process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
 process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
 
-// ==========================================
-// 4. BOT READY & UNIVERSAL COMMAND LOADER
-// ==========================================
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
     console.log('ℹ️ Slash commands are deployed with `npm run deploy`.');
 });
 
+// Advanced Hybrid File Loader
 const commandsPath = path.join(__dirname, 'commands');
-if (fs.existsSync(commandsPath)) {
-    const rootFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    for (const file of rootFiles) {
-        const command = require(path.join(commandsPath, file));
-        if ('data' in command && 'execute' in command) {
+const registerCommand = (filePath) => {
+    try {
+        const command = require(filePath);
+        // Independent Slash Registration
+        if (command.data && command.data.name && typeof command.execute === 'function') {
             client.commands.set(command.data.name, command);
             console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-        } else if ('name' in command && 'execute' in command) {
+        }
+        // Independent Prefix Registration
+        if (command.name && typeof command.name === 'string' && (typeof command.run === 'function' || typeof command.execute === 'function')) {
             client.prefixCommands.set(command.name, command);
             console.log(`✅ Loaded Prefix Command: .${command.name}`);
+            if (command.aliases && Array.isArray(command.aliases)) {
+                command.aliases.forEach(alias => client.prefixCommands.set(alias, command));
+            }
         }
+    } catch (err) {
+        console.error(`❌ Failed to load command at ${filePath}:`, err);
     }
+};
+
+if (fs.existsSync(commandsPath)) {
+    const rootFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+    for (const file of rootFiles) registerCommand(path.join(commandsPath, file));
+    
     const folders = fs.readdirSync(commandsPath).filter(f => fs.statSync(path.join(commandsPath, f)).isDirectory());
     for (const folder of folders) {
         const folderPath = path.join(commandsPath, folder);
         const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'));
-        for (const file of files) {
-            const command = require(path.join(folderPath, file));
-            if ('data' in command && 'execute' in command) {
-                client.commands.set(command.data.name, command);
-                console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-            } else if ('name' in command && 'execute' in command) {
-                client.prefixCommands.set(command.name, command);
-                console.log(`✅ Loaded Prefix Command: .${command.name}`);
-            }
-        }
+        for (const file of files) registerCommand(path.join(folderPath, file));
     }
 }
 
+// Prefix Command Execution Handler
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
+    
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
     const command = client.prefixCommands.get(commandName);
+    
     if (!command) return;
-    try { await command.execute(message, args, client); } 
-    catch (error) { console.error(`❌ Error executing prefix command ${commandName}:`, error); }
+    
+    try { 
+        // Checks if the command prefers 'run' or falls back to 'execute'
+        if (typeof command.run === 'function') {
+            await command.run(client, message, args);
+        } else {
+            await command.execute(message, args, client);
+        }
+    } catch (error) { 
+        console.error(`❌ Error executing prefix command ${commandName}:`, error); 
+    }
 });
 // ==========================================
 // 5. INTERACTION ENGINE
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     // 🚨 SOCIAL BUTTON VIP BYPASS SHIELD
-    // This instantly catches pat, hug, and kiss buttons and hands them to the command files!
     if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
         return; 
     }
@@ -599,7 +611,6 @@ client.on(Events.InteractionCreate, async interaction => {
         else await interaction.reply({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
     }
 });
-
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
