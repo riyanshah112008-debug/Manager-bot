@@ -3,12 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎨 ULTRA-HIGH QUALITY ANIMATED NITRO GIF ASSETS
+// 🎬 DIRECT HIGH-QUALITY ANIMATED ASSETS (GUARANTEED DISCORD EMBED COMPATIBLE)
 const ASSETS = {
-    ACTIVE_BANNER: 'https://media1.tenor.com/m/7S9-g3Y8M4EAAAAC/discord-nitro.gif',
-    WINNER_BANNER: 'https://media1.tenor.com/m/J3M2A0P8l5gAAAAC/discord-nitro-discord.gif',
-    GIFT_THUMBNAIL: 'https://cdn-icons-png.flaticon.com/512/4213/4213958.png',
-    TROPHY_THUMBNAIL: 'https://cdn-icons-png.flaticon.com/512/3112/3112905.png'
+    // Full-width Nitro Banner for Active Giveaways
+    ACTIVE_BANNER: 'https://i.imgur.com/dK8N2Nl.gif', 
+    
+    // Full-width Celebration Banner for Winners
+    WINNER_BANNER: 'https://i.imgur.com/v8R2vO0.gif', 
+    
+    // Animated Gift Badge Thumbnail
+    GIFT_THUMBNAIL: 'https://i.imgur.com/2D5N11q.gif', 
+    
+    // Animated Trophy Badge Thumbnail
+    TROPHY_THUMBNAIL: 'https://i.imgur.com/R38M1M1.gif' 
 };
 
 module.exports = (client) => {
@@ -52,7 +59,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🚀 1. ACTIVE GIVEAWAY EMBED (SUPER SLICK)
+    // 🚀 1. ACTIVE GIVEAWAY EMBED (WITH NITRO GIF)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
@@ -64,7 +71,7 @@ module.exports = (client) => {
 
         // 🌟 World-Class Nitro Animated Active Embed
         const embed = new EmbedBuilder()
-            .setColor('#F47FFF') // Discord Nitro Pink / Magenta
+            .setColor('#F47FFF') // Discord Nitro Magenta
             .setAuthor({ 
                 name: '✨ OFFICIAL DISCORD GIVEAWAY ✨', 
                 iconURL: author.displayAvatarURL({ dynamic: true }) 
@@ -81,9 +88,9 @@ module.exports = (client) => {
                 `*Good luck to all participants! 🚀*`
             ].join('\n'))
             .setThumbnail(ASSETS.GIFT_THUMBNAIL)
-            .setImage(ASSETS.ACTIVE_BANNER) // 🎬 FULL-WIDTH ANIMATED NITRO GIF
+            .setImage(ASSETS.ACTIVE_BANNER) // 🎬 FULL-WIDTH NITRO GIF BANNER
             .setFooter({ 
-                text: `Hosted by ${author.tag} • Auto-ending`, 
+                text: `Hosted by ${author.tag}`, 
                 iconURL: client.user.displayAvatarURL({ dynamic: true }) 
             })
             .setTimestamp(endsAt);
@@ -189,7 +196,7 @@ module.exports = (client) => {
                 // ❌ EXPIRED EMBED (No Entrants)
                 if (validUsers.length === 0) {
                     const failEmbed = new EmbedBuilder()
-                        .setColor('#2B2D31') // Sleek Dark Slate
+                        .setColor('#2B2D31') // Dark Slate
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
@@ -216,9 +223,9 @@ module.exports = (client) => {
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
-                // 🏆 WINNER CELEBRATION EMBED
+                // 🏆 WINNER CELEBRATION EMBED WITH GIF
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4') // Electric Mint / Cyber Emerald
+                    .setColor('#00F5D4') // Cyber Emerald
                     .setAuthor({ name: '🎊 GIVEAWAY CONCLUDED 🎊' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
@@ -228,7 +235,7 @@ module.exports = (client) => {
                         `👑 **Host:** <@${giveaway.hostId}>`
                     ].join('\n'))
                     .setThumbnail(ASSETS.TROPHY_THUMBNAIL)
-                    .setImage(ASSETS.WINNER_BANNER) // 🎬 ANIMATED CELEBRATION GIF BANNER
+                    .setImage(ASSETS.WINNER_BANNER) // 🎬 CELEBRATION GIF BANNER
                     .setFooter({ text: 'Giveaway Ended • Winner Picked' })
                     .setTimestamp();
 
