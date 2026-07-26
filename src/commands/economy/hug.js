@@ -40,22 +40,18 @@ async function handleCommand(context, isSlash) {
         return isSlash ? context.editReply(errReply) : context.reply(errReply);
     }
 
-    // Creates a unique, shared key for the two users interacting
     const pairKey = [authorId, target.id].sort().join('_');
-    let pairDoc;
+    let mutualCount = 1;
 
     try {
-        await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-        await User.collection.updateOne({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true });
+        await User.updateOne({ userId: authorId, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, strict: false });
+        await User.updateOne({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, strict: false });
         
-        pairDoc = await User.collection.findOneAndUpdate(
-            { userId: pairKey, guildId },
-            { $inc: { hugsShared: 1 } },
-            { upsert: true, returnDocument: 'after' }
-        );
+        await User.updateOne({ userId: pairKey, guildId }, { $inc: { hugsShared: 1 } }, { upsert: true, strict: false });
+        const pairDoc = await User.findOne({ userId: pairKey, guildId }).lean();
+        if (pairDoc && pairDoc.hugsShared) mutualCount = pairDoc.hugsShared;
     } catch (err) { console.error('DB Hug Error:', err); }
 
-    const mutualCount = pairDoc?.value?.hugsShared || 1;
     const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
     
     const embed = new EmbedBuilder()
@@ -84,19 +80,17 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backPairDoc;
+        let backMutualCount = 1;
+
         try {
-            await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-            await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true });
+            await User.updateOne({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, strict: false });
+            await User.updateOne({ userId: authorId, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, strict: false });
             
-            backPairDoc = await User.collection.findOneAndUpdate(
-                { userId: pairKey, guildId },
-                { $inc: { hugsShared: 1 } },
-                { upsert: true, returnDocument: 'after' }
-            );
+            await User.updateOne({ userId: pairKey, guildId }, { $inc: { hugsShared: 1 } }, { upsert: true, strict: false });
+            const backPairDoc = await User.findOne({ userId: pairKey, guildId }).lean();
+            if (backPairDoc && backPairDoc.hugsShared) backMutualCount = backPairDoc.hugsShared;
         } catch (err) {}
 
-        const backMutualCount = backPairDoc?.value?.hugsShared || 1;
         const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#FF9494')
