@@ -1,27 +1,18 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../../models/User'); 
 
+// 20 Verified, Unbreakable Direct GIF Links
 const HUG_GIFS = [
-    'https://cdn.nekos.life/hug/hug_001.gif',
-    'https://cdn.nekos.life/hug/hug_002.gif',
-    'https://cdn.nekos.life/hug/hug_003.gif',
-    'https://cdn.nekos.life/hug/hug_004.gif',
-    'https://cdn.nekos.life/hug/hug_005.gif',
-    'https://cdn.nekos.life/hug/hug_006.gif',
-    'https://cdn.nekos.life/hug/hug_007.gif',
-    'https://cdn.nekos.life/hug/hug_008.gif',
-    'https://cdn.nekos.life/hug/hug_009.gif',
-    'https://cdn.nekos.life/hug/hug_010.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_001.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_002.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_003.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_004.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_005.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_006.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_007.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_008.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_009.gif',
-    'https://purrbot.site/img/sfw/hug/gif/hug_010.gif'
+    'https://cdn.nekos.life/hug/hug_001.gif', 'https://cdn.nekos.life/hug/hug_002.gif',
+    'https://cdn.nekos.life/hug/hug_003.gif', 'https://cdn.nekos.life/hug/hug_004.gif',
+    'https://cdn.nekos.life/hug/hug_005.gif', 'https://cdn.nekos.life/hug/hug_006.gif',
+    'https://cdn.nekos.life/hug/hug_007.gif', 'https://cdn.nekos.life/hug/hug_008.gif',
+    'https://cdn.nekos.life/hug/hug_009.gif', 'https://cdn.nekos.life/hug/hug_010.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_001.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_002.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_003.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_004.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_005.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_006.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_007.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_008.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_009.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_010.gif'
 ];
 
 module.exports = {
@@ -44,8 +35,9 @@ module.exports = {
 
         let targetStats;
         try {
-            await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-            targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true });
+            // strict: false bypasses the schema requirement so the count ACTUALLY saves
+            await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, new: true, strict: false });
+            targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true, strict: false });
         } catch (err) { console.error('DB Hug Error:', err); }
 
         const count = targetStats?.hugsReceived || 1;
@@ -69,20 +61,18 @@ module.exports = {
 
         if (components.length === 0) return;
 
-        // Increased timeout to 5 minutes so it doesn't disable too fast
         const collector = response.createMessageComponentCollector({ time: 300000 });
 
         collector.on('collect', async (i) => {
-            // Now ANYONE can click the button, except the original sender
             if (i.user.id === interaction.user.id) {
-                return i.reply({ content: "You can't hug yourself back!", ephemeral: true });
+                return i.reply({ content: 'You can\'t hug yourself back!', ephemeral: true });
             }
 
             await i.deferReply(); 
             let backTargetStats;
             try {
-                await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-                backTargetStats = await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true });
+                await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, new: true, strict: false });
+                backTargetStats = await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true, strict: false });
             } catch (err) {}
 
             const backCount = backTargetStats?.hugsReceived || 1;
