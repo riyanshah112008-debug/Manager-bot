@@ -40,17 +40,19 @@ async function handleCommand(context, isSlash) {
         return isSlash ? context.editReply(errReply) : context.reply(errReply);
     }
 
-    let targetDoc;
+    let count = 1;
     try {
         await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-        targetDoc = await User.collection.findOneAndUpdate(
+        const res = await User.collection.findOneAndUpdate(
             { userId: target.id, guildId },
             { $inc: { hugsReceived: 1 } },
             { upsert: true, returnDocument: 'after' }
         );
-    } catch (err) { console.error('DB Hug Error:', err); }
+        count = res?.value?.hugsReceived || res?.hugsReceived || 1;
+    } catch (err) { 
+        console.error('DB Hug Error:', err); 
+    }
 
-    const count = targetDoc?.value?.hugsReceived || 1;
     const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
     
     const embed = new EmbedBuilder()
@@ -79,17 +81,19 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backTargetDoc;
+        let backCount = 1;
         try {
             await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-            backTargetDoc = await User.collection.findOneAndUpdate(
+            const backRes = await User.collection.findOneAndUpdate(
                 { userId: authorId, guildId },
                 { $inc: { hugsReceived: 1 } },
                 { upsert: true, returnDocument: 'after' }
             );
-        } catch (err) {}
+            backCount = backRes?.value?.hugsReceived || backRes?.hugsReceived || 1;
+        } catch (err) {
+            console.error('DB Hug Back Error:', err);
+        }
 
-        const backCount = backTargetDoc?.value?.hugsReceived || 1;
         const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#FF9494')
@@ -110,19 +114,17 @@ async function handleCommand(context, isSlash) {
     });
 }
 
-// Universal sniffer to catch whatever your handler throws at it
 async function universalExecute(...args) {
     const arg1 = args[0];
     const arg2 = args[1];
     
     if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
-        return await handleCommand(arg1, true); // It's a slash command
+        return await handleCommand(arg1, true);
     }
     
-    // Find the message object whether it was passed first or second
     const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
     if (message) {
-        return await handleCommand(message, false); // It's a text command
+        return await handleCommand(message, false);
     }
 }
 
@@ -138,7 +140,6 @@ module.exports = {
     aliases: ['.hug', 'hug'],
     description: 'Give someone a warm anime hug!',
 
-    // Maps both standard handler functions to our universal sniffer
     execute: universalExecute,
     run: universalExecute
 };
