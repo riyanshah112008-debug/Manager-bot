@@ -7,11 +7,15 @@ module.exports = (client) => {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. HELPER FUNCTIONS
+    // 📁 JSON DATABASE HELPERS
     // ==========================================
     function getGiveaways() {
-        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([]));
-        return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+        try {
+            if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
+            return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+        } catch {
+            return [];
+        }
     }
 
     function saveGiveaways(data) {
@@ -19,44 +23,60 @@ module.exports = (client) => {
     }
 
     function parseTime(timeStr) {
-        const match = timeStr.match(/^(\d+)(s|m|h|d)$/);
+        const match = timeStr.match(/^(\d+)(s|m|h|d|w)$/i);
         if (!match) return null;
         const val = parseInt(match[1]);
-        const unit = match[2];
+        const unit = match[2].toLowerCase();
         if (unit === 's') return val * 1000;
         if (unit === 'm') return val * 60 * 1000;
         if (unit === 'h') return val * 60 * 60 * 1000;
         if (unit === 'd') return val * 24 * 60 * 60 * 1000;
+        if (unit === 'w') return val * 7 * 24 * 60 * 60 * 1000;
         return null;
     }
 
     // ==========================================
-    // 2. BACKGROUND CHECKER INITIALIZATION
+    // ⏰ BACKGROUND CHECKER (Fixed Event Name)
     // ==========================================
-    // Use 'once' instead of 'on' to prevent duplicate loops if the bot reconnects to Discord
-    client.once('clientReady', () => {
-        setInterval(checkGiveaways, 10000); 
+    client.once('ready', () => {
+        setInterval(checkGiveaways, 8000);
+        console.log('✅ Aesthetic Giveaway Engine Active');
     });
 
     // ==========================================
-    // 3. START A GIVEAWAY
+    // 🎨 AESTHETIC GIVEAWAY CREATOR
     // ==========================================
-    async function startGiveaway(channel, author, durationStr, winnerCount, prize) {
+    async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
-        if (!msDuration) return '❌ Invalid time format! Please use `s`, `m`, `h`, or `d` (Example: `10m`).';
-        if (winnerCount < 1) return '❌ You must have at least 1 winner!';
+        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`)*.';
+        if (winnerCount < 1) return '❌ **Invalid winners!** Must have at least 1 winner.';
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
 
+        // 🌟 World-Class Aesthetic Embed
         const embed = new EmbedBuilder()
-            .setColor('#FF0055')
-            .setTitle(`🎉 GIVEAWAY: ${prize} 🎉`)
-            .setDescription(`React with 🎉 to enter!\n\n**Winners:** ${winnerCount}\n**Hosted by:** <@${author.id}>\n**Ends:** <t:${endTimestamp}:R> (<t:${endTimestamp}:f>)`)
+            .setColor('#FF007F') // Neon Vibrant Pink
+            .setAuthor({ 
+                name: '🎉 EXCLUSIVE GIVEAWAY', 
+                iconURL: author.displayAvatarURL({ dynamic: true }) 
+            })
+            .setTitle(`🏆 ${prize}`)
+            .setDescription([
+                'React with 🎉 below to enter!',
+                '',
+                '**─────────── 📊 Info ───────────**',
+                `👑 **Host:** <@${author.id}>`,
+                `👥 **Winners:** \`${winnerCount}\``,
+                `⏰ **Ends:** <t:${endTimestamp}:R> (<t:${endTimestamp}:f>)`,
+                '**─────────────────────────────**'
+            ].join('\n'))
+            .setThumbnail('https://cdn-icons-png.flaticon.com/512/4213/4213958.png')
+            .setFooter({ text: '✨ Good luck to all participants!' })
             .setTimestamp(endsAt);
 
         const message = await channel.send({ embeds: [embed] }).catch(() => null);
-        if (!message) return '❌ Failed to send the giveaway message. Check my permissions!';
+        if (!message) return '❌ Failed to send giveaway message. Please check my channel permissions!';
 
         await message.react('🎉').catch(() => {});
 
@@ -72,33 +92,35 @@ module.exports = (client) => {
         });
         saveGiveaways(giveaways);
 
-        return '✅ Giveaway started successfully!';
+        return '✅ Giveaway launched successfully!';
     }
 
-    // Slash Command Logic
+    // ==========================================
+    // 💬 LISTENERS (Slash & Prefix)
+    // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'giveaway') return;
 
         const duration = interaction.options.getString('duration');
-        const winners = interaction.options.getInteger('winners');
         const prize = interaction.options.getString('prize');
+        const winners = interaction.options.getInteger('winners') || 1;
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
 
-        const response = await startGiveaway(interaction.channel, interaction.user, duration, winners, prize);
+        const response = await startGiveaway(targetChannel, interaction.user, duration, winners, prize);
         await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
     });
 
-    // Prefix Command Logic (.giveaway)
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
         if (message.content.toLowerCase().startsWith(PREFIX + 'giveaway')) {
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                return message.reply('❌ You need **Administrator** permissions to use this command.').catch(() => {});
+                return message.reply('❌ You need **Administrator** permissions to start a giveaway.').catch(() => {});
             }
 
             const args = message.content.slice(PREFIX.length + 8).trim().split(/ +/);
             if (args.length < 2) {
-                return message.reply('🔹 **Usage:** `.giveaway <duration> [winners] <prize>`\n*Example:* `.giveaway 10m 1 VIP Role`').catch(() => {});
+                return message.reply('🔹 **Usage:** `.giveaway <duration> [winners] <prize>`\n*Example:* `.giveaway 10m 1 Nitro Classic`').catch(() => {});
             }
 
             const duration = args[0];
@@ -114,7 +136,7 @@ module.exports = (client) => {
 
             const response = await startGiveaway(message.channel, message.author, duration, winners, prize);
             if (response.includes('❌')) {
-                return message.reply(response).catch(() => {});
+                await message.reply(response).catch(() => {});
             } else {
                 await message.delete().catch(() => {});
             }
@@ -122,12 +144,13 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 4. BACKGROUND CHECKER (ENDS GIVEAWAYS)
+    // 🏁 ENDING ENGINE & WINNER SELECTOR
     // ==========================================
     async function checkGiveaways() {
         let giveaways = getGiveaways();
-        const now = Date.now();
+        if (!giveaways.length) return;
 
+        const now = Date.now();
         const ended = giveaways.filter(g => g.endsAt <= now);
         const active = giveaways.filter(g => g.endsAt > now);
 
@@ -152,15 +175,17 @@ module.exports = (client) => {
 
                 if (validUsers.length === 0) {
                     const failEmbed = new EmbedBuilder()
-                        .setColor('DarkButNotBlack')
-                        .setTitle(`🎉 GIVEAWAY ENDED: ${giveaway.prize} 🎉`)
-                        .setDescription(`Nobody entered the giveaway! 😢\n**Hosted by:** <@${giveaway.hostId}>`);
+                        .setColor('#2F3136') // Dark aesthetic grey
+                        .setTitle(`🎉 GIVEAWAY ENDED: ${giveaway.prize}`)
+                        .setDescription(`😭 **No valid entrants joined the giveaway!**\n👑 **Host:** <@${giveaway.hostId}>`)
+                        .setFooter({ text: 'Better luck next time!' });
 
                     await message.edit({ embeds: [failEmbed] }).catch(() => {});
-                    await channel.send(`The giveaway for **${giveaway.prize}** has ended, but nobody entered!`).catch(() => {});
+                    await channel.send(`📢 The giveaway for **${giveaway.prize}** has ended, but nobody entered!`).catch(() => {});
                     continue;
                 }
 
+                // Pick random winners
                 const winners = [];
                 for (let i = 0; i < giveaway.winners; i++) {
                     if (validUsers.length === 0) break;
@@ -171,18 +196,27 @@ module.exports = (client) => {
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
+                // Winners Embed
                 const winEmbed = new EmbedBuilder()
-                    .setColor('Green')
-                    .setTitle(`🎉 GIVEAWAY ENDED: ${giveaway.prize} 🎉`)
-                    .setDescription(`**Winners:** ${winnersText}\n**Hosted by:** <@${giveaway.hostId}>`);
+                    .setColor('#57F287') // Emerald Winner Green
+                    .setAuthor({ name: '🎉 GIVEAWAY CONCLUDED' })
+                    .setTitle(`🏆 ${giveaway.prize}`)
+                    .setDescription([
+                        '**─────────── 🎊 Results ───────────**',
+                        `👑 **Host:** <@${giveaway.hostId}>`,
+                        `🥳 **Winner(s):** ${winnersText}`,
+                        '**─────────────────────────────**'
+                    ].join('\n'))
+                    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112905.png')
+                    .setFooter({ text: 'Congratulations!' })
+                    .setTimestamp();
 
                 await message.edit({ embeds: [winEmbed] }).catch(() => {});
-                await channel.send(`Congratulations ${winnersText}! You won the **${giveaway.prize}**! 🎉`).catch(() => {});
+                await channel.send(`🎉 **CONGRATULATIONS** ${winnersText}! You won **${giveaway.prize}**!`).catch(() => {});
 
             } catch (error) {
-                console.error('Error ending a giveaway:', error);
+                console.error('Error ending giveaway:', error);
             }
         }
     }
 };
-            
