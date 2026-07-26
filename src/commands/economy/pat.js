@@ -40,13 +40,19 @@ async function handleCommand(context, isSlash) {
         return isSlash ? context.editReply(errReply) : context.reply(errReply);
     }
 
-    let targetStats;
+    let count = 1;
     try {
-        await User.findOneAndUpdate({ userId: authorId, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true, strict: false });
-        targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true, new: true, strict: false });
-    } catch (err) { console.error('DB Pat Error:', err); }
+        await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
+        const res = await User.collection.findOneAndUpdate(
+            { userId: target.id, guildId },
+            { $inc: { patsReceived: 1 } },
+            { upsert: true, returnDocument: 'after' }
+        );
+        count = res?.value?.patsReceived || res?.patsReceived || 1;
+    } catch (err) { 
+        console.error('DB Pat Error:', err); 
+    }
 
-    const count = targetStats?.patsReceived || 1;
     const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
     
     const embed = new EmbedBuilder()
@@ -75,13 +81,19 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backTargetStats;
+        let backCount = 1;
         try {
-            await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true, strict: false });
-            backTargetStats = await User.findOneAndUpdate({ userId: authorId, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true, new: true, strict: false });
-        } catch (err) {}
+            await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
+            const backRes = await User.collection.findOneAndUpdate(
+                { userId: authorId, guildId },
+                { $inc: { patsReceived: 1 } },
+                { upsert: true, returnDocument: 'after' }
+            );
+            backCount = backRes?.value?.patsReceived || backRes?.patsReceived || 1;
+        } catch (err) {
+            console.error('DB Pat Back Error:', err);
+        }
 
-        const backCount = backTargetStats?.patsReceived || 1;
         const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#A7C7E7')
@@ -102,27 +114,32 @@ async function handleCommand(context, isSlash) {
     });
 }
 
+async function universalExecute(...args) {
+    const arg1 = args[0];
+    const arg2 = args[1];
+    
+    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
+        return await handleCommand(arg1, true);
+    }
+    
+    const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
+    if (message) {
+        return await handleCommand(message, false);
+    }
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('pat')
         .setDescription('Give someone a gentle anime headpat!')
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
-        .addUserOption(option => 
-            option.setName('target')
-                .setDescription('The user you want to pat')
-                .setRequired(true)
-        ),
+        .addUserOption(option => option.setName('target').setDescription('The user you want to pat').setRequired(true)),
 
     name: 'pat',
-    aliases: ['pat'],
+    aliases: ['.pat', 'pat'],
     description: 'Give someone a gentle anime headpat!',
 
-    execute: async (interaction) => {
-        await handleCommand(interaction, true);
-    },
-    run: async (client, message, args) => {
-        const msg = message?.author ? message : client;
-        await handleCommand(msg, false);
-    }
+    execute: universalExecute,
+    run: universalExecute
 };
