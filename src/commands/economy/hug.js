@@ -42,7 +42,6 @@ async function handleCommand(context, isSlash) {
 
     let targetDoc;
     try {
-        // Direct MongoDB injection (Bypasses strict schema blocks to GUARANTEE count increases)
         await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
         targetDoc = await User.collection.findOneAndUpdate(
             { userId: target.id, guildId },
@@ -111,6 +110,22 @@ async function handleCommand(context, isSlash) {
     });
 }
 
+// Universal sniffer to catch whatever your handler throws at it
+async function universalExecute(...args) {
+    const arg1 = args[0];
+    const arg2 = args[1];
+    
+    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
+        return await handleCommand(arg1, true); // It's a slash command
+    }
+    
+    // Find the message object whether it was passed first or second
+    const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
+    if (message) {
+        return await handleCommand(message, false); // It's a text command
+    }
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('hug')
@@ -119,14 +134,11 @@ module.exports = {
         .setIntegrationTypes([0, 1])
         .addUserOption(option => option.setName('target').setDescription('The user you want to hug').setRequired(true)),
 
-    // Explicit prefix binding
-    name: '.hug',
-    aliases: ['hug'],
+    name: 'hug',
+    aliases: ['.hug', 'hug'],
     description: 'Give someone a warm anime hug!',
 
-    execute: async (interaction) => { await handleCommand(interaction, true); },
-    run: async (client, message, args) => {
-        const msg = message?.author ? message : client;
-        await handleCommand(msg, false);
-    }
+    // Maps both standard handler functions to our universal sniffer
+    execute: universalExecute,
+    run: universalExecute
 };
