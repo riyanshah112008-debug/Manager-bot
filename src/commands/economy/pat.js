@@ -41,20 +41,17 @@ async function handleCommand(context, isSlash) {
     }
 
     const pairKey = [authorId, target.id].sort().join('_');
-    let pairDoc;
+    let mutualCount = 1;
 
     try {
-        await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
-        await User.collection.updateOne({ userId: target.id, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true });
+        await User.updateOne({ userId: authorId, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true, strict: false });
+        await User.updateOne({ userId: target.id, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true, strict: false });
         
-        pairDoc = await User.collection.findOneAndUpdate(
-            { userId: pairKey, guildId },
-            { $inc: { patsShared: 1 } },
-            { upsert: true, returnDocument: 'after' }
-        );
+        await User.updateOne({ userId: pairKey, guildId }, { $inc: { patsShared: 1 } }, { upsert: true, strict: false });
+        const pairDoc = await User.findOne({ userId: pairKey, guildId }).lean();
+        if (pairDoc && pairDoc.patsShared) mutualCount = pairDoc.patsShared;
     } catch (err) { console.error('DB Pat Error:', err); }
 
-    const mutualCount = pairDoc?.value?.patsShared || 1;
     const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
     
     const embed = new EmbedBuilder()
@@ -83,19 +80,17 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backPairDoc;
+        let backMutualCount = 1;
+
         try {
-            await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
-            await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true });
+            await User.updateOne({ userId: i.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true, strict: false });
+            await User.updateOne({ userId: authorId, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true, strict: false });
             
-            backPairDoc = await User.collection.findOneAndUpdate(
-                { userId: pairKey, guildId },
-                { $inc: { patsShared: 1 } },
-                { upsert: true, returnDocument: 'after' }
-            );
+            await User.updateOne({ userId: pairKey, guildId }, { $inc: { patsShared: 1 } }, { upsert: true, strict: false });
+            const backPairDoc = await User.findOne({ userId: pairKey, guildId }).lean();
+            if (backPairDoc && backPairDoc.patsShared) backMutualCount = backPairDoc.patsShared;
         } catch (err) {}
 
-        const backMutualCount = backPairDoc?.value?.patsShared || 1;
         const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#A7C7E7')
