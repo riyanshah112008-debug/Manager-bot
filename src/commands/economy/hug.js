@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../../models/User'); 
 
-// 20 Verified, Unbreakable Direct GIF Links (Mix of Nekos & Purrbot)
 const HUG_GIFS = [
     'https://cdn.nekos.life/hug/hug_001.gif',
     'https://cdn.nekos.life/hug/hug_002.gif',
@@ -38,7 +37,6 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        // Prevents Discord "application did not respond" timeout error
         await interaction.deferReply(); 
         
         const target = interaction.options.getUser('target');
@@ -60,7 +58,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_hug_back') // Custom ID matched perfectly to bypass starry.js owner block
+                .setCustomId('social_hug_back') 
                 .setLabel('Hug back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('🤗')
@@ -71,17 +69,19 @@ module.exports = {
 
         if (components.length === 0) return;
 
-        const collector = response.createMessageComponentCollector({ time: 60000 });
+        // Increased timeout to 5 minutes so it doesn't disable too fast
+        const collector = response.createMessageComponentCollector({ time: 300000 });
 
         collector.on('collect', async (i) => {
-            if (i.user.id !== target.id) {
-                return i.reply({ content: 'Only the person who was hugged can hug back!', ephemeral: true });
+            // Now ANYONE can click the button, except the original sender
+            if (i.user.id === interaction.user.id) {
+                return i.reply({ content: "You can't hug yourself back!", ephemeral: true });
             }
 
             await i.deferReply(); 
             let backTargetStats;
             try {
-                await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
+                await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
                 backTargetStats = await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true });
             } catch (err) {}
 
@@ -89,7 +89,7 @@ module.exports = {
             const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
                 .setColor('#FF9494')
-                .setDescription(`**${target.username}** hugs **${interaction.user.username}** back.\n*${interaction.user.username} has received ${backCount} hugs.*`)
+                .setDescription(`**${i.user.username}** hugs **${interaction.user.username}** back.\n*${interaction.user.username} has received ${backCount} hugs.*`)
                 .setImage(returnGif);
 
             row.components[0].setDisabled(true);
