@@ -179,26 +179,8 @@ const Nodes = [
         port: 13592,
         password: 'youshallnotpass',
         secure: false,
-        retryAmount: 5,
-        retryDelay: 5000
-    },
-    {
-        name: 'DevamOP-India',
-        host: 'lavalink.devamop.in',
-        port: 443,
-        password: 'DevamOP',
-        secure: true,
-        retryAmount: 5,
-        retryDelay: 5000
-    },
-    {
-        name: 'HeavenCloud-Primary',
-        host: '89.106.84.59',
-        port: 4000,
-        password: 'heavencloud.in',
-        secure: false,
-        retryAmount: 5,
-        retryDelay: 5000
+        retryAmount: 10,
+        retryDelay: 3000
     },
     {
         name: 'AjieBlogs-EU',
@@ -206,30 +188,25 @@ const Nodes = [
         port: 443,
         password: 'https://dsc.gg/ajidevserver',
         secure: true,
-        retryAmount: 5,
-        retryDelay: 5000
+        retryAmount: 10,
+        retryDelay: 3000
     },
     {
-        name: 'NyxBot-SG',
-        host: 'sg1-nodelink.nyxbot.app',
-        port: 3000,
-        password: 'nyxbot.app/support',
-        secure: false,
-        retryAmount: 5,
-        retryDelay: 5000
+        name: 'DevamOP-India',
+        host: 'lavalink.devamop.in',
+        port: 443,
+        password: 'DevamOP',
+        secure: true,
+        retryAmount: 10,
+        retryDelay: 3000
     }
 ];
 
-
-
-
-
-
 client.manager = new Kazagumo({
-    defaultSearchEngine: "spotify",
+    defaultSearchEngine: "youtube",
     searchFallbacks: {
-        google: "ytsearch",
-        soundcloud: "scsearch"
+        soundcloud: "scsearch",
+        youtube: "ytsearch"
     },
     plugins: [
         new KazagumoSpotify({ 
@@ -238,7 +215,7 @@ client.manager = new Kazagumo({
             playlistPageLimit: 2, 
             albumPageLimit: 1, 
             searchMarket: 'IN', 
-            searchPrefix: 'ytmsearch:' 
+            searchPrefix: 'ytsearch:' 
         })
     ],
     send: (guildId, payload) => {
@@ -246,11 +223,14 @@ client.manager = new Kazagumo({
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes, {
-    voiceConnectionTimeout: 30000 
+    voiceConnectionTimeout: 30000,
+    linkInitializers: true
 });
 
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} error:`, error));
+client.manager.shoukaku.on('disconnect', (name, reason) => console.warn(`[Lavalink] Node ${name} disconnected:`, reason));
+
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
     if (!channel) return;
@@ -261,7 +241,7 @@ client.manager.on('playerStart', async (player, track) => {
             const voiceChannel = guild.channels.cache.get(player.voiceId);
             if (voiceChannel) {
                 await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                if (channel) await channel.send('🔒 **Voice channel locked!** Auto-lock is active for this session. Use `/vclock` to disable.').catch(() => {});
+                await channel.send('🔒 **Voice channel locked!** Auto-lock is active for this session. Use `/vclock` to disable.').catch(() => {});
             }
         }
     } catch (lockErr) {
@@ -314,7 +294,7 @@ client.manager.on('playerStart', async (player, track) => {
 client.manager.on('playerException', (player, data) => {
     console.error('[Lavalink Player Exception]:', data);
     const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('⚠️ **Playback Exception:** Encountered a network/node stream block. Automatically attempting to skip to the next track.').catch(() => {});
+    if (channel) channel.send('⚠️ **Playback Exception:** Encountered a stream block. Automatically attempting to skip.').catch(() => {});
     try {
         if (player.queue.size > 0) player.skip();
         else player.destroy();
@@ -322,10 +302,12 @@ client.manager.on('playerException', (player, data) => {
         console.error('Player recovery error:', e);
     }
 });
+
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
+
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
