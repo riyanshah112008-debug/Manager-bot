@@ -1,35 +1,33 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const User = require('../../models/User'); // 👈 Fixed relative path
+const User = require('../../models/User');
 
 const PAT_GIFS = [
-    'https://media1.tenor.com/m/Z71f28b2_fEAAAAC/anime-pat.gif',
-    'https://media1.tenor.com/m/IZfV3-S460EAAAAC/pat-anime.gif',
-    'https://media1.tenor.com/m/p7s5942rD6gAAAAC/anime-head-pat.gif',
-    'https://media1.tenor.com/m/OxaEbqjG2OQAAAAC/anime-pat.gif',
-    'https://media1.tenor.com/m/8-aB6iM1H-0AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/vi4kI35Z0JMAAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/B94vXzYqE70AAAAC/anime-hug.gif',
-    'https://media1.tenor.com/m/z2QaiBZCLCQAAAAC/anime-hug.gif'
+    'https://cdn.nekos.life/pat/pat_001.gif',
+    'https://cdn.nekos.life/pat/pat_002.gif',
+    'https://cdn.nekos.life/pat/pat_003.gif',
+    'https://cdn.nekos.life/pat/pat_004.gif',
+    'https://cdn.nekos.life/pat/pat_005.gif',
+    'https://cdn.nekos.life/pat/pat_006.gif',
+    'https://cdn.nekos.life/pat/pat_007.gif',
+    'https://cdn.nekos.life/pat/pat_008.gif',
+    'https://cdn.nekos.life/pat/pat_009.gif',
+    'https://cdn.nekos.life/pat/pat_010.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_001.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_002.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_003.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_004.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_005.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_006.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_007.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_008.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_009.gif',
+    'https://purrbot.site/img/sfw/pat/gif/pat_010.gif'
 ];
-
-async function trackPat(userId, guildId, isGiven) {
-    if (!userId) return;
-    const updateField = isGiven ? { patsGiven: 1 } : { patsReceived: 1 };
-    try {
-        await User.findOneAndUpdate(
-            { userId: userId, guildId: guildId },
-            { $inc: updateField },
-            { upsert: true, new: true }
-        );
-    } catch (err) {
-        console.error('DB Pat Track Error:', err);
-    }
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('pat')
-        .setDescription('✋ Give someone a gentle anime headpat (Works in DMs too!)')
+        .setDescription('Give someone a gentle anime headpat!')
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
         .addUserOption(option => 
@@ -39,53 +37,68 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        await interaction.deferReply(); 
+        
         const target = interaction.options.getUser('target');
         const guildId = interaction.guildId || 'DM';
 
-        trackPat(interaction.user.id, guildId, true);
-        trackPat(target.id, guildId, false);
+        let targetStats;
+        try {
+            await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
+            targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true, new: true });
+        } catch (err) { console.error('DB Pat Error:', err); }
 
+        const count = targetStats?.patsReceived || 1;
         const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
+        
         const embed = new EmbedBuilder()
             .setColor('#A7C7E7')
-            .setDescription(`✋ **${interaction.user.username}** gave **${target.username}** a gentle headpat!`)
+            .setDescription(`**${interaction.user.username}** pets **${target.username}**.\n*${target.username} has received ${count} pats.*`)
             .setImage(randomGif);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_pat_back')
+                .setCustomId('social_pat_back') 
                 .setLabel('Pat back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('⭐')
         );
 
         const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.reply({ embeds: [embed], components: components });
+        const response = await interaction.editReply({ embeds: [embed], components: components });
 
         if (components.length === 0) return;
 
-        const collector = response.createMessageComponentCollector({ time: 60000 });
+        // Increased timeout to 5 minutes
+        const collector = response.createMessageComponentCollector({ time: 300000 });
 
         collector.on('collect', async (i) => {
-            if (i.user.id !== target.id) {
-                return i.reply({ content: 'Only the person who received the pat can pat back!', ephemeral: true });
+            // Anyone can pat back except the original sender
+            if (i.user.id === interaction.user.id) {
+                return i.reply({ content: "You can't pat yourself back!", ephemeral: true });
             }
 
-            trackPat(target.id, guildId, true);
-            trackPat(interaction.user.id, guildId, false);
+            await i.deferReply(); 
+            let backTargetStats;
+            try {
+                await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
+                backTargetStats = await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true, new: true });
+            } catch (err) {}
 
+            const backCount = backTargetStats?.patsReceived || 1;
             const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
                 .setColor('#A7C7E7')
-                .setDescription(`⭐ **${target.username}** gave **${interaction.user.username}** a headpat back!`)
+                .setDescription(`**${i.user.username}** pets **${interaction.user.username}** back.\n*${interaction.user.username} has received ${backCount} pats.*`)
                 .setImage(returnGif);
 
             row.components[0].setDisabled(true);
             await interaction.editReply({ components: [row] }).catch(() => {});
-            await i.reply({ embeds: [returnEmbed] });
+            await i.editReply({ embeds: [returnEmbed] });
         });
 
         collector.on('end', () => {
+            if (row.components[0].data.disabled) return;
             row.components[0].setDisabled(true);
             interaction.editReply({ components: [row] }).catch(() => {});
         });
