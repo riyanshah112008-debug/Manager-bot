@@ -3,17 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 YOUR CUSTOM KLIPY MEDIA ASSETS
+// 🎬 YOUR EXACT CUSTOM MEDIA LINKS
 const ASSETS = {
-    // 1st Embed: Active Giveaway Banner
-    ACTIVE_BANNER: 'https://images-ext-1.discordapp.net/external/scrZFwioIImW2U2Yxutj2ZvuvUutfnXei9WgRzcRsZo/https/static.klipy.com/ii/4493325008d34b7bf8cd6813cd5c1619/55/13/mysnYsa1wHhL.gif', 
+    // Active Giveaway Banner (Link 1)
+    ACTIVE_BANNER: 'https://images-ext-1.discordapp.net/external/scrZFwioIImW2U2Yxutj2ZvuvUutfnXei9WgRzcRsZo/https/static.klipy.com/ii/4493325008d34b7bf8cd6813cd5c1619/55/13/mysnYsa1wHhL.mp4', 
     
-    // 2nd Embed: Winner Concluded Banner
-    WINNER_BANNER: 'https://images-ext-1.discordapp.net/external/OSkCYMZZPp12CRTv2UrrRxDOMYgmHDp6Fn7V3qNolIA/https/static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/f2/42/cLD53aeH.gif', 
-    
-    // Animated Badges
-    GIFT_THUMBNAIL: 'https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif', 
-    TROPHY_THUMBNAIL: 'https://media.giphy.com/media/3o7TKDkDbIDJieKbVm/giphy.gif' 
+    // Winner Concluded Banner (Link 2)
+    WINNER_BANNER: 'https://images-ext-1.discordapp.net/external/OSkCYMZZPp12CRTv2UrrRxDOMYgmHDp6Fn7V3qNolIA/https/static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/f2/42/cLD53aeH.mp4'
 };
 
 module.exports = (client) => {
@@ -84,7 +80,6 @@ module.exports = (client) => {
                 ``,
                 `*Good luck to all participants! 🚀*`
             ].join('\n'))
-            .setThumbnail(ASSETS.GIFT_THUMBNAIL)
             .setImage(ASSETS.ACTIVE_BANNER)
             .setFooter({ 
                 text: `Hosted by ${author.tag}`, 
@@ -222,7 +217,7 @@ module.exports = (client) => {
 
                 // 🏆 WINNER CELEBRATION EMBED
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4') // Mint Emerald
+                    .setColor('#00F5D4')
                     .setAuthor({ name: '🎊 GIVEAWAY CONCLUDED 🎊' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
@@ -231,7 +226,6 @@ module.exports = (client) => {
                         `🥳 **Winner(s):** ${winnersText}`,
                         `👑 **Host:** <@${giveaway.hostId}>`
                     ].join('\n'))
-                    .setThumbnail(ASSETS.TROPHY_THUMBNAIL)
                     .setImage(ASSETS.WINNER_BANNER)
                     .setFooter({ text: 'Giveaway Ended • Winner Picked' })
                     .setTimestamp();
