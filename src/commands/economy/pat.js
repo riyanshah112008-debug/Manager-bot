@@ -40,24 +40,26 @@ async function handleCommand(context, isSlash) {
         return isSlash ? context.editReply(errReply) : context.reply(errReply);
     }
 
-    let count = 1;
+    const pairKey = [authorId, target.id].sort().join('_');
+    let pairDoc;
+
     try {
         await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
-        const res = await User.collection.findOneAndUpdate(
-            { userId: target.id, guildId },
-            { $inc: { patsReceived: 1 } },
+        await User.collection.updateOne({ userId: target.id, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true });
+        
+        pairDoc = await User.collection.findOneAndUpdate(
+            { userId: pairKey, guildId },
+            { $inc: { patsShared: 1 } },
             { upsert: true, returnDocument: 'after' }
         );
-        count = res?.value?.patsReceived || res?.patsReceived || 1;
-    } catch (err) { 
-        console.error('DB Pat Error:', err); 
-    }
+    } catch (err) { console.error('DB Pat Error:', err); }
 
+    const mutualCount = pairDoc?.value?.patsShared || 1;
     const randomGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
     
     const embed = new EmbedBuilder()
         .setColor('#A7C7E7')
-        .setDescription(`**${authorName}** pets **${target.username}**.\n*${target.username} has received ${count} pats.*`)
+        .setDescription(`**${authorName}** pets **${target.username}**.\n*You two have shared ${mutualCount} pats.*`)
         .setImage(randomGif);
 
     const row = new ActionRowBuilder().addComponents(
@@ -81,23 +83,23 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backCount = 1;
+        let backPairDoc;
         try {
             await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { patsGiven: 1 } }, { upsert: true });
-            const backRes = await User.collection.findOneAndUpdate(
-                { userId: authorId, guildId },
-                { $inc: { patsReceived: 1 } },
+            await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { patsReceived: 1 } }, { upsert: true });
+            
+            backPairDoc = await User.collection.findOneAndUpdate(
+                { userId: pairKey, guildId },
+                { $inc: { patsShared: 1 } },
                 { upsert: true, returnDocument: 'after' }
             );
-            backCount = backRes?.value?.patsReceived || backRes?.patsReceived || 1;
-        } catch (err) {
-            console.error('DB Pat Back Error:', err);
-        }
+        } catch (err) {}
 
+        const backMutualCount = backPairDoc?.value?.patsShared || 1;
         const returnGif = PAT_GIFS[Math.floor(Math.random() * PAT_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#A7C7E7')
-            .setDescription(`**${i.user.username}** pets **${authorName}** back.\n*${authorName} has received ${backCount} pats.*`)
+            .setDescription(`**${i.user.username}** pets **${authorName}** back.\n*You two have shared ${backMutualCount} pats.*`)
             .setImage(returnGif);
 
         row.components[0].setDisabled(true);
@@ -117,15 +119,9 @@ async function handleCommand(context, isSlash) {
 async function universalExecute(...args) {
     const arg1 = args[0];
     const arg2 = args[1];
-    
-    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
-        return await handleCommand(arg1, true);
-    }
-    
+    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) return await handleCommand(arg1, true);
     const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
-    if (message) {
-        return await handleCommand(message, false);
-    }
+    if (message) return await handleCommand(message, false);
 }
 
 module.exports = {
@@ -135,11 +131,9 @@ module.exports = {
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
         .addUserOption(option => option.setName('target').setDescription('The user you want to pat').setRequired(true)),
-
     name: 'pat',
     aliases: ['.pat', 'pat'],
     description: 'Give someone a gentle anime headpat!',
-
     execute: universalExecute,
     run: universalExecute
 };
