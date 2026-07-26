@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../../models/User'); 
 
 const HUG_GIFS = [
@@ -15,35 +15,52 @@ const HUG_GIFS = [
 ];
 
 module.exports = {
-    name: '.hug', // Registered exactly as a prefix command
-    aliases: ['hug'], 
-    description: 'Give someone a warm anime hug!',
-    
-    // Using standard message execution for Prefix Commands
-    async execute(message, args) {
-        let target;
+    data: new SlashCommandBuilder()
+        .setName('hug')
+        .setDescription('Give someone a warm anime hug!')
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
+        .addUserOption(option => 
+            option.setName('target')
+                .setDescription('The user you want to hug')
+                .setRequired(true)
+        ),
 
-        // 1. Check if user is replying to a message (Nekotina style)
-        if (message.reference && message.reference.messageId) {
-            try {
-                const refMsg = await message.channel.messages.fetch(message.reference.messageId);
-                target = refMsg.author;
-            } catch (err) {}
-        } 
-        // 2. Fallback to @mentions
-        else if (message.mentions.users.size > 0) {
-            target = message.mentions.users.first();
+    name: 'hug',
+    aliases: ['.hug', 'hug'],
+    description: 'Give someone a warm anime hug!',
+
+    async execute(context, args) {
+        const isSlash = typeof context.isChatInputCommand === 'function' && context.isChatInputCommand();
+        
+        let target;
+        const guildId = context.guildId || 'DM';
+        const authorId = isSlash ? context.user.id : context.author.id;
+        const authorName = isSlash ? context.user.username : context.author.username;
+
+        if (isSlash) {
+            await context.deferReply(); 
+            target = context.options.getUser('target');
+        } else {
+            if (context.reference && context.reference.messageId) {
+                try {
+                    const refMsg = await context.channel.messages.fetch(context.reference.messageId);
+                    target = refMsg.author;
+                } catch (err) {}
+            } else if (context.mentions && context.mentions.users.size > 0) {
+                target = context.mentions.users.first();
+            }
+            if (!target) return context.reply('❌ Please reply to a message or mention a user to hug them!');
         }
 
-        if (!target) return message.reply('❌ Please reply to a message or mention a user to hug them!');
-        if (target.id === message.author.id) return message.reply("❌ You can't hug yourself!");
-
-        const guildId = message.guildId || 'DM';
+        if (target.id === authorId) {
+            const errReply = "❌ You can't hug yourself!";
+            return isSlash ? context.editReply(errReply) : context.reply(errReply);
+        }
 
         let targetStats;
         try {
-            // Force strict:false so DB guarantees the count increases even if schema is missing the field
-            await User.findOneAndUpdate({ userId: message.author.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, strict: false });
+            await User.findOneAndUpdate({ userId: authorId, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, strict: false });
             targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true, strict: false });
         } catch (err) { console.error('DB Hug Error:', err); }
 
@@ -52,7 +69,7 @@ module.exports = {
         
         const embed = new EmbedBuilder()
             .setColor('#FF9494')
-            .setDescription(`**${message.author.username}** hugs **${target.username}**.\n*${target.username} has received ${count} hugs.*`)
+            .setDescription(`**${authorName}** hugs **${target.username}**.\n*${target.username} has received ${count} hugs.*`)
             .setImage(randomGif);
 
         const row = new ActionRowBuilder().addComponents(
@@ -64,15 +81,14 @@ module.exports = {
         );
 
         const components = target.bot ? [] : [row];
-        const response = await message.reply({ embeds: [embed], components: components });
+        let response = isSlash ? await context.editReply({ embeds: [embed], components }) : await context.reply({ embeds: [embed], components });
 
         if (components.length === 0) return;
 
-        const collector = response.createMessageComponentCollector({ time: 300000 }); // 5 minutes
+        const collector = response.createMessageComponentCollector({ time: 300000 });
 
         collector.on('collect', async (i) => {
-            // Anyone can click, except the original sender
-            if (i.user.id === message.author.id) {
+            if (i.user.id === authorId) {
                 return i.reply({ content: 'You can\'t hug yourself back!', ephemeral: true });
             }
 
@@ -80,25 +96,27 @@ module.exports = {
             let backTargetStats;
             try {
                 await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true, strict: false });
-                backTargetStats = await User.findOneAndUpdate({ userId: message.author.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true, strict: false });
+                backTargetStats = await User.findOneAndUpdate({ userId: authorId, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true, strict: false });
             } catch (err) {}
 
             const backCount = backTargetStats?.hugsReceived || 1;
             const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
             const returnEmbed = new EmbedBuilder()
                 .setColor('#FF9494')
-                .setDescription(`**${i.user.username}** hugs **${message.author.username}** back.\n*${message.author.username} has received ${backCount} hugs.*`)
+                .setDescription(`**${i.user.username}** hugs **${authorName}** back.\n*${authorName} has received ${backCount} hugs.*`)
                 .setImage(returnGif);
 
             row.components[0].setDisabled(true);
-            await response.edit({ components: [row] }).catch(() => {});
+            if (isSlash) await context.editReply({ components: [row] }).catch(() => {});
+            else await response.edit({ components: [row] }).catch(() => {});
             await i.editReply({ embeds: [returnEmbed] });
         });
 
         collector.on('end', () => {
             if (row.components[0].data.disabled) return;
             row.components[0].setDisabled(true);
-            response.edit({ components: [row] }).catch(() => {});
+            if (isSlash) context.editReply({ components: [row] }).catch(() => {});
+            else response.edit({ components: [row] }).catch(() => {});
         });
     }
 };
