@@ -3,18 +3,16 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 PURE AESTHETIC & MODERN NITRO/GIVEAWAY GIFS (NO CARTOONS / NO MEMES)
+// 🎬 YOUR CUSTOM KLIPY MEDIA ASSETS
 const ASSETS = {
-    // Sleek Dark Neon Active Giveaway Banner
-    ACTIVE_BANNER: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', 
+    // 1st Embed: Active Giveaway Banner
+    ACTIVE_BANNER: 'https://images-ext-1.discordapp.net/external/scrZFwioIImW2U2Yxutj2ZvuvUutfnXei9WgRzcRsZo/https/static.klipy.com/ii/4493325008d34b7bf8cd6813cd5c1619/55/13/mysnYsa1wHhL.gif', 
     
-    // High-Tech Cyber Winner Celebration Banner
-    WINNER_BANNER: 'https://media.giphy.com/media/l2JHRhAtnJSDNJ2py/giphy.gif', 
+    // 2nd Embed: Winner Concluded Banner
+    WINNER_BANNER: 'https://images-ext-1.discordapp.net/external/OSkCYMZZPp12CRTv2UrrRxDOMYgmHDp6Fn7V3qNolIA/https/static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/f2/42/cLD53aeH.gif', 
     
-    // Animated Neon Gift Box Badge
+    // Animated Badges
     GIFT_THUMBNAIL: 'https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif', 
-    
-    // Animated Gold Trophy Badge
     TROPHY_THUMBNAIL: 'https://media.giphy.com/media/3o7TKDkDbIDJieKbVm/giphy.gif' 
 };
 
@@ -55,7 +53,7 @@ module.exports = (client) => {
     // ==========================================
     client.once('ready', () => {
         setInterval(checkGiveaways, 8000);
-        console.log('✅ Nitro-Grade Animated Giveaway Engine Active');
+        console.log('✅ Custom Media Giveaway Engine Active');
     });
 
     // ==========================================
@@ -70,7 +68,7 @@ module.exports = (client) => {
         const endTimestamp = Math.floor(endsAt / 1000);
 
         const embed = new EmbedBuilder()
-            .setColor('#F47FFF') // Discord Nitro Magenta
+            .setColor('#F47FFF') // Discord Nitro Pink
             .setAuthor({ 
                 name: '✨ OFFICIAL DISCORD GIVEAWAY ✨', 
                 iconURL: author.displayAvatarURL({ dynamic: true }) 
@@ -224,7 +222,7 @@ module.exports = (client) => {
 
                 // 🏆 WINNER CELEBRATION EMBED
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4')
+                    .setColor('#00F5D4') // Mint Emerald
                     .setAuthor({ name: '🎊 GIVEAWAY CONCLUDED 🎊' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
