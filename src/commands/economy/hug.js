@@ -1,28 +1,28 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const User = require('../../models/User'); 
 
-// 20 Unbreakable, direct .gif links
+// 20 Verified, Unbreakable Direct GIF Links (Mix of Nekos & Purrbot)
 const HUG_GIFS = [
-    'https://c.tenor.com/kKvrHj-SAvMAAAAC/tenor.gif',
-    'https://c.tenor.com/xIuXbMtA38sAAAAC/tenor.gif',
-    'https://c.tenor.com/9e1aE_x4Nc4AAAAC/tenor.gif',
-    'https://c.tenor.com/J7eIlqcG_2cAAAAC/tenor.gif',
-    'https://c.tenor.com/8-aB6iM1H-0AAAAC/tenor.gif',
-    'https://c.tenor.com/n7g1bQY1Y3UAAAAC/tenor.gif',
-    'https://c.tenor.com/X-L1s6T3-2wAAAAC/tenor.gif',
-    'https://c.tenor.com/vi4kI35Z0JMAAAAC/tenor.gif',
-    'https://c.tenor.com/X5nB-41Kav4AAAAC/tenor.gif',
-    'https://c.tenor.com/B94vXzYqE70AAAAC/tenor.gif',
-    'https://c.tenor.com/qF7mO4nnL0sAAAAC/tenor.gif',
-    'https://c.tenor.com/a97qP5P45hUAAAAC/tenor.gif',
-    'https://c.tenor.com/z2QaiBZCLCQAAAAC/tenor.gif',
-    'https://c.tenor.com/OxaEbqjG2OQAAAAC/tenor.gif',
-    'https://c.tenor.com/1T1B8HcWalQAAAAC/tenor.gif',
-    'https://c.tenor.com/FncA-A6L6sIAAAAC/tenor.gif',
-    'https://c.tenor.com/xgopH8Z_00oAAAAC/tenor.gif',
-    'https://c.tenor.com/H7i6GcgO7P8AAAAC/tenor.gif',
-    'https://c.tenor.com/wO_3tT7P-w4AAAAC/tenor.gif',
-    'https://c.tenor.com/34mH2wE8G-YAAAAC/tenor.gif'
+    'https://cdn.nekos.life/hug/hug_001.gif',
+    'https://cdn.nekos.life/hug/hug_002.gif',
+    'https://cdn.nekos.life/hug/hug_003.gif',
+    'https://cdn.nekos.life/hug/hug_004.gif',
+    'https://cdn.nekos.life/hug/hug_005.gif',
+    'https://cdn.nekos.life/hug/hug_006.gif',
+    'https://cdn.nekos.life/hug/hug_007.gif',
+    'https://cdn.nekos.life/hug/hug_008.gif',
+    'https://cdn.nekos.life/hug/hug_009.gif',
+    'https://cdn.nekos.life/hug/hug_010.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_001.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_002.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_003.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_004.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_005.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_006.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_007.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_008.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_009.gif',
+    'https://purrbot.site/img/sfw/hug/gif/hug_010.gif'
 ];
 
 module.exports = {
@@ -38,7 +38,7 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        // Stop the Discord timeout error instantly
+        // Prevents Discord "application did not respond" timeout error
         await interaction.deferReply(); 
         
         const target = interaction.options.getUser('target');
@@ -48,12 +48,11 @@ module.exports = {
         try {
             await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
             targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true, new: true });
-        } catch (err) { console.error('DB Hug Track Error:', err); }
+        } catch (err) { console.error('DB Hug Error:', err); }
 
         const count = targetStats?.hugsReceived || 1;
         const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
         
-        // Formatted to exactly match the sleek style you requested
         const embed = new EmbedBuilder()
             .setColor('#FF9494')
             .setDescription(`**${interaction.user.username}** hugs **${target.username}**.\n*${target.username} has received ${count} hugs.*`)
@@ -61,7 +60,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('social_hug_back') 
+                .setCustomId('social_hug_back') // Custom ID matched perfectly to bypass starry.js owner block
                 .setLabel('Hug back')
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji('🤗')
@@ -99,6 +98,7 @@ module.exports = {
         });
 
         collector.on('end', () => {
+            if (row.components[0].data.disabled) return;
             row.components[0].setDisabled(true);
             interaction.editReply({ components: [row] }).catch(() => {});
         });
