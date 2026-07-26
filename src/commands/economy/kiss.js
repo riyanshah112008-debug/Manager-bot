@@ -2,27 +2,131 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const User = require('../../models/User'); 
 
 const KISS_GIFS = [
-    'https://cdn.nekos.life/kiss/kiss_001.gif',
-    'https://cdn.nekos.life/kiss/kiss_002.gif',
-    'https://cdn.nekos.life/kiss/kiss_003.gif',
-    'https://cdn.nekos.life/kiss/kiss_004.gif',
-    'https://cdn.nekos.life/kiss/kiss_005.gif',
-    'https://cdn.nekos.life/kiss/kiss_006.gif',
-    'https://cdn.nekos.life/kiss/kiss_007.gif',
-    'https://cdn.nekos.life/kiss/kiss_008.gif',
-    'https://cdn.nekos.life/kiss/kiss_009.gif',
-    'https://cdn.nekos.life/kiss/kiss_010.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_002.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_003.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_004.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_005.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_006.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_007.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_008.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_009.gif',
-    'https://purrbot.site/img/sfw/kiss/gif/kiss_010.gif'
+    'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
+    'https://cdn.nekos.life/kiss/kiss_003.gif', 'https://cdn.nekos.life/kiss/kiss_004.gif',
+    'https://cdn.nekos.life/kiss/kiss_005.gif', 'https://cdn.nekos.life/kiss/kiss_006.gif',
+    'https://cdn.nekos.life/kiss/kiss_007.gif', 'https://cdn.nekos.life/kiss/kiss_008.gif',
+    'https://cdn.nekos.life/kiss/kiss_009.gif', 'https://cdn.nekos.life/kiss/kiss_010.gif',
+    'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_002.gif',
+    'https://purrbot.site/img/sfw/kiss/gif/kiss_003.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_004.gif',
+    'https://purrbot.site/img/sfw/kiss/gif/kiss_005.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_006.gif',
+    'https://purrbot.site/img/sfw/kiss/gif/kiss_007.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_008.gif',
+    'https://purrbot.site/img/sfw/kiss/gif/kiss_009.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_010.gif'
 ];
+
+async function handleCommand(context, isSlash) {
+    let target;
+    const guildId = context.guildId || 'DM';
+    const authorId = isSlash ? context.user.id : context.author.id;
+    const authorName = isSlash ? context.user.username : context.author.username;
+
+    if (isSlash) {
+        await context.deferReply(); 
+        target = context.options.getUser('target');
+    } else {
+        if (context.reference && context.reference.messageId) {
+            try {
+                const refMsg = await context.channel.messages.fetch(context.reference.messageId);
+                target = refMsg.author;
+            } catch (err) {}
+        } else if (context.mentions && context.mentions.users.size > 0) {
+            target = context.mentions.users.first();
+        }
+        if (!target) return context.reply('❌ Please reply to a message or mention a user to kiss them!');
+    }
+
+    if (target.id === authorId) {
+        const errReply = "❌ You can't kiss yourself!";
+        return isSlash ? context.editReply(errReply) : context.reply(errReply);
+    }
+
+    let count = 1;
+    try {
+        await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
+        const res = await User.collection.findOneAndUpdate(
+            { userId: target.id, guildId },
+            { $inc: { kissesReceived: 1 } },
+            { upsert: true, returnDocument: 'after' }
+        );
+        count = res?.value?.kissesReceived || res?.kissesReceived || 1;
+    } catch (err) { 
+        console.error('DB Kiss Error:', err); 
+    }
+
+    const randomGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
+    
+    const embed = new EmbedBuilder()
+        .setColor('#FFB6C1')
+        .setDescription(`**${authorName}** kisses **${target.username}**.\n*${target.username} has received ${count} kisses.*`)
+        .setImage(randomGif);
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('social_kiss_back') 
+            .setLabel('Kiss back')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('💋')
+    );
+
+    const components = target.bot ? [] : [row];
+    let response = isSlash ? await context.editReply({ embeds: [embed], components }) : await context.reply({ embeds: [embed], components });
+
+    if (components.length === 0) return;
+
+    const collector = response.createMessageComponentCollector({ time: 300000 });
+
+    collector.on('collect', async (i) => {
+        if (i.user.id === authorId) {
+            return i.reply({ content: 'You can\'t kiss yourself back!', ephemeral: true });
+        }
+
+        await i.deferReply(); 
+        let backCount = 1;
+        try {
+            await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
+            const backRes = await User.collection.findOneAndUpdate(
+                { userId: authorId, guildId },
+                { $inc: { kissesReceived: 1 } },
+                { upsert: true, returnDocument: 'after' }
+            );
+            backCount = backRes?.value?.kissesReceived || backRes?.kissesReceived || 1;
+        } catch (err) {
+            console.error('DB Kiss Back Error:', err);
+        }
+
+        const returnGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
+        const returnEmbed = new EmbedBuilder()
+            .setColor('#FFB6C1')
+            .setDescription(`**${i.user.username}** kisses **${authorName}** back.\n*${authorName} has received ${backCount} kisses.*`)
+            .setImage(returnGif);
+
+        row.components[0].setDisabled(true);
+        if (isSlash) await context.editReply({ components: [row] }).catch(() => {});
+        else await response.edit({ components: [row] }).catch(() => {});
+        await i.editReply({ embeds: [returnEmbed] });
+    });
+
+    collector.on('end', () => {
+        if (row.components[0].data.disabled) return;
+        row.components[0].setDisabled(true);
+        if (isSlash) context.editReply({ components: [row] }).catch(() => {});
+        else response.edit({ components: [row] }).catch(() => {});
+    });
+}
+
+async function universalExecute(...args) {
+    const arg1 = args[0];
+    const arg2 = args[1];
+    
+    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
+        return await handleCommand(arg1, true);
+    }
+    
+    const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
+    if (message) {
+        return await handleCommand(message, false);
+    }
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -30,77 +134,12 @@ module.exports = {
         .setDescription('Give someone a sweet anime kiss!')
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
-        .addUserOption(option => 
-            option.setName('target')
-                .setDescription('The user you want to kiss')
-                .setRequired(true)
-        ),
+        .addUserOption(option => option.setName('target').setDescription('The user you want to kiss').setRequired(true)),
 
-    async execute(interaction) {
-        await interaction.deferReply(); 
-        
-        const target = interaction.options.getUser('target');
-        const guildId = interaction.guildId || 'DM';
+    name: 'kiss',
+    aliases: ['.kiss', 'kiss'],
+    description: 'Give someone a sweet anime kiss!',
 
-        let targetStats;
-        try {
-            await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
-            targetStats = await User.findOneAndUpdate({ userId: target.id, guildId }, { $inc: { kissesReceived: 1 } }, { upsert: true, new: true });
-        } catch (err) { console.error('DB Kiss Error:', err); }
-
-        const count = targetStats?.kissesReceived || 1;
-        const randomGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
-        
-        const embed = new EmbedBuilder()
-            .setColor('#FFB6C1')
-            .setDescription(`**${interaction.user.username}** kisses **${target.username}**.\n*${target.username} has received ${count} kisses.*`)
-            .setImage(randomGif);
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('social_kiss_back') 
-                .setLabel('Kiss back')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('💋')
-        );
-
-        const components = (target.id === interaction.user.id || target.bot) ? [] : [row];
-        const response = await interaction.editReply({ embeds: [embed], components: components });
-
-        if (components.length === 0) return;
-
-        // Increased timeout to 5 minutes
-        const collector = response.createMessageComponentCollector({ time: 300000 });
-
-        collector.on('collect', async (i) => {
-            // Anyone can kiss back except the original sender
-            if (i.user.id === interaction.user.id) {
-                return i.reply({ content: "You can't kiss yourself back!", ephemeral: true });
-            }
-
-            await i.deferReply(); 
-            let backTargetStats;
-            try {
-                await User.findOneAndUpdate({ userId: i.user.id, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
-                backTargetStats = await User.findOneAndUpdate({ userId: interaction.user.id, guildId }, { $inc: { kissesReceived: 1 } }, { upsert: true, new: true });
-            } catch (err) {}
-
-            const backCount = backTargetStats?.kissesReceived || 1;
-            const returnGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
-            const returnEmbed = new EmbedBuilder()
-                .setColor('#FFB6C1')
-                .setDescription(`**${i.user.username}** kisses **${interaction.user.username}** back.\n*${interaction.user.username} has received ${backCount} kisses.*`)
-                .setImage(returnGif);
-
-            row.components[0].setDisabled(true);
-            await interaction.editReply({ components: [row] }).catch(() => {});
-            await i.editReply({ embeds: [returnEmbed] });
-        });
-
-        collector.on('end', () => {
-            if (row.components[0].data.disabled) return;
-            row.components[0].setDisabled(true);
-            interaction.editReply({ components: [row] }).catch(() => {});
-        });
-    }
+    execute: universalExecute,
+    run: universalExecute
 };
