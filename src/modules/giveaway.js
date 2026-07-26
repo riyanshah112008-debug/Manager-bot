@@ -3,12 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 YOUR EXACT CUSTOM MEDIA LINKS
+// 🎬 YOUR EXACT KLIPY MEDIA LINKS
 const ASSETS = {
-    // Active Giveaway Banner (Link 1)
+    // 1st Embed: Active Giveaway Banner
     ACTIVE_BANNER: 'https://images-ext-1.discordapp.net/external/scrZFwioIImW2U2Yxutj2ZvuvUutfnXei9WgRzcRsZo/https/static.klipy.com/ii/4493325008d34b7bf8cd6813cd5c1619/55/13/mysnYsa1wHhL.mp4', 
     
-    // Winner Concluded Banner (Link 2)
+    // 2nd Embed: Winner Concluded Banner
     WINNER_BANNER: 'https://images-ext-1.discordapp.net/external/OSkCYMZZPp12CRTv2UrrRxDOMYgmHDp6Fn7V3qNolIA/https/static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/f2/42/cLD53aeH.mp4'
 };
 
