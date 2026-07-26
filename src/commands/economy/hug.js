@@ -40,24 +40,27 @@ async function handleCommand(context, isSlash) {
         return isSlash ? context.editReply(errReply) : context.reply(errReply);
     }
 
-    let count = 1;
+    // Creates a unique, shared key for the two users interacting
+    const pairKey = [authorId, target.id].sort().join('_');
+    let pairDoc;
+
     try {
         await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-        const res = await User.collection.findOneAndUpdate(
-            { userId: target.id, guildId },
-            { $inc: { hugsReceived: 1 } },
+        await User.collection.updateOne({ userId: target.id, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true });
+        
+        pairDoc = await User.collection.findOneAndUpdate(
+            { userId: pairKey, guildId },
+            { $inc: { hugsShared: 1 } },
             { upsert: true, returnDocument: 'after' }
         );
-        count = res?.value?.hugsReceived || res?.hugsReceived || 1;
-    } catch (err) { 
-        console.error('DB Hug Error:', err); 
-    }
+    } catch (err) { console.error('DB Hug Error:', err); }
 
+    const mutualCount = pairDoc?.value?.hugsShared || 1;
     const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
     
     const embed = new EmbedBuilder()
         .setColor('#FF9494')
-        .setDescription(`**${authorName}** hugs **${target.username}**.\n*${target.username} has received ${count} hugs.*`)
+        .setDescription(`**${authorName}** hugs **${target.username}**.\n*You two have shared ${mutualCount} hugs.*`)
         .setImage(randomGif);
 
     const row = new ActionRowBuilder().addComponents(
@@ -81,23 +84,23 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backCount = 1;
+        let backPairDoc;
         try {
             await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { hugsGiven: 1 } }, { upsert: true });
-            const backRes = await User.collection.findOneAndUpdate(
-                { userId: authorId, guildId },
-                { $inc: { hugsReceived: 1 } },
+            await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { hugsReceived: 1 } }, { upsert: true });
+            
+            backPairDoc = await User.collection.findOneAndUpdate(
+                { userId: pairKey, guildId },
+                { $inc: { hugsShared: 1 } },
                 { upsert: true, returnDocument: 'after' }
             );
-            backCount = backRes?.value?.hugsReceived || backRes?.hugsReceived || 1;
-        } catch (err) {
-            console.error('DB Hug Back Error:', err);
-        }
+        } catch (err) {}
 
+        const backMutualCount = backPairDoc?.value?.hugsShared || 1;
         const returnGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#FF9494')
-            .setDescription(`**${i.user.username}** hugs **${authorName}** back.\n*${authorName} has received ${backCount} hugs.*`)
+            .setDescription(`**${i.user.username}** hugs **${authorName}** back.\n*You two have shared ${backMutualCount} hugs.*`)
             .setImage(returnGif);
 
         row.components[0].setDisabled(true);
@@ -117,15 +120,9 @@ async function handleCommand(context, isSlash) {
 async function universalExecute(...args) {
     const arg1 = args[0];
     const arg2 = args[1];
-    
-    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
-        return await handleCommand(arg1, true);
-    }
-    
+    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) return await handleCommand(arg1, true);
     const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
-    if (message) {
-        return await handleCommand(message, false);
-    }
+    if (message) return await handleCommand(message, false);
 }
 
 module.exports = {
@@ -135,11 +132,9 @@ module.exports = {
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
         .addUserOption(option => option.setName('target').setDescription('The user you want to hug').setRequired(true)),
-
     name: 'hug',
     aliases: ['.hug', 'hug'],
     description: 'Give someone a warm anime hug!',
-
     execute: universalExecute,
     run: universalExecute
 };
