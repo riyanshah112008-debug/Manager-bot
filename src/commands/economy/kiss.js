@@ -40,24 +40,26 @@ async function handleCommand(context, isSlash) {
         return isSlash ? context.editReply(errReply) : context.reply(errReply);
     }
 
-    let count = 1;
+    const pairKey = [authorId, target.id].sort().join('_');
+    let pairDoc;
+
     try {
         await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
-        const res = await User.collection.findOneAndUpdate(
-            { userId: target.id, guildId },
-            { $inc: { kissesReceived: 1 } },
+        await User.collection.updateOne({ userId: target.id, guildId }, { $inc: { kissesReceived: 1 } }, { upsert: true });
+        
+        pairDoc = await User.collection.findOneAndUpdate(
+            { userId: pairKey, guildId },
+            { $inc: { kissesShared: 1 } },
             { upsert: true, returnDocument: 'after' }
         );
-        count = res?.value?.kissesReceived || res?.kissesReceived || 1;
-    } catch (err) { 
-        console.error('DB Kiss Error:', err); 
-    }
+    } catch (err) { console.error('DB Kiss Error:', err); }
 
+    const mutualCount = pairDoc?.value?.kissesShared || 1;
     const randomGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
     
     const embed = new EmbedBuilder()
         .setColor('#FFB6C1')
-        .setDescription(`**${authorName}** kisses **${target.username}**.\n*${target.username} has received ${count} kisses.*`)
+        .setDescription(`**${authorName}** kisses **${target.username}**.\n*You two have shared ${mutualCount} kisses.*`)
         .setImage(randomGif);
 
     const row = new ActionRowBuilder().addComponents(
@@ -81,23 +83,23 @@ async function handleCommand(context, isSlash) {
         }
 
         await i.deferReply(); 
-        let backCount = 1;
+        let backPairDoc;
         try {
             await User.collection.updateOne({ userId: i.user.id, guildId }, { $inc: { kissesGiven: 1 } }, { upsert: true });
-            const backRes = await User.collection.findOneAndUpdate(
-                { userId: authorId, guildId },
-                { $inc: { kissesReceived: 1 } },
+            await User.collection.updateOne({ userId: authorId, guildId }, { $inc: { kissesReceived: 1 } }, { upsert: true });
+            
+            backPairDoc = await User.collection.findOneAndUpdate(
+                { userId: pairKey, guildId },
+                { $inc: { kissesShared: 1 } },
                 { upsert: true, returnDocument: 'after' }
             );
-            backCount = backRes?.value?.kissesReceived || backRes?.kissesReceived || 1;
-        } catch (err) {
-            console.error('DB Kiss Back Error:', err);
-        }
+        } catch (err) {}
 
+        const backMutualCount = backPairDoc?.value?.kissesShared || 1;
         const returnGif = KISS_GIFS[Math.floor(Math.random() * KISS_GIFS.length)];
         const returnEmbed = new EmbedBuilder()
             .setColor('#FFB6C1')
-            .setDescription(`**${i.user.username}** kisses **${authorName}** back.\n*${authorName} has received ${backCount} kisses.*`)
+            .setDescription(`**${i.user.username}** kisses **${authorName}** back.\n*You two have shared ${backMutualCount} kisses.*`)
             .setImage(returnGif);
 
         row.components[0].setDisabled(true);
@@ -117,15 +119,9 @@ async function handleCommand(context, isSlash) {
 async function universalExecute(...args) {
     const arg1 = args[0];
     const arg2 = args[1];
-    
-    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
-        return await handleCommand(arg1, true);
-    }
-    
+    if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) return await handleCommand(arg1, true);
     const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
-    if (message) {
-        return await handleCommand(message, false);
-    }
+    if (message) return await handleCommand(message, false);
 }
 
 module.exports = {
@@ -135,11 +131,9 @@ module.exports = {
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
         .addUserOption(option => option.setName('target').setDescription('The user you want to kiss').setRequired(true)),
-
     name: 'kiss',
     aliases: ['.kiss', 'kiss'],
     description: 'Give someone a sweet anime kiss!',
-
     execute: universalExecute,
     run: universalExecute
 };
