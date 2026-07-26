@@ -175,13 +175,14 @@ app.post('/verify', async (req, res) => {
 const Nodes = [
     { 
         name: 'Phone-Serveo-Node', 
-        url: 'd20f2cc67c394e87-152-58-31-112.serveousercontent.com', 
+        url: '2ea1424d88255b59-152-58-31-112.serveousercontent.com', 
         auth: 'youshallnotpass', 
         secure: true,
         retryAmount: 50,
         retryDelay: 10000
     }
 ];
+
 
 
 
