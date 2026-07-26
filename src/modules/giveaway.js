@@ -3,19 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 GUARANTEED WORKING DIRECT GIPHY GIF ASSETS (NO IMGUR 404 ERRORS)
+// 🎬 PURE AESTHETIC & MODERN NITRO/GIVEAWAY GIFS (NO CARTOONS / NO MEMES)
 const ASSETS = {
-    // Active Giveaway Full-Width Banner (Nitro / Gift Theme)
-    ACTIVE_BANNER: 'https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif', 
+    // Sleek Dark Neon Active Giveaway Banner
+    ACTIVE_BANNER: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', 
     
-    // Winner Celebration Full-Width Banner (Confetti / Party)
-    WINNER_BANNER: 'https://media.giphy.com/media/g9582DNuQppxC/giphy.gif', 
+    // High-Tech Cyber Winner Celebration Banner
+    WINNER_BANNER: 'https://media.giphy.com/media/l2JHRhAtnJSDNJ2py/giphy.gif', 
     
-    // Animated Gift Badge Thumbnail
-    GIFT_THUMBNAIL: 'https://media.giphy.com/media/l3vR16PMMnrA45m3K/giphy.gif', 
+    // Animated Neon Gift Box Badge
+    GIFT_THUMBNAIL: 'https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif', 
     
-    // Animated Trophy Badge Thumbnail
-    TROPHY_THUMBNAIL: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif' 
+    // Animated Gold Trophy Badge
+    TROPHY_THUMBNAIL: 'https://media.giphy.com/media/3o7TKDkDbIDJieKbVm/giphy.gif' 
 };
 
 module.exports = (client) => {
