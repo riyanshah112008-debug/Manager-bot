@@ -173,12 +173,50 @@ app.post('/verify', async (req, res) => {
 // 3. LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [
-    { 
-        name: 'Jirayu-Node-v4', 
+    {
+        name: 'Jirayu-Node-v4',
         host: 'lavalink.jirayu.net',
         port: 13592,
-        password: 'youshallnotpass', 
-        secure: false 
+        password: 'youshallnotpass',
+        secure: false,
+        retryAmount: 5,
+        retryDelay: 5000
+    },
+    {
+        name: 'DevamOP-India',
+        host: 'lavalink.devamop.in',
+        port: 443,
+        password: 'DevamOP',
+        secure: true,
+        retryAmount: 5,
+        retryDelay: 5000
+    },
+    {
+        name: 'HeavenCloud-Primary',
+        host: '89.106.84.59',
+        port: 4000,
+        password: 'heavencloud.in',
+        secure: false,
+        retryAmount: 5,
+        retryDelay: 5000
+    },
+    {
+        name: 'AjieBlogs-EU',
+        host: 'lava-v4.ajieblogs.eu.org',
+        port: 443,
+        password: 'https://dsc.gg/ajidevserver',
+        secure: true,
+        retryAmount: 5,
+        retryDelay: 5000
+    },
+    {
+        name: 'NyxBot-SG',
+        host: 'sg1-nodelink.nyxbot.app',
+        port: 3000,
+        password: 'nyxbot.app/support',
+        secure: false,
+        retryAmount: 5,
+        retryDelay: 5000
     }
 ];
 
