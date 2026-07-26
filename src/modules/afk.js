@@ -10,7 +10,7 @@ module.exports = (client) => {
         data: new SlashCommandBuilder()
             .setName('afk')
             .setDescription('Set your AFK status for this specific server.')
-            .setContexts([0]) // 0 restricts it to Guilds (servers) only, blocking DMs natively
+            .setContexts([0]) // Restricts to Guilds only
             .addStringOption(option => 
                 option.setName('reason')
                     .setDescription('Reason for going AFK')
@@ -18,18 +18,20 @@ module.exports = (client) => {
             ),
 
         async execute(interaction) {
-            const reason = interaction.options.getString('reason') || 'AFK';
-            
-            // STRICT ISOLATION: Locks the AFK status to THIS specific server
+            const reason = interaction.options.getString('reason') || 'Not specified';
             const afkKey = `${interaction.guildId}-${interaction.user.id}`;
 
             afkCollection.set(afkKey, { reason: reason, time: Date.now() });
 
             const embed = new EmbedBuilder()
-                .setColor('#23a559')
-                .setDescription(`💤 **${interaction.user.username}**, I set your AFK status for this server: **${reason}**`);
+                .setColor('#EC407A') // Nekotina Pink
+                .setAuthor({ name: interaction.user.displayName || interaction.user.username })
+                .setDescription(`**AFK status set.**\n\n**Reason:** ${reason}`)
+                .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
+                .setFooter({ text: 'I will notify those who mention you. >w<' });
 
-            await interaction.reply({ embeds: [embed] }).catch(() => {});
+            // Using content to ping the user directly alongside the embed
+            await interaction.reply({ content: `<@${interaction.user.id}>`, embeds: [embed] }).catch(() => {});
         }
     });
 
@@ -37,44 +39,47 @@ module.exports = (client) => {
     // 2. HANDLE PREFIX (.afk) AND MESSAGE TRACKING
     // ==========================================
     client.on('messageCreate', async (message) => {
-        // Ignore bots and DMs entirely
         if (message.author.bot || !message.guild) return;
 
-        // STRICT ISOLATION KEY
         const authorKey = `${message.guild.id}-${message.author.id}`;
 
         // --- A. THE PREFIX COMMAND (.afk) ---
         if (message.content.toLowerCase().startsWith(PREFIX + 'afk')) {
             const args = message.content.slice(PREFIX.length + 3).trim();
-            const reason = args || 'AFK';
+            const reason = args || 'Not specified';
 
             afkCollection.set(authorKey, { reason: reason, time: Date.now() });
 
             const embed = new EmbedBuilder()
-                .setColor('#23a559')
-                .setDescription(`💤 **${message.author.username}**, I set your AFK status for this server: **${reason}**`);
+                .setColor('#EC407A')
+                .setAuthor({ name: message.member?.displayName || message.author.username })
+                .setDescription(`**AFK status set.**\n\n**Reason:** ${reason}`)
+                .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 }))
+                .setFooter({ text: 'I will notify those who mention you. >w<' });
 
-            const reply = await message.reply({ embeds: [embed] }).catch(() => {});
+            const reply = await message.reply({ content: `<@${message.author.id}>`, embeds: [embed] }).catch(() => {});
 
-            // Auto-delete confirmation after 5 seconds
+            // Auto-delete confirmation after 5 seconds to keep chat clean
             if (reply) setTimeout(() => reply.delete().catch(() => {}), 5000);
             
-            return; // Stops execution so the bot doesn't immediately remove the AFK status!
+            return;
         }
 
         // --- B. REMOVE AFK WHEN THEY TALK ---
         if (afkCollection.has(authorKey)) {
             const afkData = afkCollection.get(authorKey);
             
-            // Anti-Glitch: Prevents removing AFK if they trigger it by typing ".afk" less than 3 seconds ago
+            // 3-second anti-glitch cooldown so setting AFK doesn't instantly remove it
             if (Date.now() - afkData.time > 3000) {
                 afkCollection.delete(authorKey);
                 
                 const embed = new EmbedBuilder()
-                    .setColor('#FEE75C')
-                    .setDescription(`👋 Welcome back **${message.author.username}**, I removed your AFK status for this server.`);
+                    .setColor('#2ECC71') // Green for welcome back
+                    .setAuthor({ name: message.member?.displayName || message.author.username })
+                    .setDescription(`**Welcome back!**\n\nI have removed your AFK status.`)
+                    .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 }));
                 
-                const welcomeBack = await message.channel.send({ embeds: [embed] }).catch(() => {});
+                const welcomeBack = await message.channel.send({ content: `<@${message.author.id}>`, embeds: [embed] }).catch(() => {});
                 
                 if (welcomeBack) setTimeout(() => welcomeBack.delete().catch(() => {}), 5000);
             }
@@ -84,7 +89,6 @@ module.exports = (client) => {
         const mentionedUsers = message.mentions.users;
         if (mentionedUsers.size > 0) {
             mentionedUsers.forEach(user => {
-                // Check if the pinged user is AFK in THIS specific server
                 const mentionedKey = `${message.guild.id}-${user.id}`;
 
                 if (afkCollection.has(mentionedKey)) {
@@ -92,8 +96,10 @@ module.exports = (client) => {
                     const timeAgo = Math.floor(data.time / 1000);
 
                     const embed = new EmbedBuilder()
-                        .setColor('Orange')
-                        .setDescription(`💤 **${user.username}** is currently AFK: ${data.reason} *(Since <t:${timeAgo}:R>)*`);
+                        .setColor('#EC407A')
+                        .setAuthor({ name: user.displayName || user.username })
+                        .setDescription(`**is currently AFK.**\n\n**Reason:** ${data.reason}\n\n*Went AFK <t:${timeAgo}:R>*`)
+                        .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 256 }));
 
                     message.reply({ embeds: [embed] }).catch(() => {});
                 }
