@@ -175,13 +175,13 @@ app.post('/verify', async (req, res) => {
 const Nodes = [
     { 
         name: 'PC-Primary', 
-        url: '127.0.0.1:2333',     // Runs locally on your PC
+        url: '127.0.0.1:2333', 
         auth: 'youshallnotpass', 
         secure: false 
     },
     { 
         name: 'Termux-Standby', 
-        url: '192.168.1.42:2333',  // Replace '192.168.1.42' with your phone's actual Wi-Fi IPv4 address
+        url: '192.168.1.X:2333', // Replace 192.168.1.X with your phone's actual Wi-Fi IP
         auth: 'youshallnotpass', 
         secure: false 
     }
