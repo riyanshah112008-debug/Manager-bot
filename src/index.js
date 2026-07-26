@@ -174,12 +174,19 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 const Nodes = [
     { 
-        name: 'My Android Phone Node', 
-        url: 'e1ec152f5e7a9c18-152-58-31-136.serveousercontent.com:443', 
+        name: 'PC-Primary', 
+        url: '127.0.0.1:2333',     // Runs locally on your PC
         auth: 'youshallnotpass', 
-        secure: true 
+        secure: false 
+    },
+    { 
+        name: 'Termux-Standby', 
+        url: '192.168.1.42:2333',  // Replace '192.168.1.42' with your phone's actual Wi-Fi IPv4 address
+        auth: 'youshallnotpass', 
+        secure: false 
     }
 ];
+
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
