@@ -3,19 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 DIRECT HIGH-QUALITY ANIMATED ASSETS (GUARANTEED DISCORD EMBED COMPATIBLE)
+// 🎬 GUARANTEED WORKING DIRECT GIPHY GIF ASSETS (NO IMGUR 404 ERRORS)
 const ASSETS = {
-    // Full-width Nitro Banner for Active Giveaways
-    ACTIVE_BANNER: 'https://i.imgur.com/dK8N2Nl.gif', 
+    // Active Giveaway Full-Width Banner (Nitro / Gift Theme)
+    ACTIVE_BANNER: 'https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif', 
     
-    // Full-width Celebration Banner for Winners
-    WINNER_BANNER: 'https://i.imgur.com/v8R2vO0.gif', 
+    // Winner Celebration Full-Width Banner (Confetti / Party)
+    WINNER_BANNER: 'https://media.giphy.com/media/g9582DNuQppxC/giphy.gif', 
     
     // Animated Gift Badge Thumbnail
-    GIFT_THUMBNAIL: 'https://i.imgur.com/2D5N11q.gif', 
+    GIFT_THUMBNAIL: 'https://media.giphy.com/media/l3vR16PMMnrA45m3K/giphy.gif', 
     
     // Animated Trophy Badge Thumbnail
-    TROPHY_THUMBNAIL: 'https://i.imgur.com/R38M1M1.gif' 
+    TROPHY_THUMBNAIL: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif' 
 };
 
 module.exports = (client) => {
@@ -59,7 +59,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🚀 1. ACTIVE GIVEAWAY EMBED (WITH NITRO GIF)
+    // 🚀 1. ACTIVE GIVEAWAY EMBED
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
@@ -69,7 +69,6 @@ module.exports = (client) => {
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
 
-        // 🌟 World-Class Nitro Animated Active Embed
         const embed = new EmbedBuilder()
             .setColor('#F47FFF') // Discord Nitro Magenta
             .setAuthor({ 
@@ -88,7 +87,7 @@ module.exports = (client) => {
                 `*Good luck to all participants! 🚀*`
             ].join('\n'))
             .setThumbnail(ASSETS.GIFT_THUMBNAIL)
-            .setImage(ASSETS.ACTIVE_BANNER) // 🎬 FULL-WIDTH NITRO GIF BANNER
+            .setImage(ASSETS.ACTIVE_BANNER)
             .setFooter({ 
                 text: `Hosted by ${author.tag}`, 
                 iconURL: client.user.displayAvatarURL({ dynamic: true }) 
@@ -164,7 +163,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🏁 2. CONCLUDED GIVEAWAY EMBED (WINNER FLAGGED)
+    // 🏁 2. CONCLUDED GIVEAWAY EMBED
     // ==========================================
     async function checkGiveaways() {
         let giveaways = getGiveaways();
@@ -196,7 +195,7 @@ module.exports = (client) => {
                 // ❌ EXPIRED EMBED (No Entrants)
                 if (validUsers.length === 0) {
                     const failEmbed = new EmbedBuilder()
-                        .setColor('#2B2D31') // Dark Slate
+                        .setColor('#2B2D31')
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
@@ -223,9 +222,9 @@ module.exports = (client) => {
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
-                // 🏆 WINNER CELEBRATION EMBED WITH GIF
+                // 🏆 WINNER CELEBRATION EMBED
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4') // Cyber Emerald
+                    .setColor('#00F5D4')
                     .setAuthor({ name: '🎊 GIVEAWAY CONCLUDED 🎊' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
@@ -235,7 +234,7 @@ module.exports = (client) => {
                         `👑 **Host:** <@${giveaway.hostId}>`
                     ].join('\n'))
                     .setThumbnail(ASSETS.TROPHY_THUMBNAIL)
-                    .setImage(ASSETS.WINNER_BANNER) // 🎬 CELEBRATION GIF BANNER
+                    .setImage(ASSETS.WINNER_BANNER)
                     .setFooter({ text: 'Giveaway Ended • Winner Picked' })
                     .setTimestamp();
 
