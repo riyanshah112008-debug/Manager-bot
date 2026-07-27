@@ -1,5 +1,5 @@
 const { PermissionsBitField } = require('discord.js');
-const { AutoroleConfig, StickyRole } = require('../../models/AutoroleSchema');
+const { AutoroleConfig, StickyRole } = require('../models/AutoroleSchema');
 
 module.exports = (client) => {
     // ==========================================
