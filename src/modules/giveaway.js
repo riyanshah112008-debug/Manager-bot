@@ -3,12 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 DIRECT CDN ANIMATED MEDIA ASSETS (DISCORD EMBED NATIVE APPROVED)
+// 🎬 VERIFIED DIRECT DISCORD-APPROVED MEDIA ASSETS
 const ASSETS = {
-    // Active Banner: Tony Stark / RDJ Arms Open (Direct Tenor GIF)
-    ACTIVE_BANNER: 'https://media.tenor.com/images/8effa7b7964c33cf80d21e73cdf44359/tenor.gif', 
+    // Active Banner: REAL Tony Stark / RDJ Arms Spread GIF
+    ACTIVE_BANNER: 'https://media.tenor.com/X_1y4K6H4jAAAAAC/tony-stark-iron-man.gif', 
 
-    // Winner Banner: Leonardo DiCaprio Great Gatsby Toast (Direct GIF)
+    // Winner Banner: Leonardo DiCaprio Great Gatsby Toast GIF
     WINNER_BANNER: 'https://i.giphy.com/g9582DNuQppxC.gif'
 };
 
@@ -184,14 +184,13 @@ module.exports = (client) => {
                 const users = await reaction.users.fetch();
                 const validUsers = users.filter(u => !u.bot).map(u => u.id);
 
-                // ❌ EXPIRED EMBED (No Entrants)
                 if (validUsers.length === 0) {
                     const failEmbed = new EmbedBuilder()
                         .setColor('#ED4245')
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
-                            `> Could not pick a winner because nobody entered!`,
+                            `>>> Could not pick a winner because nobody entered!`,
                             ``,
                             `👑 **Host:** <@${giveaway.hostId}>`
                         ].join('\n'))
@@ -203,7 +202,6 @@ module.exports = (client) => {
                     continue;
                 }
 
-                // Pick random winners
                 const winners = [];
                 for (let i = 0; i < giveaway.winners; i++) {
                     if (validUsers.length === 0) break;
@@ -214,9 +212,8 @@ module.exports = (client) => {
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
-                // 🏆 WINNER CELEBRATION EMBED (LEONARDO DICAPRIO GATSBY TOAST)
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4') // Supreme Emerald Cyan
+                    .setColor('#00F5D4')
                     .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
