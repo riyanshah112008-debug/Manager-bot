@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { 
   joinVoiceChannel, 
   createAudioPlayer, 
@@ -11,20 +11,71 @@ const {
 const prism = require('prism-media');
 const { GoogleGenAI } = require('@google/genai');
 const googleTTS = require('google-tts-api');
+const mongoose = require('mongoose');
 
-// Initialize Gemini SDK with your existing GEMINI_API_KEY
+// Initialize Gemini SDK with your GEMINI_API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('callstarry')
-    .setDescription('Call Starry for a private 1-on-1 human-like voice call!'),
+    .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction) {
+    // ==========================================
+    // 👑 1. PREMIUM PROTECTION SHIELD
+    // ==========================================
+    let isPremium = false;
+
+    try {
+      // Check Premium database collection
+      const PremiumModel = mongoose.models.Premium || mongoose.model('Premium');
+      const premiumDoc = await PremiumModel.findOne({ 
+        $or: [
+          { guildId: interaction.guild.id },
+          { userId: interaction.user.id }
+        ] 
+      });
+
+      if (premiumDoc) isPremium = true;
+    } catch (e) {
+      // Fallback check on Guild schema if separate Premium model isn't used
+      try {
+        const GuildModel = mongoose.models.Guild || mongoose.model('Guild');
+        const guildDoc = await GuildModel.findOne({ guildId: interaction.guild.id });
+        if (guildDoc?.isPremium) isPremium = true;
+      } catch (err) {}
+    }
+
+    // Bot owners automatically bypass Premium restriction
+    const botOwners = ['1465049039153135639', '1257676837249617971'];
+    if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
+    if (botOwners.includes(interaction.user.id)) isPremium = true;
+
+    // Reject non-premium users
+    if (!isPremium) {
+      const premiumEmbed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('✨ Starry Premium Feature')
+        .setDescription(
+          `📞 **\` /callstarry \` Voice AI is an exclusive Starry Premium feature!**\n\n` +
+          `Unlock **1-on-1 real-time voice calls** with Starry, featuring human-like speech, emotions, dynamic listening, and seamless conversations.`
+        )
+        .addFields(
+          { name: '💎 How to Unlock', value: 'Run `/activatepremium` or visit our dashboard to activate Premium for this server!', inline: false }
+        )
+        .setFooter({ text: 'Starry Voice AI • Powered by Gemini 2.5', iconURL: interaction.client.user.displayAvatarURL() })
+        .setTimestamp();
+
+      return interaction.reply({ embeds: [premiumEmbed], ephemeral: true });
+    }
+
+    // ==========================================
+    // 🎙️ 2. VOICE CHANNEL VALIDATION & JOIN
+    // ==========================================
     const member = interaction.member;
     const voiceChannel = member.voice?.channel;
 
-    // 1. Validation Checks
     if (!voiceChannel) {
       return interaction.reply({ 
         content: "❌ You need to be in a voice channel first to call me!", 
@@ -52,24 +103,21 @@ module.exports = {
       content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` 
     });
 
-    // 2. Join Voice Channel
     const connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: interaction.guild.id,
       adapterCreator: interaction.guild.voiceAdapterCreator,
-      selfDeaf: false, // Critical: must be false to listen to user voice
+      selfDeaf: false,
       selfMute: false
     });
 
     const player = createAudioPlayer();
     connection.subscribe(player);
 
-    // Audio Playback Queue for smooth multi-sentence TTS playback
     let audioQueue = [];
     let isProcessing = false;
     let inactivityTimeout = null;
 
-    // Chat context for realistic voice conversation
     const chatHistory = [
       {
         role: "user",
@@ -88,7 +136,6 @@ Rules for your voice responses:
       }
     ];
 
-    // Play next audio chunk in queue
     const playNextInQueue = () => {
       if (audioQueue.length > 0) {
         const nextUrl = audioQueue.shift();
@@ -101,7 +148,6 @@ Rules for your voice responses:
       playNextInQueue();
     });
 
-    // Reset inactivity timer (Disconnects after 3 minutes of silence)
     const resetInactivityTimer = () => {
       if (inactivityTimeout) clearTimeout(inactivityTimeout);
       inactivityTimeout = setTimeout(() => {
@@ -109,7 +155,6 @@ Rules for your voice responses:
       }, 3 * 60 * 1000);
     };
 
-    // Full cleanup function to prevent memory leaks
     const cleanupAndDisconnect = () => {
       if (inactivityTimeout) clearTimeout(inactivityTimeout);
       interaction.client.removeListener('voiceStateUpdate', channelListener);
@@ -122,13 +167,14 @@ Rules for your voice responses:
 
     resetInactivityTimer();
 
-    // 3. Audio Receiver Engine
+    // ==========================================
+    // 🎧 3. REAL-TIME VOICE PROCESSING ENGINE
+    // ==========================================
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', (speakingUserId) => {
       if (speakingUserId !== member.id) return;
 
-      // Barge-in capability: Stop current speech if user starts talking
       if (player.state.status === AudioPlayerStatus.Playing) {
         audioQueue = [];
         player.stop();
@@ -140,7 +186,7 @@ Rules for your voice responses:
       const audioStream = receiver.subscribe(member.id, {
         end: {
           behavior: EndBehaviorType.AfterSilence,
-          duration: 1200, // Detects 1.2s of silence as end of user speech
+          duration: 1200,
         },
       });
 
@@ -152,7 +198,7 @@ Rules for your voice responses:
 
       opusDecoder.on('end', async () => {
         const buffer = Buffer.concat(pcmChunks);
-        if (buffer.length < 12000) return; // Skip minor background noise or mic pops
+        if (buffer.length < 12000) return;
 
         isProcessing = true;
 
@@ -160,7 +206,6 @@ Rules for your voice responses:
           const wavBuffer = pcmToWav(buffer, 48000, 2);
           const base64Audio = wavBuffer.toString("base64");
 
-          // Step A: Pass voice audio directly to Gemini 2.5 Flash
           const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: [
@@ -186,17 +231,13 @@ Rules for your voice responses:
             return;
           }
 
-          // Clean markdown tokens (*, _, ~, #) from Gemini response
           aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
 
-          // Store in conversation history
           chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
           chatHistory.push({ role: "model", parts: [{ text: aiReply }] });
 
-          // Trim history to avoid context buffer bloating
           if (chatHistory.length > 10) chatHistory.splice(1, 2);
 
-          // Step B: Split text into safe TTS chunks
           const ttsUrls = googleTTS.getAllAudioUrls(aiReply, {
             lang: 'en',
             slow: false,
@@ -204,7 +245,6 @@ Rules for your voice responses:
             timeout: 10000,
           });
 
-          // Step C: Load audio queue & trigger playback
           audioQueue = ttsUrls.map(item => item.url);
           playNextInQueue();
 
@@ -216,7 +256,6 @@ Rules for your voice responses:
       });
     });
 
-    // 4. Auto-Leave Listener (if user leaves or someone else joins)
     const channelListener = (oldState, newState) => {
       if (oldState.channelId === voiceChannel.id || newState.channelId === voiceChannel.id) {
         const currentHumans = voiceChannel.members.filter(m => !m.user.bot);
@@ -230,22 +269,19 @@ Rules for your voice responses:
   }
 };
 
-/**
- * Converts raw 16-bit PCM buffer into valid WAV header format for Gemini API
- */
 function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
   header.writeUInt32LE(36 + pcmBuffer.length, 4);
   header.write("WAVE", 8);
   header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16); // PCM format
+  header.writeUInt32LE(16, 16);
   header.writeUInt16LE(1, 20);
   header.writeUInt16LE(channels, 22);
   header.writeUInt32LE(sampleRate, 24);
   header.writeUInt32LE(sampleRate * channels * 2, 28);
   header.writeUInt16LE(channels * 2, 32);
-  header.writeUInt16LE(16, 34); // 16-bit
+  header.writeUInt16LE(16, 34);
   header.write("data", 36);
   header.writeUInt32LE(pcmBuffer.length, 40);
   return Buffer.concat([header, pcmBuffer]);
