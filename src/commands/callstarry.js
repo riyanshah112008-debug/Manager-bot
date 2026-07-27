@@ -18,11 +18,10 @@ module.exports = {
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction, client) {
-    // ⏱️ 1. DEFER IMMEDIATELY
     await interaction.deferReply({ ephemeral: false }).catch(() => {});
 
     try {
-      // 👑 2. PREMIUM CHECK
+      // 👑 1. PREMIUM CHECK
       const isPremium = interaction.client.isPremium 
         ? interaction.client.isPremium(interaction.guild?.id, interaction.user.id)
         : false;
@@ -31,55 +30,38 @@ module.exports = {
         const premiumEmbed = new EmbedBuilder()
           .setColor('#FFD700')
           .setTitle('✨ Starry Premium Feature')
-          .setDescription(
-            `📞 **\` /callstarry \` Voice AI is an exclusive Starry Premium feature!**\n\n` +
-            `Unlock **1-on-1 real-time voice calls** with Starry, featuring human-like speech, emotions, dynamic listening, and seamless conversations.`
-          )
-          .addFields(
-            { name: '💎 How to Unlock', value: 'Run `/activatepremium` or visit our web dashboard to activate Premium!', inline: false }
-          )
-          .setFooter({ text: 'Starry Voice AI • Powered by Gemini', iconURL: interaction.client.user.displayAvatarURL() })
-          .setTimestamp();
+          .setDescription(`📞 **\` /callstarry \` Voice AI is an exclusive Starry Premium feature!**`)
+          .setFooter({ text: 'Starry Voice AI', iconURL: interaction.client.user.displayAvatarURL() });
 
         return interaction.editReply({ embeds: [premiumEmbed] });
       }
 
-      // 🎙️ 3. VOICE CHANNEL VALIDATION
+      // 🎙️ 2. VOICE CHANNEL VALIDATION
       const member = interaction.member;
       const voiceChannel = member?.voice?.channel;
 
       if (!voiceChannel) {
-        return interaction.editReply({ 
-          content: "❌ You need to be in a voice channel first to call me!" 
-        });
+        return interaction.editReply({ content: "❌ You need to be in a voice channel first to call me!" });
       }
 
       const permissions = voiceChannel.permissionsFor(interaction.client.user);
       if (!permissions.has(PermissionFlagsBits.Connect) || !permissions.has(PermissionFlagsBits.Speak)) {
-        return interaction.editReply({ 
-          content: "❌ I don't have permissions to connect and speak in your voice channel!" 
-        });
+        return interaction.editReply({ content: "❌ I don't have permissions to connect and speak in your voice channel!" });
       }
 
       const humanMembers = voiceChannel.members.filter(m => !m.user.bot);
       if (humanMembers.size > 1) {
-        return interaction.editReply({ 
-          content: "🔒 `/callstarry` is for private 1-on-1 calls. Please call me when you are alone in VC!" 
-        });
+        return interaction.editReply({ content: "🔒 `/callstarry` is for private 1-on-1 calls. Please call me when you are alone in VC!" });
       }
 
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        return interaction.editReply({
-          content: "❌ `GEMINI_API_KEY` is missing in Environment Variables on Render!"
-        });
+        return interaction.editReply({ content: "❌ `GEMINI_API_KEY` is missing in Environment Variables on Render!" });
       }
 
-      await interaction.editReply({ 
-        content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` 
-      });
+      await interaction.editReply({ content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` });
 
-      // 4. JOIN VOICE CHANNEL
+      // 3. JOIN VOICE CHANNEL
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
@@ -91,9 +73,7 @@ module.exports = {
       const player = createAudioPlayer();
       connection.subscribe(player);
 
-      player.on('error', error => {
-        console.error('❌ [CallStarry Audio Player Error]:', error.message);
-      });
+      player.on('error', err => console.error('❌ [CallStarry Player Error]:', err.message));
 
       let audioQueue = [];
       let isProcessing = false;
@@ -102,31 +82,20 @@ module.exports = {
       const chatHistory = [
         {
           role: "user",
-          parts: [{ 
-            text: `You are Starry, a warm, witty, and empathetic AI friend having a 1-on-1 voice call on Discord. 
-Rules for your voice responses:
-- Speak naturally like a real human on a casual phone call.
-- Keep responses short (1 to 2 sentences max; around 15-25 words).
-- Use natural conversational fillers ("oh wow", "yeah", "hmm", "haha") when appropriate.
-- DO NOT use markdown characters like asterisks, bullet points, or emojis since your words are read aloud by TTS.` 
-          }]
+          parts: [{ text: "You are Starry, a warm AI friend in a 1-on-1 Discord call. Keep responses short (1-2 sentences max, under 20 words). Do not use asterisks or emojis." }]
         },
         {
           role: "model",
-          parts: [{ text: "Hey! Starry here. I'm connected and ready to hang out. What's on your mind today?" }]
+          parts: [{ text: "Hey there! Starry here. I can hear you clearly now! What is on your mind today?" }]
         }
       ];
 
-      // Helper to fetch TTS MP3 Buffer safely with Chrome headers
       const fetchTTSBuffer = async (url) => {
         const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
         });
-        if (!res.ok) throw new Error(`TTS HTTP error: ${res.status}`);
-        const arrayBuf = await res.arrayBuffer();
-        return Buffer.from(arrayBuf);
+        if (!res.ok) throw new Error(`TTS HTTP Error: ${res.status}`);
+        return Buffer.from(await res.arrayBuffer());
       };
 
       const playNextInQueue = async () => {
@@ -137,21 +106,17 @@ Rules for your voice responses:
             const resource = createAudioResource(Readable.from(mp3Buffer));
             player.play(resource);
           } catch (err) {
-            console.error('❌ [CallStarry TTS Fetch Error]:', err);
+            console.error('❌ [TTS Playback Error]:', err);
             playNextInQueue();
           }
         }
       };
 
-      player.on(AudioPlayerStatus.Idle, () => {
-        playNextInQueue();
-      });
+      player.on(AudioPlayerStatus.Idle, () => playNextInQueue());
 
       const resetInactivityTimer = () => {
         if (inactivityTimeout) clearTimeout(inactivityTimeout);
-        inactivityTimeout = setTimeout(() => {
-          cleanupAndDisconnect();
-        }, 3 * 60 * 1000);
+        inactivityTimeout = setTimeout(() => cleanupAndDisconnect(), 3 * 60 * 1000);
       };
 
       const cleanupAndDisconnect = () => {
@@ -166,28 +131,25 @@ Rules for your voice responses:
 
       resetInactivityTimer();
 
-      // 🚨 CRITICAL FIX: PLAY IMMEDIATE GREETING TO UNBLOCK DISCORD'S VOICE RECEIVER UDP LINK
+      // 🚨 SPEAK INITIAL GREETING TO UNBLOCK DISCORD UDP RECEIVER
       try {
-        const greetingUrl = googleTTS.getAudioUrl("Hey! Starry is connected. I can hear you now, what's up?", {
-          lang: 'en',
-          slow: false,
-          host: 'https://translate.google.com'
+        const greetingUrl = googleTTS.getAudioUrl("Hey! Starry is connected and listening. What is up?", {
+          lang: 'en', slow: false, host: 'https://translate.google.com'
         });
         audioQueue.push(greetingUrl);
         playNextInQueue();
-      } catch (err) {
-        console.error("❌ [CallStarry Initial Greeting Error]:", err);
+      } catch (e) {
+        console.error("❌ Greeting Error:", e);
       }
 
-      // 5. OPUS -> PCM DECODING VOICE ENGINE
+      // 4. VOICE RECEIVER ENGINE
       const receiver = connection.receiver;
 
       receiver.speaking.on('start', (speakingUserId) => {
         if (speakingUserId !== member.id) return;
 
-        console.log(`🎙️ [CallStarry] User ${speakingUserId} started speaking...`);
+        console.log(`🎙️ [CallStarry Log] Speaking detected from User ${speakingUserId}`);
 
-        // Barge-in capability: Interrupt playback if user speaks
         if (player.state.status === AudioPlayerStatus.Playing) {
           audioQueue = [];
           player.stop();
@@ -197,27 +159,29 @@ Rules for your voice responses:
         resetInactivityTimer();
 
         const audioStream = receiver.subscribe(member.id, {
-          end: {
-            behavior: EndBehaviorType.AfterSilence,
-            duration: 900,
-          },
+          end: { behavior: EndBehaviorType.AfterSilence, duration: 800 }
         });
 
-        const opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
-        const pcmChunks = [];
+        // Initialize Opus Decoder with fallbacks
+        let opusDecoder;
+        try {
+          opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
+        } catch (decErr) {
+          console.error("❌ [Opus Decoder Init Failed]:", decErr);
+          return;
+        }
 
+        const pcmChunks = [];
         audioStream.pipe(opusDecoder);
 
         opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
-        opusDecoder.on('error', (err) => console.error('❌ [CallStarry Opus Decoder Error]:', err));
-        audioStream.on('error', (err) => console.error('❌ [CallStarry Audio Stream Error]:', err));
 
         opusDecoder.on('end', async () => {
           const buffer = Buffer.concat(pcmChunks);
-          console.log(`🎙️ [CallStarry] Captured PCM Audio: ${buffer.length} bytes`);
-          
-          if (buffer.length < 3000) {
-            console.log(`⚠️ [CallStarry] Audio too short (${buffer.length} bytes), skipping.`);
+          console.log(`🎙️ [CallStarry Log] Audio Buffer Captured: ${buffer.length} bytes`);
+
+          if (buffer.length < 2000) {
+            console.log(`⚠️ [CallStarry Log] Audio too quiet/short (${buffer.length} bytes). Ignored.`);
             return;
           }
 
@@ -227,71 +191,59 @@ Rules for your voice responses:
             const wavBuffer = pcmToWav(buffer, 48000, 2);
             const base64Audio = wavBuffer.toString("base64");
 
-            const callGemini = async (modelName) => {
-              const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-              const payload = {
-                contents: [
-                  ...chatHistory,
-                  {
-                    role: "user",
-                    parts: [
-                      {
-                        inlineData: {
-                          mimeType: "audio/wav",
-                          data: base64Audio
-                        }
-                      },
-                      { text: "Listen to my speech and respond naturally as Starry in 1-2 spoken sentences." }
-                    ]
-                  }
-                ]
-              };
+            console.log(`📡 [CallStarry Log] Sending ${wavBuffer.length} bytes WAV to Gemini API...`);
 
-              const res = await fetch(endpoint, {
+            const geminiRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+              {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-              });
+                body: JSON.stringify({
+                  contents: [
+                    ...chatHistory,
+                    {
+                      role: "user",
+                      parts: [
+                        { inlineData: { mimeType: "audio/wav", data: base64Audio } },
+                        { text: "Listen to my speech and reply as Starry in 1 short spoken sentence." }
+                      ]
+                    }
+                  ]
+                })
+              }
+            );
 
-              return await res.json();
-            };
-
-            let data = await callGemini("gemini-2.5-flash");
-
+            const data = await geminiRes.json();
+            
             if (data.error) {
-              console.warn("⚠️ [CallStarry] gemini-2.5-flash error, trying gemini-1.5-flash:", data.error.message);
-              data = await callGemini("gemini-1.5-flash");
-            }
-
-            let aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-            if (!aiReply) {
-              console.error("❌ [CallStarry] Gemini returned empty response:", JSON.stringify(data));
+              console.error("❌ [Gemini API Error]:", JSON.stringify(data.error));
               isProcessing = false;
               return;
             }
 
-            console.log(`🗣️ [Starry Reply]: "${aiReply}"`);
+            let aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            console.log(`🗣️ [Starry Reply Generated]: "${aiReply}"`);
+
+            if (!aiReply) {
+              isProcessing = false;
+              return;
+            }
 
             aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
 
             chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
             chatHistory.push({ role: "model", parts: [{ text: aiReply }] });
-
             if (chatHistory.length > 10) chatHistory.splice(1, 2);
 
             const ttsUrls = googleTTS.getAllAudioUrls(aiReply, {
-              lang: 'en',
-              slow: false,
-              host: 'https://translate.google.com',
-              timeout: 10000,
+              lang: 'en', slow: false, host: 'https://translate.google.com'
             });
 
             audioQueue = ttsUrls.map(item => item.url);
             playNextInQueue();
 
           } catch (error) {
-            console.error("❌ [CallStarry Engine Error]:", error);
+            console.error("❌ [CallStarry Engine Exception]:", error);
           } finally {
             isProcessing = false;
           }
@@ -301,19 +253,15 @@ Rules for your voice responses:
       const channelListener = (oldState, newState) => {
         if (oldState.channelId === voiceChannel.id || newState.channelId === voiceChannel.id) {
           const currentHumans = voiceChannel.members.filter(m => !m.user.bot);
-          if (currentHumans.size !== 1) {
-            cleanupAndDisconnect();
-          }
+          if (currentHumans.size !== 1) cleanupAndDisconnect();
         }
       };
 
       interaction.client.on('voiceStateUpdate', channelListener);
 
     } catch (err) {
-      console.error("❌ Error executing /callstarry:", err);
-      await interaction.editReply({ 
-        content: "❌ An error occurred while trying to start the voice call!" 
-      }).catch(() => {});
+      console.error("❌ [CallStarry Execution Error]:", err);
+      await interaction.editReply({ content: "❌ An error occurred starting the call!" }).catch(() => {});
     }
   }
 };
