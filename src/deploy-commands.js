@@ -1,5 +1,12 @@
 require('dotenv').config();
-const { REST, Routes, PermissionFlagsBits, ApplicationCommandType } = require('discord.js');
+const { 
+    REST, 
+    Routes, 
+    PermissionFlagsBits, 
+    ApplicationCommandType, 
+    SlashCommandBuilder, 
+    ChannelType 
+} = require('discord.js');
 
 const ADMIN = PermissionFlagsBits.Administrator.toString();
 const MANAGE_MESSAGES = PermissionFlagsBits.ManageMessages.toString();
@@ -22,8 +29,52 @@ const autoroleCommandDef = {
     default_member_permissions: ADMIN,
     options: autoroleOptions
 };
+
 // ==========================================
-// GIVEAWAY & REROLL SLASH COMMANDS
+// INITIALIZE COMMANDS ARRAY (Fixes ReferenceError)
+// ==========================================
+const commands = [
+    // ================= SOCIAL & TELEMETRY =================
+    { 
+        name: 'hug', 
+        description: '🤗 Give someone a warm anime hug (Works in DMs too!)', 
+        contexts: [0, 1, 2],       
+        integration_types: [0, 1], 
+        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to hug' }] 
+    },
+    { 
+        name: 'kiss', 
+        description: '💋 Give someone a sweet anime kiss (Works in DMs too!)', 
+        contexts: [0, 1, 2], 
+        integration_types: [0, 1],
+        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }] 
+    },
+    { 
+        name: 'pat', 
+        description: '✋ Give someone a gentle anime headpat (Works in DMs too!)', 
+        contexts: [0, 1, 2],       
+        integration_types: [0, 1], 
+        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to pat' }] 
+    },
+    { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
+
+    // ================= MUSIC & VOICE AI =================
+    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
+    { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
+    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
+    { name: 'pause', description: 'Pause the currently playing song' },
+    { name: 'resume', description: 'Resume the paused song' },
+    { name: 'skip', description: 'Skip the current song' },
+    { name: 'stop', description: 'Stop the music and clear the queue' },
+    { name: 'queue', description: 'View the current music queue' },
+    { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
+    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
+
+    // ================= MODERATION & SECURITY =================
+    { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
+];
+// ==========================================
+// GIVEAWAY & REROLL SLASH COMMAND BUILDERS
 // ==========================================
 commands.push(
     new SlashCommandBuilder()
@@ -70,55 +121,16 @@ commands.push(
         .toJSON()
 );
 
-const commands = [
-    // ================= SOCIAL & TELEMETRY =================
-    { 
-        name: 'hug', 
-        description: '🤗 Give someone a warm anime hug (Works in DMs too!)', 
-        contexts: [0, 1, 2],       // 0 = Guild, 1 = Bot DM, 2 = Private Channel
-        integration_types: [0, 1], // 0 = Guild Install, 1 = User Install
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to hug' }] 
-    },
-    { 
-        name: 'kiss', 
-        description: '💋 Give someone a sweet anime kiss (Works in DMs too!)', 
-        contexts: [0, 1, 2], 
-        integration_types: [0, 1],
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }] 
-    },
-    { 
-        name: 'pat', 
-        description: '✋ Give someone a gentle anime headpat (Works in DMs too!)', 
-        contexts: [0, 1, 2],       
-        integration_types: [0, 1], 
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to pat' }] 
-    },
-    { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
-
-    // ================= MUSIC & VOICE AI =================
-    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
-
-    { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
-    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
-    { name: 'pause', description: 'Pause the currently playing song' },
-    { name: 'resume', description: 'Resume the paused song' },
-    { name: 'skip', description: 'Skip the current song' },
-    { name: 'stop', description: 'Stop the music and clear the queue' },
-    { name: 'queue', description: 'View the current music queue' },
-    { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
-
-    // ================= MODERATION & SECURITY =================
-    { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] },
-
-    // ================= ECONOMY & XP =================
+// ==========================================
+// ECONOMY, XP & MASTER MODERATION
+// ==========================================
+commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
     { name: 'prestige', description: 'Reset your level to gain Prestige 👑 and permanent bonus multipliers!' },
     { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check your active pet and its happiness level', type: 1 }, { name: 'equip', description: 'Equip a different pet from your inventory', type: 1, options: [{ name: 'name', description: 'The exact name of the pet you want to equip', type: 3, required: true }] }] },
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
-    // ================= UNIFIED MODERATION =================
     { name: 'setup-starry', description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.', default_member_permissions: '8' },
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
     { name: 'emergency-lockdown', description: '🚨 EMERGENCY: Freezes the entire server. Nobody can type or join VC. (Admins Only)', default_member_permissions: '8' },
@@ -148,8 +160,12 @@ const commands = [
     { name: 'protect', description: 'Protect a member from staff actions', options: [{ name: 'user', type: 6, required: true, description: 'Member to protect' }] },
     { name: 'unprotect', description: 'Remove a member’s protection', options: [{ name: 'user', type: 6, required: true, description: 'Member to unprotect' }] },
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create a role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }, { name: 'color', type: 3, required: false, description: 'Hex color, for example #FF0000' }] }, { name: 'delete', type: 1, description: 'Delete a role', options: [{ name: 'role', type: 8, required: true, description: 'Role to delete' }] }, { name: 'give', type: 1, description: 'Give a role to a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to give' }] }, { name: 'remove', type: 1, description: 'Remove a role from a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to remove' }] }] },
-    { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] },
-    // ================= SETUP / UTILITIES =================
+    { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] }
+);
+// ==========================================
+// SETUP, UTILITIES, PREMIUM & WEB DIRECTORY
+// ==========================================
+commands.push(
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel for logs' }] },
     { name: 'setlevelchannel', description: 'Set a specific channel for level-up notifications', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send level-up alerts to' }] },
     { name: 'setupvc', description: 'Configure a join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel to use as the hub' }] },
@@ -159,7 +175,6 @@ const commands = [
     { name: 'setupcount', description: 'Set up the counting game', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Counting-game channel' }] },
     { name: 'ticketsetup', description: 'Create the support-ticket panel', default_member_permissions: MANAGE_CHANNELS },
     { name: 'applysetup', description: 'Create the application panel', default_member_permissions: MANAGE_CHANNELS },
-    { name: 'giveaway', description: 'Start a giveaway', default_member_permissions: ADMIN, options: [{ name: 'duration', type: 3, required: true, description: 'Duration, for example 10m, 2h, or 1d' }, { name: 'winners', type: 4, required: true, description: 'Number of winners', min_value: 1 }, { name: 'prize', type: 3, required: true, description: 'Giveaway prize' }] },
     { name: 'toggleleveling', description: 'Enable or disable the leveling system', default_member_permissions: ADMIN, options: [{ name: 'state', type: 3, required: false, description: 'Desired state; omit to toggle', choices: [{ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }] }] },
     { name: 'rank', description: 'Show a member’s rank', options: [{ name: 'target', type: 6, required: false, description: 'Member; defaults to you' }] },
     { name: 'messages', description: 'Show a member’s message count', options: [{ name: 'target', type: 6, required: false, description: 'Member; defaults to you' }] },
@@ -186,7 +201,11 @@ const commands = [
     { name: 'set-listing', description: 'Configure how your server appears on the Starry Server Web List!', default_member_permissions: ADMIN, options: [{ name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' }, { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }] },
     { name: 'bump', description: 'Bump this server to the top of the Starry Global Web List!' },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
-];
+);
+
+// ==========================================
+// REST DISCORD COMMAND DEPLOYER FUNCTION
+// ==========================================
 async function deployCommands() {
     const token = process.env.TOKEN;
     let clientId = process.env.CLIENT_ID;
@@ -196,7 +215,6 @@ async function deployCommands() {
         throw new Error('🛑 CRITICAL: TOKEN environment variable must be set before deploying commands.');
     }
 
-    // Auto-decode Client ID from Bot Token if CLIENT_ID is missing or empty
     if (!clientId) {
         try {
             clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8');
@@ -208,7 +226,6 @@ async function deployCommands() {
 
     const rest = new REST({ version: '10' }).setToken(token);
 
-    // Check terminal execution flags (--global / --guild)
     const isGlobal = process.argv.includes('--global') || (!guildId && process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true');
     const isLocal = guildId && guildId !== 'PASTE_YOUR_SERVER_ID_HERE' && !isGlobal;
 
