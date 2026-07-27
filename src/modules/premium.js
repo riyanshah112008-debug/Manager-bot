@@ -1,9 +1,10 @@
-const { EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const mongoose = require('mongoose');
 
-// 🗄️ 1. Define the Permanent Premium Schema for MongoDB
+// 🗄️ 1. Flexible Schema supporting both Guild and User Premium
 const PremiumSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
+    targetId: { type: String, required: true, unique: true }, // Can be Guild ID or User ID
+    type: { type: String, enum: ['guild', 'user'], default: 'guild' },
     isPremium: { type: Boolean, default: true },
     activatedAt: { type: Date, default: Date.now }
 });
@@ -11,44 +12,50 @@ const PremiumSchema = new mongoose.Schema({
 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds', PremiumSchema);
 
 module.exports = (client) => {
-    // 🧠 2. Initialize a fast local cache
+    // 🧠 2. Instant Memory Cache
     const premiumCache = new Set();
 
-    // 📥 3. ROBUST DB LOADER: Loads immediately if already connected, or waits if connecting
+    // 👑 3. Multi-Owner Authorization List
+    const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
+    if (process.env.OWNER_ID && !BOT_OWNERS.includes(process.env.OWNER_ID)) {
+        BOT_OWNERS.push(process.env.OWNER_ID);
+    }
+
+    // 📥 4. DB Cache Loader
     const loadPremiumCache = async () => {
         try {
-            const premiumGuilds = await PremiumModel.find({ isPremium: true });
-            premiumGuilds.forEach(g => premiumCache.add(g.guildId));
-            console.log(`💎 Loaded ${premiumCache.size} Premium servers from MongoDB!`);
+            const premiumRecords = await PremiumModel.find({ isPremium: true });
+            premiumCache.clear();
+            premiumRecords.forEach(record => premiumCache.add(record.targetId));
+            console.log(`💎 Loaded ${premiumCache.size} Premium entities into high-speed RAM cache!`);
         } catch (err) {
-            console.error('❌ Failed to load premium servers from DB:', err);
+            console.error('❌ Failed to load premium entities from DB:', err);
         }
     };
 
     if (mongoose.connection.readyState === 1) {
-        loadPremiumCache(); // DB is already open, load immediately!
+        loadPremiumCache();
     } else {
         mongoose.connection.once('open', loadPremiumCache);
     }
 
-    // 🔗 4. Attach a fast check function to the client object
-    client.isPremium = (guildId) => {
-        return premiumCache.has(guildId);
+    // ⚡ 5. Master Sync Fast Check
+    client.isPremium = (guildId, userId = null) => {
+        // Bot Owners bypass all Premium checks globally
+        if (userId && BOT_OWNERS.includes(userId)) return true;
+        // Check if Guild ID or User ID is in cache
+        if (guildId && premiumCache.has(guildId)) return true;
+        if (userId && premiumCache.has(userId)) return true;
+        return false;
     };
 
     // =====================================================================
-    // 💎 5. GLOBAL PREMIUM MODERATION DM SYSTEM
+    // 💎 6. GLOBAL PREMIUM MODERATION DM SYSTEM
     // =====================================================================
-    /**
-     * Sends a DM to a user before a mod action. Automatically scales quality based on Premium status.
-     * Usage anywhere in your bot: await client.sendPremiumModDM(member, mod, 'ban', 'reason', 'Permanent', guild, '1042', 'appeal_url');
-     */
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
         const actionType = action.toLowerCase();
-        const isGuildPremium = client.isPremium(guild.id);
+        const isGuildPremium = client.isPremium(guild.id, member.id);
 
-        // --- FREE TIER FALLBACK ---
-        // If the server isn't premium, send a clean but basic DM without the advanced Zendesk layout or buttons
         if (!isGuildPremium) {
             const basicEmbed = new EmbedBuilder()
                 .setColor('#2F3136')
@@ -69,7 +76,6 @@ module.exports = (client) => {
             }
         }
 
-        // --- PREMIUM TIER EMBED (Wick-Killer Layout) ---
         let embedColor, actionTitle, actionEmoji, durationDisplay;
 
         switch(actionType) {
@@ -108,7 +114,7 @@ module.exports = (client) => {
         }
 
         if (actionType !== 'ban') {
-            row.addComponents(new ButtonBuilder().setLabel('Read Server Rules').setURL('https://discord.com').setStyle(ButtonStyle.Link).setEmoji('📜')); // Replace with your default rules link
+            row.addComponents(new ButtonBuilder().setLabel('Read Server Rules').setURL('https://discord.com').setStyle(ButtonStyle.Link).setEmoji('📜'));
         }
 
         if (row.components.length > 0) components.push(row);
@@ -117,12 +123,12 @@ module.exports = (client) => {
             await member.send({ embeds: [modEmbed], components: components });
             return true; 
         } catch (error) {
-            return false; // Silently fails if user has DMs disabled
+            return false;
         }
     };
 
     // =====================================================================
-    // --- COMMAND HANDLING WITH INPUT TRIMMING ---
+    // 🎛️ 7. PREMIUM SLASH COMMAND HANDLERS
     // =====================================================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
@@ -131,72 +137,52 @@ module.exports = (client) => {
 
         // --- CHECK PREMIUM ---
         if (commandName === 'premiumcheck') {
-            const enabled = premiumCache.has(guildId);
+            const enabled = client.isPremium(guildId, user.id);
             return interaction.reply({
                 content: enabled
-                    ? '💎 **Premium is active on this server.**'
-                    : 'ℹ️ **Premium is not active on this server.**',
+                    ? '💎 **Premium is ACTIVE on this server or for your account!**'
+                    : 'ℹ️ **Premium is NOT active on this server.** Use `/activatepremium` if you are a bot owner.',
                 ephemeral: true
             });
         }
 
         // --- ACTIVATE PREMIUM ---
         if (commandName === 'activatepremium') {
-            try {
-                const isOwner = typeof client.isOwner === 'function' ? client.isOwner(user.id) : user.id === process.env.OWNER_ID;
-                if (!isOwner) {
-                    return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
-                }
-
-                await interaction.deferReply({ ephemeral: true });
-
-                // 🛡️ TRIM SHIELD: Cleans up accidental spaces from copy-pasting IDs
-                const rawInputId = options.getString('server_id');
-                const targetGuildId = rawInputId ? rawInputId.trim() : guildId;
-
-                // Save permanently to MongoDB
-                await PremiumModel.findOneAndUpdate(
-                    { guildId: targetGuildId },
-                    { isPremium: true },
-                    { upsert: true, new: true }
-                );
-
-                // Update memory cache instantly
-                premiumCache.add(targetGuildId);
-
-                return interaction.editReply({ content: `✅ **SUCCESS:** Premium has been enabled for server \`${targetGuildId}\`!` });
-            } catch (error) {
-                console.error('Premium Activation Error:', error);
-                return interaction.editReply({ content: '❌ An error occurred processing the premium activation.' }).catch(()=>{});
+            if (!BOT_OWNERS.includes(user.id)) {
+                return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
             }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const rawInputId = options.getString('server_id');
+            const targetId = rawInputId ? rawInputId.trim() : guildId;
+
+            await PremiumModel.findOneAndUpdate(
+                { targetId: targetId },
+                { targetId: targetId, isPremium: true, type: 'guild' },
+                { upsert: true, new: true }
+            );
+
+            premiumCache.add(targetId);
+
+            return interaction.editReply({ content: `✅ **SUCCESS:** Premium has been activated for target ID \`${targetId}\`!` });
         }
 
         // --- DEACTIVATE PREMIUM ---
         if (commandName === 'deactivatepremium' || commandName === 'removepremium') {
-            try {
-                // 👑 MULTI-OWNER CHECK: Verified against client.isOwner()
-                const isOwner = typeof client.isOwner === 'function' ? client.isOwner(user.id) : user.id === process.env.OWNER_ID;
-                if (!isOwner) {
-                    return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
-                }
-
-                await interaction.deferReply({ ephemeral: true });
-
-                // 🛡️ TRIM SHIELD: Cleans up accidental spaces from copy-pasting IDs
-                const rawInputId = options.getString('server_id');
-                const targetGuildId = rawInputId ? rawInputId.trim() : guildId;
-
-                // Remove permanently from MongoDB
-                await PremiumModel.deleteOne({ guildId: targetGuildId });
-
-                // Remove from memory cache instantly
-                premiumCache.delete(targetGuildId);
-
-                return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status has been removed from server \`${targetGuildId}\`.` });
-            } catch (error) {
-                console.error('Premium Deactivation Error:', error);
-                return interaction.editReply({ content: '❌ An error occurred processing the premium deactivation.' }).catch(()=>{});
+            if (!BOT_OWNERS.includes(user.id)) {
+                return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
             }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const rawInputId = options.getString('server_id');
+            const targetId = rawInputId ? rawInputId.trim() : guildId;
+
+            await PremiumModel.deleteOne({ targetId: targetId });
+            premiumCache.delete(targetId);
+
+            return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status has been removed from target ID \`${targetId}\`.` });
         }
     });
 };
