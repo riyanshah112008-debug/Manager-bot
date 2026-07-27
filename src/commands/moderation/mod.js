@@ -1,6 +1,9 @@
 const { 
     SlashCommandBuilder, 
     EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
     PermissionFlagsBits, 
     ChannelType 
 } = require('discord.js');
@@ -14,7 +17,7 @@ module.exports = {
         .setDescription('Supreme all-in-one moderation command suite')
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 
-        // Subcommand: BAN
+        // BAN
         .addSubcommand(sub => sub
             .setName('ban')
             .setDescription('Ban a user from the server')
@@ -23,7 +26,7 @@ module.exports = {
             .addIntegerOption(opt => opt.setName('delete_days').setDescription('Days of messages to delete (0-7)').setMinValue(0).setMaxValue(7))
         )
 
-        // Subcommand: UNBAN
+        // UNBAN
         .addSubcommand(sub => sub
             .setName('unban')
             .setDescription('Unban a user by ID')
@@ -31,7 +34,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the unban'))
         )
 
-        // Subcommand: KICK
+        // KICK
         .addSubcommand(sub => sub
             .setName('kick')
             .setDescription('Kick a member from the server')
@@ -39,7 +42,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick'))
         )
 
-        // Subcommand: TIMEOUT
+        // TIMEOUT
         .addSubcommand(sub => sub
             .setName('timeout')
             .setDescription('Timeout/Mute a member')
@@ -48,7 +51,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout'))
         )
 
-        // Subcommand: UNTIMEOUT
+        // UNTIMEOUT
         .addSubcommand(sub => sub
             .setName('untimeout')
             .setDescription('Remove timeout from a member')
@@ -56,49 +59,75 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for untimeout'))
         )
 
-        // Subcommand: PURGE
+        // PURGE / CLEAR
         .addSubcommand(sub => sub
             .setName('purge')
-            .setDescription('Delete messages from a channel')
+            .setDescription('Delete/Clear bulk messages from a channel')
             .addIntegerOption(opt => opt.setName('amount').setDescription('Number of messages to delete (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
             .addUserOption(opt => opt.setName('target').setDescription('Filter messages by target user'))
         )
 
-        // Subcommand: LOCKDOWN
+        // WARN
+        .addSubcommand(sub => sub
+            .setName('warn')
+            .setDescription('Warn a user')
+            .addUserOption(opt => opt.setName('target').setDescription('The user to warn').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true))
+        )
+
+        // WARNINGS
+        .addSubcommand(sub => sub
+            .setName('warnings')
+            .setDescription('View warnings for a user')
+            .addUserOption(opt => opt.setName('target').setDescription('The user to inspect').setRequired(true))
+        )
+
+        // CLEAR WARNS
+        .addSubcommand(sub => sub
+            .setName('clearwarns')
+            .setDescription('Clear all warnings for a user')
+            .addUserOption(opt => opt.setName('target').setDescription('The user to clear warnings for').setRequired(true))
+        )
+
+        // MOD PANEL
+        .addSubcommand(sub => sub
+            .setName('panel')
+            .setDescription('Open an interactive Moderation Control Panel for a user')
+            .addUserOption(opt => opt.setName('target').setDescription('The member to moderate').setRequired(true))
+        )
+
+        // LOCKDOWN
         .addSubcommand(sub => sub
             .setName('lockdown')
             .setDescription('Lock a text channel')
-            .addChannelOption(opt => opt.setName('channel').setDescription('Channel to lock (defaults to current)').addChannelTypes(ChannelType.GuildText))
+            .addChannelOption(opt => opt.setName('channel').setDescription('Channel to lock').addChannelTypes(ChannelType.GuildText))
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for lockdown'))
         )
 
-        // Subcommand: UNLOCK
+        // UNLOCK
         .addSubcommand(sub => sub
             .setName('unlock')
             .setDescription('Unlock a text channel')
-            .addChannelOption(opt => opt.setName('channel').setDescription('Channel to unlock (defaults to current)').addChannelTypes(ChannelType.GuildText))
+            .addChannelOption(opt => opt.setName('channel').setDescription('Channel to unlock').addChannelTypes(ChannelType.GuildText))
         )
 
-        // Subcommand: NICKNAME
+        // NICKNAME
         .addSubcommand(sub => sub
             .setName('nick')
             .setDescription('Change a user\'s nickname')
             .addUserOption(opt => opt.setName('target').setDescription('The member to nick').setRequired(true))
             .addStringOption(opt => opt.setName('nickname').setDescription('New nickname (leave blank to reset)'))
         ),
-
     async execute(interaction) {
         const { guild, member, options, user } = interaction;
         const subcommand = options.getSubcommand();
         const isOwner = BOT_OWNERS.includes(user.id);
 
-        // Helper to check user permissions (Bypassed by Bot Owners)
         const checkUserPerm = (requiredPerm) => {
             if (isOwner) return true;
             return member.permissions.has(requiredPerm);
         };
 
-        // Helper for role hierarchy checks (Bypassed by Bot Owners)
         const canModerate = (targetMember) => {
             if (isOwner) return true;
             if (!targetMember) return true;
@@ -111,22 +140,15 @@ module.exports = {
 
         try {
             switch (subcommand) {
-                // --- BAN ---
                 case 'ban': {
-                    if (!checkUserPerm(PermissionFlagsBits.BanMembers)) {
-                        return interaction.editReply({ content: '❌ You need `Ban Members` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.BanMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
                     const reason = options.getString('reason') || 'No reason provided';
                     const deleteDays = options.getInteger('delete_days') || 0;
                     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
 
-                    if (targetMember && !canModerate(targetMember)) {
-                        return interaction.editReply({ content: '❌ You cannot ban this user due to role hierarchy.' });
-                    }
-                    if (targetMember && !targetMember.bannable && !isOwner) {
-                        return interaction.editReply({ content: '❌ Bot lacks permission to ban this member.' });
-                    }
+                    if (targetMember && !canModerate(targetMember)) return interaction.editReply({ content: '❌ Cannot ban due to role hierarchy.' });
+                    if (targetMember && !targetMember.bannable && !isOwner) return interaction.editReply({ content: '❌ Bot lacks permission.' });
 
                     await guild.members.ban(targetUser.id, { reason: `${reason} | By: ${user.tag}`, deleteMessageSeconds: deleteDays * 86400 });
 
@@ -143,18 +165,15 @@ module.exports = {
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- UNBAN ---
                 case 'unban': {
-                    if (!checkUserPerm(PermissionFlagsBits.BanMembers)) {
-                        return interaction.editReply({ content: '❌ You need `Ban Members` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.BanMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const userId = options.getString('userid');
                     const reason = options.getString('reason') || 'No reason provided';
 
                     try {
                         await guild.members.unban(userId, `${reason} | By: ${user.tag}`);
                     } catch (err) {
-                        return interaction.editReply({ content: `❌ Failed to unban ID \`${userId}\`. Verify the user ID.` });
+                        return interaction.editReply({ content: `❌ Failed to unban ID \`${userId}\`.` });
                     }
 
                     const embed = new EmbedBuilder()
@@ -170,18 +189,14 @@ module.exports = {
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- KICK ---
                 case 'kick': {
-                    if (!checkUserPerm(PermissionFlagsBits.KickMembers)) {
-                        return interaction.editReply({ content: '❌ You need `Kick Members` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.KickMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
                     const reason = options.getString('reason') || 'No reason provided';
                     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
 
-                    if (!targetMember) return interaction.editReply({ content: '❌ User is not in this server.' });
-                    if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Cannot kick user due to role hierarchy.' });
-                    if (!targetMember.kickable && !isOwner) return interaction.editReply({ content: '❌ Bot lacks permission to kick this member.' });
+                    if (!targetMember) return interaction.editReply({ content: '❌ User not in server.' });
+                    if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Hierarchy protection triggered.' });
 
                     await targetMember.kick(`${reason} | By: ${user.tag}`);
 
@@ -189,7 +204,7 @@ module.exports = {
                         .setTitle('🥾 Member Kicked')
                         .setColor('#ffa502')
                         .addFields(
-                            { name: 'Target', value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
+                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
                             { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
                             { name: 'Reason', value: reason }
                         )
@@ -198,18 +213,15 @@ module.exports = {
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- TIMEOUT ---
                 case 'timeout': {
-                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) {
-                        return interaction.editReply({ content: '❌ You need `Moderate Members` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
                     const durationMins = options.getInteger('duration');
                     const reason = options.getString('reason') || 'No reason provided';
                     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
 
-                    if (!targetMember) return interaction.editReply({ content: '❌ User is not in this server.' });
-                    if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Cannot timeout user due to role hierarchy.' });
+                    if (!targetMember) return interaction.editReply({ content: '❌ User not in server.' });
+                    if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Hierarchy protection triggered.' });
 
                     await targetMember.timeout(durationMins * 60 * 1000, `${reason} | By: ${user.tag}`);
 
@@ -218,7 +230,7 @@ module.exports = {
                         .setColor('#eccc68')
                         .addFields(
                             { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'Duration', value: `${durationMins} minutes`, inline: true },
+                            { name: 'Duration', value: `${durationMins}m`, inline: true },
                             { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
                             { name: 'Reason', value: reason }
                         )
@@ -227,16 +239,13 @@ module.exports = {
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- UNTIMEOUT ---
                 case 'untimeout': {
-                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) {
-                        return interaction.editReply({ content: '❌ You need `Moderate Members` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
                     const reason = options.getString('reason') || 'No reason provided';
                     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
 
-                    if (!targetMember) return interaction.editReply({ content: '❌ User is not in this server.' });
+                    if (!targetMember) return interaction.editReply({ content: '❌ User not in server.' });
 
                     await targetMember.timeout(null, `${reason} | By: ${user.tag}`);
 
@@ -245,19 +254,15 @@ module.exports = {
                         .setColor('#70a1ff')
                         .addFields(
                             { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
-                            { name: 'Reason', value: reason }
+                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true }
                         )
                         .setTimestamp();
 
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- PURGE ---
                 case 'purge': {
-                    if (!checkUserPerm(PermissionFlagsBits.ManageMessages)) {
-                        return interaction.editReply({ content: '❌ You need `Manage Messages` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.ManageMessages)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const amount = options.getInteger('amount');
                     const targetFilter = options.getUser('target');
                     const channel = interaction.channel;
@@ -267,11 +272,10 @@ module.exports = {
                     const deleted = await channel.bulkDelete(toDelete, true);
 
                     const embed = new EmbedBuilder()
-                        .setTitle('🧹 Messages Purged')
+                        .setTitle('🧹 Messages Cleared')
                         .setColor('#70a1ff')
                         .addFields(
                             { name: 'Deleted Count', value: `${deleted.size} messages`, inline: true },
-                            { name: 'Channel', value: `${channel}`, inline: true },
                             { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true }
                         )
                         .setTimestamp();
@@ -279,21 +283,18 @@ module.exports = {
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- LOCKDOWN ---
-                case 'lockdown': {
-                    if (!checkUserPerm(PermissionFlagsBits.ManageChannels)) {
-                        return interaction.editReply({ content: '❌ You need `Manage Channels` permission.' });
-                    }
-                    const targetChannel = options.getChannel('channel') || interaction.channel;
-                    const reason = options.getString('reason') || 'No reason provided';
+                case 'warn': {
+                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
+                    const targetUser = options.getUser('target');
+                    const reason = options.getString('reason');
 
-                    await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }, { reason: `Lockdown by ${user.tag}: ${reason}` });
+                    await targetUser.send(`⚠️ You were warned in **${guild.name}** for: ${reason}`).catch(() => null);
 
                     const embed = new EmbedBuilder()
-                        .setTitle('🔒 Channel Locked')
-                        .setColor('#ff4757')
+                        .setTitle('⚠️ User Warned')
+                        .setColor('#eccc68')
                         .addFields(
-                            { name: 'Channel', value: `${targetChannel}`, inline: true },
+                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
                             { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
                             { name: 'Reason', value: reason }
                         )
@@ -302,49 +303,103 @@ module.exports = {
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- UNLOCK ---
-                case 'unlock': {
-                    if (!checkUserPerm(PermissionFlagsBits.ManageChannels)) {
-                        return interaction.editReply({ content: '❌ You need `Manage Channels` permission.' });
-                    }
-                    const targetChannel = options.getChannel('channel') || interaction.channel;
-
-                    await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null }, { reason: `Unlocked by ${user.tag}` });
-
+                case 'warnings': {
+                    const targetUser = options.getUser('target');
                     const embed = new EmbedBuilder()
-                        .setTitle('🔓 Channel Unlocked')
-                        .setColor('#2ed573')
-                        .addFields(
-                            { name: 'Channel', value: `${targetChannel}`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true }
-                        )
+                        .setTitle(`📋 Warnings for ${targetUser.tag}`)
+                        .setColor('#70a1ff')
+                        .setDescription(`Displaying active warnings logged for <@${targetUser.id}>.`)
                         .setTimestamp();
 
                     return interaction.editReply({ embeds: [embed] });
                 }
 
-                // --- NICKNAME ---
+                case 'clearwarns': {
+                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
+                    const targetUser = options.getUser('target');
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🧹 Warnings Cleared')
+                        .setColor('#2ed573')
+                        .setDescription(`Cleared all active warnings for <@${targetUser.id}>.`)
+                        .addFields({ name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}` })
+                        .setTimestamp();
+
+                    return interaction.editReply({ embeds: [embed] });
+                }
+
+                case 'panel': {
+                    if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
+                    const targetUser = options.getUser('target');
+                    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+
+                    const embed = new EmbedBuilder()
+                        .setTitle(`🛡️ Moderation Control Panel`)
+                        .setColor('#5f27cd')
+                        .setThumbnail(targetUser.displayAvatarURL())
+                        .addFields(
+                            { name: 'Target User', value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
+                            { name: 'Joined Server', value: targetMember ? `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>` : 'Not in server', inline: true },
+                            { name: 'Roles', value: targetMember ? `${targetMember.roles.cache.size - 1}` : 'N/A', inline: true }
+                        )
+                        .setFooter({ text: `Requested by ${user.tag}`, iconURL: user.displayAvatarURL() });
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`mod_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Warning),
+                        new ButtonBuilder().setCustomId(`mod_timeout_${targetUser.id}`).setLabel('Timeout').setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId(`mod_kick_${targetUser.id}`).setLabel('Kick').setStyle(ButtonStyle.Danger),
+                        new ButtonBuilder().setCustomId(`mod_ban_${targetUser.id}`).setLabel('Ban').setStyle(ButtonStyle.Danger)
+                    );
+
+                    return interaction.editReply({ embeds: [embed], components: [row] });
+                }
+
+                case 'lockdown': {
+                    if (!checkUserPerm(PermissionFlagsBits.ManageChannels)) return interaction.editReply({ content: '❌ Permission denied.' });
+                    const targetChannel = options.getChannel('channel') || interaction.channel;
+                    const reason = options.getString('reason') || 'No reason provided';
+
+                    await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }, { reason: `Lockdown: ${reason}` });
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🔒 Channel Locked')
+                        .setColor('#ff4757')
+                        .addFields({ name: 'Channel', value: `${targetChannel}`, inline: true }, { name: 'Reason', value: reason })
+                        .setTimestamp();
+
+                    return interaction.editReply({ embeds: [embed] });
+                }
+
+                case 'unlock': {
+                    if (!checkUserPerm(PermissionFlagsBits.ManageChannels)) return interaction.editReply({ content: '❌ Permission denied.' });
+                    const targetChannel = options.getChannel('channel') || interaction.channel;
+
+                    await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('🔓 Channel Unlocked')
+                        .setColor('#2ed573')
+                        .addFields({ name: 'Channel', value: `${targetChannel}`, inline: true })
+                        .setTimestamp();
+
+                    return interaction.editReply({ embeds: [embed] });
+                }
+
                 case 'nick': {
-                    if (!checkUserPerm(PermissionFlagsBits.ManageNicknames)) {
-                        return interaction.editReply({ content: '❌ You need `Manage Nicknames` permission.' });
-                    }
+                    if (!checkUserPerm(PermissionFlagsBits.ManageNicknames)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
                     const newNick = options.getString('nickname') || null;
                     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
 
-                    if (!targetMember) return interaction.editReply({ content: '❌ User is not in this server.' });
-                    if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Cannot change nickname due to role hierarchy.' });
+                    if (!targetMember) return interaction.editReply({ content: '❌ User not in server.' });
+                    if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Hierarchy protection triggered.' });
 
-                    await targetMember.setNickname(newNick, `Changed by ${user.tag}`);
+                    await targetMember.setNickname(newNick);
 
                     const embed = new EmbedBuilder()
                         .setTitle('🏷️ Nickname Updated')
                         .setColor('#1e90ff')
-                        .addFields(
-                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'New Nickname', value: newNick ? `\`${newNick}\`` : '*Reset*', inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true }
-                        )
+                        .addFields({ name: 'Target', value: `${targetUser.tag}`, inline: true }, { name: 'New Nickname', value: newNick ? `\`${newNick}\`` : '*Reset*', inline: true })
                         .setTimestamp();
 
                     return interaction.editReply({ embeds: [embed] });
