@@ -22,6 +22,53 @@ const autoroleCommandDef = {
     default_member_permissions: ADMIN,
     options: autoroleOptions
 };
+// ==========================================
+// GIVEAWAY & REROLL SLASH COMMANDS
+// ==========================================
+commands.push(
+    new SlashCommandBuilder()
+        .setName('giveaway')
+        .setDescription('🎉 Start a supreme giveaway with animated media banners!')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addStringOption(option =>
+            option.setName('duration')
+                .setDescription('Duration of the giveaway (e.g. 10s, 10m, 2h, 1d)')
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName('prize')
+                .setDescription('The prize being given away')
+                .setRequired(true)
+        )
+        .addIntegerOption(option =>
+            option.setName('winners')
+                .setDescription('Number of winners (default: 1)')
+                .setRequired(false)
+        )
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('Target channel for the giveaway (default: current channel)')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('reroll')
+        .setDescription('🔄 Reroll a new winner for a concluded giveaway!')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addStringOption(option =>
+            option.setName('message_id')
+                .setDescription('The Message ID of the giveaway to reroll')
+                .setRequired(true)
+        )
+        .addIntegerOption(option =>
+            option.setName('winners')
+                .setDescription('Number of winners to reroll (default: 1)')
+                .setRequired(false)
+        )
+        .toJSON()
+);
 
 const commands = [
     // ================= SOCIAL & TELEMETRY =================
