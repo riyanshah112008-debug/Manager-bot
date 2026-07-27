@@ -3,27 +3,28 @@ const {
   joinVoiceChannel, 
   createAudioPlayer, 
   createAudioResource, 
-  AudioPlayerStatus, 
+  AudioPlayerStatus,
   EndBehaviorType,
   getVoiceConnection,
   VoiceConnectionStatus
 } = require('@discordjs/voice');
 const prism = require('prism-media');
-const { OpenAI } = require('openai');
-const { Readable } = require('stream');
+const { GoogleGenAI } = require('@google/genai');
+const googleTTS = require('google-tts-api');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Initialize Gemini SDK with your existing GEMINI_API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('callstarry')
-    .setDescription('Call Starry for a private 1-on-1 voice conversation!'),
+    .setDescription('Call Starry for a private 1-on-1 human-like voice call!'),
 
   async execute(interaction) {
     const member = interaction.member;
-    const voiceChannel = member.voice.channel;
+    const voiceChannel = member.voice?.channel;
 
-    // 1. Check if user is in a Voice Channel
+    // 1. Validation Checks
     if (!voiceChannel) {
       return interaction.reply({ 
         content: "❌ You need to be in a voice channel first to call me!", 
@@ -31,20 +32,18 @@ module.exports = {
       });
     }
 
-    // 2. Check bot permissions
     const permissions = voiceChannel.permissionsFor(interaction.client.user);
     if (!permissions.has(PermissionFlagsBits.Connect) || !permissions.has(PermissionFlagsBits.Speak)) {
-      return interaction.reply({
-        content: "❌ I don't have permissions to connect and speak in your voice channel!",
-        ephemeral: true
+      return interaction.reply({ 
+        content: "❌ I don't have permissions to connect and speak in your voice channel!", 
+        ephemeral: true 
       });
     }
 
-    // 3. Verify user is ALONE in VC (excluding bots)
     const humanMembers = voiceChannel.members.filter(m => !m.user.bot);
     if (humanMembers.size > 1) {
       return interaction.reply({ 
-        content: "🔒 `/callstarry` is for 1-on-1 private calls. Please call me when you're alone in VC, or join an empty voice channel!", 
+        content: "🔒 `/callstarry` is for private 1-on-1 calls. Please call me when you are alone in VC!", 
         ephemeral: true 
       });
     }
@@ -53,59 +52,95 @@ module.exports = {
       content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` 
     });
 
-    // 4. Connect to VC with undeafened audio receiver
+    // 2. Join Voice Channel
     const connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: interaction.guild.id,
       adapterCreator: interaction.guild.voiceAdapterCreator,
-      selfDeaf: false, // Critical: must be false to listen to user speech
+      selfDeaf: false, // Critical: must be false to listen to user voice
       selfMute: false
     });
 
     const player = createAudioPlayer();
     connection.subscribe(player);
 
-    // Initial conversation context giving Starry human-like behavior and emotions
-    const conversationHistory = [
-      { 
-        role: "system", 
-        content: `You are Starry, a warm, energetic, and deeply empathetic AI friend chatting on a Discord voice call.
-Personality traits:
-- Speak casually like a real friend on a phone call.
-- Keep responses short and conversational (1 to 3 short sentences max) so the dialogue feels natural.
-- Express human emotions: use gentle laughter, enthusiasm, sympathy, and conversational starters ("Oh wow", "Yeah totally", "Hmm, let me think").
-- Do NOT sound like an AI assistant or give long bulleted lists.` 
-      }
-    ];
-
+    // Audio Playback Queue for smooth multi-sentence TTS playback
+    let audioQueue = [];
     let isProcessing = false;
     let inactivityTimeout = null;
 
-    // Reset inactivity timer (disconnects after 3 mins of silence)
+    // Chat context for realistic voice conversation
+    const chatHistory = [
+      {
+        role: "user",
+        parts: [{ 
+          text: `You are Starry, a warm, witty, and empathetic AI friend having a 1-on-1 voice call on Discord. 
+Rules for your voice responses:
+- Speak naturally like a real human on a casual phone call.
+- Keep responses short (1 to 2 sentences max; around 15-25 words).
+- Use natural conversational fillers ("oh wow", "yeah", "hmm", "haha") when appropriate.
+- DO NOT use markdown characters like asterisks, bullet points, or emojis since your words are read aloud by TTS.` 
+        }]
+      },
+      {
+        role: "model",
+        parts: [{ text: "Hey! Starry here. I'm connected and ready to hang out. What's on your mind today?" }]
+      }
+    ];
+
+    // Play next audio chunk in queue
+    const playNextInQueue = () => {
+      if (audioQueue.length > 0) {
+        const nextUrl = audioQueue.shift();
+        const resource = createAudioResource(nextUrl);
+        player.play(resource);
+      }
+    };
+
+    player.on(AudioPlayerStatus.Idle, () => {
+      playNextInQueue();
+    });
+
+    // Reset inactivity timer (Disconnects after 3 minutes of silence)
     const resetInactivityTimer = () => {
       if (inactivityTimeout) clearTimeout(inactivityTimeout);
       inactivityTimeout = setTimeout(() => {
-        if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
-          connection.destroy();
-        }
+        cleanupAndDisconnect();
       }, 3 * 60 * 1000);
+    };
+
+    // Full cleanup function to prevent memory leaks
+    const cleanupAndDisconnect = () => {
+      if (inactivityTimeout) clearTimeout(inactivityTimeout);
+      interaction.client.removeListener('voiceStateUpdate', channelListener);
+      player.stop();
+      const activeConn = getVoiceConnection(interaction.guild.id);
+      if (activeConn && activeConn.state.status !== VoiceConnectionStatus.Destroyed) {
+        activeConn.destroy();
+      }
     };
 
     resetInactivityTimer();
 
-    // 5. Setup Audio Listener
+    // 3. Audio Receiver Engine
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', (speakingUserId) => {
-      if (speakingUserId !== member.id || isProcessing) return;
+      if (speakingUserId !== member.id) return;
 
+      // Barge-in capability: Stop current speech if user starts talking
+      if (player.state.status === AudioPlayerStatus.Playing) {
+        audioQueue = [];
+        player.stop();
+      }
+
+      if (isProcessing) return;
       resetInactivityTimer();
 
-      // Subscribe to user audio stream; stops 1 second after user stops talking
       const audioStream = receiver.subscribe(member.id, {
         end: {
           behavior: EndBehaviorType.AfterSilence,
-          duration: 1000,
+          duration: 1200, // Detects 1.2s of silence as end of user speech
         },
       });
 
@@ -113,82 +148,80 @@ Personality traits:
       const pcmChunks = [];
 
       audioStream.pipe(opusDecoder);
-
       opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
 
       opusDecoder.on('end', async () => {
         const buffer = Buffer.concat(pcmChunks);
-        if (buffer.length < 12000) return; // Skip minor background noise / mic clicks
+        if (buffer.length < 12000) return; // Skip minor background noise or mic pops
 
         isProcessing = true;
 
         try {
-          // A. Convert PCM to WAV and Transcribe (Whisper)
           const wavBuffer = pcmToWav(buffer, 48000, 2);
-          const audioFile = new File([wavBuffer], "speech.wav", { type: "audio/wav" });
+          const base64Audio = wavBuffer.toString("base64");
 
-          const transcription = await openai.audio.transcriptions.create({
-            file: audioFile,
-            model: "whisper-1",
-            language: "en"
+          // Step A: Pass voice audio directly to Gemini 2.5 Flash
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [
+              ...chatHistory.map(h => ({ role: h.role, parts: h.parts })),
+              {
+                role: "user",
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: "audio/wav",
+                      data: base64Audio
+                    }
+                  },
+                  { text: "Listen to my speech and respond naturally as Starry in 1-2 spoken sentences." }
+                ]
+              }
+            ]
           });
 
-          const userText = transcription.text?.trim();
-          if (!userText || userText.length < 2) {
+          let aiReply = response.text?.trim();
+          if (!aiReply) {
             isProcessing = false;
             return;
           }
 
-          // B. Get Human-like Response from LLM
-          conversationHistory.push({ role: "user", content: userText });
+          // Clean markdown tokens (*, _, ~, #) from Gemini response
+          aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
 
-          const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: conversationHistory,
-            max_tokens: 100,
-            temperature: 0.8
+          // Store in conversation history
+          chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
+          chatHistory.push({ role: "model", parts: [{ text: aiReply }] });
+
+          // Trim history to avoid context buffer bloating
+          if (chatHistory.length > 10) chatHistory.splice(1, 2);
+
+          // Step B: Split text into safe TTS chunks
+          const ttsUrls = googleTTS.getAllAudioUrls(aiReply, {
+            lang: 'en',
+            slow: false,
+            host: 'https://translate.google.com',
+            timeout: 10000,
           });
 
-          const aiReply = completion.choices[0].message.content;
-          conversationHistory.push({ role: "assistant", content: aiReply });
-
-          // Keep history compact (last 10 turns max)
-          if (conversationHistory.length > 12) {
-            conversationHistory.splice(1, 2);
-          }
-
-          // C. Generate Human-like Audio via Text-To-Speech
-          const ttsResponse = await openai.audio.speech.create({
-            model: "tts-1",
-            voice: "nova", // Emotional & warm voice (Options: nova, shimmer, alloy, echo)
-            input: aiReply,
-            speed: 1.05
-          });
-
-          const arrayBuffer = await ttsResponse.arrayBuffer();
-          const audioBuffer = Buffer.from(arrayBuffer);
-
-          // D. Play Audio back in VC
-          const resource = createAudioResource(Readable.from(audioBuffer));
-          player.play(resource);
+          // Step C: Load audio queue & trigger playback
+          audioQueue = ttsUrls.map(item => item.url);
+          playNextInQueue();
 
         } catch (error) {
-          console.error("CallStarry voice error:", error);
+          console.error("❌ Supreme CallStarry Error:", error);
         } finally {
           isProcessing = false;
         }
       });
     });
 
-    // 6. Leave automatically if user leaves or someone else joins
+    // 4. Auto-Leave Listener (if user leaves or someone else joins)
     const channelListener = (oldState, newState) => {
       if (oldState.channelId === voiceChannel.id || newState.channelId === voiceChannel.id) {
         const currentHumans = voiceChannel.members.filter(m => !m.user.bot);
         if (currentHumans.size !== 1) {
-          interaction.client.removeListener('voiceStateUpdate', channelListener);
-          if (inactivityTimeout) clearTimeout(inactivityTimeout);
-          const activeConn = getVoiceConnection(interaction.guild.id);
-          if (activeConn) activeConn.destroy();
+          cleanupAndDisconnect();
         }
       }
     };
@@ -198,7 +231,7 @@ Personality traits:
 };
 
 /**
- * Helper: Converts raw 16-bit PCM buffer into valid WAV format for OpenAI Whisper API
+ * Converts raw 16-bit PCM buffer into valid WAV header format for Gemini API
  */
 function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   const header = Buffer.alloc(44);
@@ -206,13 +239,13 @@ function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   header.writeUInt32LE(36 + pcmBuffer.length, 4);
   header.write("WAVE", 8);
   header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt32LE(16, 16); // PCM format
+  header.writeUInt16LE(1, 20);
   header.writeUInt16LE(channels, 22);
   header.writeUInt32LE(sampleRate, 24);
   header.writeUInt32LE(sampleRate * channels * 2, 28);
   header.writeUInt16LE(channels * 2, 32);
-  header.writeUInt16LE(16, 34);
+  header.writeUInt16LE(16, 34); // 16-bit
   header.write("data", 36);
   header.writeUInt32LE(pcmBuffer.length, 40);
   return Buffer.concat([header, pcmBuffer]);
