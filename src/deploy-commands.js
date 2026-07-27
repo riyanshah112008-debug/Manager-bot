@@ -22,6 +22,7 @@ const autoroleCommandDef = {
     default_member_permissions: ADMIN,
     options: autoroleOptions
 };
+
 const commands = [
     // ================= SOCIAL & TELEMETRY =================
     { 
@@ -45,10 +46,10 @@ const commands = [
         integration_types: [0, 1], 
         options: [{ name: 'target', type: 6, required: true, description: 'The user you want to pat' }] 
     },
-
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
 
-    // ================= MUSIC =================
+    // ================= MUSIC & VOICE AI =================
+    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice conversation!' },
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
     { name: 'pause', description: 'Pause the currently playing song' },
@@ -69,7 +70,6 @@ const commands = [
     { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check your active pet and its happiness level', type: 1 }, { name: 'equip', description: 'Equip a different pet from your inventory', type: 1, options: [{ name: 'name', description: 'The exact name of the pet you want to equip', type: 3, required: true }] }] },
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
-
     // ================= UNIFIED MODERATION =================
     { name: 'setup-starry', description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.', default_member_permissions: '8' },
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
@@ -90,7 +90,7 @@ const commands = [
     { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'id', type: 4, required: true, description: 'Warning ID' }] },
 
     autoroleCommandDef,
-    
+
     // ================= AUTOMOD & ROLES =================
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Automod action', choices: [{ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' }] }] },
     { name: 'ignore', description: 'Disable automod filters in a channel', default_member_permissions: ADMIN, options: [{ name: 'type', type: 3, required: true, description: 'Filter to ignore', choices: [{ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' }, { name: 'Status', value: 'status' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
@@ -101,7 +101,6 @@ const commands = [
     { name: 'unprotect', description: 'Remove a member’s protection', options: [{ name: 'user', type: 6, required: true, description: 'Member to unprotect' }] },
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create a role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }, { name: 'color', type: 3, required: false, description: 'Hex color, for example #FF0000' }] }, { name: 'delete', type: 1, description: 'Delete a role', options: [{ name: 'role', type: 8, required: true, description: 'Role to delete' }] }, { name: 'give', type: 1, description: 'Give a role to a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to give' }] }, { name: 'remove', type: 1, description: 'Remove a role from a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to remove' }] }] },
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] },
-
     // ================= SETUP / UTILITIES =================
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel for logs' }] },
     { name: 'setlevelchannel', description: 'Set a specific channel for level-up notifications', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send level-up alerts to' }] },
@@ -135,40 +134,50 @@ const commands = [
     { name: 'premiumcheck', description: 'Check whether this server has Premium' },
     { name: 'tracker', description: 'Manage the 14-day inactivity tracker and historical scraper', default_member_permissions: MANAGE_GUILD, options: [{ name: 'setup', description: 'Setup the 14-day inactivity log channel', type: 1, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send 14-day inactivity alerts to' }] }, { name: 'scrape', description: 'Premium: Scrape historical messages into MongoDB', type: 1, options: [{ name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' }] }] },
 
-    // ✨ THE NEW SERVER DIRECTORY COMMANDS ✨
+    // ================= SERVER DIRECTORY COMMANDS =================
     { name: 'set-listing', description: 'Configure how your server appears on the Starry Server Web List!', default_member_permissions: ADMIN, options: [{ name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' }, { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }] },
     { name: 'bump', description: 'Bump this server to the top of the Starry Global Web List!' },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
 ];
 async function deployCommands() {
     const token = process.env.TOKEN;
-    const clientId = process.env.CLIENT_ID;
-    const guildId = process.env.GUILD_ID || 'PASTE_YOUR_SERVER_ID_HERE';
+    let clientId = process.env.CLIENT_ID;
+    const guildId = process.env.GUILD_ID;
 
-    if (!token || !clientId) {
-        throw new Error('TOKEN and CLIENT_ID must be set before deploying commands.');
+    if (!token) {
+        throw new Error('🛑 CRITICAL: TOKEN environment variable must be set before deploying commands.');
+    }
+
+    // Auto-decode Client ID from Bot Token if CLIENT_ID is missing or empty
+    if (!clientId) {
+        try {
+            clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8');
+            console.log(`ℹ️ Automatically derived Client ID from Token: ${clientId}`);
+        } catch (e) {
+            throw new Error('🛑 Could not parse CLIENT_ID from TOKEN. Please set CLIENT_ID explicitly.');
+        }
     }
 
     const rest = new REST({ version: '10' }).setToken(token);
-    
-    // Check if the --global flag was passed in the terminal
-    const isGlobal = process.argv.includes('--global');
-    const isLocal = guildId !== 'PASTE_YOUR_SERVER_ID_HERE' && !isGlobal;
+
+    // Check terminal execution flags (--global / --guild)
+    const isGlobal = process.argv.includes('--global') || (!guildId && process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true');
+    const isLocal = guildId && guildId !== 'PASTE_YOUR_SERVER_ID_HERE' && !isGlobal;
 
     const route = isLocal 
         ? Routes.applicationGuildCommands(clientId, guildId)
         : Routes.applicationCommands(clientId);
 
     if (isGlobal) {
-        console.log(`🌍 '--global' flag detected. Pushing ${commands.length} commands globally so DM features work!`);
+        console.log(`🌍 Registering ${commands.length} application commands GLOBALLY across all servers & DMs...`);
     } else if (isLocal) {
-        console.log(`⚠️ Pushing to specific guild ID. (NOTE: DM features like /hug will NOT work in Guild-only scope!)`);
+        console.log(`⚡ Registering ${commands.length} application commands INSTANTLY to Guild ID: ${guildId}`);
     } else {
-        console.log(`🌍 Pushing ${commands.length} commands globally...`);
+        console.log(`🌍 Registering ${commands.length} application commands globally...`);
     }
 
     const result = await rest.put(route, { body: commands });
-    console.log(`✅ Registered ${result.length} commands successfully.`);
+    console.log(`✅ Successfully registered ${result.length} commands with Discord API.`);
     return result;
 }
 
