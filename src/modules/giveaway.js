@@ -3,12 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 DIRECT CDN ANIMATED MEDIA ASSETS (DISCORD PROXY GUARANTEED)
+// 🎬 DISCORD-APPROVED DIRECT CDN ASSETS
 const ASSETS = {
-    // Active Banner: Robert Downey Jr. (Tony Stark Arms Spread) - Direct CDN Link
-    ACTIVE_BANNER: 'https://i.giphy.com/AbYxLIXH1uxbO.gif', 
+    // Active Banner: Tony Stark / RDJ Arms Spread (Imgur Direct GIF)
+    ACTIVE_BANNER: 'https://i.imgur.com/vH3sY8k.gif', 
 
-    // Winner Banner: Leonardo DiCaprio (Great Gatsby Toast) - Direct CDN Link
+    // Winner Banner: Leonardo DiCaprio Great Gatsby Toast (Direct GIF)
     WINNER_BANNER: 'https://i.giphy.com/g9582DNuQppxC.gif'
 };
 
@@ -53,7 +53,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🚀 1. ACTIVE GIVEAWAY EMBED (REPAIRED RDJ EDITION)
+    // 🚀 1. ACTIVE GIVEAWAY EMBED (TONY STARK EDITION)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
@@ -191,7 +191,7 @@ module.exports = (client) => {
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
-                            `> Could not pick a winner because nobody entered!`,
+                            `>>> Could not pick a winner because nobody entered!`,
                             ``,
                             `👑 **Host:** <@${giveaway.hostId}>`
                         ].join('\n'))
@@ -220,7 +220,7 @@ module.exports = (client) => {
                     .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
-                        `> Cheers to the lucky champion(s)!`,
+                        `>>> Cheers to the lucky champion(s)!`,
                         ``,
                         `🥳 **Winner(s):** ${winnersText}`,
                         `👑 **Host:** <@${giveaway.hostId}>`,
