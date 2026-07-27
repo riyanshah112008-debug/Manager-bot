@@ -3,10 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 DISCORD-APPROVED DIRECT CDN ASSETS
+// 🎬 DIRECT CDN ANIMATED MEDIA ASSETS (DISCORD EMBED NATIVE APPROVED)
 const ASSETS = {
-    // Active Banner: Tony Stark / RDJ Arms Spread (Imgur Direct GIF)
-    ACTIVE_BANNER: 'https://i.imgur.com/vH3sY8k.gif', 
+    // Active Banner: Tony Stark / RDJ Arms Open (Direct Tenor GIF)
+    ACTIVE_BANNER: 'https://media.tenor.com/images/8effa7b7964c33cf80d21e73cdf44359/tenor.gif', 
 
     // Winner Banner: Leonardo DiCaprio Great Gatsby Toast (Direct GIF)
     WINNER_BANNER: 'https://i.giphy.com/g9582DNuQppxC.gif'
@@ -191,7 +191,7 @@ module.exports = (client) => {
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
-                            `>>> Could not pick a winner because nobody entered!`,
+                            `> Could not pick a winner because nobody entered!`,
                             ``,
                             `👑 **Host:** <@${giveaway.hostId}>`
                         ].join('\n'))
@@ -220,7 +220,7 @@ module.exports = (client) => {
                     .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
-                        `>>> Cheers to the lucky champion(s)!`,
+                        `> Cheers to the lucky champion(s)!`,
                         ``,
                         `🥳 **Winner(s):** ${winnersText}`,
                         `👑 **Host:** <@${giveaway.hostId}>`,
