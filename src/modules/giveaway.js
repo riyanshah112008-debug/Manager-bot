@@ -3,13 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 HIGH-QUALITY ANIMATED BANNER ASSETS (DISCORD EMBED APPROVED)
+// 🎬 PEAK ANIMATED MEDIA ASSETS (DISCORD EMBED DIRECT RENDER APPROVED)
 const ASSETS = {
-    // 1st Embed: Active Giveaway Banner (Neon Gift Animation)
-    ACTIVE_BANNER: 'https://i.imgur.com/39aI8eR.gif', 
-    
-    // 2nd Embed: Winner Celebration Banner (Party Confetti Animation)
-    WINNER_BANNER: 'https://i.imgur.com/K3Z9jX8.gif'
+    // Active Giveaway Banner: Robert Downey Jr. (Tony Stark Icon)
+    ACTIVE_BANNER: 'https://media.giphy.com/media/AbYxLIXH1uxbO/giphy.gif', 
+
+    // Winner Celebration Banner: Leonardo DiCaprio (Great Gatsby Toast)
+    WINNER_BANNER: 'https://media.giphy.com/media/g9582DNuQppxC/giphy.gif'
 };
 
 module.exports = (client) => {
@@ -49,46 +49,45 @@ module.exports = (client) => {
     // ==========================================
     client.once('ready', () => {
         setInterval(checkGiveaways, 8000);
-        console.log('✅ Custom Media Giveaway Engine Active');
+        console.log('✅ Supreme RDJ & Leo Media Giveaway Engine Active');
     });
 
     // ==========================================
-    // 🚀 1. ACTIVE GIVEAWAY EMBED
+    // 🚀 1. ACTIVE GIVEAWAY EMBED (RDJ EDITION)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
-        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`)*.';
-        if (winnerCount < 1) return '❌ **Invalid winners!** Must have at least 1 winner.';
+        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`, `1d`)*.';
+        if (winnerCount < 1) return '❌ **Invalid winners!** Must specify at least 1 winner.';
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
 
         const embed = new EmbedBuilder()
-            .setColor('#F47FFF') // Discord Nitro Pink
+            .setColor('#FF007F') // Supreme Cyber Neon Pink
             .setAuthor({ 
-                name: '✨ OFFICIAL DISCORD GIVEAWAY ✨', 
+                name: '✨ SUPREME OFFICIAL GIVEAWAY ✨', 
                 iconURL: author.displayAvatarURL({ dynamic: true }) 
             })
             .setTitle(`🎁 ${prize}`)
             .setDescription([
-                `> React with **🎉** to enter for a chance to win!`,
+                `>>> React with **🎉** to enter the grand prize drop!`,
                 ``,
-                `⏱️ **Time Remaining:** <t:${endTimestamp}:R>`,
-                `📅 **Ends On:** <t:${endTimestamp}:F>`,
+                `⏳ **Ending:** <t:${endTimestamp}:R> (<t:${endTimestamp}:F>)`,
                 `👑 **Hosted By:** <@${author.id}>`,
-                `🏆 **Total Winners:** \`${winnerCount}\``,
+                `🏆 **Lucky Winners:** \`${winnerCount}\``,
                 ``,
-                `*Good luck to all participants! 🚀*`
+                `*“Genius, billionaire, playboy, philanthropist level drop.”* 🚀`
             ].join('\n'))
             .setImage(ASSETS.ACTIVE_BANNER)
             .setFooter({ 
-                text: `Hosted by ${author.tag}`, 
+                text: `Hosted by ${author.tag} • Tap 🎉 to enter!`, 
                 iconURL: client.user.displayAvatarURL({ dynamic: true }) 
             })
             .setTimestamp(endsAt);
 
         const message = await channel.send({ embeds: [embed] }).catch(() => null);
-        if (!message) return '❌ Failed to send giveaway message. Please check my channel permissions!';
+        if (!message) return '❌ Failed to send giveaway message. Verify channel bot permissions!';
 
         await message.react('🎉').catch(() => {});
 
@@ -104,7 +103,7 @@ module.exports = (client) => {
         });
         saveGiveaways(giveaways);
 
-        return '✅ Giveaway launched successfully!';
+        return '✅ Supreme Giveaway launched successfully!';
     }
 
     // ==========================================
@@ -156,7 +155,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🏁 2. CONCLUDED GIVEAWAY EMBED
+    // 🏁 2. CONCLUDED GIVEAWAY EMBED (LEO GATSBY EDITION)
     // ==========================================
     async function checkGiveaways() {
         let giveaways = getGiveaways();
@@ -188,19 +187,19 @@ module.exports = (client) => {
                 // ❌ EXPIRED EMBED (No Entrants)
                 if (validUsers.length === 0) {
                     const failEmbed = new EmbedBuilder()
-                        .setColor('#2B2D31')
+                        .setColor('#ED4245')
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
-                            `> Could not determine a winner because nobody entered!`,
+                            `>>> Could not pick a winner because nobody entered!`,
                             ``,
                             `👑 **Host:** <@${giveaway.hostId}>`
                         ].join('\n'))
-                        .setFooter({ text: 'Giveaway Ended' })
+                        .setFooter({ text: 'Giveaway Ended • No Participants' })
                         .setTimestamp();
 
                     await message.edit({ embeds: [failEmbed] }).catch(() => {});
-                    await channel.send(`📢 The giveaway for **${giveaway.prize}** has ended, but nobody entered!`).catch(() => {});
+                    await channel.send(`📢 The giveaway for **${giveaway.prize}** ended, but nobody entered!`).catch(() => {});
                     continue;
                 }
 
@@ -215,23 +214,25 @@ module.exports = (client) => {
 
                 const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
-                // 🏆 WINNER CELEBRATION EMBED
+                // 🏆 WINNER CELEBRATION EMBED (LEONARDO DICAPRIO GATSBY TOAST)
                 const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4')
-                    .setAuthor({ name: '🎊 GIVEAWAY CONCLUDED 🎊' })
+                    .setColor('#00F5D4') // Supreme Emerald Cyan
+                    .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
-                        `> Congratulations to our lucky winner(s)!`,
+                        `>>> Cheers to the lucky champion(s)!`,
                         ``,
                         `🥳 **Winner(s):** ${winnersText}`,
-                        `👑 **Host:** <@${giveaway.hostId}>`
+                        `👑 **Host:** <@${giveaway.hostId}>`,
+                        ``,
+                        `*“Here’s to the ones who dream, and the ones who win.”* 🍾`
                     ].join('\n'))
                     .setImage(ASSETS.WINNER_BANNER)
-                    .setFooter({ text: 'Giveaway Ended • Winner Picked' })
+                    .setFooter({ text: 'Giveaway Ended • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
                     .setTimestamp();
 
                 await message.edit({ embeds: [winEmbed] }).catch(() => {});
-                await channel.send(`🎉 **CONGRATULATIONS** ${winnersText}! You won **${giveaway.prize}**! 🚀`).catch(() => {});
+                await channel.send(`🎉 **CHEERS & CONGRATULATIONS** ${winnersText}! You won **${giveaway.prize}**! 🚀🥂`).catch(() => {});
 
             } catch (error) {
                 console.error('Error ending giveaway:', error);
