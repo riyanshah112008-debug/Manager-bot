@@ -117,7 +117,7 @@ Rules for your voice responses:
         }
       ];
 
-      // Download audio buffer safely with browser headers to avoid 403 blocks
+      // Helper to fetch TTS MP3 Buffer safely with Chrome headers
       const fetchTTSBuffer = async (url) => {
         const res = await fetch(url, {
           headers: {
@@ -166,6 +166,19 @@ Rules for your voice responses:
 
       resetInactivityTimer();
 
+      // 🚨 CRITICAL FIX: PLAY IMMEDIATE GREETING TO UNBLOCK DISCORD'S VOICE RECEIVER UDP LINK
+      try {
+        const greetingUrl = googleTTS.getAudioUrl("Hey! Starry is connected. I can hear you now, what's up?", {
+          lang: 'en',
+          slow: false,
+          host: 'https://translate.google.com'
+        });
+        audioQueue.push(greetingUrl);
+        playNextInQueue();
+      } catch (err) {
+        console.error("❌ [CallStarry Initial Greeting Error]:", err);
+      }
+
       // 5. OPUS -> PCM DECODING VOICE ENGINE
       const receiver = connection.receiver;
 
@@ -174,6 +187,7 @@ Rules for your voice responses:
 
         console.log(`🎙️ [CallStarry] User ${speakingUserId} started speaking...`);
 
+        // Barge-in capability: Interrupt playback if user speaks
         if (player.state.status === AudioPlayerStatus.Playing) {
           audioQueue = [];
           player.stop();
@@ -185,7 +199,7 @@ Rules for your voice responses:
         const audioStream = receiver.subscribe(member.id, {
           end: {
             behavior: EndBehaviorType.AfterSilence,
-            duration: 1000,
+            duration: 900,
           },
         });
 
@@ -193,14 +207,17 @@ Rules for your voice responses:
         const pcmChunks = [];
 
         audioStream.pipe(opusDecoder);
+
         opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
+        opusDecoder.on('error', (err) => console.error('❌ [CallStarry Opus Decoder Error]:', err));
+        audioStream.on('error', (err) => console.error('❌ [CallStarry Audio Stream Error]:', err));
 
         opusDecoder.on('end', async () => {
           const buffer = Buffer.concat(pcmChunks);
           console.log(`🎙️ [CallStarry] Captured PCM Audio: ${buffer.length} bytes`);
           
-          if (buffer.length < 4000) {
-            console.log(`⚠️ [CallStarry] Audio too short/quiet (${buffer.length} bytes), skipping.`);
+          if (buffer.length < 3000) {
+            console.log(`⚠️ [CallStarry] Audio too short (${buffer.length} bytes), skipping.`);
             return;
           }
 
@@ -242,7 +259,7 @@ Rules for your voice responses:
             let data = await callGemini("gemini-2.5-flash");
 
             if (data.error) {
-              console.warn("⚠️ [CallStarry] gemini-2.5-flash failed, trying gemini-1.5-flash:", data.error.message);
+              console.warn("⚠️ [CallStarry] gemini-2.5-flash error, trying gemini-1.5-flash:", data.error.message);
               data = await callGemini("gemini-1.5-flash");
             }
 
