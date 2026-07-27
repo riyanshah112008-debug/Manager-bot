@@ -182,16 +182,19 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-// ==========================================
-// 3. LAVALINK MUSIC ENGINE SETUP
-// ==========================================
-// ==========================================
-// 3. LAVALINK MUSIC ENGINE SETUP
-// ==========================================
+
 // ==========================================
 // 3. LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [
+    {
+        name: 'Lavalink-v4-Main',
+        url: 'lavalink.v4.lavalink.me:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 10,
+        retryDelay: 3000
+    },
     {
         name: 'Jirayu-Node-v4',
         url: 'lavalink.jirayu.net:13592',
@@ -201,9 +204,9 @@ const Nodes = [
         retryDelay: 3000
     },
     {
-        name: 'AjieBlogs-EU',
-        url: 'lava-v4.ajieblogs.eu.org:443',
-        auth: 'https://dsc.gg/ajidevserver',
+        name: 'Inu-Lavalink-v4',
+        url: 'lavalink.inu.is:443',
+        auth: 'youshallnotpass',
         secure: true,
         retryAmount: 10,
         retryDelay: 3000
