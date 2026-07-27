@@ -3,7 +3,19 @@
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
-const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    Partials, 
+    Collection, 
+    Events, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    StringSelectMenuBuilder, 
+    PermissionFlagsBits 
+} = require('discord.js');
 const express = require('express');
 const cors = require('cors'); 
 const https = require('https'); 
@@ -122,7 +134,7 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildVoiceStates, // Crucial for /callstarry & Voice AI
         GatewayIntentBits.GuildModeration,
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.DirectMessages
@@ -134,6 +146,7 @@ client.setMaxListeners(50);
 client.commands = new Collection(); 
 client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
+client.voiceCalls = new Map(); // Tracks active /callstarry AI voice sessions
 
 app.get('/verify', (req, res) => {
     const token = req.query.token;
@@ -347,7 +360,7 @@ const registerCommand = (filePath) => {
 if (fs.existsSync(commandsPath)) {
     const rootFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
     for (const file of rootFiles) registerCommand(path.join(commandsPath, file));
-    
+
     const folders = fs.readdirSync(commandsPath).filter(f => fs.statSync(path.join(commandsPath, f)).isDirectory());
     for (const folder of folders) {
         const folderPath = path.join(commandsPath, folder);
@@ -361,15 +374,14 @@ client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
-    
+
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
     const command = client.prefixCommands.get(commandName);
-    
+
     if (!command) return;
-    
+
     try { 
-        // Checks if the command prefers 'run' or falls back to 'execute'
         if (typeof command.run === 'function') {
             await command.run(client, message, args);
         } else {
@@ -383,7 +395,6 @@ client.on(Events.MessageCreate, async message => {
 // 5. INTERACTION ENGINE
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
-    // 🚨 SOCIAL BUTTON VIP BYPASS SHIELD
     if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
         return; 
     }
@@ -683,5 +694,22 @@ async function startBot() {
         process.exit(1);
     }
 }
+
+// Graceful shutdown handling for Render deployments
+const shutdownHandler = async (signal) => {
+    console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry...`);
+    try {
+        if (mongoose.connection.readyState === 1) await mongoose.connection.close();
+        if (client) client.destroy();
+        console.log("👋 Clean shutdown completed.");
+        process.exit(0);
+    } catch (err) {
+        console.error("Error during graceful shutdown:", err);
+        process.exit(1);
+    }
+};
+
+process.on('SIGINT', () => shutdownHandler('SIGINT'));
+process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
