@@ -109,18 +109,29 @@ module.exports = (client) => {
     // ==========================================
     // 🔄 2. REROLL WINNER FUNCTION
     // ==========================================
-    async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
+        async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
         const message = await channel.messages.fetch(messageId).catch(() => null);
         if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
 
+        // Force fetch up to 100 reaction users
         const reaction = message.reactions.cache.get('🎉');
         if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
 
-        const users = await reaction.users.fetch();
-        const validUsers = users.filter(u => !u.bot).map(u => u.id);
+        const fetchedUsers = await reaction.users.fetch({ limit: 100 });
+        let validUsers = fetchedUsers.filter(u => !u.bot).map(u => u.id);
 
         if (validUsers.length === 0) {
             return '❌ **Cannot reroll!** There are no human participants in the reactions.';
+        }
+
+        // Try to identify previous winner(s) from the existing embed
+        const previousWinnerMentions = message.embeds[0]?.description?.match(/<@!?(\d+)>/g) || [];
+        const previousWinnerIds = previousWinnerMentions.map(m => m.replace(/<@!?|>/g, ''));
+
+        // Exclude previous winners if there are enough remaining entrants
+        const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
+        if (filteredUsers.length >= winnerCount) {
+            validUsers = filteredUsers;
         }
 
         const winners = [];
@@ -155,6 +166,8 @@ module.exports = (client) => {
         }).catch(() => {});
 
         return '✅ Winner rerolled successfully!';
+    }
+
     }
 
     // ==========================================
