@@ -9,7 +9,6 @@ const {
   VoiceConnectionStatus
 } = require('@discordjs/voice');
 const prism = require('prism-media');
-const googleTTS = require('google-tts-api');
 const { Readable } = require('stream');
 
 module.exports = {
@@ -18,10 +17,11 @@ module.exports = {
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction, client) {
+    // ⏱️ 1. DEFER IMMEDIATELY
     await interaction.deferReply({ ephemeral: false }).catch(() => {});
 
     try {
-      // 👑 1. PREMIUM CHECK
+      // 👑 2. PREMIUM CHECK
       const isPremium = interaction.client.isPremium 
         ? interaction.client.isPremium(interaction.guild?.id, interaction.user.id)
         : false;
@@ -36,7 +36,7 @@ module.exports = {
         return interaction.editReply({ embeds: [premiumEmbed] });
       }
 
-      // 🎙️ 2. VOICE CHANNEL VALIDATION
+      // 🎙️ 3. VOICE CHANNEL VALIDATION
       const member = interaction.member;
       const voiceChannel = member?.voice?.channel;
 
@@ -61,7 +61,7 @@ module.exports = {
 
       await interaction.editReply({ content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` });
 
-      // 3. JOIN VOICE CHANNEL
+      // 4. JOIN VOICE CHANNEL
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
@@ -90,29 +90,23 @@ module.exports = {
         }
       ];
 
-      const fetchTTSBuffer = async (url) => {
-        const res = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
-        if (!res.ok) throw new Error(`TTS HTTP Error: ${res.status}`);
-        return Buffer.from(await res.arrayBuffer());
-      };
+      // StreamElements Amazon Polly High-Quality Voice Streamer
+      const playTTS = async (text) => {
+        try {
+          const cleanText = text.replace(/[*_~#`]/g, '').trim();
+          const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Salli&text=${encodeURIComponent(cleanText)}`;
+          
+          const res = await fetch(ttsUrl);
+          if (!res.ok) throw new Error(`TTS Stream Error: ${res.status}`);
 
-      const playNextInQueue = async () => {
-        if (audioQueue.length > 0) {
-          const nextUrl = audioQueue.shift();
-          try {
-            const mp3Buffer = await fetchTTSBuffer(nextUrl);
-            const resource = createAudioResource(Readable.from(mp3Buffer));
-            player.play(resource);
-          } catch (err) {
-            console.error('❌ [TTS Playback Error]:', err);
-            playNextInQueue();
-          }
+          const arrayBuf = await res.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+          const resource = createAudioResource(Readable.from(buffer));
+          player.play(resource);
+        } catch (err) {
+          console.error('❌ [CallStarry TTS Error]:', err);
         }
       };
-
-      player.on(AudioPlayerStatus.Idle, () => playNextInQueue());
 
       const resetInactivityTimer = () => {
         if (inactivityTimeout) clearTimeout(inactivityTimeout);
@@ -131,27 +125,18 @@ module.exports = {
 
       resetInactivityTimer();
 
-      // 🚨 SPEAK INITIAL GREETING TO UNBLOCK DISCORD UDP RECEIVER
-      try {
-        const greetingUrl = googleTTS.getAudioUrl("Hey! Starry is connected and listening. What is up?", {
-          lang: 'en', slow: false, host: 'https://translate.google.com'
-        });
-        audioQueue.push(greetingUrl);
-        playNextInQueue();
-      } catch (e) {
-        console.error("❌ Greeting Error:", e);
-      }
+      // Play Opening Greeting
+      playTTS("Hey! Starry is connected and listening. What is up?");
 
-      // 4. VOICE RECEIVER ENGINE
+      // 5. VOICE RECEIVER ENGINE
       const receiver = connection.receiver;
 
       receiver.speaking.on('start', (speakingUserId) => {
         if (speakingUserId !== member.id) return;
 
-        console.log(`🎙️ [CallStarry Log] Speaking detected from User ${speakingUserId}`);
+        console.log(`🎙️ [CallStarry] Speaking detected from User ${speakingUserId}`);
 
         if (player.state.status === AudioPlayerStatus.Playing) {
-          audioQueue = [];
           player.stop();
         }
 
@@ -162,26 +147,18 @@ module.exports = {
           end: { behavior: EndBehaviorType.AfterSilence, duration: 800 }
         });
 
-        // Initialize Opus Decoder with fallbacks
-        let opusDecoder;
-        try {
-          opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
-        } catch (decErr) {
-          console.error("❌ [Opus Decoder Init Failed]:", decErr);
-          return;
-        }
-
+        const opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
         const pcmChunks = [];
-        audioStream.pipe(opusDecoder);
 
+        audioStream.pipe(opusDecoder);
         opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
 
         opusDecoder.on('end', async () => {
           const buffer = Buffer.concat(pcmChunks);
-          console.log(`🎙️ [CallStarry Log] Audio Buffer Captured: ${buffer.length} bytes`);
+          console.log(`🎙️ [CallStarry] Audio Buffer Captured: ${buffer.length} bytes`);
 
-          if (buffer.length < 2000) {
-            console.log(`⚠️ [CallStarry Log] Audio too quiet/short (${buffer.length} bytes). Ignored.`);
+          if (buffer.length < 2500) {
+            console.log(`⚠️ [CallStarry] Audio too quiet/short (${buffer.length} bytes), skipping.`);
             return;
           }
 
@@ -191,7 +168,7 @@ module.exports = {
             const wavBuffer = pcmToWav(buffer, 48000, 2);
             const base64Audio = wavBuffer.toString("base64");
 
-            console.log(`📡 [CallStarry Log] Sending ${wavBuffer.length} bytes WAV to Gemini API...`);
+            console.log(`📡 [CallStarry] Sending ${wavBuffer.length} bytes WAV to Gemini API...`);
 
             const geminiRes = await fetch(
               `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -229,18 +206,11 @@ module.exports = {
               return;
             }
 
-            aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
-
             chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
             chatHistory.push({ role: "model", parts: [{ text: aiReply }] });
             if (chatHistory.length > 10) chatHistory.splice(1, 2);
 
-            const ttsUrls = googleTTS.getAllAudioUrls(aiReply, {
-              lang: 'en', slow: false, host: 'https://translate.google.com'
-            });
-
-            audioQueue = ttsUrls.map(item => item.url);
-            playNextInQueue();
+            await playTTS(aiReply);
 
           } catch (error) {
             console.error("❌ [CallStarry Engine Exception]:", error);
