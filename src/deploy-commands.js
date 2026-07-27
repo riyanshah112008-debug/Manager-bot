@@ -49,7 +49,8 @@ const commands = [
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
 
     // ================= MUSIC & VOICE AI =================
-    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice conversation!' },
+    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
+
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
     { name: 'pause', description: 'Pause the currently playing song' },
