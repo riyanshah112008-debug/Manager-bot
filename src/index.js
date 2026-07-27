@@ -716,7 +716,7 @@ async function startBot() {
 
         if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
             console.log("🔄 Auto-deploying commands...");
-            const { deployCommands } = require('./deploy-commands.js');
+            const { deployCommands } = require('../deploy-commands.js');
             await deployCommands().catch(err => console.error("❌ Auto-deploy failed:\n", err.stack || err));
         }
         await client.login(process.env.TOKEN);
