@@ -8,7 +8,6 @@ const {
   getVoiceConnection,
   VoiceConnectionStatus
 } = require('@discordjs/voice');
-const prism = require('prism-media');
 const googleTTS = require('google-tts-api');
 
 module.exports = {
@@ -17,7 +16,7 @@ module.exports = {
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction, client) {
-    // ⏱️ 1. DEFER IMMEDIATELY (Prevents "The application did not respond")
+    // ⏱️ 1. DEFER IMMEDIATELY
     await interaction.deferReply({ ephemeral: false }).catch(() => {});
 
     try {
@@ -37,7 +36,7 @@ module.exports = {
           .addFields(
             { name: '💎 How to Unlock', value: 'Run `/activatepremium` or visit our web dashboard to activate Premium!', inline: false }
           )
-          .setFooter({ text: 'Starry Voice AI • Powered by Gemini 2.5', iconURL: interaction.client.user.displayAvatarURL() })
+          .setFooter({ text: 'Starry Voice AI • Powered by Gemini', iconURL: interaction.client.user.displayAvatarURL() })
           .setTimestamp();
 
         return interaction.editReply({ embeds: [premiumEmbed] });
@@ -143,12 +142,13 @@ Rules for your voice responses:
 
       resetInactivityTimer();
 
-      // 5. REAL-TIME VOICE PROCESSING ENGINE
+      // 5. NATIVE PCM VOICE RECEIVER ENGINE
       const receiver = connection.receiver;
 
       receiver.speaking.on('start', (speakingUserId) => {
         if (speakingUserId !== member.id) return;
 
+        // Barge-in: Interrupt current playback if user speaks
         if (player.state.status === AudioPlayerStatus.Playing) {
           audioQueue = [];
           player.stop();
@@ -157,22 +157,24 @@ Rules for your voice responses:
         if (isProcessing) return;
         resetInactivityTimer();
 
+        // Subscribe using native 'pcm' mode directly from Discord.js
         const audioStream = receiver.subscribe(member.id, {
+          mode: 'pcm',
           end: {
             behavior: EndBehaviorType.AfterSilence,
-            duration: 1200,
+            duration: 900, // 0.9s silence detection
           },
         });
 
-        const opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
         const pcmChunks = [];
 
-        audioStream.pipe(opusDecoder);
-        opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
+        audioStream.on('data', (chunk) => pcmChunks.push(chunk));
 
-        opusDecoder.on('end', async () => {
+        audioStream.on('end', async () => {
           const buffer = Buffer.concat(pcmChunks);
-          if (buffer.length < 12000) return;
+          
+          // Lowered threshold to catch quiet/soft-spoken voices (3,800 bytes ~ 20ms)
+          if (buffer.length < 3800) return;
 
           isProcessing = true;
 
@@ -180,33 +182,43 @@ Rules for your voice responses:
             const wavBuffer = pcmToWav(buffer, 48000, 2);
             const base64Audio = wavBuffer.toString("base64");
 
-            const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-            
-            const payload = {
-              contents: [
-                ...chatHistory,
-                {
-                  role: "user",
-                  parts: [
-                    {
-                      inlineData: {
-                        mimeType: "audio/wav",
-                        data: base64Audio
-                      }
-                    },
-                    { text: "Listen to my speech and respond naturally as Starry in 1-2 spoken sentences." }
-                  ]
-                }
-              ]
+            // Multi-model API helper with automatic fallback
+            const generateGeminiReply = async (modelName) => {
+              const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+              const payload = {
+                contents: [
+                  ...chatHistory,
+                  {
+                    role: "user",
+                    parts: [
+                      {
+                        inlineData: {
+                          mimeType: "audio/wav",
+                          data: base64Audio
+                        }
+                      },
+                      { text: "Listen to my speech and respond naturally as Starry in 1-2 spoken sentences." }
+                    ]
+                  }
+                ]
+              };
+
+              const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+              });
+
+              return await res.json();
             };
 
-            const response = await fetch(geminiEndpoint, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload)
-            });
+            let data = await generateGeminiReply("gemini-2.5-flash");
 
-            const data = await response.json();
+            // Fallback to gemini-1.5-flash if 2.5-flash endpoint returns an error
+            if (data.error) {
+              data = await generateGeminiReply("gemini-1.5-flash");
+            }
+
             let aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
             if (!aiReply) {
@@ -214,6 +226,7 @@ Rules for your voice responses:
               return;
             }
 
+            // Strip formatting tokens
             aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
 
             chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
@@ -232,7 +245,7 @@ Rules for your voice responses:
             playNextInQueue();
 
           } catch (error) {
-            console.error("❌ Supreme CallStarry Error:", error);
+            console.error("❌ CallStarry Voice Engine Error:", error);
           } finally {
             isProcessing = false;
           }
