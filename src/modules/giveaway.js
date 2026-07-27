@@ -109,11 +109,10 @@ module.exports = (client) => {
     // ==========================================
     // 🔄 2. REROLL WINNER FUNCTION
     // ==========================================
-        async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
+    async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
         const message = await channel.messages.fetch(messageId).catch(() => null);
         if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
 
-        // Force fetch up to 100 reaction users
         const reaction = message.reactions.cache.get('🎉');
         if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
 
@@ -124,11 +123,10 @@ module.exports = (client) => {
             return '❌ **Cannot reroll!** There are no human participants in the reactions.';
         }
 
-        // Try to identify previous winner(s) from the existing embed
+        // Exclude previous winners if possible
         const previousWinnerMentions = message.embeds[0]?.description?.match(/<@!?(\d+)>/g) || [];
         const previousWinnerIds = previousWinnerMentions.map(m => m.replace(/<@!?|>/g, ''));
 
-        // Exclude previous winners if there are enough remaining entrants
         const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
         if (filteredUsers.length >= winnerCount) {
             validUsers = filteredUsers;
@@ -168,20 +166,23 @@ module.exports = (client) => {
         return '✅ Winner rerolled successfully!';
     }
 
-    }
-
     // ==========================================
     // 💬 LISTENERS (Slash & Prefix)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
+        // ⏱️ INSTANT ACKNOWLEDGMENT (Prevents "Application Did Not Respond" error)
+        if (interaction.commandName === 'giveaway' || interaction.commandName === 'reroll') {
+            await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        }
+
         // REROLL SLASH COMMAND
         if (interaction.commandName === 'reroll' || (interaction.commandName === 'giveaway' && interaction.options.getSubcommand(false) === 'reroll')) {
             const messageId = interaction.options.getString('message_id');
             const winners = interaction.options.getInteger('winners') || 1;
             const response = await rerollGiveaway(interaction.channel, messageId, winners, interaction.user);
-            return interaction.reply({ content: response, ephemeral: true }).catch(() => {});
+            return interaction.editReply({ content: response }).catch(() => {});
         }
 
         // START GIVEAWAY SLASH COMMAND
@@ -192,7 +193,7 @@ module.exports = (client) => {
             const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
 
             const response = await startGiveaway(targetChannel, interaction.user, duration, winners, prize);
-            await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
+            await interaction.editReply({ content: response }).catch(() => {});
         }
     });
 
