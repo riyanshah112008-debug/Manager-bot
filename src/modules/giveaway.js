@@ -107,23 +107,107 @@ module.exports = (client) => {
     }
 
     // ==========================================
+    // 🔄 2. REROLL WINNER FUNCTION
+    // ==========================================
+    async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+        if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
+
+        const reaction = message.reactions.cache.get('🎉');
+        if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
+
+        const users = await reaction.users.fetch();
+        const validUsers = users.filter(u => !u.bot).map(u => u.id);
+
+        if (validUsers.length === 0) {
+            return '❌ **Cannot reroll!** There are no human participants in the reactions.';
+        }
+
+        const winners = [];
+        for (let i = 0; i < winnerCount; i++) {
+            if (validUsers.length === 0) break;
+            const randomIndex = Math.floor(Math.random() * validUsers.length);
+            winners.push(validUsers[randomIndex]);
+            validUsers.splice(randomIndex, 1);
+        }
+
+        const winnersText = winners.map(id => `<@${id}>`).join(', ');
+
+        const rerollEmbed = new EmbedBuilder()
+            .setColor('#00F5D4')
+            .setAuthor({ name: '🔄 GIVEAWAY WINNER REROLLED 🔄' })
+            .setTitle(message.embeds[0]?.title || '🎁 Prize Reroll')
+            .setDescription([
+                `> A new winner has been selected by request!`,
+                ``,
+                `🥳 **New Winner(s):** ${winnersText}`,
+                `👑 **Rerolled By:** <@${executor.id}>`,
+                ``,
+                `*“Here’s to the new champion!”* 🥂`
+            ].join('\n'))
+            .setImage(ASSETS.WINNER_BANNER)
+            .setFooter({ text: 'Reroll Complete • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
+            .setTimestamp();
+
+        await channel.send({ 
+            content: `🎉 **NEW REROLLED WINNER(S):** ${winnersText}! Congratulations! 🚀🥂`, 
+            embeds: [rerollEmbed] 
+        }).catch(() => {});
+
+        return '✅ Winner rerolled successfully!';
+    }
+
+    // ==========================================
     // 💬 LISTENERS (Slash & Prefix)
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'giveaway') return;
+        if (!interaction.isChatInputCommand()) return;
 
-        const duration = interaction.options.getString('duration');
-        const prize = interaction.options.getString('prize');
-        const winners = interaction.options.getInteger('winners') || 1;
-        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        // REROLL SLASH COMMAND
+        if (interaction.commandName === 'reroll' || (interaction.commandName === 'giveaway' && interaction.options.getSubcommand(false) === 'reroll')) {
+            const messageId = interaction.options.getString('message_id');
+            const winners = interaction.options.getInteger('winners') || 1;
+            const response = await rerollGiveaway(interaction.channel, messageId, winners, interaction.user);
+            return interaction.reply({ content: response, ephemeral: true }).catch(() => {});
+        }
 
-        const response = await startGiveaway(targetChannel, interaction.user, duration, winners, prize);
-        await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
+        // START GIVEAWAY SLASH COMMAND
+        if (interaction.commandName === 'giveaway') {
+            const duration = interaction.options.getString('duration');
+            const prize = interaction.options.getString('prize');
+            const winners = interaction.options.getInteger('winners') || 1;
+            const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+            const response = await startGiveaway(targetChannel, interaction.user, duration, winners, prize);
+            await interaction.reply({ content: response, ephemeral: true }).catch(() => {});
+        }
     });
 
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
+        // PREFIX REROLL COMMAND (.reroll <message_id> [winners])
+        if (message.content.toLowerCase().startsWith(PREFIX + 'reroll') || message.content.toLowerCase().startsWith(PREFIX + 'giveaway reroll')) {
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return message.reply('❌ You need **Administrator** permissions to reroll giveaways.').catch(() => {});
+            }
+
+            const args = message.content.split(/ +/);
+            const messageId = args.find(a => /^\d{17,20}$/.test(a));
+
+            if (!messageId) {
+                return message.reply('🔹 **Usage:** `.reroll <message_id> [winners]`\n*Example:* `.reroll 123456789012345678 1`').catch(() => {});
+            }
+
+            let winners = 1;
+            const numArg = args.find(a => !isNaN(a) && a !== messageId && parseInt(a) > 0);
+            if (numArg) winners = parseInt(numArg);
+
+            const response = await rerollGiveaway(message.channel, messageId, winners, message.author);
+            return message.reply(response).catch(() => {});
+        }
+
+        // PREFIX START GIVEAWAY COMMAND (.giveaway <duration> [winners] <prize>)
         if (message.content.toLowerCase().startsWith(PREFIX + 'giveaway')) {
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                 return message.reply('❌ You need **Administrator** permissions to start a giveaway.').catch(() => {});
@@ -155,7 +239,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🏁 2. CONCLUDED GIVEAWAY EMBED (LEO GATSBY EDITION)
+    // 🏁 3. CONCLUDED GIVEAWAY AUTOMATION ENGINE
     // ==========================================
     async function checkGiveaways() {
         let giveaways = getGiveaways();
