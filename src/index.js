@@ -188,6 +188,9 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 // 3. LAVALINK MUSIC ENGINE SETUP
 // ==========================================
+// ==========================================
+// 3. LAVALINK MUSIC ENGINE SETUP
+// ==========================================
 const Nodes = [
     {
         name: 'Jirayu-Node-v4',
@@ -204,17 +207,8 @@ const Nodes = [
         secure: true,
         retryAmount: 10,
         retryDelay: 3000
-    },
-    {
-        name: 'DevamOP-India',
-        url: 'lavalink.devamop.in:443',
-        auth: 'DevamOP',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
     }
 ];
-
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
