@@ -395,12 +395,21 @@ client.on(Events.MessageCreate, async message => {
 // 5. INTERACTION ENGINE
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
+    // 🚨 SOCIAL BUTTON VIP BYPASS SHIELD
     if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
         return; 
     }
 
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
+    // 💎 MODULE-HANDLED COMMAND BYPASS
+    // Stops index.js from blocking commands handled inside separate event modules (e.g., modules/premium.js)
+    const moduleCommands = ['premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium'];
+    if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
+        return; // Passed through to module event listeners
+    }
+
+    // 🎛️ DJ PANEL CONTROLS
     if (interaction.isButton() && interaction.customId.startsWith('dj_')) {
         const member = interaction.member;
         const voiceChannel = member.voice?.channel;
@@ -482,6 +491,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
+    // 🛍️ SHOP BUY MENU
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
         const itemId = interaction.values[0];
@@ -512,6 +522,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
+    // 🎵 MUSIC BUTTON & SELECT MENU CONTROLS
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (!interaction.customId.startsWith('music_')) return;
         const player = client.manager.getPlayer(interaction.guild.id);
@@ -540,8 +551,10 @@ client.on(Events.InteractionCreate, async interaction => {
             else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
         }
     }
+
     if (!interaction.isChatInputCommand()) return;
 
+    // 📡 TELEMETRY COMMAND
     if (interaction.commandName === 'telemetry') {
         const botOwners = ['1465049039153135639', '1257676837249617971']; 
         if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
@@ -633,20 +646,33 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
+    // ⚡ COMMAND LOOKUP & EXECUTION
     const command = client.commands.get(interaction.commandName);
-    if (!command) return interaction.reply({ content: `❌ **Command file not found!**`, ephemeral: true }).catch(console.error);
+    if (!command) {
+        return interaction.reply({ 
+            content: `❌ **Command file not found!** Make sure the command file exists in your \`src/commands/\` directory and exported correctly.`, 
+            ephemeral: true 
+        }).catch(console.error);
+    }
 
     const botOwners = ['1465049039153135639', '1257676837249617971']; 
     if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) return interaction.reply({ content: '❌ Access Denied: Not bot owner.', ephemeral: true });
+    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Access Denied: Not bot owner.', ephemeral: true });
+    }
 
-    try { await command.execute(interaction, client); } 
-    catch (error) {
-        console.error(`❌ Error executing ${interaction.commandName}:`, error);
-        if (interaction.replied || interaction.deferred) await interaction.followUp({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
-        else await interaction.reply({ content: 'Error executing command!', ephemeral: true }).catch(() => {});
+    try { 
+        await command.execute(interaction, client); 
+    } catch (error) {
+        console.error(`❌ Error executing /${interaction.commandName}:`, error);
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({ content: '❌ An error occurred while executing this command!', ephemeral: true }).catch(() => {});
+        } else {
+            await interaction.reply({ content: '❌ An error occurred while executing this command!', ephemeral: true }).catch(() => {});
+        }
     }
 });
+
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
