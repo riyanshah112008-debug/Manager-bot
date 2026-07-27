@@ -3,12 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 VERIFIED DIRECT DISCORD-APPROVED MEDIA ASSETS
+// 🎬 DIRECT GIPHY CDN ASSETS (DISCORD PROXY GUARANTEED)
 const ASSETS = {
-    // Active Banner: REAL Tony Stark / RDJ Arms Spread GIF
-    ACTIVE_BANNER: 'https://media.tenor.com/X_1y4K6H4jAAAAAC/tony-stark-iron-man.gif', 
+    // Active Banner: Tony Stark / Iron Man (Direct i.giphy CDN)
+    ACTIVE_BANNER: 'https://i.giphy.com/O7ifqdHteyN7q.gif', 
 
-    // Winner Banner: Leonardo DiCaprio Great Gatsby Toast GIF
+    // Winner Banner: Leonardo DiCaprio Great Gatsby Toast (Direct i.giphy CDN)
     WINNER_BANNER: 'https://i.giphy.com/g9582DNuQppxC.gif'
 };
 
