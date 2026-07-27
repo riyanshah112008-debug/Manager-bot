@@ -8,6 +8,7 @@ const {
   getVoiceConnection,
   VoiceConnectionStatus
 } = require('@discordjs/voice');
+const prism = require('prism-media');
 const googleTTS = require('google-tts-api');
 
 module.exports = {
@@ -16,7 +17,7 @@ module.exports = {
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction, client) {
-    // ⏱️ 1. DEFER IMMEDIATELY
+    // ⏱️ 1. DEFER IMMEDIATELY (Prevents 3-second Discord Slash Command timeout)
     await interaction.deferReply({ ephemeral: false }).catch(() => {});
 
     try {
@@ -142,13 +143,13 @@ Rules for your voice responses:
 
       resetInactivityTimer();
 
-      // 5. NATIVE PCM VOICE RECEIVER ENGINE
+      // 5. OPUS -> PCM DECODING VOICE ENGINE
       const receiver = connection.receiver;
 
       receiver.speaking.on('start', (speakingUserId) => {
         if (speakingUserId !== member.id) return;
 
-        // Barge-in: Interrupt current playback if user speaks
+        // Barge-in: Stop playback if user starts speaking
         if (player.state.status === AudioPlayerStatus.Playing) {
           audioQueue = [];
           player.stop();
@@ -157,24 +158,30 @@ Rules for your voice responses:
         if (isProcessing) return;
         resetInactivityTimer();
 
-        // Subscribe using native 'pcm' mode directly from Discord.js
+        // Subscribe to raw Opus audio stream
         const audioStream = receiver.subscribe(member.id, {
-          mode: 'pcm',
           end: {
             behavior: EndBehaviorType.AfterSilence,
-            duration: 900, // 0.9s silence detection
+            duration: 1000, // 1 sec silence
           },
         });
 
+        // Pipe Opus packets through Prism Opus Decoder to convert into PCM
+        const opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
         const pcmChunks = [];
 
-        audioStream.on('data', (chunk) => pcmChunks.push(chunk));
+        audioStream.pipe(opusDecoder);
 
-        audioStream.on('end', async () => {
+        opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
+
+        opusDecoder.on('end', async () => {
           const buffer = Buffer.concat(pcmChunks);
+          console.log(`🎙️ [CallStarry] Captured PCM Audio: ${buffer.length} bytes`);
           
-          // Lowered threshold to catch quiet/soft-spoken voices (3,800 bytes ~ 20ms)
-          if (buffer.length < 3800) return;
+          if (buffer.length < 5000) {
+            console.log(`⚠️ [CallStarry] Audio packet too small/quiet (${buffer.length} bytes), skipping.`);
+            return;
+          }
 
           isProcessing = true;
 
@@ -182,8 +189,8 @@ Rules for your voice responses:
             const wavBuffer = pcmToWav(buffer, 48000, 2);
             const base64Audio = wavBuffer.toString("base64");
 
-            // Multi-model API helper with automatic fallback
-            const generateGeminiReply = async (modelName) => {
+            // Gemini API Call
+            const callGemini = async (modelName) => {
               const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
               const payload = {
                 contents: [
@@ -212,21 +219,24 @@ Rules for your voice responses:
               return await res.json();
             };
 
-            let data = await generateGeminiReply("gemini-2.5-flash");
+            let data = await callGemini("gemini-2.5-flash");
 
-            // Fallback to gemini-1.5-flash if 2.5-flash endpoint returns an error
             if (data.error) {
-              data = await generateGeminiReply("gemini-1.5-flash");
+              console.warn("⚠️ [CallStarry] gemini-2.5-flash failed, falling back to gemini-1.5-flash:", data.error.message);
+              data = await callGemini("gemini-1.5-flash");
             }
 
             let aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
             if (!aiReply) {
+              console.error("❌ [CallStarry] Gemini returned empty response:", JSON.stringify(data));
               isProcessing = false;
               return;
             }
 
-            // Strip formatting tokens
+            console.log(`🗣️ [Starry Reply]: "${aiReply}"`);
+
+            // Clean markdown formatting
             aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
 
             chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
@@ -234,6 +244,7 @@ Rules for your voice responses:
 
             if (chatHistory.length > 10) chatHistory.splice(1, 2);
 
+            // Generate TTS audio URLs
             const ttsUrls = googleTTS.getAllAudioUrls(aiReply, {
               lang: 'en',
               slow: false,
@@ -245,7 +256,7 @@ Rules for your voice responses:
             playNextInQueue();
 
           } catch (error) {
-            console.error("❌ CallStarry Voice Engine Error:", error);
+            console.error("❌ [CallStarry Engine Error]:", error);
           } finally {
             isProcessing = false;
           }
@@ -272,6 +283,9 @@ Rules for your voice responses:
   }
 };
 
+/**
+ * Converts PCM Buffer into valid 16-bit WAV Header format
+ */
 function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
@@ -279,12 +293,12 @@ function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   header.write("WAVE", 8);
   header.write("fmt ", 12);
   header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 20); // 1 = PCM
   header.writeUInt16LE(channels, 22);
   header.writeUInt32LE(sampleRate, 24);
   header.writeUInt32LE(sampleRate * channels * 2, 28);
   header.writeUInt16LE(channels * 2, 32);
-  header.writeUInt16LE(16, 34);
+  header.writeUInt16LE(16, 34); // 16-bit
   header.write("data", 36);
   header.writeUInt32LE(pcmBuffer.length, 40);
   return Buffer.concat([header, pcmBuffer]);
