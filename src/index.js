@@ -241,7 +241,8 @@ client.manager.shoukaku.on('disconnect', (name, reason) => console.warn(`[Lavali
 
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
-    if (!channel) return;
+    const interaction = player.data.get('interaction');
+    player.data.delete('interaction'); // Clear reference
 
     try {
         const guild = client.guilds.cache.get(player.guildId);
@@ -249,7 +250,6 @@ client.manager.on('playerStart', async (player, track) => {
             const voiceChannel = guild.channels.cache.get(player.voiceId);
             if (voiceChannel) {
                 await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                await channel.send('🔒 **Voice channel locked!** Auto-lock is active for this session. Use `/vclock` to disable.').catch(() => {});
             }
         }
     } catch (lockErr) {
@@ -271,17 +271,27 @@ client.manager.on('playerStart', async (player, track) => {
         .setURL(track.uri)
         .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
         .setDescription(
-            `**ℹ️ Song Details**\n▶️ **Status:** Playing\n⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue'}\n🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown'}\n🔠 **Queue:** ${player.queue.length} songs in queue\n\n**⚙️ Playback & Filters**\nUse the interactive controls below to manage your audio session.`
+            `ℹ️ **Song Details**\n▶️ **Status:** Playing\n⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue'}\n🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown'}\n🔠 **Queue:** ${player.queue.length} songs in queue\n\n⚙️ **Playback & Filters**\nUse the interactive controls below to manage your audio session.`
         )
         .setFooter({ text: 'Starry Music Player • Use /help for commands', iconURL: client.user.displayAvatarURL() });
 
-    const playbackRow = new ActionRowBuilder().addComponents(
+    // Row 1: Playback Buttons
+    const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
+    // Row 2: Volume & VC Security Buttons
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+    );
+
+    // Row 3: Filter Menu Dropdown
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
             { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
@@ -295,9 +305,24 @@ client.manager.on('playerStart', async (player, track) => {
             { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
         ])
     );
-    const msg = await channel.send({ embeds: [embed], components: [playbackRow, filterRow] });
-    player.data.set('nowPlayingMessage', msg);
+
+    const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
+
+    try {
+        if (interaction) {
+            await interaction.editReply(messageData);
+        } else if (channel) {
+            const msg = await channel.send(messageData);
+            player.data.set('nowPlayingMessage', msg);
+        }
+    } catch (e) {
+        if (channel) {
+            const msg = await channel.send(messageData).catch(() => {});
+            if (msg) player.data.set('nowPlayingMessage', msg);
+        }
+    }
 });
+
 
 client.manager.on('playerException', (player, data) => {
     console.error('[Lavalink Player Exception]:', data);
