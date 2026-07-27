@@ -10,6 +10,7 @@ const {
 } = require('@discordjs/voice');
 const prism = require('prism-media');
 const googleTTS = require('google-tts-api');
+const { Readable } = require('stream');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,7 +18,7 @@ module.exports = {
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction, client) {
-    // ⏱️ 1. DEFER IMMEDIATELY (Prevents 3-second Discord Slash Command timeout)
+    // ⏱️ 1. DEFER IMMEDIATELY
     await interaction.deferReply({ ephemeral: false }).catch(() => {});
 
     try {
@@ -90,6 +91,10 @@ module.exports = {
       const player = createAudioPlayer();
       connection.subscribe(player);
 
+      player.on('error', error => {
+        console.error('❌ [CallStarry Audio Player Error]:', error.message);
+      });
+
       let audioQueue = [];
       let isProcessing = false;
       let inactivityTimeout = null;
@@ -112,11 +117,29 @@ Rules for your voice responses:
         }
       ];
 
-      const playNextInQueue = () => {
+      // Download audio buffer safely with browser headers to avoid 403 blocks
+      const fetchTTSBuffer = async (url) => {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        });
+        if (!res.ok) throw new Error(`TTS HTTP error: ${res.status}`);
+        const arrayBuf = await res.arrayBuffer();
+        return Buffer.from(arrayBuf);
+      };
+
+      const playNextInQueue = async () => {
         if (audioQueue.length > 0) {
           const nextUrl = audioQueue.shift();
-          const resource = createAudioResource(nextUrl);
-          player.play(resource);
+          try {
+            const mp3Buffer = await fetchTTSBuffer(nextUrl);
+            const resource = createAudioResource(Readable.from(mp3Buffer));
+            player.play(resource);
+          } catch (err) {
+            console.error('❌ [CallStarry TTS Fetch Error]:', err);
+            playNextInQueue();
+          }
         }
       };
 
@@ -149,7 +172,8 @@ Rules for your voice responses:
       receiver.speaking.on('start', (speakingUserId) => {
         if (speakingUserId !== member.id) return;
 
-        // Barge-in: Stop playback if user starts speaking
+        console.log(`🎙️ [CallStarry] User ${speakingUserId} started speaking...`);
+
         if (player.state.status === AudioPlayerStatus.Playing) {
           audioQueue = [];
           player.stop();
@@ -158,28 +182,25 @@ Rules for your voice responses:
         if (isProcessing) return;
         resetInactivityTimer();
 
-        // Subscribe to raw Opus audio stream
         const audioStream = receiver.subscribe(member.id, {
           end: {
             behavior: EndBehaviorType.AfterSilence,
-            duration: 1000, // 1 sec silence
+            duration: 1000,
           },
         });
 
-        // Pipe Opus packets through Prism Opus Decoder to convert into PCM
         const opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
         const pcmChunks = [];
 
         audioStream.pipe(opusDecoder);
-
         opusDecoder.on('data', (chunk) => pcmChunks.push(chunk));
 
         opusDecoder.on('end', async () => {
           const buffer = Buffer.concat(pcmChunks);
           console.log(`🎙️ [CallStarry] Captured PCM Audio: ${buffer.length} bytes`);
           
-          if (buffer.length < 5000) {
-            console.log(`⚠️ [CallStarry] Audio packet too small/quiet (${buffer.length} bytes), skipping.`);
+          if (buffer.length < 4000) {
+            console.log(`⚠️ [CallStarry] Audio too short/quiet (${buffer.length} bytes), skipping.`);
             return;
           }
 
@@ -189,7 +210,6 @@ Rules for your voice responses:
             const wavBuffer = pcmToWav(buffer, 48000, 2);
             const base64Audio = wavBuffer.toString("base64");
 
-            // Gemini API Call
             const callGemini = async (modelName) => {
               const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
               const payload = {
@@ -222,7 +242,7 @@ Rules for your voice responses:
             let data = await callGemini("gemini-2.5-flash");
 
             if (data.error) {
-              console.warn("⚠️ [CallStarry] gemini-2.5-flash failed, falling back to gemini-1.5-flash:", data.error.message);
+              console.warn("⚠️ [CallStarry] gemini-2.5-flash failed, trying gemini-1.5-flash:", data.error.message);
               data = await callGemini("gemini-1.5-flash");
             }
 
@@ -236,7 +256,6 @@ Rules for your voice responses:
 
             console.log(`🗣️ [Starry Reply]: "${aiReply}"`);
 
-            // Clean markdown formatting
             aiReply = aiReply.replace(/[*_~#`]/g, '').trim();
 
             chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio Message]" }] });
@@ -244,7 +263,6 @@ Rules for your voice responses:
 
             if (chatHistory.length > 10) chatHistory.splice(1, 2);
 
-            // Generate TTS audio URLs
             const ttsUrls = googleTTS.getAllAudioUrls(aiReply, {
               lang: 'en',
               slow: false,
@@ -283,9 +301,6 @@ Rules for your voice responses:
   }
 };
 
-/**
- * Converts PCM Buffer into valid 16-bit WAV Header format
- */
 function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
@@ -293,12 +308,12 @@ function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   header.write("WAVE", 8);
   header.write("fmt ", 12);
   header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // 1 = PCM
+  header.writeUInt16LE(1, 20);
   header.writeUInt16LE(channels, 22);
   header.writeUInt32LE(sampleRate, 24);
   header.writeUInt32LE(sampleRate * channels * 2, 28);
   header.writeUInt16LE(channels * 2, 32);
-  header.writeUInt16LE(16, 34); // 16-bit
+  header.writeUInt16LE(16, 34);
   header.write("data", 36);
   header.writeUInt32LE(pcmBuffer.length, 40);
   return Buffer.concat([header, pcmBuffer]);
