@@ -9,24 +9,18 @@ const {
   VoiceConnectionStatus
 } = require('@discordjs/voice');
 const prism = require('prism-media');
-const { GoogleGenAI } = require('@google/genai');
 const googleTTS = require('google-tts-api');
-const mongoose = require('mongoose');
-
-// Initialize Gemini SDK with your GEMINI_API_KEY
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('callstarry')
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
-  async execute(interaction) {
-  async execute(interaction) {
-    // ==========================================
-    // 👑 1. INSTANT PREMIUM CHECK
-    // ==========================================
-    const isPremium = interaction.client.isPremium(interaction.guild.id, interaction.user.id);
+  async execute(interaction, client) {
+    // 👑 1. PREMIUM CHECK
+    const isPremium = interaction.client.isPremium 
+      ? interaction.client.isPremium(interaction.guild?.id, interaction.user.id)
+      : false;
 
     if (!isPremium) {
       const premiumEmbed = new EmbedBuilder()
@@ -45,12 +39,9 @@ module.exports = {
       return interaction.reply({ embeds: [premiumEmbed], ephemeral: true });
     }
 
-    // ... rest of callstarry execute function ...
- ==========================================
-    // 🎙️ 2. VOICE CHANNEL VALIDATION & JOIN
-    // ==========================================
+    // 🎙️ 2. VOICE CHANNEL VALIDATION
     const member = interaction.member;
-    const voiceChannel = member.voice?.channel;
+    const voiceChannel = member?.voice?.channel;
 
     if (!voiceChannel) {
       return interaction.reply({ 
@@ -75,10 +66,19 @@ module.exports = {
       });
     }
 
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return interaction.reply({
+        content: "❌ `GEMINI_API_KEY` is missing in Environment Variables on Render!",
+        ephemeral: true
+      });
+    }
+
     await interaction.reply({ 
       content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` 
     });
 
+    // 3. JOIN VOICE CHANNEL
     const connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: interaction.guild.id,
@@ -143,9 +143,7 @@ Rules for your voice responses:
 
     resetInactivityTimer();
 
-    // ==========================================
-    // 🎧 3. REAL-TIME VOICE PROCESSING ENGINE
-    // ==========================================
+    // 4. REAL-TIME VOICE PROCESSING ENGINE
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', (speakingUserId) => {
@@ -182,10 +180,12 @@ Rules for your voice responses:
           const wavBuffer = pcmToWav(buffer, 48000, 2);
           const base64Audio = wavBuffer.toString("base64");
 
-          const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+          // Native Gemini 2.5 Flash API Call
+          const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+          
+          const payload = {
             contents: [
-              ...chatHistory.map(h => ({ role: h.role, parts: h.parts })),
+              ...chatHistory,
               {
                 role: "user",
                 parts: [
@@ -199,9 +199,17 @@ Rules for your voice responses:
                 ]
               }
             ]
+          };
+
+          const response = await fetch(geminiEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
           });
 
-          let aiReply = response.text?.trim();
+          const data = await response.json();
+          let aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
           if (!aiReply) {
             isProcessing = false;
             return;
@@ -261,4 +269,5 @@ function pcmToWav(pcmBuffer, sampleRate = 48000, channels = 2) {
   header.write("data", 36);
   header.writeUInt32LE(pcmBuffer.length, 40);
   return Buffer.concat([header, pcmBuffer]);
-}
+  }
+        
