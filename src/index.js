@@ -185,35 +185,36 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 // 3. LAVALINK MUSIC ENGINE SETUP
 // ==========================================
+// ==========================================
+// 3. LAVALINK MUSIC ENGINE SETUP
+// ==========================================
 const Nodes = [
     {
         name: 'Jirayu-Node-v4',
-        host: 'lavalink.jirayu.net',
-        port: 13592,
-        password: 'youshallnotpass',
+        url: 'lavalink.jirayu.net:13592',
+        auth: 'youshallnotpass',
         secure: false,
         retryAmount: 10,
         retryDelay: 3000
     },
     {
         name: 'AjieBlogs-EU',
-        host: 'lava-v4.ajieblogs.eu.org',
-        port: 443,
-        password: 'https://dsc.gg/ajidevserver',
+        url: 'lava-v4.ajieblogs.eu.org:443',
+        auth: 'https://dsc.gg/ajidevserver',
         secure: true,
         retryAmount: 10,
         retryDelay: 3000
     },
     {
         name: 'DevamOP-India',
-        host: 'lavalink.devamop.in',
-        port: 443,
-        password: 'DevamOP',
+        url: 'lavalink.devamop.in:443',
+        auth: 'DevamOP',
         secure: true,
         retryAmount: 10,
         retryDelay: 3000
     }
 ];
+
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
