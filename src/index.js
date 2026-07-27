@@ -412,106 +412,98 @@ client.on(Events.MessageCreate, async message => {
     }
 });
 // ==========================================
-// 5. INTERACTION ENGINE
+// 5. INTERACTION ENGINE (SUPREME EDITION)
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
-    // 🚨 SOCIAL BUTTON VIP BYPASS SHIELD
+    // 🚨 1. SOCIAL BUTTON VIP BYPASS SHIELD
     if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
         return; 
     }
 
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // 💎 MODULE-HANDLED COMMAND BYPASS
-    // Stops index.js from blocking commands handled inside separate event modules (e.g., modules/premium.js)
+    // 💎 2. MODULE-HANDLED COMMAND BYPASS
+    // Passes commands managed by standalone modules (e.g., modules/premium.js) straight through
     const moduleCommands = ['premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium'];
     if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
-        return; // Passed through to module event listeners
+        return;
     }
 
-    // 🎛️ DJ PANEL CONTROLS
-    if (interaction.isButton() && interaction.customId.startsWith('dj_')) {
+    // 🎛️ 3. UNIFIED DJ & MUSIC BUTTON CONTROLS (INSTANT DEFER FIX FOR MOBILE SPINNER)
+    if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
-        const voiceChannel = member.voice?.channel;
+        const voiceChannel = member?.voice?.channel;
+        const player = client.manager.getPlayer(interaction.guild.id);
         const action = interaction.customId;
 
+        // ⏱️ INSTANT ACKNOWLEDGMENT: Solves the '...' loading spinner freeze on mobile Discord!
+        await interaction.deferUpdate().catch(() => {});
+
         if (!voiceChannel && action !== 'dj_refresh_panel') {
-            return interaction.reply({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true });
+            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true }).catch(() => {});
         }
-        if (action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-            return interaction.reply({ content: '❌ You need **Manage Channels** permission to execute this VC action!', ephemeral: true });
+
+        if (action.startsWith('dj_') && action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+            return interaction.followUp({ content: '❌ You need **Manage Channels** permission for VC control actions!', ephemeral: true }).catch(() => {});
         }
 
         try {
-            if (action === 'dj_lock') {
+            // --- VC Capacity & Security Actions ---
+            if (action === 'dj_lock' && voiceChannel) {
                 await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
-                return interaction.reply({ content: '🔒 Voice channel has been **locked**. No new users can join.', ephemeral: true });
             }
-            if (action === 'dj_unlock') {
+            if (action === 'dj_unlock' && voiceChannel) {
                 await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
-                return interaction.reply({ content: '🔓 Voice channel has been **unlocked**. Users can join freely.', ephemeral: true });
             }
-            if (action === 'dj_limit_plus') {
-                let newLimit = voiceChannel.userLimit + 5;
-                if (newLimit > 99) newLimit = 99;
+            if (action === 'dj_limit_plus' && voiceChannel) {
+                let newLimit = Math.min((voiceChannel.userLimit || 0) + 5, 99);
                 await voiceChannel.setUserLimit(newLimit);
-                return interaction.reply({ content: `➕ Voice channel member limit increased to **${newLimit}**`, ephemeral: true });
             }
-            if (action === 'dj_limit_minus') {
-                let newLimit = voiceChannel.userLimit - 5;
-                if (newLimit < 0) newLimit = 0;
+            if (action === 'dj_limit_minus' && voiceChannel) {
+                let newLimit = Math.max((voiceChannel.userLimit || 0) - 5, 0);
                 await voiceChannel.setUserLimit(newLimit);
-                return interaction.reply({ content: `➖ Voice channel member limit decreased to **${newLimit === 0 ? 'Unlimited' : newLimit}**`, ephemeral: true });
             }
-            if (action === 'dj_reset_limit') {
+            if (action === 'dj_reset_limit' && voiceChannel) {
                 await voiceChannel.setUserLimit(0);
-                return interaction.reply({ content: '🔄 Voice channel member limit reset to **Unlimited**.', ephemeral: true });
             }
-            if (action === 'dj_shuffle') {
-                const player = client.manager.getPlayer(interaction.guild.id);
-                if (!player || !player.queue.size) return interaction.reply({ content: '❌ There are no songs in the queue to shuffle.', ephemeral: true });
-                player.queue.shuffle();
-                return interaction.reply({ content: '🔀 The music queue has been **shuffled**!', ephemeral: true });
+
+            // --- Music Playback & Queue Actions ---
+            if (player) {
+                if (action === 'music_pause') player.pause(!player.paused);
+                if (action === 'music_skip') player.skip();
+                if (action === 'music_stop') player.destroy();
+                if (action === 'music_loop' || action === 'dj_loop') {
+                    const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
+                    player.setLoop(nextLoop);
+                }
+                if (action === 'dj_shuffle' && player.queue.size) player.queue.shuffle();
+                if (action === 'dj_clear_queue' && player.queue.size) player.queue.clear();
+                if (action === 'dj_vol_up') {
+                    let newVol = Math.min(player.volume + 10, 100);
+                    await player.setVolume(newVol);
+                }
+                if (action === 'dj_vol_down') {
+                    let newVol = Math.max(player.volume - 10, 0);
+                    await player.setVolume(newVol);
+                }
             }
-            if (action === 'dj_loop') {
-                const player = client.manager.getPlayer(interaction.guild.id);
-                if (!player) return interaction.reply({ content: '❌ No active music player found.', ephemeral: true });
-                const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
-                player.setLoop(nextLoop);
-                return interaction.reply({ content: `🔁 Music loop mode changed to: **${nextLoop.toUpperCase()}**`, ephemeral: true });
-            }
-            if (action === 'dj_vol_up' || action === 'dj_vol_down') {
-                const player = client.manager.getPlayer(interaction.guild.id);
-                if (!player) return interaction.reply({ content: '❌ No active music player found.', ephemeral: true });
-                let newVol = player.volume + (action === 'dj_vol_up' ? 10 : -10);
-                if (newVol > 100) newVol = 100;
-                if (newVol < 0) newVol = 0;
-                await player.setVolume(newVol);
-                return interaction.reply({ content: `🔊 Volume adjusted to **${newVol}%**`, ephemeral: true });
-            }
-            if (action === 'dj_clear_queue') {
-                const player = client.manager.getPlayer(interaction.guild.id);
-                if (!player || !player.queue.size) return interaction.reply({ content: '❌ The queue is already empty.', ephemeral: true });
-                player.queue.clear();
-                return interaction.reply({ content: '🗑️ The music queue has been **cleared**!', ephemeral: true });
-            }
-            if (action === 'dj_refresh_panel') {
-                if (!voiceChannel) return interaction.reply({ content: '❌ Join a voice channel to refresh panel stats for it!', ephemeral: true });
+
+            // --- DJ Panel Stats Refresh Action ---
+            if (action === 'dj_refresh_panel' && voiceChannel && interaction.message?.embeds?.[0]) {
                 const vcName = voiceChannel.name;
                 const vcLimit = voiceChannel.userLimit === 0 ? 'Unlimited' : voiceChannel.userLimit;
                 const vcStatus = voiceChannel.permissionsFor(interaction.guild.roles.everyone).has('Connect') ? '🔓 Unlocked' : '🔒 Locked';
                 const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                     .setDescription(`Complete master command center for voice channel security, moderation, and music playback.\n\n🎙️ **Active VC:** \`${vcName}\`\n🔒 **Access Status:** ${vcStatus}\n👥 **Member Capacity:** \`${voiceChannel.members.size} / ${vcLimit}\``);
-                await interaction.update({ embeds: [updatedEmbed] });
-                return;
+                await interaction.editReply({ embeds: [updatedEmbed] }).catch(() => {});
             }
         } catch (err) {
-            console.error('DJ Panel Error:', err);
-            return interaction.reply({ content: '❌ Failed to execute action. Verify my bot permissions.', ephemeral: true });
+            console.error('❌ Button Execution Error:', err);
         }
+        return;
     }
 
-    // 🛍️ SHOP BUY MENU
+    // 🛍️ 4. ECONOMY SHOP BUY MENU
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
         const itemId = interaction.values[0];
@@ -519,12 +511,13 @@ client.on(Events.InteractionCreate, async interaction => {
         const ShopItem = require('./models/ShopItem');
         const item = await ShopItem.findById(itemId);
         if (!item) return interaction.editReply('❌ That item no longer exists in the shop!');
+        
         let userData = await User.findOne({ userId: interaction.user.id, guildId: interaction.guild.id });
         if (!userData || userData.credits < item.price) return interaction.editReply(`❌ You do not have enough credits! You need 💳 **${item.price.toLocaleString()} Credits**.`);
 
         if (item.type === 'role') {
             const role = interaction.guild.roles.cache.get(item.roleId);
-            if (!role) return interaction.editReply('❌ That role was deleted from the server settings.');
+            if (!role) return interaction.editReply('❌ That role was deleted from server settings.');
             if (interaction.member.roles.cache.has(role.id)) return interaction.editReply('✅ You already own this role!');
             userData.credits -= item.price;
             await userData.save();
@@ -542,39 +535,28 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // 🎵 MUSIC BUTTON & SELECT MENU CONTROLS
-    if (interaction.isButton() || interaction.isStringSelectMenu()) {
-        if (!interaction.customId.startsWith('music_')) return;
+    // 🎵 5. AUDIO FILTERS MENU HANDLER
+    if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
         const player = client.manager.getPlayer(interaction.guild.id);
         if (!player) return interaction.reply({ content: '❌ No music is currently playing.', ephemeral: true });
-        if (interaction.member.voice.channelId !== player.voiceId) return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
+        if (interaction.member.voice?.channelId !== player.voiceId) return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
 
-        if (interaction.isButton()) {
-            switch (interaction.customId) {
-                case 'music_pause': player.pause(!player.paused); return interaction.reply({ content: `⏯️ Music **${player.paused ? 'Paused' : 'Resumed'}**.`, ephemeral: true });
-                case 'music_skip': player.skip(); return interaction.reply({ content: '⏭️ Skipped track.', ephemeral: true });
-                case 'music_stop': player.destroy(); return interaction.reply({ content: '⏹️ Playback stopped.', ephemeral: true });
-                case 'music_loop': const nl = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none'; player.setLoop(nl); return interaction.reply({ content: `🔁 Loop set to: **${nl.toUpperCase()}**`, ephemeral: true });
-            }
-        }        
-        if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
-            const filter = interaction.values[0];
-            await interaction.deferReply({ ephemeral: true });
-            if (filter === 'clear') { player.shoukaku.clearFilters(); return interaction.editReply('🚫 Filters cleared.'); }
-            else if (filter === 'bassboost') { player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] }); return interaction.editReply('🎸 **Bassboost** applied!'); }
-            else if (filter === '8d') { player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } }); return interaction.editReply('🌀 **8D Audio** applied!'); }
-            else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ **Nightcore** applied!'); }
-            else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 **Daycore** applied!'); }
-            else if (filter === 'vaporwave') { player.shoukaku.setFilters({ timescale: { speed: 0.85, pitch: 0.8, rate: 1.0 }, tremolo: { frequency: 14.0, depth: 0.3 } }); return interaction.editReply('🪩 **Vaporwave** applied!'); }
-            else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 **Karaoke** applied!'); }
-            else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
-            else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
-        }
+        const filter = interaction.values[0];
+        await interaction.deferReply({ ephemeral: true });
+
+        if (filter === 'clear') { player.shoukaku.clearFilters(); return interaction.editReply('🚫 Filters cleared.'); }
+        else if (filter === 'bassboost') { player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] }); return interaction.editReply('🎸 **Bassboost** applied!'); }
+        else if (filter === '8d') { player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } }); return interaction.editReply('🌀 **8D Audio** applied!'); }
+        else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ **Nightcore** applied!'); }
+        else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 **Daycore** applied!'); }
+        else if (filter === 'vaporwave') { player.shoukaku.setFilters({ timescale: { speed: 0.85, pitch: 0.8, rate: 1.0 }, tremolo: { frequency: 14.0, depth: 0.3 } }); return interaction.editReply('🪩 **Vaporwave** applied!'); }
+        else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 **Karaoke** applied!'); }
+        else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
+        else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
     }
-
     if (!interaction.isChatInputCommand()) return;
 
-    // 📡 TELEMETRY COMMAND
+    // 📡 6. NETWORK TELEMETRY COMMAND HANDLER
     if (interaction.commandName === 'telemetry') {
         const botOwners = ['1465049039153135639', '1257676837249617971']; 
         if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
@@ -666,11 +648,11 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // ⚡ COMMAND LOOKUP & EXECUTION
+    // ⚡ 7. MASTER COMMAND LOOKUP & EXECUTION ENGINE
     const command = client.commands.get(interaction.commandName);
     if (!command) {
         return interaction.reply({ 
-            content: `❌ **Command file not found!** Make sure the command file exists in your \`src/commands/\` directory and exported correctly.`, 
+            content: `❌ **Command file not found!** Make sure the command file exists in your \`src/commands/\` directory and is exported correctly.`, 
             ephemeral: true 
         }).catch(console.error);
     }
