@@ -22,37 +22,12 @@ module.exports = {
     .setDescription('📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)'),
 
   async execute(interaction) {
+  async execute(interaction) {
     // ==========================================
-    // 👑 1. PREMIUM PROTECTION SHIELD
+    // 👑 1. INSTANT PREMIUM CHECK
     // ==========================================
-    let isPremium = false;
+    const isPremium = interaction.client.isPremium(interaction.guild.id, interaction.user.id);
 
-    try {
-      // Check Premium database collection
-      const PremiumModel = mongoose.models.Premium || mongoose.model('Premium');
-      const premiumDoc = await PremiumModel.findOne({ 
-        $or: [
-          { guildId: interaction.guild.id },
-          { userId: interaction.user.id }
-        ] 
-      });
-
-      if (premiumDoc) isPremium = true;
-    } catch (e) {
-      // Fallback check on Guild schema if separate Premium model isn't used
-      try {
-        const GuildModel = mongoose.models.Guild || mongoose.model('Guild');
-        const guildDoc = await GuildModel.findOne({ guildId: interaction.guild.id });
-        if (guildDoc?.isPremium) isPremium = true;
-      } catch (err) {}
-    }
-
-    // Bot owners automatically bypass Premium restriction
-    const botOwners = ['1465049039153135639', '1257676837249617971'];
-    if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-    if (botOwners.includes(interaction.user.id)) isPremium = true;
-
-    // Reject non-premium users
     if (!isPremium) {
       const premiumEmbed = new EmbedBuilder()
         .setColor('#FFD700')
@@ -62,7 +37,7 @@ module.exports = {
           `Unlock **1-on-1 real-time voice calls** with Starry, featuring human-like speech, emotions, dynamic listening, and seamless conversations.`
         )
         .addFields(
-          { name: '💎 How to Unlock', value: 'Run `/activatepremium` or visit our dashboard to activate Premium for this server!', inline: false }
+          { name: '💎 How to Unlock', value: 'Run `/activatepremium` or visit our web dashboard to activate Premium!', inline: false }
         )
         .setFooter({ text: 'Starry Voice AI • Powered by Gemini 2.5', iconURL: interaction.client.user.displayAvatarURL() })
         .setTimestamp();
@@ -70,7 +45,8 @@ module.exports = {
       return interaction.reply({ embeds: [premiumEmbed], ephemeral: true });
     }
 
-    // ==========================================
+    // ... rest of callstarry execute function ...
+ ==========================================
     // 🎙️ 2. VOICE CHANNEL VALIDATION & JOIN
     // ==========================================
     const member = interaction.member;
