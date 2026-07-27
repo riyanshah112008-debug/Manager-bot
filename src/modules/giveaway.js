@@ -3,13 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
-// 🎬 PEAK ANIMATED MEDIA ASSETS (DISCORD EMBED DIRECT RENDER APPROVED)
+// 🎬 DIRECT CDN ANIMATED MEDIA ASSETS (DISCORD PROXY GUARANTEED)
 const ASSETS = {
-    // Active Giveaway Banner: Robert Downey Jr. (Tony Stark Icon)
-    ACTIVE_BANNER: 'https://media.giphy.com/media/AbYxLIXH1uxbO/giphy.gif', 
+    // Active Banner: Robert Downey Jr. (Tony Stark Arms Spread) - Direct CDN Link
+    ACTIVE_BANNER: 'https://i.giphy.com/AbYxLIXH1uxbO.gif', 
 
-    // Winner Celebration Banner: Leonardo DiCaprio (Great Gatsby Toast)
-    WINNER_BANNER: 'https://media.giphy.com/media/g9582DNuQppxC/giphy.gif'
+    // Winner Banner: Leonardo DiCaprio (Great Gatsby Toast) - Direct CDN Link
+    WINNER_BANNER: 'https://i.giphy.com/g9582DNuQppxC.gif'
 };
 
 module.exports = (client) => {
@@ -53,7 +53,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🚀 1. ACTIVE GIVEAWAY EMBED (RDJ EDITION)
+    // 🚀 1. ACTIVE GIVEAWAY EMBED (REPAIRED RDJ EDITION)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
@@ -71,7 +71,7 @@ module.exports = (client) => {
             })
             .setTitle(`🎁 ${prize}`)
             .setDescription([
-                `>>> React with **🎉** to enter the grand prize drop!`,
+                `> React with **🎉** to enter the grand prize drop!`,
                 ``,
                 `⏳ **Ending:** <t:${endTimestamp}:R> (<t:${endTimestamp}:F>)`,
                 `👑 **Hosted By:** <@${author.id}>`,
@@ -191,7 +191,7 @@ module.exports = (client) => {
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
                         .setTitle(`🎁 ${giveaway.prize}`)
                         .setDescription([
-                            `>>> Could not pick a winner because nobody entered!`,
+                            `> Could not pick a winner because nobody entered!`,
                             ``,
                             `👑 **Host:** <@${giveaway.hostId}>`
                         ].join('\n'))
@@ -220,7 +220,7 @@ module.exports = (client) => {
                     .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
                     .setTitle(`🏆 ${giveaway.prize}`)
                     .setDescription([
-                        `>>> Cheers to the lucky champion(s)!`,
+                        `> Cheers to the lucky champion(s)!`,
                         ``,
                         `🥳 **Winner(s):** ${winnersText}`,
                         `👑 **Host:** <@${giveaway.hostId}>`,
