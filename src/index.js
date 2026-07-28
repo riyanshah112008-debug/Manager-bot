@@ -125,7 +125,7 @@ app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
     setInterval(() => {
-        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-hglf.onrender.com';
+        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com';
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
@@ -424,14 +424,15 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // DIRECT BYPASS: Directs modules that handle their interactions internally without needing external command files!
+    // DIRECT BYPASS: Bypasses commands handled inside modules so they don't look for files in src/commands/
     const moduleCommands = [
         'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
         'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
-        'setup-starry', 'ahelp'
+        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel'
     ];
+    
     if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
-        return;
+        return; // Handled inside module listener directly
     }
 
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
@@ -501,7 +502,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
         return;
     }
-
     if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
         await interaction.deferReply({ ephemeral: true });
         const itemId = interaction.values[0];
@@ -551,6 +551,7 @@ client.on(Events.InteractionCreate, async interaction => {
         else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
         else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
     }
+
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'telemetry') {
@@ -666,17 +667,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-
-    // DIRECT BYPASS: Directs modules that handle their interactions internally without needing external command files!
-    const moduleCommands = [
-        'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
-        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
-        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel' // 👈 ADDED THESE TWO
-    ];
-    if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
-        return;
-    }
-
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
