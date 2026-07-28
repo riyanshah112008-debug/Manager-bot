@@ -35,28 +35,11 @@ const autoroleCommandDef = {
 // ==========================================
 const commands = [
     // ================= SOCIAL & TELEMETRY =================
-    { 
-        name: 'hug', 
-        description: '🤗 Give someone a warm anime hug (Works in DMs too!)', 
-        contexts: [0, 1, 2],       
-        integration_types: [0, 1], 
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to hug' }] 
-    },
-    { 
-        name: 'kiss', 
-        description: '💋 Give someone a sweet anime kiss (Works in DMs too!)', 
-        contexts: [0, 1, 2], 
-        integration_types: [0, 1],
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to kiss' }] 
-    },
-    { 
-        name: 'pat', 
-        description: '✋ Give someone a gentle anime headpat (Works in DMs too!)', 
-        contexts: [0, 1, 2],       
-        integration_types: [0, 1], 
-        options: [{ name: 'target', type: 6, required: true, description: 'The user you want to pat' }] 
-    },
+
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
+const { socialCommandsPayload } = require('./src/modules/socialActions');
+socialCommandsPayload.forEach(cmd => commands.push(cmd));
+
 
     // ================= MUSIC & VOICE AI =================
     { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
