@@ -9,7 +9,6 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 
-// Mongoose Schema for MongoDB Logging Configuration
 const logSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     logChannel: { type: String, default: null }
@@ -17,21 +16,26 @@ const logSettingsSchema = new mongoose.Schema({
 
 const LogSettings = mongoose.models.LogSettings || mongoose.model('LogSettings', logSettingsSchema);
 
-// Slash Command Schema for /setlogs
 const setLogsCommand = new SlashCommandBuilder()
     .setName('setlogs')
     .setDescription('Configure the server audit log channel in MongoDB')
     .addChannelOption(option => 
         option.setName('channel')
-            .setDescription('The channel where audit logs should be sent')
+            .setDescription('The default channel where audit logs should be sent')
             .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 module.exports = (client) => {
 
-    // Helper: Fetch configured log channel from MongoDB
-    async function getLogChannel(guild) {
+    // Smart Channel Resolver: Uses client.getLogChannel if available, else DB fallback
+    async function resolveLogChannel(guild, type = 'misc') {
         if (!guild) return null;
+
+        if (typeof client.getLogChannel === 'function') {
+            const smartChannel = client.getLogChannel(guild, type);
+            if (smartChannel) return smartChannel;
+        }
+
         try {
             const config = await LogSettings.findOne({ guildId: guild.id });
             if (!config || !config.logChannel) return null;
@@ -41,12 +45,10 @@ module.exports = (client) => {
         }
     }
 
-    // Register /setlogs Command in Client Memory
     if (client.commands && typeof client.commands.set === 'function') {
         client.commands.set('setlogs', { data: setLogsCommand, execute: handleSetLogs });
     }
 
-    // Command Handler for /setlogs
     async function handleSetLogs(interaction) {
         try {
             if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
@@ -63,7 +65,7 @@ module.exports = (client) => {
         const embed = new EmbedBuilder()
             .setColor('#23A559')
             .setTitle('⚙️ Audit Logs Channel Updated')
-            .setDescription(`Audit logs will now be saved and sent to ${channel}.`)
+            .setDescription(`Fallback audit logs will now be saved and sent to ${channel}.`)
             .setFooter({ text: 'Starry MongoDB Logger' });
 
         return interaction.editReply({ embeds: [embed] });
@@ -78,9 +80,8 @@ module.exports = (client) => {
     // 📥 2. MEMBER EVENTS (JOIN, LEAVE, UPDATE)
     // ==========================================
 
-    // Member Join
     client.on(Events.GuildMemberAdd, async (member) => {
-        const logChannel = await getLogChannel(member.guild);
+        const logChannel = await resolveLogChannel(member.guild, 'access');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -97,9 +98,8 @@ module.exports = (client) => {
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    // Member Leave
     client.on(Events.GuildMemberRemove, async (member) => {
-        const logChannel = await getLogChannel(member.guild);
+        const logChannel = await resolveLogChannel(member.guild, 'access');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -115,9 +115,8 @@ module.exports = (client) => {
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    // Member Update (Roles, Nickname, Timeout)
     client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
-        const logChannel = await getLogChannel(newMember.guild);
+        const logChannel = await resolveLogChannel(newMember.guild, 'members');
         if (!logChannel) return;
 
         const oldRoles = oldMember.roles.cache;
@@ -126,6 +125,7 @@ module.exports = (client) => {
         const removedRoles = oldRoles.filter(r => !newRoles.has(r.id));
 
         if (addedRoles.size > 0 || removedRoles.size > 0) {
+            const roleChannel = await resolveLogChannel(newMember.guild, 'roles') || logChannel;
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
@@ -139,7 +139,7 @@ module.exports = (client) => {
                 embed.setTitle('🛡️ Role Removed')
                      .setDescription(`**Removed from ${newMember.user}:** ${removedRoles.map(r => r.toString()).join(', ')}`);
             }
-            return logChannel.send({ embeds: [embed] }).catch(() => {});
+            return roleChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
         if (oldMember.nickname !== newMember.nickname) {
@@ -155,6 +155,7 @@ module.exports = (client) => {
         }
 
         if (!oldMember.isCommunicationDisabled() && newMember.isCommunicationDisabled()) {
+            const modChannel = await resolveLogChannel(newMember.guild, 'moderate') || logChannel;
             const embed = new EmbedBuilder()
                 .setColor('#ED4245')
                 .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
@@ -163,9 +164,10 @@ module.exports = (client) => {
                 .setFooter({ text: `User ID: ${newMember.id}` })
                 .setTimestamp();
 
-            return logChannel.send({ embeds: [embed] }).catch(() => {});
+            return modChannel.send({ embeds: [embed] }).catch(() => {});
         }
     });
+
     // ==========================================
     // 💬 3. MESSAGE AUDIT LOGS
     // ==========================================
@@ -173,7 +175,7 @@ module.exports = (client) => {
     client.on(Events.MessageDelete, async (message) => {
         if (!message.guild || message.author?.bot) return;
 
-        const logChannel = await getLogChannel(message.guild);
+        const logChannel = await resolveLogChannel(message.guild, 'messages');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -199,7 +201,7 @@ module.exports = (client) => {
         if (!newMessage.guild || newMessage.author?.bot) return;
         if (oldMessage.content === newMessage.content) return;
 
-        const logChannel = await getLogChannel(newMessage.guild);
+        const logChannel = await resolveLogChannel(newMessage.guild, 'messages');
         if (!logChannel) return;
 
         const beforeText = oldMessage.partial || !oldMessage.content 
@@ -218,34 +220,17 @@ module.exports = (client) => {
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
-
-    client.on(Events.MessageDeleteBulk, async (messages) => {
-        const firstMsg = messages.first();
-        if (!firstMsg || !firstMsg.guild) return;
-
-        const logChannel = await getLogChannel(firstMsg.guild);
-        if (!logChannel) return;
-
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle('🧹 Bulk Messages Purged')
-            .setDescription(`**${messages.size} messages** were deleted in ${firstMsg.channel}.`)
-            .setTimestamp();
-
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
     // ==========================================
-    // 🎙️ 4. VOICE CHANNEL AUDIT LOGS
+    // 🎙️ 4. VOICE CHANNEL AUDIT LOGS (ROUTED TO #logs-voice)
     // ==========================================
     client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         const guild = newState.guild || oldState.guild;
-        const logChannel = await getLogChannel(guild);
+        const logChannel = await resolveLogChannel(guild, 'voice');
         if (!logChannel || !newState.member) return;
 
         const user = newState.member.user;
 
-        // Joined VC
+        // --- Joined Voice Channel ---
         if (!oldState.channelId && newState.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#23A559')
@@ -258,7 +243,7 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
-        // Left VC
+        // --- Left Voice Channel ---
         if (oldState.channelId && !newState.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#DA373C')
@@ -271,7 +256,7 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
-        // Switched VC
+        // --- Switched / Moved Voice Channel ---
         if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#FEE75C')
@@ -284,7 +269,7 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
-        // Server Muted / Deafened
+        // --- Server Muted / Deafened ---
         if (oldState.serverMute !== newState.serverMute || oldState.serverDeaf !== newState.serverDeaf) {
             const action = newState.serverMute ? 'Muted' : newState.serverDeaf ? 'Deafened' : 'Unmuted/Undeafened';
             const embed = new EmbedBuilder()
@@ -303,7 +288,7 @@ module.exports = (client) => {
     // 🔗 5. INVITE LOGS
     // ==========================================
     client.on(Events.InviteCreate, async (invite) => {
-        const logChannel = await getLogChannel(invite.guild);
+        const logChannel = await resolveLogChannel(invite.guild, 'access');
         if (!logChannel) return;
 
         const inviter = invite.inviter ? `<@${invite.inviter.id}> (\`${invite.inviter.tag}\`)` : 'Unknown';
@@ -322,7 +307,7 @@ module.exports = (client) => {
     });
 
     client.on(Events.InviteDelete, async (invite) => {
-        const logChannel = await getLogChannel(invite.guild);
+        const logChannel = await resolveLogChannel(invite.guild, 'access');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -338,7 +323,7 @@ module.exports = (client) => {
     // ==========================================
     client.on(Events.ChannelCreate, async (channel) => {
         if (!channel.guild) return;
-        const logChannel = await getLogChannel(channel.guild);
+        const logChannel = await resolveLogChannel(channel.guild, 'channels');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -353,7 +338,7 @@ module.exports = (client) => {
 
     client.on(Events.ChannelDelete, async (channel) => {
         if (!channel.guild) return;
-        const logChannel = await getLogChannel(channel.guild);
+        const logChannel = await resolveLogChannel(channel.guild, 'channels');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -368,7 +353,7 @@ module.exports = (client) => {
 
     client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
         if (!newChannel.guild) return;
-        const logChannel = await getLogChannel(newChannel.guild);
+        const logChannel = await resolveLogChannel(newChannel.guild, 'channels');
         if (!logChannel) return;
 
         if (oldChannel.name !== newChannel.name) {
@@ -400,7 +385,7 @@ module.exports = (client) => {
     // 🛡️ 7. ROLE AUDIT LOGS
     // ==========================================
     client.on(Events.GuildRoleCreate, async (role) => {
-        const logChannel = await getLogChannel(role.guild);
+        const logChannel = await resolveLogChannel(role.guild, 'roles');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -414,7 +399,7 @@ module.exports = (client) => {
     });
 
     client.on(Events.GuildRoleDelete, async (role) => {
-        const logChannel = await getLogChannel(role.guild);
+        const logChannel = await resolveLogChannel(role.guild, 'roles');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -428,7 +413,7 @@ module.exports = (client) => {
     });
 
     client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
-        const logChannel = await getLogChannel(newRole.guild);
+        const logChannel = await resolveLogChannel(newRole.guild, 'roles');
         if (!logChannel) return;
 
         if (oldRole.name !== newRole.name) {
@@ -447,7 +432,7 @@ module.exports = (client) => {
     // 🔨 8. BAN & SECURITY AUDIT LOGS
     // ==========================================
     client.on(Events.GuildBanAdd, async (ban) => {
-        const logChannel = await getLogChannel(ban.guild);
+        const logChannel = await resolveLogChannel(ban.guild, 'moderate');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -462,7 +447,7 @@ module.exports = (client) => {
     });
 
     client.on(Events.GuildBanRemove, async (ban) => {
-        const logChannel = await getLogChannel(ban.guild);
+        const logChannel = await resolveLogChannel(ban.guild, 'moderate');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -480,7 +465,7 @@ module.exports = (client) => {
     // 🌐 9. GUILD & EMOJI UPDATES
     // ==========================================
     client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
-        const logChannel = await getLogChannel(newGuild);
+        const logChannel = await resolveLogChannel(newGuild, 'misc');
         if (!logChannel) return;
 
         if (oldGuild.name !== newGuild.name) {
@@ -495,7 +480,7 @@ module.exports = (client) => {
     });
 
     client.on(Events.GuildEmojiCreate, async (emoji) => {
-        const logChannel = await getLogChannel(emoji.guild);
+        const logChannel = await resolveLogChannel(emoji.guild, 'misc');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -508,7 +493,7 @@ module.exports = (client) => {
     });
 
     client.on(Events.GuildEmojiDelete, async (emoji) => {
-        const logChannel = await getLogChannel(emoji.guild);
+        const logChannel = await resolveLogChannel(emoji.guild, 'misc');
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()
@@ -521,6 +506,5 @@ module.exports = (client) => {
     });
 };
 
-// Module Hybrid Exports
 module.exports.LogSettings = LogSettings;
 module.exports.setLogsData = setLogsCommand;
