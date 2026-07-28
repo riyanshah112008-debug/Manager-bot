@@ -51,6 +51,32 @@ const trackerCommandSchema = new SlashCommandBuilder()
                 option.setName('private_channel')
                     .setDescription('The private channel for the live scraping dashboard')
                     .setRequired(true)));
+// Add this updated schema in Section 1
+const trackerCommandSchema = new SlashCommandBuilder()
+    .setName('tracker')
+    .setDescription('Universal Invite Tracker & 14-Day Inactivity System')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('setup')
+            .setDescription('Setup the 14-day inactivity log channel & preview embeds')
+            .addChannelOption(option =>
+                option.setName('channel')
+                    .setDescription('The channel to send inactivity alerts to')
+                    .setRequired(true)))
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('scrape')
+            .setDescription('Premium: Scrape historical messages into MongoDB')
+            .addChannelOption(option =>
+                option.setName('private_channel')
+                    .setDescription('The private channel for the live scraping dashboard')
+                    .setRequired(true))
+            .addIntegerOption(option =>
+                option.setName('after_days')
+                    .setDescription('Fetch data only from the last X days (e.g. 7, 30, 90). Leave blank for all time.')
+                    .setRequired(false)
+                    .setMinValue(1)));
 
 // ==========================================
 // 2. MAIN MODULE FUNCTION
@@ -282,27 +308,43 @@ const universalTrackerModule = (client) => {
         if (!user.bot && reaction.message.guild) updateActivity(reaction.message.guild, user, { reacts: 1 });
     });
 
+     // ==========================================
+    // ⏳ 6. UPGRADED HISTORICAL SCRAPING ENGINE
     // ==========================================
-    // ⏳ 6. HISTORICAL SCRAPING ENGINE
-    // ==========================================
-    async function updateLiveDashboard(logMessage, currentChannel, messagesInChannel, completed = 0, total = 0) {
+
+    // Helper: Progress Bar Generator
+    function generateProgressBar(current, total, length = 12) {
+        if (!total || total === 0) return '░'.repeat(length) + ' 0%';
+        const progress = Math.min(Math.max(current / total, 0), 1);
+        const fill = Math.round(length * progress);
+        const bar = '█'.repeat(fill) + '░'.repeat(length - fill);
+        return `\`${bar}\` ${Math.floor(progress * 100)}%`;
+    }
+
+    async function updateLiveDashboard(logMessage, currentChannel, messagesInChannel, completed = 0, total = 0, timeframeDays = null) {
         try {
+            const progressBar = generateProgressBar(completed, total);
+            const timeFilterText = timeframeDays ? `Last **${timeframeDays} days**` : '**All Time (Full Scrape)**';
+
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
-                .setTitle('🧠 AI Data Bridge: Historical Scraper')
-                .setDescription(`Reading past chats to populate MongoDB. Do not restart the bot.`)
+                .setAuthor({ name: '🧠 AI Data Bridge • Historical Scraper', iconURL: logMessage.guild.iconURL({ dynamic: true }) || undefined })
+                .setTitle('🚀 Live Scraper Engine Active')
+                .setDescription('Reading past channel histories to sync activity data into MongoDB. **Do not restart the bot during this process.**')
                 .addFields(
-                    { name: '📍 Current Channel', value: `${currentChannel} (\`#${currentChannel.name}\`)`, inline: true },
-                    { name: '📊 Channel Messages Processed', value: `${messagesInChannel.toLocaleString()}`, inline: true },
-                    { name: '📈 Overall Progress', value: `${completed}/${total || '?'} Channels Completed`, inline: false }
+                    { name: '📍 Current Target', value: `${currentChannel} (\`#${currentChannel.name}\`)`, inline: true },
+                    { name: '💬 Messages Processed', value: `\`${messagesInChannel.toLocaleString()}\` msgs`, inline: true },
+                    { name: '⏱️ Time Filter', value: timeFilterText, inline: true },
+                    { name: '📈 Overall Progress', value: `${progressBar}\n**${completed}** of **${total}** Channels Completed`, inline: false }
                 )
-                .setFooter({ text: '💎 Premium Feature • Safe Rate-Limit Throttling Active' })
+                .setFooter({ text: '💎 Premium Engine • Safe Rate-Limit Throttling Active' })
                 .setTimestamp();
+
             await logMessage.edit({ embeds: [embed] });
         } catch (err) {}
     }
 
-    async function scrapeChannelHistory(channel, logMessage, totalChannels, completedChannels) {
+    async function scrapeChannelHistory(channel, logMessage, totalChannels, completedChannels, minTimestamp = 0, timeframeDays = null) {
         let state = await ChannelScrapeState.findOne({ channelId: channel.id }) || 
                     new ChannelScrapeState({ guildId: channel.guild.id, channelId: channel.id });
 
@@ -321,8 +363,17 @@ const universalTrackerModule = (client) => {
                 }
 
                 const bulkOps = [];
+                let ReachedTimeLimit = false;
+
                 messages.forEach(msg => {
                     if (msg.author.bot) return;
+
+                    // Enforce Time Interval Filter
+                    if (minTimestamp > 0 && msg.createdTimestamp < minTimestamp) {
+                        ReachedTimeLimit = true;
+                        return;
+                    }
+
                     bulkOps.push({
                         updateOne: {
                             filter: { guildId: channel.guild.id, userId: msg.author.id },
@@ -347,14 +398,19 @@ const universalTrackerModule = (client) => {
                 state.totalMessagesProcessed += messages.size;
                 await state.save();
 
+                if (ReachedTimeLimit) {
+                    hasMoreMessages = false;
+                    break;
+                }
+
                 if (state.isFullyScraped) fetchOptions.after = sortedIds[sortedIds.length - 1];
                 else fetchOptions.before = sortedIds[0];
 
                 batchCount++;
-                if (batchCount % 5 === 0) {
-                    await updateLiveDashboard(logMessage, channel, state.totalMessagesProcessed, completedChannels, totalChannels);
+                if (batchCount % 3 === 0) {
+                    await updateLiveDashboard(logMessage, channel, state.totalMessagesProcessed, completedChannels, totalChannels, timeframeDays);
                 }
-                await sleep(1500);
+                await sleep(1200); // Throttling protection
             } catch (error) {
                 await sleep(5000);
             }
@@ -363,14 +419,16 @@ const universalTrackerModule = (client) => {
         await state.save();
     }
 
-    async function startServerScrape(guild, privateAdminChannelId) {
+    async function startServerScrape(guild, privateAdminChannelId, timeframeDays = null) {
         const adminChannel = guild.channels.cache.get(privateAdminChannelId);
         if (!adminChannel) return;
 
+        const minTimestamp = timeframeDays ? Date.now() - (timeframeDays * 24 * 60 * 60 * 1000) : 0;
+
         const initEmbed = new EmbedBuilder()
             .setColor('#FEE75C')
-            .setTitle('⏳ Historical Data Scraper Active')
-            .setDescription('Initializing MongoDB sync...')
+            .setTitle('⏳ Initializing Historical Data Engine...')
+            .setDescription(`Preparing MongoDB sync... Time Filter: ${timeframeDays ? `**Last ${timeframeDays} Days**` : '**All Time**'}`)
             .setTimestamp();
 
         const logMessage = await adminChannel.send({ embeds: [initEmbed] });
@@ -378,20 +436,26 @@ const universalTrackerModule = (client) => {
         let channelsCompleted = 0;
 
         for (const [id, channel] of textChannels) {
-            await updateLiveDashboard(logMessage, channel, 0, channelsCompleted, textChannels.size);
-            await scrapeChannelHistory(channel, logMessage, textChannels.size, channelsCompleted);
+            await updateLiveDashboard(logMessage, channel, 0, channelsCompleted, textChannels.size, timeframeDays);
+            await scrapeChannelHistory(channel, logMessage, textChannels.size, channelsCompleted, minTimestamp, timeframeDays);
             channelsCompleted++;
         }
 
         const doneEmbed = new EmbedBuilder()
             .setColor('#57F287')
-            .setTitle('✅ Historical Scrape Complete')
-            .setDescription(`Successfully processed **${textChannels.size} channels** into MongoDB.`)
+            .setAuthor({ name: '🧠 AI Data Bridge • Complete', iconURL: guild.iconURL({ dynamic: true }) || undefined })
+            .setTitle('✅ Historical Scrape Completed Successfully')
+            .setDescription(
+                `Successfully processed **${textChannels.size} channels** into MongoDB.\n\n` +
+                `• **Time Window:** ${timeframeDays ? `Last ${timeframeDays} days` : 'Full History'}\n` +
+                `• **Status:** Database successfully populated & synced.`
+            )
+            .setFooter({ text: ' Universal Tracker System' })
             .setTimestamp();
+
         await logMessage.edit({ embeds: [doneEmbed] });
     }
-
-    // ==========================================
+ ==========================================
     // 🚨 7. AUTOMATED 14-DAY INACTIVITY CHECKER WITH MODERATION PANEL
     // ==========================================
     setInterval(async () => {
@@ -526,16 +590,24 @@ const universalTrackerModule = (client) => {
                 return interaction.editReply({ content: `✅ **Success!** Target tracking channel configured to ${channel}. Sent live preview embeds!` });
             } 
 
+            // 👇 THIS IS WHERE THE LAST CODE BLOCK GOES
             if (subCommand === 'scrape') {
                 const privateChannel = interaction.options.getChannel('private_channel', true);
+                const afterDays = interaction.options.getInteger('after_days');
+
                 await GuildTrackerSettings.findOneAndUpdate(
                     { guildId: interaction.guildId },
                     { privateAdminChannel: privateChannel.id },
                     { upsert: true }
                 );
 
-                interaction.editReply({ content: `🚀 **Started!** Check ${privateChannel} for the live scraping dashboard.` });
-                startServerScrape(interaction.guild, privateChannel.id);
+                const filterNotice = afterDays ? ` (Filtering last **${afterDays} days**)` : ' (Full Server History)';
+
+                interaction.editReply({ 
+                    content: `🚀 **Scraper Started!** Check ${privateChannel} for the live aesthetic dashboard${filterNotice}. Do not restart the bot.` 
+                });
+
+                startServerScrape(interaction.guild, privateChannel.id, afterDays);
             }
         } catch (error) { 
             return interaction.editReply({ content: `❌ **Error:** \`${error.message}\`` }); 
