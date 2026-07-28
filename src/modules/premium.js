@@ -1,9 +1,11 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+// ==========================================
+// 1. IMPORTS & FLEXIBLE MONGOOSE SCHEMA
+// ==========================================
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const mongoose = require('mongoose');
 
-// 🗄️ 1. Flexible Schema supporting both Guild and User Premium
 const PremiumSchema = new mongoose.Schema({
-    targetId: { type: String, required: true, unique: true }, // Can be Guild ID or User ID
+    targetId: { type: String, required: true, unique: true }, // Guild ID or User ID
     type: { type: String, enum: ['guild', 'user'], default: 'guild' },
     isPremium: { type: Boolean, default: true },
     activatedAt: { type: Date, default: Date.now }
@@ -11,17 +13,20 @@ const PremiumSchema = new mongoose.Schema({
 
 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds', PremiumSchema);
 
-module.exports = (client) => {
-    // 🧠 2. Instant Memory Cache
+// ==========================================
+// 2. MAIN PREMIUM MODULE
+// ==========================================
+const premiumModule = (client) => {
+    // 🧠 High-Speed RAM Cache
     const premiumCache = new Set();
 
-    // 👑 3. Multi-Owner Authorization List
+    // 👑 Multi-Owner Authorization List
     const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
     if (process.env.OWNER_ID && !BOT_OWNERS.includes(process.env.OWNER_ID)) {
         BOT_OWNERS.push(process.env.OWNER_ID);
     }
 
-    // 📥 4. DB Cache Loader
+    // 📥 DB Cache Loader
     const loadPremiumCache = async () => {
         try {
             const premiumRecords = await PremiumModel.find({ isPremium: true });
@@ -39,18 +44,18 @@ module.exports = (client) => {
         mongoose.connection.once('open', loadPremiumCache);
     }
 
-    // ⚡ 5. Master Sync Fast Check
+    // ⚡ Master Sync Fast Check
     client.isPremium = (guildId, userId = null) => {
         // Bot Owners bypass all Premium checks globally
         if (userId && BOT_OWNERS.includes(userId)) return true;
-        // Check if Guild ID or User ID is in cache
+        // Check if Guild ID or User ID is in RAM cache
         if (guildId && premiumCache.has(guildId)) return true;
         if (userId && premiumCache.has(userId)) return true;
         return false;
     };
 
     // =====================================================================
-    // 💎 6. GLOBAL PREMIUM MODERATION DM SYSTEM
+    // 💎 GLOBAL PREMIUM MODERATION DM SYSTEM
     // =====================================================================
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
         const actionType = action.toLowerCase();
@@ -126,63 +131,96 @@ module.exports = (client) => {
             return false;
         }
     };
-
     // =====================================================================
-    // 🎛️ 7. PREMIUM SLASH COMMAND HANDLERS
+    // 🎛️ 3. PREMIUM SLASH COMMAND INTERACTION HANDLERS
     // =====================================================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
         const { commandName, options, guildId, user } = interaction;
 
-        // --- CHECK PREMIUM ---
+        // --- 1. /premiumcheck ---
         if (commandName === 'premiumcheck') {
-            const enabled = client.isPremium(guildId, user.id);
-            return interaction.reply({
-                content: enabled
-                    ? '💎 **Premium is ACTIVE on this server or for your account!**'
-                    : 'ℹ️ **Premium is NOT active on this server.** Use `/activatepremium` if you are a bot owner.',
-                ephemeral: true
-            });
+            try {
+                const targetId = guildId || user.id;
+                const enabled = client.isPremium(guildId, user.id);
+
+                return interaction.reply({
+                    content: enabled
+                        ? `💎 **Premium is ACTIVE** on this server/account! (ID: \`${targetId}\`)`
+                        : `ℹ️ **Premium is NOT active** on this server. Use \`/activatepremium\` if you are a bot owner.`,
+                    ephemeral: true
+                });
+            } catch (err) {
+                console.error('PremiumCheck Error:', err);
+                return interaction.reply({ content: '❌ An error occurred while checking premium status.', ephemeral: true }).catch(() => {});
+            }
         }
 
-        // --- ACTIVATE PREMIUM ---
+        // --- 2. /activatepremium ---
         if (commandName === 'activatepremium') {
             if (!BOT_OWNERS.includes(user.id)) {
                 return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            try {
+                await interaction.deferReply({ ephemeral: true });
 
-            const rawInputId = options.getString('server_id');
-            const targetId = rawInputId ? rawInputId.trim() : guildId;
+                const rawInputId = options.getString('server_id');
+                const targetId = rawInputId ? rawInputId.trim() : (guildId || user.id);
 
-            await PremiumModel.findOneAndUpdate(
-                { targetId: targetId },
-                { targetId: targetId, isPremium: true, type: 'guild' },
-                { upsert: true, new: true }
-            );
+                if (!targetId) {
+                    return interaction.editReply({ content: '❌ Invalid Target ID provided.' });
+                }
 
-            premiumCache.add(targetId);
+                await PremiumModel.findOneAndUpdate(
+                    { targetId: targetId },
+                    { targetId: targetId, isPremium: true, type: rawInputId ? 'guild' : (guildId ? 'guild' : 'user') },
+                    { upsert: true, new: true }
+                );
 
-            return interaction.editReply({ content: `✅ **SUCCESS:** Premium has been activated for target ID \`${targetId}\`!` });
+                premiumCache.add(targetId);
+                if (guildId) premiumCache.add(guildId);
+
+                return interaction.editReply({ content: `✅ **SUCCESS:** Premium has been activated for target ID \`${targetId}\`!` });
+            } catch (err) {
+                console.error('ActivatePremium Error:', err);
+                if (interaction.deferred || interaction.replied) {
+                    return interaction.editReply({ content: `❌ **Failed to activate Premium:** \`${err.message}\`` });
+                } else {
+                    return interaction.reply({ content: `❌ **Failed to activate Premium:** \`${err.message}\``, ephemeral: true });
+                }
+            }
         }
 
-        // --- DEACTIVATE PREMIUM ---
+        // --- 3. /deactivatepremium & /removepremium ---
         if (commandName === 'deactivatepremium' || commandName === 'removepremium') {
             if (!BOT_OWNERS.includes(user.id)) {
                 return interaction.reply({ content: '❌ Only Bot Owners can manage Premium activation.', ephemeral: true });
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            try {
+                await interaction.deferReply({ ephemeral: true });
 
-            const rawInputId = options.getString('server_id');
-            const targetId = rawInputId ? rawInputId.trim() : guildId;
+                const rawInputId = options.getString('server_id');
+                const targetId = rawInputId ? rawInputId.trim() : (guildId || user.id);
 
-            await PremiumModel.deleteOne({ targetId: targetId });
-            premiumCache.delete(targetId);
+                await PremiumModel.deleteOne({ targetId: targetId });
+                premiumCache.delete(targetId);
 
-            return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status has been removed from target ID \`${targetId}\`.` });
+                return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status has been removed from target ID \`${targetId}\`.` });
+            } catch (err) {
+                console.error('DeactivatePremium Error:', err);
+                if (interaction.deferred || interaction.replied) {
+                    return interaction.editReply({ content: `❌ **Failed to deactivate Premium:** \`${err.message}\`` });
+                } else {
+                    return interaction.reply({ content: `❌ **Failed to deactivate Premium:** \`${err.message}\``, ephemeral: true });
+                }
+            }
         }
     });
 };
+
+// Hybrid Export
+premiumModule.PremiumModel = PremiumModel;
+module.exports = premiumModule;
