@@ -39,11 +39,10 @@ const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuil
 const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', automodChannelSchema);
 const Warning = mongoose.models.Warning || mongoose.model('Warning', warningSchema);
 
-// Safe Transcript Fallback Model
 let Transcript;
 try { Transcript = require('../models/Transcript'); } catch (e) { Transcript = mongoose.models.Transcript; }
 
-// --- SQLite Database Setup (Protected Users) ---
+// --- SQLite Database Setup ---
 const protectDb = new Database('protect.db');
 protectDb.exec(`
     CREATE TABLE IF NOT EXISTS protected_users (
@@ -57,7 +56,7 @@ const addProtect = protectDb.prepare('INSERT OR IGNORE INTO protected_users (gui
 const removeProtect = protectDb.prepare('DELETE FROM protected_users WHERE guild_id = ? AND user_id = ?');
 const getProtect = protectDb.prepare('SELECT 1 FROM protected_users WHERE guild_id = ? AND user_id = ?');
 
-// Media Channels File Storage Setup
+// Media Storage
 const mediaDbPath = path.join(__dirname, 'mediaChannels.json');
 function getMediaData() {
     if (!fs.existsSync(mediaDbPath)) fs.writeFileSync(mediaDbPath, JSON.stringify([]));
@@ -67,31 +66,11 @@ function saveMediaData(data) {
     fs.writeFileSync(mediaDbPath, JSON.stringify(data, null, 2));
 }
 
-// Global Anti-Spam Memory Maps
 const userMessageLog = new Map();
 const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free'];
 
-// Allowed Links Checker
-function isAllowedUrl(linkString) {
-    try {
-        const cleanLink = linkString.replace(/[.,!?>)]+$/, '');
-        const parsed = new URL(cleanLink);
-        const host = parsed.hostname.toLowerCase();
-        const pathname = parsed.pathname.toLowerCase();
-
-        const safeDomains = [
-            'discord.com', 'discordapp.com', 'discordapp.net', 'tenor.com', 'giphy.com', 
-            'imgur.com', 'reddit.com', 'youtube.com', 'youtu.be', 'spotify.com'
-        ];
-
-        if (safeDomains.some(d => host === d || host.endsWith('.' + d))) return true;
-        if (['.gif', '.gifv', '.webp', '.mp4', '.png', '.jpg', '.jpeg'].some(ext => pathname.endsWith(ext))) return true;
-        return false;
-    } catch { return false; }
-}
-
 // ==========================================
-// 2. MASTER COMMAND SCHEMAS (/mod & /automod)
+// 2. MASTER SLASH COMMAND BUILDERS
 // ==========================================
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod')
@@ -141,10 +120,7 @@ const autoModMasterCommand = new SlashCommandBuilder()
     .setName('automod')
     .setDescription('⚙️ Master Security & Auto-Mod Config Hub')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addSubcommand(sub => 
-        sub.setName('status')
-           .setDescription('Check server-wide Automod status')
-    )
+    .addSubcommand(sub => sub.setName('status').setDescription('Check server-wide Automod status'))
     .addSubcommand(sub => 
         sub.setName('toggle')
            .setDescription('Toggle Server Automod or Protection Modules')
@@ -188,145 +164,152 @@ const autoModMasterCommand = new SlashCommandBuilder()
            .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(false))
     );
 // ==========================================
-// 3. MASTER /mod HANDLER
+// 3. BULLETPROOF /mod HANDLER
 // ==========================================
 async function handleModCommands(client, interaction) {
-    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+    if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    }
 
     const sub = interaction.options.getSubcommand();
     const guild = interaction.guild;
 
-    // --- WARN ---
-    if (sub === 'warn') {
-        const user = interaction.options.getUser('target', true);
-        const reason = interaction.options.getString('reason', true);
+    switch (sub) {
+        case 'warn': {
+            const user = interaction.options.getUser('target', true);
+            const reason = interaction.options.getString('reason', true);
 
-        if (user.id === guild.ownerId) return interaction.editReply('❌ You cannot warn the Server Owner!');
+            if (user.id === guild.ownerId) return interaction.editReply('❌ You cannot warn the Server Owner!');
 
-        const warnId = Math.floor(1000 + Math.random() * 9000);
-        await Warning.create({ guildId: guild.id, userId: user.id, warnId, reason, moderatorId: interaction.user.id });
+            const warnId = Math.floor(1000 + Math.random() * 9000);
+            await Warning.create({ guildId: guild.id, userId: user.id, warnId, reason, moderatorId: interaction.user.id });
 
-        const userWarns = await Warning.find({ guildId: guild.id, userId: user.id });
+            const userWarns = await Warning.find({ guildId: guild.id, userId: user.id });
 
-        if (userWarns.length >= 3 && typeof client.isPremium === 'function' && client.isPremium(guild.id)) {
-            const member = await guild.members.fetch(user.id).catch(() => null);
-            if (member?.kickable) await member.kick('Reached 3 active warnings').catch(() => {});
-            return interaction.editReply(`⚠️ <@${user.id}> reached 3 warnings and was automatically kicked from the server.`);
+            if (userWarns.length >= 3 && typeof client.isPremium === 'function' && client.isPremium(guild.id)) {
+                const member = await guild.members.fetch(user.id).catch(() => null);
+                if (member?.kickable) await member.kick('Reached 3 active warnings').catch(() => {});
+                return interaction.editReply(`⚠️ <@${user.id}> reached 3 warnings and was automatically kicked.`);
+            }
+
+            return interaction.editReply(`⚠️ **<@${user.id}> has been warned.** (Total: ${userWarns.length})\nReason: *${reason}* | ID: \`#${warnId}\``);
         }
 
-        return interaction.editReply(`⚠️ **<@${user.id}> has been warned.** (Total Warnings: ${userWarns.length})\nReason: *${reason}* | Warning ID: \`#${warnId}\``);
-    }
+        case 'warnings': {
+            const user = interaction.options.getUser('target', true);
+            const warns = await Warning.find({ guildId: guild.id, userId: user.id });
 
-    // --- WARNINGS ---
-    if (sub === 'warnings') {
-        const user = interaction.options.getUser('target', true);
-        const warns = await Warning.find({ guildId: guild.id, userId: user.id });
+            if (!warns || warns.length === 0) {
+                return interaction.editReply(`✅ **${user.username}** has 0 warnings on record.`);
+            }
 
-        if (!warns || warns.length === 0) {
-            return interaction.editReply(`✅ **${user.username}** has 0 warnings on record.`);
+            const embed = new EmbedBuilder()
+                .setColor('#ED4245')
+                .setTitle(`⚠️ Warnings Record for ${user.username}`)
+                .setDescription(warns.map((w, i) => `**${i + 1}.** ${w.reason} *(ID: #${w.warnId || w._id})*`).join('\n'))
+                .setFooter({ text: 'Use /mod delwarn <ID> to clear a warning.' });
+
+            return interaction.editReply({ embeds: [embed] });
         }
 
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle(`⚠️ Warnings Record for ${user.username}`)
-            .setDescription(warns.map((w, i) => `**${i + 1}.** ${w.reason} *(ID: #${w.warnId || w._id})*`).join('\n'))
-            .setFooter({ text: 'Use /mod delwarn <ID> to clear a warning.' });
+        case 'delwarn': {
+            const id = interaction.options.getInteger('id', true);
+            const deleted = await Warning.findOneAndDelete({ guildId: guild.id, warnId: id });
 
-        return interaction.editReply({ embeds: [embed] });
-    }
+            if (!deleted) return interaction.editReply(`❌ Warning ID \`#${id}\` was not found.`);
+            return interaction.editReply(`✅ Warning ID \`#${id}\` has been removed.`);
+        }
 
-    // --- DELWARN ---
-    if (sub === 'delwarn') {
-        const id = interaction.options.getInteger('id', true);
-        const deleted = await Warning.findOneAndDelete({ guildId: guild.id, warnId: id });
+        case 'clear': {
+            let amount = interaction.options.getInteger('amount', true);
+            let totalDeleted = 0;
+            let collectedMessages = [];
 
-        if (!deleted) return interaction.editReply(`❌ Warning ID \`#${id}\` was not found.`);
-        return interaction.editReply(`✅ Warning ID \`#${id}\` has been removed.`);
-    }
+            try {
+                while (amount > 0) {
+                    const fetchSize = amount > 100 ? 100 : amount;
+                    const messages = await interaction.channel.messages.fetch({ limit: fetchSize }).catch(() => null);
+                    if (!messages || messages.size === 0) break;
 
-    // --- CLEAR / PURGE + TRANSCRIPT LOG ---
-    if (sub === 'clear') {
-        let amount = interaction.options.getInteger('amount', true);
-        let totalDeleted = 0;
-        let collectedMessages = [];
-
-        try {
-            while (amount > 0) {
-                const fetchSize = amount > 100 ? 100 : amount;
-                const messages = await interaction.channel.messages.fetch({ limit: fetchSize });
-                if (messages.size === 0) break;
-
-                messages.forEach(m => {
-                    collectedMessages.push({
-                        authorId: m.author.id,
-                        authorTag: m.author.tag,
-                        content: m.content || '[Embed / Attachment]',
-                        timestamp: m.createdAt
+                    messages.forEach(m => {
+                        collectedMessages.push({
+                            authorId: m.author.id,
+                            authorTag: m.author.tag,
+                            content: m.content || '[Embed / Attachment]',
+                            timestamp: m.createdAt
+                        });
                     });
-                });
 
-                const deleted = await interaction.channel.bulkDelete(messages, true);
-                totalDeleted += deleted.size;
-                amount -= fetchSize;
+                    const deleted = await interaction.channel.bulkDelete(messages, true).catch(() => null);
+                    if (!deleted || deleted.size === 0) break;
 
-                if (deleted.size < fetchSize) break;
+                    totalDeleted += deleted.size;
+                    amount -= fetchSize;
+
+                    if (deleted.size < fetchSize) break;
+                }
+
+                if (collectedMessages.length > 0 && Transcript) {
+                    await Transcript.create({
+                        guildId: guild.id,
+                        channelId: interaction.channel.id,
+                        moderatorId: interaction.user.id,
+                        deletedCount: totalDeleted,
+                        messages: collectedMessages
+                    }).catch(() => {});
+                }
+
+                return interaction.editReply(`🧹 Successfully purged **${totalDeleted}** messages!`);
+            } catch (err) {
+                return interaction.editReply(`❌ Bulk delete error: \`${err.message}\`. Ensure messages are under 14 days old.`);
+            }
+        }
+
+        case 'lockdown': {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return interaction.editReply('❌ Administrator permission required for Lockdown.');
             }
 
-            if (collectedMessages.length > 0 && Transcript) {
-                await Transcript.create({
-                    guildId: guild.id,
-                    channelId: interaction.channel.id,
-                    moderatorId: interaction.user.id,
-                    deletedCount: totalDeleted,
-                    messages: collectedMessages
-                }).catch(() => {});
+            const action = interaction.options.getString('action', true);
+            const everyoneRole = guild.roles.everyone;
+
+            if (action === 'lock') {
+                await interaction.channel.permissionOverwrites.edit(everyoneRole, { SendMessages: false });
+                return interaction.editReply('🔒 **CHANNEL LOCKED.** Normal members can no longer send messages here.');
             }
 
-            return interaction.editReply(`🧹 Successfully deleted and archived **${totalDeleted}** messages to database transcript logs!`);
-        } catch (err) {
-            return interaction.editReply(`❌ Bulk delete error: \`${err.message}\`. Ensure messages are under 14 days old.`);
-        }
-    }
-
-    // --- LOCKDOWN ---
-    if (sub === 'lockdown') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.editReply('❌ Administrator permission required for Lockdown.');
+            await interaction.channel.permissionOverwrites.edit(everyoneRole, { SendMessages: null });
+            return interaction.editReply('🔓 **CHANNEL UNLOCKED.** Normal members can send messages again.');
         }
 
-        const action = interaction.options.getString('action', true);
-        const everyoneRole = guild.roles.everyone;
+        case 'protect':
+        case 'unprotect': {
+            const isOwner = interaction.user.id === guild.ownerId || interaction.user.id === process.env.OWNER_ID;
+            if (!isOwner) return interaction.editReply('❌ **Access Denied:** Only the Server Owner can use protection commands!');
 
-        if (action === 'lock') {
-            await interaction.channel.permissionOverwrites.edit(everyoneRole, { SendMessages: false });
-            return interaction.editReply('🔒 **CHANNEL LOCKED.** Normal members can no longer send messages here.');
+            const targetUser = interaction.options.getUser('user', true);
+
+            if (sub === 'protect') {
+                addProtect.run(guild.id, targetUser.id);
+                return interaction.editReply(`🛡️ **${targetUser.username}** is now protected! Staff cannot ban or kick them.`);
+            } else {
+                removeProtect.run(guild.id, targetUser.id);
+                return interaction.editReply(`🔓 **${targetUser.username}** is no longer protected.`);
+            }
         }
 
-        await interaction.channel.permissionOverwrites.edit(everyoneRole, { SendMessages: null });
-        return interaction.editReply('🔓 **CHANNEL UNLOCKED.** Normal members can send messages again.');
-    }
-
-    // --- PROTECT / UNPROTECT ---
-    if (sub === 'protect' || sub === 'unprotect') {
-        const isOwner = interaction.user.id === guild.ownerId || interaction.user.id === process.env.OWNER_ID;
-        if (!isOwner) return interaction.editReply('❌ **Access Denied:** Only the Server Owner can use protection commands!');
-
-        const targetUser = interaction.options.getUser('user', true);
-
-        if (sub === 'protect') {
-            addProtect.run(guild.id, targetUser.id);
-            return interaction.editReply(`🛡️ **${targetUser.username}** is now protected! Staff cannot ban or kick them.`);
-        } else {
-            removeProtect.run(guild.id, targetUser.id);
-            return interaction.editReply(`🔓 **${targetUser.username}** is no longer protected.`);
-        }
+        default:
+            return interaction.editReply('❌ Unknown subcommand.');
     }
 }
+
 // ==========================================
 // 4. MASTER /automod HANDLER
 // ==========================================
 async function handleAutoModCommands(client, interaction, guildCache, channelCache) {
-    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+    if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    }
 
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
@@ -400,7 +383,6 @@ module.exports = (client) => {
 
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
 
-    // Sync Memory Caches
     client.once('ready', async () => {
         try {
             const gSettings = await AutomodGuild.find().lean();
@@ -410,9 +392,7 @@ module.exports = (client) => {
             cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
 
             console.log('✅ Integrated Master Moderation & Automod Engine Ready!');
-        } catch (err) {
-            console.error('❌ Error initializing Automod cache:', err);
-        }
+        } catch (err) {}
     });
 
     // --- Slash Command Router ---
@@ -497,7 +477,7 @@ module.exports = (client) => {
         }
     });
 
-    // --- Anti-Kick / Anti-Ban Protected Users Audit Shield ---
+    // --- Anti-Kick / Anti-Ban Protected Users Shield ---
     client.on(Events.GuildAuditLogEntryCreate, async (auditLog, guild) => {
         const { action, executorId, targetId } = auditLog;
 
