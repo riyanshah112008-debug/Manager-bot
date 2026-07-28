@@ -195,48 +195,32 @@ const Nodes = [
         url: 'lavalink.jirayu.net:13592',
         auth: 'youshallnotpass',
         secure: false,
-        retryAmount: 15,
-        retryDelay: 3000
+        retryAmount: 5,
+        retryDelay: 5000
     },
     {
-        name: 'Ajie-Node-v4',
+        name: 'Lavalink-v4-Primary',
         url: 'lava-v4.ajiehospitality.com:443',
         auth: 'https://discord.gg/vM3e3U389y',
         secure: true,
-        retryAmount: 15,
-        retryDelay: 3000
-    },
-    {
-        name: 'Lava-Ready-v4',
-        url: 'v4.lavalink.boats:443',
-        auth: 'youshallnotpass',
-        secure: true,
-        retryAmount: 15,
-        retryDelay: 3000
+        retryAmount: 3,
+        retryDelay: 5000
     },
     {
         name: 'Lavalink-v4-Secondary',
-        url: 'lava.link:2333',
-        auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 15,
-        retryDelay: 3000
-    },
-    {
-        name: 'Serene-Lavalink-v4',
-        url: 'lavalink.serene.ink:443',
+        url: 'lavalink.lavalink.pw:443',
         auth: 'youshallnotpass',
         secure: true,
-        retryAmount: 15,
-        retryDelay: 3000
+        retryAmount: 3,
+        retryDelay: 5000
     },
     {
-        name: 'Inu-Lavalink-v4',
-        url: 'lavalink.inu.is:443',
+        name: 'Node-v4-Backup',
+        url: 'ssl.freelavalink.ga:443',
         auth: 'youshallnotpass',
         secure: true,
-        retryAmount: 15,
-        retryDelay: 3000
+        retryAmount: 3,
+        retryDelay: 5000
     }
 ];
 
@@ -263,13 +247,13 @@ client.manager = new Kazagumo({
 }, new Connectors.DiscordJS(client), Nodes, {
     voiceConnectionTimeout: 30000,
     linkInitializers: true,
-    reconnectTries: 20,
+    reconnectTries: 5,
     restTimeout: 10000
 });
 
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', (name, error) => console.error(`[Lavalink] Node ${name} warning/error:`, error?.message || error));
-client.manager.shoukaku.on('disconnect', (name, reason) => console.warn(`[Lavalink] Node ${name} disconnected. Reconnecting or migrating players...`));
+client.manager.shoukaku.on('error', () => {}); // Silenced to prevent Render log spam when fallback node is offline
+client.manager.shoukaku.on('disconnect', () => {});
 
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
@@ -350,9 +334,7 @@ client.manager.on('playerStart', async (player, track) => {
     }
 });
 
-client.manager.on('playerException', (player, data) => {
-    const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('⚠️ **Playback Exception:** Encountered a stream block. Automatically recovering stream...').catch(() => {});
+client.manager.on('playerException', (player) => {
     try {
         if (player.queue.size > 0) player.skip();
         else player.destroy();
@@ -363,6 +345,7 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
+
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
