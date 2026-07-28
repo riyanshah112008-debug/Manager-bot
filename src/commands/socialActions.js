@@ -1,5 +1,5 @@
 // ==========================================
-// 1. IMPORTS & GIF DATA ARRAYS
+// 1. IMPORTS, SCHEMAS & GIF DATABASE
 // ==========================================
 const { 
     SlashCommandBuilder, 
@@ -16,7 +16,6 @@ const User = mongoose.models.User || require('../models/User');
 const GIF_DATABASE = {
     kiss: [
         'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
-        'https://cdn.nekos.life/kiss/kiss_003.gif', 'https://cdn.nekos.life/kiss/kiss_004.gif',
         'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_002.gif'
     ],
     pat: [
@@ -28,12 +27,10 @@ const GIF_DATABASE = {
         'https://purrbot.site/img/sfw/hug/gif/hug_001.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_002.gif'
     ],
     slap: [
-        'https://cdn.nekos.life/slap/slap_001.gif', 'https://cdn.nekos.life/slap/slap_002.gif',
-        'https://purrbot.site/img/sfw/slap/gif/slap_001.gif', 'https://purrbot.site/img/sfw/slap/gif/slap_002.gif'
+        'https://cdn.nekos.life/slap/slap_001.gif', 'https://purrbot.site/img/sfw/slap/gif/slap_001.gif'
     ],
     cuddle: [
-        'https://cdn.nekos.life/cuddle/cuddle_001.gif', 'https://cdn.nekos.life/cuddle/cuddle_002.gif',
-        'https://purrbot.site/img/sfw/cuddle/gif/cuddle_001.gif'
+        'https://cdn.nekos.life/cuddle/cuddle_001.gif', 'https://purrbot.site/img/sfw/cuddle/gif/cuddle_001.gif'
     ],
     bite: [
         'https://purrbot.site/img/sfw/bite/gif/bite_001.gif', 'https://purrbot.site/img/sfw/bite/gif/bite_002.gif'
@@ -60,7 +57,7 @@ const GIF_DATABASE = {
         'https://purrbot.site/img/sfw/wave/gif/wave_001.gif'
     ],
     sleep: [
-        'https://media.tenor.com/7L3f6n4I5e8AAAAC/anime-sleep.gif', 'https://purrbot.site/img/sfw/sleep/gif/sleep_001.gif'
+        'https://purrbot.site/img/sfw/sleep/gif/sleep_001.gif', 'https://media.tenor.com/7L3f6n4I5e8AAAAC/anime-sleep.gif'
     ],
     wakeup: [
         'https://media.tenor.com/yFzN-d8C_jMAAAAC/anime-wakeup.gif'
@@ -88,35 +85,69 @@ const GIF_DATABASE = {
     ]
 };
 
-// Full Action Configuration Master Table
 const ACTION_CONFIG = {
-    kiss: { verb: 'kisses', emoji: '💋', color: '#FFB6C1', dbField: 'kisses', allowsSelf: false, requiresTarget: true },
-    pat: { verb: 'pets', emoji: '⭐', color: '#A7C7E7', dbField: 'pats', allowsSelf: false, requiresTarget: true },
-    hug: { verb: 'hugs', emoji: '🤗', color: '#FF9494', dbField: 'hugs', allowsSelf: false, requiresTarget: true },
-    slap: { verb: 'slaps', emoji: '✋', color: '#E74C3C', dbField: 'slaps', allowsSelf: false, requiresTarget: true },
-    cuddle: { verb: 'cuddles with', emoji: '🥺', color: '#F39C12', dbField: 'cuddles', allowsSelf: false, requiresTarget: true },
-    bite: { verb: 'bites', emoji: '🦷', color: '#9B59B6', dbField: 'bites', allowsSelf: false, requiresTarget: true },
-    poke: { verb: 'pokes', emoji: '👉', color: '#3498DB', dbField: 'pokes', allowsSelf: false, requiresTarget: true },
-    punch: { verb: 'punches', emoji: '🥊', color: '#C0392B', dbField: 'punches', allowsSelf: false, requiresTarget: true },
-    tickle: { verb: 'tickles', emoji: '🤏', color: '#1ABC9C', dbField: 'tickles', allowsSelf: false, requiresTarget: true },
-    feed: { verb: 'feeds', emoji: '🍱', color: '#2ECC71', dbField: 'feeds', allowsSelf: false, requiresTarget: true },
-    lick: { verb: 'licks', emoji: '👅', color: '#E91E63', dbField: 'licks', allowsSelf: false, requiresTarget: true },
-    highfive: { verb: 'highfives', emoji: '🙌', color: '#F1C40F', dbField: 'highfives', allowsSelf: false, requiresTarget: true },
-    wave: { verb: 'waves at', emoji: '👋', color: '#34495E', dbField: 'waves', allowsSelf: false, requiresTarget: true },
+    // Group 1: action (Targeted Interactions)
+    kiss: { verb: 'kisses', emoji: '💋', color: '#FFB6C1', group: 'action', dbField: 'kisses', requiresTarget: true },
+    pat: { verb: 'pets', emoji: '⭐', color: '#A7C7E7', group: 'action', dbField: 'pats', requiresTarget: true },
+    hug: { verb: 'hugs', emoji: '🤗', color: '#FF9494', group: 'action', dbField: 'hugs', requiresTarget: true },
+    slap: { verb: 'slaps', emoji: '✋', color: '#E74C3C', group: 'action', dbField: 'slaps', requiresTarget: true },
+    cuddle: { verb: 'cuddles with', emoji: '🥺', color: '#F39C12', group: 'action', dbField: 'cuddles', requiresTarget: true },
+    bite: { verb: 'bites', emoji: '🦷', color: '#9B59B6', group: 'action', dbField: 'bites', requiresTarget: true },
+    poke: { verb: 'pokes', emoji: '👉', color: '#3498DB', group: 'action', dbField: 'pokes', requiresTarget: true },
+    punch: { verb: 'punches', emoji: '🥊', color: '#C0392B', group: 'action', dbField: 'punches', requiresTarget: true },
+    tickle: { verb: 'tickles', emoji: '🤏', color: '#1ABC9C', group: 'action', dbField: 'tickles', requiresTarget: true },
+    feed: { verb: 'feeds', emoji: '🍱', color: '#2ECC71', group: 'action', dbField: 'feeds', requiresTarget: true },
+    lick: { verb: 'licks', emoji: '👅', color: '#E91E63', group: 'action', dbField: 'licks', requiresTarget: true },
+    highfive: { verb: 'highfives', emoji: '🙌', color: '#F1C40F', group: 'action', dbField: 'highfives', requiresTarget: true },
+    wave: { verb: 'waves at', emoji: '👋', color: '#34495E', group: 'action', dbField: 'waves', requiresTarget: true },
     
-    // Solo Emotions / Actions
-    sleep: { verb: 'is sleeping zzz...', emoji: '😴', color: '#2C3E50', allowsSelf: true, requiresTarget: false },
-    wakeup: { verb: 'just woke up!', emoji: '⏰', color: '#E67E22', allowsSelf: true, requiresTarget: false },
-    cry: { verb: 'is crying...', emoji: '😭', color: '#3498DB', allowsSelf: true, requiresTarget: false },
-    laugh: { verb: 'is laughing hysterically!', emoji: '😆', color: '#F1C40F', allowsSelf: true, requiresTarget: false },
-    dance: { verb: 'is dancing happily!', emoji: '💃', color: '#9B59B6', allowsSelf: true, requiresTarget: false },
-    blush: { verb: 'is blushing deeply...', emoji: '😳', color: '#FFB6C1', allowsSelf: true, requiresTarget: false },
-    pout: { verb: 'is pouting!', emoji: '😤', color: '#E74C3C', allowsSelf: true, requiresTarget: false },
-    smile: { verb: 'smiles warmly!', emoji: '😊', color: '#2ECC71', allowsSelf: true, requiresTarget: false },
-    bored: { verb: 'is feeling super bored...', emoji: '🥱', color: '#95A5A6', allowsSelf: true, requiresTarget: false }
+    // Group 2: express (Solo Expressions)
+    sleep: { verb: 'is sleeping zzz...', emoji: '😴', color: '#2C3E50', group: 'express', requiresTarget: false },
+    wakeup: { verb: 'just woke up!', emoji: '⏰', color: '#E67E22', group: 'express', requiresTarget: false },
+    cry: { verb: 'is crying...', emoji: '😭', color: '#3498DB', group: 'express', requiresTarget: false },
+    laugh: { verb: 'is laughing hysterically!', emoji: '😆', color: '#F1C40F', group: 'express', requiresTarget: false },
+    dance: { verb: 'is dancing happily!', emoji: '💃', color: '#9B59B6', group: 'express', requiresTarget: false },
+    blush: { verb: 'is blushing deeply...', emoji: '😳', color: '#FFB6C1', group: 'express', requiresTarget: false },
+    pout: { verb: 'is pouting!', emoji: '😤', color: '#E74C3C', group: 'express', requiresTarget: false },
+    smile: { verb: 'smiles warmly!', emoji: '😊', color: '#2ECC71', group: 'express', requiresTarget: false },
+    bored: { verb: 'is feeling super bored...', emoji: '🥱', color: '#95A5A6', group: 'express', requiresTarget: false }
 };
 // ==========================================
-// 2. CORE ACTION EXECUTOR ENGINE
+// 2. BUILD MASTER SLASH COMMAND /social
+// ==========================================
+const socialCommandBuilder = new SlashCommandBuilder()
+    .setName('social')
+    .setDescription('🎭 Perform anime social actions or express emotions!')
+    .setContexts([0, 1, 2])
+    .setIntegrationTypes([0, 1]);
+
+// Subcommand Group 1: Action (Targeted)
+socialCommandBuilder.addSubcommandGroup(group => {
+    group.setName('action').setDescription('Targeted social actions with other members');
+    Object.keys(ACTION_CONFIG).filter(k => ACTION_CONFIG[k].group === 'action').forEach(actionKey => {
+        group.addSubcommand(sub => 
+            sub.setName(actionKey)
+               .setDescription(`${actionKey.charAt(0).toUpperCase() + actionKey.slice(1)} another user`)
+               .addUserOption(opt => opt.setName('target').setDescription('Target member').setRequired(true))
+        );
+    });
+    return group;
+});
+
+// Subcommand Group 2: Express (Solo)
+socialCommandBuilder.addSubcommandGroup(group => {
+    group.setName('express').setDescription('Express individual feelings or emotions');
+    Object.keys(ACTION_CONFIG).filter(k => ACTION_CONFIG[k].group === 'express').forEach(actionKey => {
+        group.addSubcommand(sub => 
+            sub.setName(actionKey)
+               .setDescription(`Express ${actionKey}`)
+        );
+    });
+    return group;
+});
+
+// ==========================================
+// 3. ACTION EXECUTOR ENGINE
 // ==========================================
 async function executeSocialAction(actionKey, context, isSlash) {
     const config = ACTION_CONFIG[actionKey];
@@ -147,43 +178,32 @@ async function executeSocialAction(actionKey, context, isSlash) {
             return isSlash ? context.reply({ content: reqMsg, ephemeral: true }) : context.reply(reqMsg);
         }
 
-        if (target.id === authorId && !config.allowsSelf) {
+        if (target.id === authorId) {
             const errReply = `❌ You can't ${actionKey} yourself!`;
-            return isSlash ? (context.deferred || context.replied ? context.editReply(errReply) : context.reply({ content: errReply, ephemeral: true })) : context.reply(errReply);
+            return isSlash ? context.reply({ content: errReply, ephemeral: true }) : context.reply(errReply);
         }
     }
 
-    if (isSlash && !context.deferred && !context.replied) {
-        await context.deferReply();
-    }
+    if (isSlash && !context.deferred && !context.replied) await context.deferReply();
 
     let mutualCount = 1;
     const pairKey = target ? [authorId, target.id].sort().join('_') : null;
 
     if (target && config.dbField && User) {
         try {
-            const givenKey = `${config.dbField}Given`;
-            const receivedKey = `${config.dbField}Received`;
-            const sharedKey = `${config.dbField}Shared`;
-
-            await User.updateOne({ userId: authorId, guildId }, { $inc: { [givenKey]: 1 } }, { upsert: true, strict: false });
-            await User.updateOne({ userId: target.id, guildId }, { $inc: { [receivedKey]: 1 } }, { upsert: true, strict: false });
-
-            await User.updateOne({ userId: pairKey, guildId }, { $inc: { [sharedKey]: 1 } }, { upsert: true, strict: false });
+            await User.updateOne({ userId: authorId, guildId }, { $inc: { [`${config.dbField}Given`]: 1 } }, { upsert: true, strict: false });
+            await User.updateOne({ userId: target.id, guildId }, { $inc: { [`${config.dbField}Received`]: 1 } }, { upsert: true, strict: false });
+            await User.updateOne({ userId: pairKey, guildId }, { $inc: { [`${config.dbField}Shared`]: 1 } }, { upsert: true, strict: false });
             const pairDoc = await User.findOne({ userId: pairKey, guildId }).lean();
-            if (pairDoc && pairDoc[sharedKey]) mutualCount = pairDoc[sharedKey];
-        } catch (err) {
-            console.error(`DB ${actionKey} Error:`, err);
-        }
+            if (pairDoc && pairDoc[`${config.dbField}Shared`]) mutualCount = pairDoc[`${config.dbField}Shared`];
+        } catch (err) {}
     }
 
     const gifList = GIF_DATABASE[actionKey] || GIF_DATABASE.hug;
     const randomGif = gifList[Math.floor(Math.random() * gifList.length)];
 
     let descriptionText = `**${authorName}** ${config.verb}`;
-    if (target) {
-        descriptionText += ` **${target.username}**!\n*You two have shared ${mutualCount} ${actionKey}s.*`;
-    }
+    if (target) descriptionText += ` **${target.username}**!\n*You two have shared ${mutualCount} ${actionKey}s.*`;
 
     const embed = new EmbedBuilder()
         .setColor(config.color)
@@ -206,29 +226,21 @@ async function executeSocialAction(actionKey, context, isSlash) {
 
     if (components.length === 0) return;
 
-    // --- Interactive Action-Back Collector ---
     const collector = response.createMessageComponentCollector({ time: 300000 });
 
     collector.on('collect', async (i) => {
-        if (i.user.id === authorId) {
-            return i.reply({ content: `You can't ${actionKey} yourself back!`, ephemeral: true });
-        }
+        if (i.user.id === authorId) return i.reply({ content: `You can't ${actionKey} yourself back!`, ephemeral: true });
 
         await i.deferReply();
         let backMutualCount = 1;
 
         if (config.dbField && User) {
             try {
-                const givenKey = `${config.dbField}Given`;
-                const receivedKey = `${config.dbField}Received`;
-                const sharedKey = `${config.dbField}Shared`;
-
-                await User.updateOne({ userId: i.user.id, guildId }, { $inc: { [givenKey]: 1 } }, { upsert: true, strict: false });
-                await User.updateOne({ userId: authorId, guildId }, { $inc: { [receivedKey]: 1 } }, { upsert: true, strict: false });
-
-                await User.updateOne({ userId: pairKey, guildId }, { $inc: { [sharedKey]: 1 } }, { upsert: true, strict: false });
+                await User.updateOne({ userId: i.user.id, guildId }, { $inc: { [`${config.dbField}Given`]: 1 } }, { upsert: true, strict: false });
+                await User.updateOne({ userId: authorId, guildId }, { $inc: { [`${config.dbField}Received`]: 1 } }, { upsert: true, strict: false });
+                await User.updateOne({ userId: pairKey, guildId }, { $inc: { [`${config.dbField}Shared`]: 1 } }, { upsert: true, strict: false });
                 const backPairDoc = await User.findOne({ userId: pairKey, guildId }).lean();
-                if (backPairDoc && backPairDoc[sharedKey]) backMutualCount = backPairDoc[sharedKey];
+                if (backPairDoc && backPairDoc[`${config.dbField}Shared`]) backMutualCount = backPairDoc[`${config.dbField}Shared`];
             } catch (err) {}
         }
 
@@ -244,92 +256,30 @@ async function executeSocialAction(actionKey, context, isSlash) {
 
         await i.editReply({ embeds: [returnEmbed] });
     });
-
-    collector.on('end', () => {
-        if (components[0] && !components[0].components[0].data.disabled) {
-            components[0].components[0].setDisabled(true);
-            if (isSlash) context.editReply({ components: [components[0]] }).catch(() => {});
-            else response.edit({ components: [components[0]] }).catch(() => {});
-        }
-    });
 }
 // ==========================================
-// 3. SLASH COMMAND BUILDERS & EXPORTS
-// ==========================================
-const exportedCommands = [];
-
-Object.keys(ACTION_CONFIG).forEach(actionKey => {
-    const config = ACTION_CONFIG[actionKey];
-    
-    const builder = new SlashCommandBuilder()
-        .setName(actionKey)
-        .setDescription(`${actionKey.charAt(0).toUpperCase() + actionKey.slice(1)} action expression`)
-        .setContexts([0, 1, 2])
-        .setIntegrationTypes([0, 1]);
-
-    if (config.requiresTarget) {
-        builder.addUserOption(option => 
-            option.setName('target')
-                .setDescription(`The user to ${actionKey}`)
-                .setRequired(true)
-        );
-    }
-
-    const commandObj = {
-        data: builder,
-        name: actionKey,
-        aliases: [`.${actionKey}`, actionKey],
-        description: builder.description,
-        async execute(...args) {
-            const arg1 = args[0];
-            const arg2 = args[1];
-            if (arg1 && typeof arg1.isChatInputCommand === 'function' && arg1.isChatInputCommand()) {
-                return await executeSocialAction(actionKey, arg1, true);
-            }
-            const message = (arg1 && arg1.author) ? arg1 : ((arg2 && arg2.author) ? arg2 : null);
-            if (message) return await executeSocialAction(actionKey, message, false);
-        },
-        async run(...args) {
-            return this.execute(...args);
-        }
-    };
-
-    exportedCommands.push(commandObj);
-});
-// ==========================================
-// 4. CLIENT LISTENER MODULE INITIALIZER
+// 4. MODULE INITIALIZER & EXPORTS
 // ==========================================
 module.exports = (client) => {
-    // Register prefix and slash listeners directly into client memory collections
-    exportedCommands.forEach(cmd => {
-        if (client.commands && typeof client.commands.set === 'function') {
-            client.commands.set(cmd.name, cmd);
-        }
-        if (client.prefixCommands && typeof client.prefixCommands.set === 'function') {
-            client.prefixCommands.set(cmd.name, cmd);
-            cmd.aliases.forEach(alias => client.prefixCommands.set(alias, cmd));
-        }
+    // Handle Slash Command /social
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'social') return;
+        const subCommand = interaction.options.getSubcommand();
+        if (subCommand) await executeSocialAction(subCommand, interaction, true);
     });
 
-    // Dedicated Prefix Listener Fallback for Social Actions (.hug, .kiss, .slap, etc.)
+    // Handle Prefix Text Commands (.hug, .kiss, .slap, .sleep, etc.)
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content) return;
 
-        const content = message.content.toLowerCase().trim();
-        const firstWord = content.split(' ')[0];
+        const firstWord = message.content.toLowerCase().trim().split(' ')[0];
 
         Object.keys(ACTION_CONFIG).forEach(async (actionKey) => {
             if (firstWord === `.${actionKey}` || firstWord === actionKey) {
-                const cmdObj = exportedCommands.find(c => c.name === actionKey);
-                if (cmdObj) await cmdObj.execute(message);
+                await executeSocialAction(actionKey, message, false);
             }
         });
     });
 };
 
-// Export individual commands for deploy-commands.js or command handlers
-exportedCommands.forEach(cmd => {
-    module.exports[cmd.name] = cmd;
-});
-
-module.exports.socialCommandsPayload = exportedCommands.map(c => c.data.toJSON());
+module.exports.socialCommandPayload = socialCommandBuilder.toJSON();
