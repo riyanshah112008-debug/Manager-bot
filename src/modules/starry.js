@@ -463,7 +463,7 @@ module.exports = (client) => {
         }
     });
     // ==========================================
-    // 🤖 AI & NLP MODERATION ENGINE
+    // 🤖 AI & NLP MODERATION ENGINE (ULTRA FAST)
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
@@ -482,10 +482,10 @@ module.exports = (client) => {
             } catch (err) {}
         }
 
-        const text = message.content.toLowerCase();
+        const text = message.content.toLowerCase().trim();
         const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes(triggerWord);
+        const hasName = text.includes(triggerWord) || text.includes('jarvis');
         const isOwner = client.isOwner(message.author.id);
         let isReplyToBot = false;
 
@@ -500,7 +500,26 @@ module.exports = (client) => {
             return message.reply('❌ **AI is a Premium feature!** Contact the bot owner to upgrade this server.').catch(() => {});
         }
 
-        // --- IMAGE GENERATION (POLLINATIONS) ---
+        // ==========================================
+        // ⚡ 1. INSTANT LOCAL PRE-PARSER (0ms DELAY)
+        // ==========================================
+        const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
+        const roleMatch = message.content.match(createRoleRegex);
+
+        if (roleMatch) {
+            const roleName = roleMatch[1].trim();
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !message.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                return message.reply('❌ Missing permissions to manage roles in this server.');
+            }
+            try {
+                const newRole = await message.guild.roles.create({ name: roleName, reason: `Requested by ${message.author.tag}` });
+                return message.reply(`✅ Successfully created role **${newRole.name}**!`);
+            } catch (err) {
+                return message.reply(`❌ Failed to create role: \`${err.message}\``);
+            }
+        }
+
+        // --- IMAGE GENERATION ---
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -529,14 +548,34 @@ module.exports = (client) => {
             }
         }
 
-        // --- GEMINI TEXT & NLP PROCESSING ---
+        // ==========================================
+        // 🧠 2. QUAD-MODEL AI FAILOVER ENGINE
+        // ==========================================
         if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** API Key missing!");        
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456] (Supported: GIVEROLE, REMOVEROLE, CREATEROLE, DELETEROLE).\nRULE 3: Keep casual chat highly concise.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-            
-            const geminiResponse = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses ultra concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+
+            // Quad-model fallback pool to bypass 503 errors instantly
+            const aiModels = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
+            let geminiResponse = null;
+            let lastError = null;
+
+            for (const modelName of aiModels) {
+                try {
+                    geminiResponse = await ai.models.generateContent({ model: modelName, contents: prompt });
+                    if (geminiResponse && geminiResponse.text) break; 
+                } catch (err) {
+                    lastError = err;
+                    console.warn(`[AI Engine] Model ${modelName} failed or busy. Trying next...`);
+                }
+            }
+
+            if (!geminiResponse || !geminiResponse.text) {
+                return message.reply("⏳ **High Demand Notice:** Google AI servers are currently busy. Please try your request again in a moment!");
+            }
+
             let replyText = geminiResponse.text || "";
             let functionName = null; let args = {};
 
@@ -546,7 +585,8 @@ module.exports = (client) => {
                 const params = (cmdMatch[2] || '').split('|');
                 const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
 
-                if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 10; }
+                if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME') || getParam('ROLE'); }
+                else if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 10; }
                 else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 2; args.reason = getParam('REASON') || "AI Moderation"; }
                 else if (action === 'UNTIMEOUT') { functionName = 'untimeout_member'; args.userId = getParam('ID'); }
                 else if (action === 'UNBAN') { functionName = 'unban_member'; args.userId = getParam('ID'); }
@@ -562,6 +602,16 @@ module.exports = (client) => {
                 const botMember = message.guild.members.me;
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
 
+                if (functionName === "create_role") {
+                    if (!hasPerm(PermissionFlagsBits.ManageRoles)) return message.reply("❌ Required permissions to create roles are missing.");
+                    try {
+                        const newRole = await message.guild.roles.create({ name: args.roleName || 'new-role' });
+                        return message.reply(`✅ Created role **${newRole.name}**!`);
+                    } catch (err) {
+                        return message.reply(`❌ Failed to create role: \`${err.message}\``);
+                    }
+                }
+
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
                     const deleteCount = Math.min(args.amount, 99) + 1;
                     await message.channel.bulkDelete(deleteCount, true).catch(()=>{});
@@ -574,7 +624,6 @@ module.exports = (client) => {
                     return message.reply("✅ User Unbanned.");
                 }
 
-                // FETCH TARGET MEMBER
                 const tMember = await message.guild.members.fetch(tId).catch(() => null);
 
                 if (!tMember) {
@@ -589,8 +638,6 @@ module.exports = (client) => {
                     return message.reply("❌ I cannot moderate **myself**!");
                 }
 
-                // 🛡️ ROLE HIERARCHY CHECK FIX:
-                // Compare highest role position instead of relying purely on .manageable
                 const botHighestRole = botMember.roles.highest;
                 const targetHighestRole = tMember.roles.highest;
 
@@ -600,7 +647,6 @@ module.exports = (client) => {
                     return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role (\`${targetHighestRole.name}\`) is higher than or equal to my highest role (\`${botHighestRole.name}\`). Please move my bot role higher!`);
                 }
 
-                // EXECUTING MODERATION ACTIONS
                 if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
                     const caseId = Math.floor(Math.random() * 90000) + 10000;
                     const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
