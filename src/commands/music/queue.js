@@ -1,16 +1,26 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { 
+    SlashCommandBuilder, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    StringSelectMenuBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    ComponentType 
+} = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('queue')
-        .setDescription('📑 View the current music queue with interactive pages'),
+        .setDescription('📑 View and interactively manage the music queue'),
 
     async execute(interaction, client) {
-        // Defer reply so the bot has time to process large queues
         await interaction.deferReply();
 
         const player = client.manager.getPlayer(interaction.guild.id);
-        
+
         if (!player || !player.queue.current) {
             return interaction.editReply('❌ There is no music currently playing in this server.');
         }
@@ -23,38 +33,29 @@ module.exports = {
             return `${minutes}:${seconds.toString().padStart(2, '0')}`;
         };
 
-        const tracks = player.queue; // Array of upcoming tracks
-        const current = player.queue.current; // The currently playing track
-        
-        // If there is no queue, just show the currently playing song
-        if (!tracks.length) {
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setTitle(`🎶 Queue for ${interaction.guild.name}`)
-                .setDescription(`**Now Playing:**\n[${current.title}](${current.uri}) - \`${formatTime(current.length)}\`\n\n*The queue is currently empty.*`);
-            return interaction.editReply({ embeds: [embed] });
-        }
-
-        // --- PAGINATION LOGIC ---
+        let tracks = player.queue;
         const itemsPerPage = 10;
-        const totalPages = Math.ceil(tracks.length / itemsPerPage);
         let currentPage = 0;
 
-        // Function to generate the embed for a specific page
+        // Function to build the Queue Display Embed
         const generateEmbed = (page) => {
+            const current = player.queue.current;
+            tracks = player.queue;
+            const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
             const start = page * itemsPerPage;
-            const end = start + itemsPerPage;
-            const currentTracks = tracks.slice(start, end);
+            const currentTracks = tracks.slice(start, start + itemsPerPage);
 
-            const trackList = currentTracks.map((track, index) => {
-                return `**${start + index + 1}.** [${track.title}](${track.uri}) - \`${formatTime(track.length)}\``;
-            }).join('\n');
+            const trackList = currentTracks.length > 0
+                ? currentTracks.map((track, index) => {
+                    return `**${start + index + 1}.** [${track.title.substring(0, 45)}](${track.uri}) - \`${formatTime(track.length)}\``;
+                }).join('\n')
+                : '*No upcoming songs in queue.*';
 
             return new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle(`🎶 Queue for ${interaction.guild.name}`)
                 .setDescription(
-                    `**Now Playing:**\n[${current.title}](${current.uri}) - \`${formatTime(current.length)}\`\n\n` +
+                    `**Now Playing:**\n[${current ? current.title : 'None'}](${current ? current.uri : ''}) - \`${formatTime(current ? current.length : 0)}\`\n\n` +
                     `**Up Next:**\n${trackList}`
                 )
                 .setFooter({ 
@@ -63,75 +64,185 @@ module.exports = {
                 });
         };
 
-        // Function to generate the interactive buttons based on the current page
+        // Function to build Navigation Buttons
         const generateButtons = (page) => {
+            tracks = player.queue;
+            const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
+
             return new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('q_first')
-                    .setEmoji('⏪')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(page === 0), // Disable if on the first page
-                new ButtonBuilder()
-                    .setCustomId('q_prev')
-                    .setEmoji('◀️')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(page === 0),
-                new ButtonBuilder()
-                    .setCustomId('q_next')
-                    .setEmoji('▶️')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(page === totalPages - 1), // Disable if on the last page
-                new ButtonBuilder()
-                    .setCustomId('q_last')
-                    .setEmoji('⏩')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(page === totalPages - 1)
+                new ButtonBuilder().setCustomId('q_first').setEmoji('⏪').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+                new ButtonBuilder().setCustomId('q_prev').setEmoji('◀️').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+                new ButtonBuilder().setCustomId('q_next').setEmoji('▶️').setStyle(ButtonStyle.Primary).setDisabled(page >= totalPages - 1),
+                new ButtonBuilder().setCustomId('q_last').setEmoji('⏩').setStyle(ButtonStyle.Primary).setDisabled(page >= totalPages - 1),
+                new ButtonBuilder().setCustomId('q_move_modal').setLabel('Move Position').setEmoji('🔀').setStyle(ButtonStyle.Secondary).setDisabled(tracks.length < 2)
             );
         };
 
-        // Send the initial first page
+        // Function to build the "Play Next" Dropdown Menu
+        const generatePlayNextMenu = (page) => {
+            tracks = player.queue;
+            const start = page * itemsPerPage;
+            const currentTracks = tracks.slice(start, start + itemsPerPage);
+
+            if (currentTracks.length === 0) return null;
+
+            const options = currentTracks.map((track, index) => ({
+                label: `${start + index + 1}. ${track.title}`.substring(0, 95),
+                description: `Duration: ${formatTime(track.length)}`,
+                value: `playnext_${start + index}`
+            }));
+
+            return new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('q_select_playnext')
+                    .setPlaceholder('⏭️ Select a song to Play Next...')
+                    .addOptions(options)
+            );
+        };
+
+        // Function to build the "Remove Song" Dropdown Menu
+        const generateRemoveMenu = (page) => {
+            tracks = player.queue;
+            const start = page * itemsPerPage;
+            const currentTracks = tracks.slice(start, start + itemsPerPage);
+
+            if (currentTracks.length === 0) return null;
+
+            const options = currentTracks.map((track, index) => ({
+                label: `${start + index + 1}. ${track.title}`.substring(0, 95),
+                description: `Duration: ${formatTime(track.length)}`,
+                value: `remove_${start + index}`
+            }));
+
+            return new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('q_select_remove')
+                    .setPlaceholder('❌ Select a song to Remove...')
+                    .addOptions(options)
+            );
+        };
+
+        // Function to assemble components for response
+        const getComponents = (page) => {
+            const rows = [generateButtons(page)];
+            const playNext = generatePlayNextMenu(page);
+            const remove = generateRemoveMenu(page);
+            if (playNext) rows.push(playNext);
+            if (remove) rows.push(remove);
+            return rows;
+        };
+
+        // Send initial Queue Message
         const message = await interaction.editReply({ 
             embeds: [generateEmbed(currentPage)], 
-            components: [generateButtons(currentPage)] 
+            components: getComponents(currentPage) 
         });
 
-        // --- BUTTON COLLECTOR LOGIC ---
-        // This listens for button clicks on THIS specific message for 2 minutes (120,000ms)
-        const collector = message.createMessageComponentCollector({ 
-            componentType: ComponentType.Button, 
-            time: 120000 
-        });
+        // Component Collector for buttons, select menus, and modals
+        const collector = message.createMessageComponentCollector({ time: 180000 });
 
         collector.on('collect', async (i) => {
-            // Optional: Only allow the person who ran the command to click the buttons
             if (i.user.id !== interaction.user.id) {
-                return i.reply({ content: '❌ Only the person who requested the queue can change pages.', ephemeral: true });
+                return i.reply({ content: '❌ Only the person who requested the queue can use these controls.', ephemeral: true });
             }
 
-            // Update the page number based on the button clicked
+            tracks = player.queue;
+            const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
+
+            // --- 1. PAGINATION CONTROLS ---
             if (i.customId === 'q_first') currentPage = 0;
-            if (i.customId === 'q_prev') currentPage--;
-            if (i.customId === 'q_next') currentPage++;
+            if (i.customId === 'q_prev') currentPage = Math.max(currentPage - 1, 0);
+            if (i.customId === 'q_next') currentPage = Math.min(currentPage + 1, totalPages - 1);
             if (i.customId === 'q_last') currentPage = totalPages - 1;
 
-            // Refresh the message with the new page and updated button states
-            await i.update({ 
-                embeds: [generateEmbed(currentPage)], 
-                components: [generateButtons(currentPage)] 
-            });
+            // --- 2. MOVE SONG POSITION (MODAL) ---
+            if (i.customId === 'q_move_modal') {
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_move_queue')
+                    .setTitle('Reorder Queue Position');
+
+                const fromInput = new TextInputBuilder()
+                    .setCustomId('move_from')
+                    .setLabel('Move Song Number (From Position X)')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g. 5')
+                    .setRequired(true);
+
+                const toInput = new TextInputBuilder()
+                    .setCustomId('move_to')
+                    .setLabel('To Position Number (To Position Y)')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g. 2')
+                    .setRequired(true);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(fromInput),
+                    new ActionRowBuilder().addComponents(toInput)
+                );
+
+                await i.showModal(modal);
+
+                try {
+                    const modalSubmit = await i.awaitModalSubmit({ time: 30000 });
+                    const fromPos = parseInt(modalSubmit.fields.getTextInputValue('move_from')) - 1;
+                    const toPos = parseInt(modalSubmit.fields.getTextInputValue('move_to')) - 1;
+
+                    if (isNaN(fromPos) || isNaN(toPos) || fromPos < 0 || toPos < 0 || fromPos >= tracks.length || toPos >= tracks.length) {
+                        return modalSubmit.reply({ content: '❌ Invalid position numbers provided.', ephemeral: true });
+                    }
+
+                    // Perform queue move operation
+                    const [movedTrack] = tracks.splice(fromPos, 1);
+                    tracks.splice(toPos, 0, movedTrack);
+
+                    await modalSubmit.reply({ content: `✅ Moved **${movedTrack.title}** from position **#${fromPos + 1}** to **#${toPos + 1}**!`, ephemeral: true });
+
+                    return message.edit({
+                        embeds: [generateEmbed(currentPage)],
+                        components: getComponents(currentPage)
+                    });
+                } catch (err) {
+                    return;
+                }
+            }
+
+            // --- 3. PLAY NEXT SELECTION ---
+            if (i.customId === 'q_select_playnext') {
+                const selectedIndex = parseInt(i.values[0].replace('playnext_', ''));
+                if (!isNaN(selectedIndex) && tracks[selectedIndex]) {
+                    const [selectedTrack] = tracks.splice(selectedIndex, 1);
+                    tracks.unshift(selectedTrack); // Insert at position 0 (next up)
+
+                    await i.reply({ content: `⏭️ **${selectedTrack.title}** will now play next!`, ephemeral: true });
+                }
+            }
+
+            // --- 4. REMOVE SONG SELECTION ---
+            if (i.customId === 'q_select_remove') {
+                const selectedIndex = parseInt(i.values[0].replace('remove_', ''));
+                if (!isNaN(selectedIndex) && tracks[selectedIndex]) {
+                    const [removedTrack] = tracks.splice(selectedIndex, 1);
+
+                    await i.reply({ content: `❌ Removed **${removedTrack.title}** from the queue.`, ephemeral: true });
+                }
+            }
+
+            // Update display after actions
+            if (i.replied || i.deferred) {
+                await message.edit({
+                    embeds: [generateEmbed(currentPage)],
+                    components: getComponents(currentPage)
+                }).catch(() => {});
+            } else {
+                await i.update({
+                    embeds: [generateEmbed(currentPage)],
+                    components: getComponents(currentPage)
+                }).catch(() => {});
+            }
         });
 
-        // When the 2-minute timer runs out, disable the buttons so they don't error out later
         collector.on('end', () => {
-            const disabledRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('q_first').setEmoji('⏪').setStyle(ButtonStyle.Primary).setDisabled(true),
-                new ButtonBuilder().setCustomId('q_prev').setEmoji('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
-                new ButtonBuilder().setCustomId('q_next').setEmoji('▶️').setStyle(ButtonStyle.Primary).setDisabled(true),
-                new ButtonBuilder().setCustomId('q_last').setEmoji('⏩').setStyle(ButtonStyle.Primary).setDisabled(true)
-            );
-            
-            // Failsafe in case the queue message was deleted before the timer ended
-            interaction.editReply({ components: [disabledRow] }).catch(() => {}); 
+            message.edit({ components: [] }).catch(() => {});
         });
     }
 };
