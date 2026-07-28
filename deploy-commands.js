@@ -66,7 +66,7 @@ const commands = [
     { name: 'resume', description: 'Resume the paused song' },
     { name: 'skip', description: 'Skip the current song' },
     { name: 'stop', description: 'Stop the music and clear the queue' },
-    { name: 'queue', description: 'View the current music queue' },
+    { name: 'queue', description: 'View and interactively manage the current music queue' },
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
@@ -178,9 +178,9 @@ commands.push(
     { name: 'toggleleveling', description: 'Enable or disable the leveling system', default_member_permissions: ADMIN, options: [{ name: 'state', type: 3, required: false, description: 'Desired state; omit to toggle', choices: [{ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }] }] },
     { name: 'rank', description: 'Show a member’s rank', options: [{ name: 'target', type: 6, required: false, description: 'Member; defaults to you' }] },
     { name: 'messages', description: 'Show a member’s message count', options: [{ name: 'target', type: 6, required: false, description: 'Member; defaults to you' }] },
-    { name: 'leaderboard', description: 'Show the server leaderboard' },
-    { name: 'rep', description: 'Give reputation to a member', options: [{ name: 'user', type: 6, required: true, description: 'Member receiving reputation' }] },
-    { name: 'checkrep', description: 'Show a member’s reputation', options: [{ name: 'user', type: 6, required: false, description: 'Member; defaults to you' }] },
+    { name: 'leaderboard', description: '🏆 Display top server rankings for Reputation and XP' },
+    { name: 'rep', description: '+1 Give reputation to a helpful server member', options: [{ name: 'user', type: 6, required: true, description: 'Member receiving reputation' }] },
+    { name: 'checkrep', description: "⭐ Check your or another member's total reputation score", options: [{ name: 'user', type: 6, required: false, description: 'Member; defaults to you' }] },
     { name: 'afk', description: 'Set your AFK status', options: [{ name: 'reason', type: 3, required: false, description: 'AFK reason' }] },
     { name: 'tod', description: 'Play Truth or Dare', options: [{ name: 'choice', type: 3, required: true, description: 'Choose Truth or Dare', choices: [{ name: 'Truth', value: 'truth' }, { name: 'Dare', value: 'dare' }] }] },
     { name: 'whois', description: 'Show detailed information about a user', options: [{ name: 'target', type: 6, required: false, description: 'User; defaults to you' }] },
@@ -233,8 +233,17 @@ commands.push(
 );
 
 // ==========================================
-// REST DISCORD COMMAND DEPLOYER FUNCTION
+// DEDUPLICATION & DEPLOYMENT ENGINE
 // ==========================================
+const commandMap = new Map();
+commands.forEach(cmd => {
+    if (cmd && cmd.name) {
+        commandMap.set(cmd.name, cmd);
+    }
+});
+
+const finalPayload = Array.from(commandMap.values());
+
 async function deployCommands() {
     const token = process.env.TOKEN;
     let clientId = process.env.CLIENT_ID;
@@ -263,14 +272,14 @@ async function deployCommands() {
         : Routes.applicationCommands(clientId);
 
     if (isGlobal) {
-        console.log(`🌍 Registering ${commands.length} application commands GLOBALLY across all servers & DMs...`);
+        console.log(`🌍 Registering ${finalPayload.length} application commands GLOBALLY across all servers & DMs...`);
     } else if (isLocal) {
-        console.log(`⚡ Registering ${commands.length} application commands INSTANTLY to Guild ID: ${guildId}`);
+        console.log(`⚡ Registering ${finalPayload.length} application commands INSTANTLY to Guild ID: ${guildId}`);
     } else {
-        console.log(`🌍 Registering ${commands.length} application commands globally...`);
+        console.log(`🌍 Registering ${finalPayload.length} application commands globally...`);
     }
 
-    const result = await rest.put(route, { body: commands });
+    const result = await rest.put(route, { body: finalPayload });
     console.log(`✅ Successfully registered ${result.length} commands with Discord API.`);
     return result;
 }
@@ -282,4 +291,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { commands, deployCommands };
+module.exports = { commands: finalPayload, deployCommands };
