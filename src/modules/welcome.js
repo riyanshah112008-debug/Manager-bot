@@ -1,57 +1,110 @@
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+// ==========================================
+// 1. IMPORTS & MONGOOSE SCHEMA
+// ==========================================
+const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
+const mongoose = require('mongoose');
 
-const dbPath = path.join(__dirname, 'welcomeData.json');
+// MongoDB Schema for Welcome Channel Configuration
+const welcomeSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    channelId: { type: String, required: true }
+});
 
-function getWelcomeData() {
-    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
-    return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-}
+const WelcomeSettings = mongoose.models.WelcomeSettings || mongoose.model('WelcomeSettings', welcomeSchema);
 
-function saveWelcomeData(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
+// Slash Command Schema Definition
+const setupWelcomeCommand = new SlashCommandBuilder()
+    .setName('setupwelcome')
+    .setDescription('Set up the channel for automated server welcome messages')
+    .addChannelOption(option => 
+        option.setName('channel')
+            .setDescription('The text channel to send welcome cards in')
+            .setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
-module.exports = (client) => {
-    // 1. Handle the Slash Command
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'setupwelcome') return;
-        
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-            return interaction.reply({ content: '❌ You need Manage Server permissions to do this.', ephemeral: true });
+// ==========================================
+// 2. MAIN WELCOME MODULE FUNCTION
+// ==========================================
+const welcomeModule = (client) => {
+
+    // Register /setupwelcome command into client command collection
+    if (client.commands && typeof client.commands.set === 'function') {
+        client.commands.set('setupwelcome', { data: setupWelcomeCommand, execute: handleSetupWelcome });
+    }
+
+    // --- Slash Command Handler ---
+    async function handleSetupWelcome(interaction) {
+        try {
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferReply({ ephemeral: true });
+            }
+        } catch (e) { return; }
+
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+            return interaction.editReply({ content: '❌ You need **Manage Server** permissions to configure welcome messages.' });
         }
 
-        const channel = interaction.options.getChannel('channel');
-        const data = getWelcomeData();
-        
-        data[interaction.guild.id] = channel.id;
-        saveWelcomeData(data);
+        const channel = interaction.options.getChannel('channel', true);
 
-        await interaction.reply({ content: `✅ Welcome messages will now be sent to ${channel}!`, ephemeral: true });
+        await WelcomeSettings.findOneAndUpdate(
+            { guildId: interaction.guildId },
+            { channelId: channel.id },
+            { upsert: true, new: true }
+        );
+
+        const previewEmbed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle(`✨ Welcome to ${interaction.guild.name} ✨`)
+            .setDescription(`Hello ${interaction.user}, we are so glad you joined the server! Be sure to read the rules and enjoy your stay.`)
+            .addFields(
+                { name: '👤 Member Count', value: `You are member **#${interaction.guild.memberCount}**!`, inline: true },
+                { name: '📆 Account Created', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true }
+            )
+            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
+            .setFooter({ text: `Starry Welcome System • Preview Mode` })
+            .setTimestamp();
+
+        await channel.send({ content: `Hey ${interaction.user}! 👋 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
+
+        return interaction.editReply({ content: `✅ **Success!** Welcome messages will now be sent to ${channel}!` });
+    }
+
+    // --- Interaction Router ---
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand()) return;
+        if (interaction.commandName === 'setupwelcome') await handleSetupWelcome(interaction);
     });
 
-    // 2. Handle the User Joining
+    // --- Member Join Listener ---
     client.on('guildMemberAdd', async (member) => {
-        const data = getWelcomeData();
-        const channelId = data[member.guild.id];
-        if (!channelId) return;
+        if (member.user.bot) return;
 
-        const channel = member.guild.channels.cache.get(channelId);
-        if (!channel) return;
+        try {
+            const config = await WelcomeSettings.findOne({ guildId: member.guild.id });
+            if (!config || !config.channelId) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#FFD700')
-            .setTitle(`✨ Welcome to ${member.guild.name} ✨`)
-            .setDescription(`Hello <@${member.id}>, we are so glad you joined the server! Be sure to read the rules and enjoy your stay.`)
-            .addFields(
-                { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!` },
-                { name: '📆 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` }
-            )
-            .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-            .setFooter({ text: `Enjoy your stay! | ${new Date().toLocaleDateString()}` });
+            const channel = member.guild.channels.cache.get(config.channelId);
+            if (!channel) return;
 
-        await channel.send({ content: `Hey <@${member.id}>! 👋`, embeds: [embed] }).catch(() => {});
+            const embed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle(`✨ Welcome to ${member.guild.name} ✨`)
+                .setDescription(`Hello <@${member.id}>, we are so glad you joined the server! Be sure to read the rules and enjoy your stay.`)
+                .addFields(
+                    { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!`, inline: true },
+                    { name: '📆 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                )
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+                .setFooter({ text: `Enjoy your stay in ${member.guild.name}!` })
+                .setTimestamp();
+
+            await channel.send({ content: `Hey <@${member.id}>! 👋`, embeds: [embed] }).catch(() => {});
+        } catch (error) {
+            console.error('[Welcome Engine Error]:', error);
+        }
     });
 };
-        
+
+welcomeModule.WelcomeSettings = WelcomeSettings;
+welcomeModule.setupWelcomeData = setupWelcomeCommand;
+module.exports = welcomeModule;
