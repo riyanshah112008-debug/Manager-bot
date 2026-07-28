@@ -49,18 +49,25 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
-    // ================= MODERATION & SECURITY =================
+    // ================= SECURITY & VERIFICATION =================
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
 
-// Safely Load Combined /social Master Command
+// Safely Load Combined /social Master Command Payload
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
-    if (socialCommandPayload) {
-        commands.push(socialCommandPayload);
-    }
+    if (socialCommandPayload) commands.push(socialCommandPayload);
 } catch (err) {
     console.warn('⚠️ Could not load socialCommandPayload:', err.message);
+}
+
+// Safely Load Consolidated /mod and /automod Master Payloads
+try {
+    const { modMasterPayload, autoModMasterPayload } = require('./src/modules/moderation');
+    if (modMasterPayload) commands.push(modMasterPayload);
+    if (autoModMasterPayload) commands.push(autoModMasterPayload);
+} catch (err) {
+    console.warn('⚠️ Could not load master moderation payloads:', err.message);
 }
 // ==========================================
 // GIVEAWAY SLASH COMMAND BUILDERS
@@ -111,7 +118,7 @@ commands.push(
 );
 
 // ==========================================
-// ECONOMY, XP & MASTER MODERATION
+// ECONOMY, XP & MASTER MANAGEMENT
 // ==========================================
 commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
@@ -129,28 +136,14 @@ commands.push(
     { name: 'set-name', description: 'Change the bot\'s trigger word/name for this server (Admins Only)', default_member_permissions: '8', options: [{ name: 'name', description: 'The new trigger word (e.g., Jarvis, HelperBot)', type: 3, required: true }] },
     { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', description: 'The channel to send boost messages in', type: 7, required: true }] },
     { name: 'setup-server', description: 'Automatically generates a professional server layout (Roles, Categories, Channels)!', default_member_permissions: '8' },
-    { name: 'moderate', description: 'Configure moderation and protection modules', default_member_permissions: ADMIN, options: [{ name: 'toggle', type: 1, description: 'Enable or disable a moderation module', options: [{ name: 'module', type: 3, required: true, description: 'Module to configure', choices: [{ name: 'Wick anti-nuke', value: 'wick' }, { name: 'Beemo anti-raid', value: 'beemo' }, { name: 'AltDentifier', value: 'altdentifier' }, { name: 'Dyno/Carl automod', value: 'dyno' }] }, { name: 'status', type: 5, required: true, description: 'Whether the module should be enabled' }] }, { name: 'autokick', type: 1, description: 'Configure automatic kicks for new accounts', options: [{ name: 'enabled', type: 5, required: true, description: 'Enable or disable automatic kicks' }, { name: 'account_age', type: 4, required: false, description: 'Minimum account age in days', min_value: 0 }] }, { name: 'autoban', type: 1, description: 'Enable or disable automatic bans', options: [{ name: 'enabled', type: 5, required: true, description: 'Enable or disable automatic bans' }] }, { name: 'ownerbypass', type: 1, description: 'Configure owner immunity', options: [{ name: 'bypass', type: 5, required: true, description: 'Whether server owners bypass protection checks' }] }] },
     { name: 'modpanel', description: 'Open the interactive moderation dashboard', default_member_permissions: MODERATE_MEMBERS, options: [{ name: 'user', type: 6, required: true, description: 'The user to moderate' }] },
-    { name: 'lockdown', description: 'Lock or unlock the current channel', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Lock or unlock the channel', choices: [{ name: 'Lock', value: 'lock' }, { name: 'Unlock', value: 'unlock' }] }] },
-    { name: 'clear', description: 'Delete up to 100 recent messages', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'amount', type: 4, required: true, description: 'Number of messages to delete', min_value: 1, max_value: 100 }] },
     { name: 'devpanel', description: '💻 Open the interactive developer control panel with clickable buttons' },
-    { name: 'warn', description: 'Warn a member', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'target', type: 6, required: true, description: 'Member to warn' }, { name: 'reason', type: 3, required: true, description: 'Reason for the warning' }] },
-    { name: 'warnings', description: 'View a member’s warnings', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'target', type: 6, required: true, description: 'Member whose warnings should be shown' }] },
-    { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'id', type: 4, required: true, description: 'Warning ID' }] },
-
     autoroleCommandDef
 );
 // ==========================================
-// AUTOMOD, ROLES & UTILITIES
+// ROLES, SETUP & UTILITIES
 // ==========================================
 commands.push(
-    { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Automod action', choices: [{ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' }] }] },
-    { name: 'ignore', description: 'Disable automod filters in a channel', default_member_permissions: ADMIN, options: [{ name: 'type', type: 3, required: true, description: 'Filter to ignore', choices: [{ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' }, { name: 'Status', value: 'status' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
-    { name: 'unignore', description: 'Re-enable automod filters in a channel', default_member_permissions: ADMIN, options: [{ name: 'type', type: 3, required: true, description: 'Filter to re-enable', choices: [{ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
-    { name: 'mediaonly', description: 'Configure media-only mode for a channel', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Media-only action', choices: [{ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
-    { name: 'sussetup', description: 'Configure suspicious-account protection', default_member_permissions: ADMIN, options: [{ name: 'enabled', type: 5, required: true, description: 'Enable or disable the module' }, { name: 'threshold', type: 4, required: true, description: 'Account-age threshold in days', min_value: 0 }, { name: 'action', type: 3, required: true, description: 'Action to take', choices: [{ name: 'Warn', value: 'warn' }, { name: 'Kick', value: 'kick' }, { name: 'Ban', value: 'ban' }] }] },
-    { name: 'protect', description: 'Protect a member from staff actions', options: [{ name: 'user', type: 6, required: true, description: 'Member to protect' }] },
-    { name: 'unprotect', description: 'Remove a member’s protection', options: [{ name: 'user', type: 6, required: true, description: 'Member to unprotect' }] },
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create a role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }, { name: 'color', type: 3, required: false, description: 'Hex color, for example #FF0000' }] }, { name: 'delete', type: 1, description: 'Delete a role', options: [{ name: 'role', type: 8, required: true, description: 'Role to delete' }] }, { name: 'give', type: 1, description: 'Give a role to a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to give' }] }, { name: 'remove', type: 1, description: 'Remove a role from a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to remove' }] }] },
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] },
 
