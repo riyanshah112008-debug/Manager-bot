@@ -80,6 +80,11 @@ const bumpCommand = new SlashCommandBuilder()
     .setName('bump')
     .setDescription('Bump this server to the top of the Starry Global Web List!');
 
+const autoBumpCommand = new SlashCommandBuilder()
+    .setName('autobump')
+    .setDescription('💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+
 // ==========================================
 // 🌐 3. REST API ENDPOINTS FOR MIKE'S WEB APP
 // ==========================================
@@ -118,7 +123,7 @@ function setupWebDirectoryAPI(app) {
         }
     });
 
-    // GET /api/user-guilds/:userId - Fetch all servers where user is Owner/Admin for Mike's Web Dashboard
+    // GET /api/user-guilds/:userId - Fetch all servers where user is Owner/Admin
     app.get('/api/user-guilds/:userId', async (req, res) => {
         try {
             const userServers = await ServerListing.find({ ownerId: req.params.userId });
@@ -139,6 +144,7 @@ const bumpEngineModule = (client, expressApp) => {
         client.commands.set('set-listing', { data: setListingCommand, execute: handleSetListing });
         client.commands.set('bump-setup', { data: bumpSetupCommand, execute: handleBumpSetup });
         client.commands.set('bump', { data: bumpCommand, execute: handleBump });
+        client.commands.set('autobump', { data: autoBumpCommand, execute: handleAutoBump });
     }
 
     // ==========================================
@@ -180,7 +186,7 @@ const bumpEngineModule = (client, expressApp) => {
     }
 
     client.once('ready', async () => {
-        console.log('🌐 Synchronizing server directory metadata for Mike\'s website...');
+        console.log('🌐 Synchronizing server directory metadata for website...');
         for (const [id, guild] of client.guilds.cache) {
             await syncGuildData(guild);
         }
@@ -206,7 +212,6 @@ const bumpEngineModule = (client, expressApp) => {
                 const guild = client.guilds.cache.get(config.guildId);
                 if (!guild) continue;
 
-                // Check Premium Status
                 const isPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
                 if (!isPremium) {
                     config.autoBumpEnabled = false;
@@ -217,7 +222,6 @@ const bumpEngineModule = (client, expressApp) => {
                 let listing = await ServerListing.findOne({ guildId: guild.id });
                 if (!listing) listing = new ServerListing({ guildId: guild.id, name: guild.name });
 
-                // Check 2-hour cooldown status
                 if (!listing.lastBump || (now.getTime() - listing.lastBump.getTime() >= twoHours)) {
                     
                     let inviteUrl = listing.inviteLink;
@@ -291,6 +295,7 @@ const bumpEngineModule = (client, expressApp) => {
             console.error('Bump Engine Timer Error:', error);
         }
     }, 60000);
+
     // ==========================================
     // 📡 DISBOARD & DISCADIA BUMP DETECTORS
     // ==========================================
@@ -299,14 +304,12 @@ const bumpEngineModule = (client, expressApp) => {
 
         let isBump = false;
 
-        // --- 1. DISBOARD BUMP DETECTION ---
         if (message.author.id === '302050872383242240') { 
             if (message.embeds.length > 0 && message.embeds[0].description?.toLowerCase().includes('bump done')) {
                 isBump = true;
             }
         }
 
-        // --- 2. DISCADIA BUMP DETECTION ---
         const lowerName = message.author.username.toLowerCase();
         if (lowerName.includes('discardia') || lowerName.includes('discadia') || message.author.id === '839211028308426762') {
             const embed = message.embeds[0];
@@ -315,7 +318,6 @@ const bumpEngineModule = (client, expressApp) => {
             }
         }
 
-        // --- 3. REGISTER COOLDOWN TIMER ---
         if (isBump) {
             const nextTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
@@ -336,14 +338,15 @@ const bumpEngineModule = (client, expressApp) => {
             await message.channel.send({ embeds: [embed] }).catch(() => {});
         }
     });
-
     // ==========================================
     // ⚙️ COMMAND HANDLERS
     // ==========================================
 
     // --- 1. /set-listing HANDLER ---
     async function handleSetListing(interaction) {
-        await interaction.deferReply();
+        try {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        } catch (e) { return; }
 
         const description = interaction.options.getString('description');
         const tagsInput = interaction.options.getString('tags') || '';
@@ -376,14 +379,16 @@ const bumpEngineModule = (client, expressApp) => {
                 { name: 'Tags', value: tags.length > 0 ? tags.map(t => `\`${t}\``).join(' ') : 'None' }
             )
             .setThumbnail(listing.iconUrl)
-            .setFooter({ text: 'Mike\'s Starry Directory App Ready' });
+            .setFooter({ text: 'Starry Directory App Sync Active' });
 
         return interaction.editReply({ embeds: [embed] });
     }
 
     // --- 2. /bump-setup HANDLER ---
     async function handleBumpSetup(interaction) {
-        await interaction.deferReply();
+        try {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        } catch (e) { return; }
 
         const pingRole = interaction.options.getRole('ping_role');
         const channel = interaction.options.getChannel('channel');
@@ -398,7 +403,7 @@ const bumpEngineModule = (client, expressApp) => {
         let autoBumpMsg = '`Disabled`';
 
         if (autoBumpOpt !== null) {
-            const isPremium = typeof client.isPremium === 'function' ? client.isPremium(interaction.guildId) : false;
+            const isPremium = typeof client.isPremium === 'function' ? client.isPremium(interaction.guildId, interaction.user.id) : false;
 
             if (autoBumpOpt && !isPremium) {
                 return interaction.editReply({ 
@@ -426,9 +431,13 @@ const bumpEngineModule = (client, expressApp) => {
 
         return interaction.editReply({ embeds: [embed] });
     }
+
     // --- 3. /bump HANDLER ---
     async function handleBump(interaction) {
-        await interaction.deferReply();
+        try {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        } catch (e) { return; }
+
         const guild = interaction.guild;
 
         if (!guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
@@ -436,7 +445,7 @@ const bumpEngineModule = (client, expressApp) => {
         }
 
         let listing = await ServerListing.findOne({ guildId: guild.id });
-        const cooldown = 2 * 60 * 60 * 1000; // 2 hours
+        const cooldown = 2 * 60 * 60 * 1000;
 
         if (listing && listing.lastBump && (Date.now() - listing.lastBump.getTime() < cooldown)) {
             const nextBump = Math.floor((listing.lastBump.getTime() + cooldown) / 1000);
@@ -488,11 +497,44 @@ const bumpEngineModule = (client, expressApp) => {
         return interaction.editReply({ embeds: [embed] });
     }
 
+    // --- 4. /autobump HANDLER (Standalone Command) ---
+    async function handleAutoBump(interaction) {
+        try {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+        } catch (e) { return; }
+
+        const isPremium = typeof client.isPremium === 'function' ? client.isPremium(interaction.guildId, interaction.user.id) : false;
+
+        if (!isPremium) {
+            return interaction.editReply({ 
+                content: '💎 **Premium Only Feature!** Auto-Bump is exclusive to Premium servers. Contact the bot owner to upgrade this server for 24/7 automatic bumping!' 
+            });
+        }
+
+        let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
+        if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
+
+        bumpData.autoBumpEnabled = !bumpData.autoBumpEnabled;
+        await bumpData.save();
+
+        const statusText = bumpData.autoBumpEnabled ? 'ENABLED (24/7 Automatic Bumping Active 🚀)' : 'DISABLED';
+
+        const embed = new EmbedBuilder()
+            .setColor(bumpData.autoBumpEnabled ? '#FEE75C' : '#ED4245')
+            .setTitle('💎 Premium Auto-Bump Status Updated')
+            .setDescription(`24/7 Auto-Bump is now **${statusText}** for **${interaction.guild.name}**!`)
+            .setFooter({ text: 'Starry Premium Engine' });
+
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    // Interaction router
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'set-listing') await handleSetListing(interaction);
         if (interaction.commandName === 'bump-setup') await handleBumpSetup(interaction);
         if (interaction.commandName === 'bump') await handleBump(interaction);
+        if (interaction.commandName === 'autobump') await handleAutoBump(interaction);
     });
 };
 
@@ -505,7 +547,8 @@ bumpEngineModule.BumpSystem = BumpSystem;
 bumpEngineModule.setListingData = setListingCommand;
 bumpEngineModule.bumpSetupData = bumpSetupCommand;
 bumpEngineModule.bumpData = bumpCommand;
+bumpEngineModule.autoBumpData = autoBumpCommand;
 
-bumpEngineModule.commands = [setListingCommand, bumpSetupCommand, bumpCommand];
+bumpEngineModule.commands = [setListingCommand, bumpSetupCommand, bumpCommand, autoBumpCommand];
 
 module.exports = bumpEngineModule;
