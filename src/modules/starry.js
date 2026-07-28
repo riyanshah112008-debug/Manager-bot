@@ -1,5 +1,5 @@
 // ==========================================
-// 1. IMPORTS, INITIALIZATION & CACHING
+// 1. IMPORTS, INITIALIZATION & KEY ROTATION
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -21,12 +21,70 @@ try {
     ChestChannel = require('../models/ChestChannel');
     BoostChannel = require('../models/BoostChannel');
 } catch (e) {
-    // Models will be fetched dynamically if required
+    // Models will be loaded dynamically if needed
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const blacklistedUsers = new Set();
+// Multi-API Key Support (Comma-separated in process.env.GEMINI_API_KEY)
+const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
+const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+let currentKeyIndex = 0;
 
+function getNextAIClient() {
+    if (apiKeys.length === 0) return null;
+    const key = apiKeys[currentKeyIndex];
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+    return new GoogleGenAI({ apiKey: key });
+}
+
+// Preferred Models Fallback Chain
+const AI_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-2.0-flash-exp',
+    'gemini-1.0-pro'
+];
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Fail-Safe Generator with Retries & Exponential Backoff
+async function generateAIResponseWithRetry(prompt) {
+    if (apiKeys.length === 0) {
+        throw new Error('Missing GEMINI_API_KEY environment variable.');
+    }
+
+    let lastError = null;
+
+    for (const modelName of AI_MODELS) {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const ai = getNextAIClient();
+                const response = await ai.models.generateContent({
+                    model: modelName,
+                    contents: prompt
+                });
+
+                if (response && response.text && response.text.trim().length > 0) {
+                    return response.text.trim();
+                }
+            } catch (err) {
+                lastError = err;
+                const errStatus = err.status || err.statusCode || (err.message && err.message.includes('503') ? 503 : 0);
+                const isRateLimit = errStatus === 429 || errStatus === 503 || (err.message && err.message.includes('high demand'));
+
+                if (isRateLimit && attempt < 3) {
+                    await sleep(attempt * 1000); // Backoff delay (1s, 2s)
+                    continue;
+                }
+                break; // Switch to next model if not rate limit or retries exhausted
+            }
+        }
+    }
+
+    throw lastError || new Error('All AI models are currently busy.');
+}
+
+const blacklistedUsers = new Set();
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
@@ -67,16 +125,10 @@ module.exports = (client) => {
         const allOwners = [...new Set([...defaultOwners, ...envOwners])];
         return allOwners.includes(userId);
     };
+
     // ==========================================
     // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
     // ==========================================
-    /**
-     * Automatically analyzes a server's text channels to find the ideal log destination.
-     * Searches for specialized channels first; if none exist, routes EVERYTHING to a single general log channel.
-     * @param {Guild} guild - The Discord Guild object
-     * @param {String} logType - 'access', 'moderate', 'messages', 'voice', 'channels', 'members', 'roles', or 'misc'
-     * @returns {TextChannel|null}
-     */
     client.getLogChannel = (guild, logType = 'misc') => {
         if (!guild || !guild.channels) return null;
 
@@ -93,13 +145,11 @@ module.exports = (client) => {
 
         const targetNames = typeMap[logType.toLowerCase()] || typeMap['misc'];
 
-        // 1. Try to find a specialized channel matching the specific log category
         let channel = guild.channels.cache.find(c => 
             c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name))
         );
         if (channel) return channel;
 
-        // 2. Fallback to a single master server log channel if no dedicated category channel exists
         channel = guild.channels.cache.find(c => 
             c.type === ChannelType.GuildText && (
                 c.name === 'logs-server' ||
@@ -114,7 +164,6 @@ module.exports = (client) => {
 
         return channel || null;
     };
-
     // ==========================================
     // 🛠️ UTILITIES: SERVER DUMP GENERATOR
     // ==========================================
@@ -140,6 +189,7 @@ module.exports = (client) => {
 
         return Buffer.from(dump, 'utf-8');
     };
+
     // ==========================================
     // 🧠 MASTER COMMAND: /setup-starry
     // ==========================================
@@ -183,14 +233,12 @@ module.exports = (client) => {
             const channels = guild.channels.cache;
             let report = [];
 
-            // 1. BASIC CONFIGURATION
             try {
                 if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
                 await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { triggerWord: 'Starry' }, { upsert: true });
                 report.push(`⚙️ **Identity:** Trigger word set to \`Starry\``);
             } catch (err) {}
 
-            // 2. COMMUNITY FEATURES
             const welcome = channels.find(c => c.name.includes('welcome'));
             if (welcome) report.push(`👋 **Welcomes:** Linked to <#${welcome.id}>`);
 
@@ -200,10 +248,6 @@ module.exports = (client) => {
             const suggestions = channels.find(c => c.name.includes('suggestions') || c.name.includes('ideas'));
             if (suggestions) report.push(`💡 **Suggestions:** Linked to <#${suggestions.id}>`);
 
-            const confessions = channels.find(c => c.name.includes('confessions'));
-            if (confessions) report.push(`👀 **Confessions:** Linked to <#${confessions.id}>`);
-
-            // 3. SECURITY & MODERATION
             const verification = channels.find(c => c.name.includes('verification') || c.name.includes('verify'));
             if (verification) report.push(`🛡️ **Verification:** System mapped to <#${verification.id}>`);
 
@@ -214,22 +258,12 @@ module.exports = (client) => {
                 report.push(`🗂️ **Smart Logging:** Mapped to single fallback channel.`);
             }
 
-            // 4. TICKETS & APPLICATIONS
             const openTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('opened tickets'));
             const closedTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('closed tickets'));
             if (openTicketsCat && closedTicketsCat) {
                 report.push(`🎫 **Tickets:** Bound to \`${openTicketsCat.name}\` & \`${closedTicketsCat.name}\``);
             }
 
-            const applicationsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('applications'));
-            if (applicationsCat) {
-                report.push(`📝 **Applications:** Bound to category \`${applicationsCat.name}\``);
-            }
-
-            const appeals = channels.find(c => c.name.includes('appeals'));
-            if (appeals) report.push(`🏛️ **Appeals:** Linked to <#${appeals.id}>`);
-
-            // 5. ECONOMY & REWARDS
             const booster = channels.find(c => c.name.includes('boosters') || c.name.includes('boost'));
             if (booster) {
                 try {
@@ -239,29 +273,6 @@ module.exports = (client) => {
                 } catch (err) {}
             }
 
-            const chestTargets = channels.filter(c => 
-                c.type === ChannelType.GuildText && 
-                (c.name.includes('general') || c.name.includes('cafe-chat') || c.name.includes('chat') || c.name.includes('spam'))
-            );
-
-            if (!client.chestChannelsCache) client.chestChannelsCache = new Set();
-            let chestCount = 0;
-
-            try {
-                if (!ChestChannel) ChestChannel = require('../models/ChestChannel');
-                for (const [id, channel] of chestTargets) {
-                    const existing = await ChestChannel.findOne({ channelId: id });
-                    if (!existing) {
-                        await ChestChannel.create({ guildId: guild.id, channelId: id });
-                        client.chestChannelsCache.add(id);
-                        chestCount++;
-                    }
-                }
-            } catch (err) {}
-
-            if (chestCount > 0) report.push(`🎁 **Loot Engine:** Activated in **${chestCount}** chat channels`);
-
-            // 6. FINISH REPORT
             const successEmbed = new EmbedBuilder()
                 .setColor('#2ecc71')
                 .setTitle('✅ Neural Sync Complete')
@@ -361,7 +372,7 @@ module.exports = (client) => {
             const devEmbed = new EmbedBuilder()
                 .setColor('#2C2F33')
                 .setTitle('💻 Starry Developer Menu')
-                .setDescription('**Owner-Only Text Commands:**\n\n` .sysinfo ` - Bot stats.\n` .serverdump ` - Full text data dump.\n` .eval <code> ` - Run raw JS.\n` .broadcast <msg> ` - Send message to ALL servers.\n` .leaveserver <ID> ` - Force leave.\n` .blacklist <ID> ` - Block user.')
+                .setDescription('**Owner-Only Text Commands:**\n\n` .sysinfo ` - Bot stats.\n` .eval <code> ` - Run raw JS.\n` .broadcast <msg> ` - Global broadcast.')
                 .setFooter({ text: 'Starry Developer CLI' });
             try {
                 await message.author.send({ embeds: [devEmbed] });
@@ -412,12 +423,11 @@ module.exports = (client) => {
 
             const row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
-                new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐'),
-                new ButtonBuilder().setCustomId('dev_dump').setLabel('Server Dump').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+                new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐')
             );
             const row2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
-                new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📝')
+                new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📢')
             );
 
             return interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
@@ -462,8 +472,8 @@ module.exports = (client) => {
             }
         }
     });
-     // ==========================================
-    // 🤖 AI & NLP MODERATION ENGINE (ULTRA FAST)
+    // ==========================================
+    // 🤖 AI & NLP MODERATION ENGINE
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
@@ -500,25 +510,12 @@ module.exports = (client) => {
             return message.reply('❌ **AI is a Premium feature!** Contact the bot owner to upgrade this server.').catch(() => {});
         }
 
-        // Helper Function to Alert Bot Owners via DM on API issues
-        const sendOwnerApiAlert = async (errType, guildName, triggerUserTag) => {
-            const ownerIds = (process.env.OWNER_ID || '1465049039153135639,1257676837249617971').split(',').map(id => id.trim());
-            for (const ownerId of ownerIds) {
-                try {
-                    const owner = await client.users.fetch(ownerId).catch(() => null);
-                    if (owner) {
-                        await owner.send(`⚠️ **API Quota / Server Alert!**\nStarry encountered an issue: \`${errType}\`\n**Location:** ${guildName}\n**Triggered by:** ${triggerUserTag}`);
-                    }
-                } catch (dmErr) {}
-            }
-        };
-
         // ==========================================
-        // ⚡ 1. INSTANT LOCAL MODERATION & ROLE PRE-PARSER (0ms DELAY)
+        // ⚡ INSTANT LOCAL PRE-PARSERS (0ms DELAY)
         // ==========================================
         const botMember = message.guild ? message.guild.members.me : null;
 
-        // A. TIMEOUT PRE-PARSER (e.g. "Timeout @lexi for 1 min", "starry timeout @user 10m")
+        // A. TIMEOUT PRE-PARSER
         const timeoutRegex = /timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)\s*(m|min|mins|minute|minutes|h|hr|hours|d|day|days)?/i;
         const timeoutMatch = message.content.match(timeoutRegex);
 
@@ -539,19 +536,18 @@ module.exports = (client) => {
             if (tMember.id === message.guild.ownerId) return message.reply("❌ I cannot moderate the **Server Owner**!");
             if (tMember.id === client.user.id) return message.reply("❌ I cannot moderate **myself**!");
 
-            const isTargetHigherOrEqual = tMember.roles.highest.position >= botMember.roles.highest.position;
-            if (isTargetHigherOrEqual) {
-                return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their highest role is equal to or above mine!`);
+            if (tMember.roles.highest.position >= botMember.roles.highest.position) {
+                return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role is higher than or equal to mine!`);
             }
 
             const caseId = Math.floor(Math.random() * 90000) + 10000;
             const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', 'Direct Staff Command', `${amount} ${unit}`, message.guild, caseId);
-            
+
             await tMember.timeout(durationMs, `Requested by ${message.author.tag}`).catch(() => {});
             return message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
         }
 
-        // B. CREATE ROLE PRE-PARSER (e.g. "Create role bump-me", "Create a role named VIP")
+        // B. CREATE ROLE PRE-PARSER
         const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
         const roleMatch = message.content.match(createRoleRegex);
 
@@ -568,7 +564,7 @@ module.exports = (client) => {
             }
         }
 
-        // C. CLEAR / PURGE PRE-PARSER (e.g. "Clear 10", "Starry purge 5 messages")
+        // C. CLEAR / PURGE PRE-PARSER
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -611,38 +607,18 @@ module.exports = (client) => {
                 return replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
             }
         }
-
         // ==========================================
-        // 🧠 2. QUAD-MODEL AI FAILOVER & OWNER ALERTS
+        // 🧠 FAIL-SAFE RETRY AI EXECUTION ENGINE
         // ==========================================
-        if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** API Key missing!");        
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses ultra concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord AI companion. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
 
-            const aiModels = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
-            let geminiResponse = null;
-            let lastError = null;
+            let replyText = await generateAIResponseWithRetry(prompt);
 
-            for (const modelName of aiModels) {
-                try {
-                    geminiResponse = await ai.models.generateContent({ model: modelName, contents: prompt });
-                    if (geminiResponse && geminiResponse.text) break; 
-                } catch (err) {
-                    lastError = err;
-                    console.warn(`[AI Engine] Model ${modelName} failed or busy. Trying next...`);
-                }
-            }
-
-            if (!geminiResponse || !geminiResponse.text) {
-                const locationStr = message.guild ? message.guild.name : 'DMs';
-                await sendOwnerApiAlert('503 / High Demand Spike', locationStr, message.author.tag);
-                return message.reply("⏳ **High Demand Notice:** Google AI servers are currently busy. Please try your request again in a moment!");
-            }
-
-            let replyText = geminiResponse.text || "";
-            let functionName = null; let args = {};
+            let functionName = null; 
+            let args = {};
 
             const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE)(?:\|(.*?))?\]/i);
             if (cmdMatch) {
@@ -660,107 +636,67 @@ module.exports = (client) => {
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
-            // ==========================================
-            // 🛡️ UPGRADED ROLE HIERARCHY MODERATION ENGINE
-            // ==========================================
+
+            // Execute Moderation Actions Generated by AI
             if (functionName) {
-                const botMember = message.guild.members.me;
+                const botMember = message.guild ? message.guild.members.me : null;
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
 
-                if (functionName === "create_role") {
-                    if (!hasPerm(PermissionFlagsBits.ManageRoles)) return message.reply("❌ Required permissions to create roles are missing.");
-                    try {
-                        const newRole = await message.guild.roles.create({ name: args.roleName || 'new-role' });
-                        return message.reply(`✅ Created role **${newRole.name}**!`);
-                    } catch (err) {
-                        return message.reply(`❌ Failed to create role: \`${err.message}\``);
-                    }
+                if (functionName === "create_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
+                    const newRole = await message.guild.roles.create({ name: args.roleName || 'new-role' }).catch(() => null);
+                    if (newRole) await message.reply(`✅ Created role **${newRole.name}**!`);
                 }
 
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
                     const deleteCount = Math.min(args.amount, 99) + 1;
-                    await message.channel.bulkDelete(deleteCount, true).catch(()=>{});
-                    return message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete().catch(()=>{}), 3500));
+                    await message.channel.bulkDelete(deleteCount, true).catch(() => {});
+                    await message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
                 }
 
                 const tId = (args.userId || '').replace(/\D/g, '');
-                if (functionName === "unban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
-                    await message.guild.members.unban(tId).catch(()=>{}); 
-                    return message.reply("✅ User Unbanned.");
-                }
+                if (tId && message.guild) {
+                    const tMember = await message.guild.members.fetch(tId).catch(() => null);
 
-                const tMember = await message.guild.members.fetch(tId).catch(() => null);
+                    if (tMember && tMember.id !== message.guild.ownerId && tMember.id !== client.user.id) {
+                        const isHigher = tMember.roles.highest.position >= botMember.roles.highest.position;
 
-                if (!tMember) {
-                    return message.reply("❌ Target member could not be found in this server.");
-                }
+                        if (!isHigher) {
+                            if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
+                                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
+                                await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(() => {}); 
+                                await message.reply(`⏰ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                            }
 
-                if (tMember.id === message.guild.ownerId) {
-                    return message.reply("❌ I cannot moderate the **Server Owner**!");
-                }
-                if (tMember.id === client.user.id) {
-                    return message.reply("❌ I cannot moderate **myself**!");
-                }
+                            if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
+                                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
+                                await tMember.kick(args.reason).catch(() => {});
+                                await message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                            }
 
-                const botHighestRole = botMember.roles.highest;
-                const targetHighestRole = tMember.roles.highest;
-
-                const isTargetHigherOrEqual = targetHighestRole.position >= botHighestRole.position;
-
-                if (isTargetHigherOrEqual) {
-                    return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role (\`${targetHighestRole.name}\`) is higher than or equal to my highest role (\`${botHighestRole.name}\`). Please move my bot role higher!`);
-                }
-
-                if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
-                    
-                    await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch((err) => {
-                        console.error('Timeout Execution Error:', err);
-                    }); 
-
-                    return message.reply(`⏰ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                }
-
-                if (functionName === "untimeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                    await tMember.timeout(null).catch(()=>{}); 
-                    return message.reply(`✅ Removed timeout from <@${tId}>.`);
-                }
-
-                if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
-                    const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
-                    
-                    await tMember.kick(args.reason).catch((err) => {
-                        console.error('Kick Execution Error:', err);
-                    }); 
-
-                    return message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                }
-
-                if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
-                    const caseId = Math.floor(Math.random() * 90000) + 10000;
-                    const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
-                    
-                    await tMember.ban({ reason: args.reason }).catch((err) => {
-                        console.error('Ban Execution Error:', err);
-                    });
-
-                    return message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                            if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
+                                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
+                                await tMember.ban({ reason: args.reason }).catch(() => {});
+                                await message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+                            }
+                        }
+                    }
                 }
             }
 
-            // --- DELIVER AI RESPONSE CHUNKS ---
+            // Deliver AI Response
             if (replyText && replyText.trim().length > 0) {
                 const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
-                for (const chunk of textChunks) await message.reply(chunk).catch(console.error); 
+                for (const chunk of textChunks) {
+                    await message.reply(chunk).catch(() => {});
+                }
             }
 
         } catch (error) {
-            console.error("Gemini AI error:", error);
-            const locationStr = message.guild ? message.guild.name : 'DMs';
-            await sendOwnerApiAlert(error.status || error.message || 'AI Crash', locationStr, message.author.tag);
-            return message.reply(`⏳ **High Demand Notice:** Google AI servers are currently busy. Please try your request again in a moment!`).catch(console.error);
+            console.error("Gemini AI error:", error.message || error);
+            return message.reply(`⏳ **High Demand Notice:** Google AI servers are currently experiencing a temporary traffic spike. Please try again in a few seconds!`).catch(() => {});
         }
     }); 
 };
