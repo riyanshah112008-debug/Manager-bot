@@ -228,11 +228,11 @@ commands.push(
         ] 
     },
 
-    // ================= SERVER DIRECTORY COMMANDS =================
+        // ================= SERVER DIRECTORY COMMANDS =================
     { name: 'set-listing', description: 'Configure how your server appears on the Starry Server Web List!', default_member_permissions: ADMIN, options: [{ name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' }, { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }] },
     { name: 'bump', description: 'Bump this server to the top of the Starry Global Web List!' },
+    { name: 'autobump', description: '💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!', default_member_permissions: ADMIN },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
-);
 
 // ==========================================
 // REST DISCORD COMMAND DEPLOYER FUNCTION
