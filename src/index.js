@@ -345,7 +345,6 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
@@ -425,7 +424,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    const moduleCommands = ['premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium'];
+    // Direct Bypass for standalone modules handled internally (e.g., premium, bump, tracker)
+    const moduleCommands = [
+        'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
+        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump'
+    ];
     if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
         return;
     }
@@ -669,7 +672,7 @@ const loadModule = (name, filePath) => {
     try { 
         const mod = require(filePath);
         if (typeof mod === 'function') {
-            mod(client, app); 
+            mod(client, app); // Passes both client and Express app instance
             console.log(`✅ ${name} Module Loaded`); 
         } else {
             console.log(`✅ ${name} Module Loaded (Object Export)`);
