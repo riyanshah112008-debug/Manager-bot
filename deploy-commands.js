@@ -53,14 +53,14 @@ const commands = [
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
 
-// Safely Load Dynamic Social & Expression Commands
+// Safely Load Combined /social Master Command
 try {
-    const { socialCommandsPayload } = require('./src/modules/socialActions');
-    if (Array.isArray(socialCommandsPayload)) {
-        socialCommandsPayload.forEach(cmd => commands.push(cmd));
+    const { socialCommandPayload } = require('./src/modules/socialActions');
+    if (socialCommandPayload) {
+        commands.push(socialCommandPayload);
     }
 } catch (err) {
-    console.warn('⚠️ Could not load socialActions module commands:', err.message);
+    console.warn('⚠️ Could not load socialCommandPayload:', err.message);
 }
 // ==========================================
 // GIVEAWAY SLASH COMMAND BUILDERS
