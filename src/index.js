@@ -424,15 +424,15 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // DIRECT BYPASS: Bypasses commands handled inside modules so they don't look for files in src/commands/
+    // DIRECT BYPASS: Directs modules that handle their interactions internally without needing external command files!
     const moduleCommands = [
         'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
         'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
-        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel'
+        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel',
+        'rep', 'checkrep', 'leaderboard', 'social'
     ];
-    
     if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
-        return; // Handled inside module listener directly
+        return; // Handled directly inside module listeners
     }
 
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
@@ -706,7 +706,8 @@ async function startBot() {
             ['Welcome System', './modules/welcome.js'], ['User Protection', './modules/protect.js'], ['Goodbye System', './modules/goodbye.js'], 
             ['Server Backup Engine', './modules/backupEngine.js'], ['Role Manager', './modules/roleManager.js'], ['Anti-Abuse', './modules/antiAbuse.js'], 
             ['Random Chest Drops', './modules/chestDrop.js'], ['Autorole & Sticky Roles', './modules/autorole.js'], ['Verification System', './modules/verification.js'], 
-            ['Auto Bump Engine', './modules/bumpEngine.js'], ['Network Telemetry Engine', './modules/telemetryEngine.js']
+            ['Auto Bump Engine', './modules/bumpEngine.js'], ['Network Telemetry Engine', './modules/telemetryEngine.js'],
+            ['Social Actions Engine', './modules/socialActions.js']
         ];
         mods.forEach(([name, path]) => loadModule(name, path));
 
