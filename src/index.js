@@ -666,6 +666,17 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
+
+    // DIRECT BYPASS: Directs modules that handle their interactions internally without needing external command files!
+    const moduleCommands = [
+        'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
+        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
+        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel' // 👈 ADDED THESE TWO
+    ];
+    if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
+        return;
+    }
+
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
