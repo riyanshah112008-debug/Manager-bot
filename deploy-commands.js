@@ -74,7 +74,7 @@ const commands = [
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
 // ==========================================
-// GIVEAWAY & REROLL SLASH COMMAND BUILDERS
+// GIVEAWAY SLASH COMMAND BUILDERS
 // ==========================================
 commands.push(
     new SlashCommandBuilder()
@@ -163,7 +163,7 @@ commands.push(
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] }
 );
 // ==========================================
-// SETUP, UTILITIES,PREMIUM & UPGRADED TRACKER
+// SETUP, UTILITIES, PREMIUM, TRACKERS & DIRECTORY
 // ==========================================
 commands.push(
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel for logs' }] },
@@ -190,8 +190,7 @@ commands.push(
     { name: 'ping', description: 'Check bot latency' },
     { name: 'Steal Emojis', type: ApplicationCommandType.Message },
 
-    
-        // ================= PREMIUM, TRACKERS & WEB DASHBOARD =================
+    // ================= PREMIUM & TRACKER =================
     { 
         name: 'activatepremium', 
         description: 'Activate Premium for a server or user with optional duration', 
@@ -203,8 +202,6 @@ commands.push(
     { name: 'deactivatepremium', description: 'Deactivate Premium for a server', options: [{ name: 'server_id', type: 3, required: false, description: 'Server ID or User ID' }] },
     { name: 'removepremium', description: 'Alias for deactivating Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server ID or User ID' }] },
     { name: 'premiumcheck', description: 'Check whether this server has Premium' },
-
-    // ⚡ UPDATED TRACKER COMMAND WITH AFTER_DAYS SUB-OPTION ⚡
     { 
         name: 'tracker', 
         description: 'Manage the 14-day inactivity tracker and historical scraper', 
@@ -228,11 +225,12 @@ commands.push(
         ] 
     },
 
-        // ================= SERVER DIRECTORY COMMANDS =================
+    // ================= SERVER DIRECTORY COMMANDS =================
     { name: 'set-listing', description: 'Configure how your server appears on the Starry Server Web List!', default_member_permissions: ADMIN, options: [{ name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' }, { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }] },
     { name: 'bump', description: 'Bump this server to the top of the Starry Global Web List!' },
     { name: 'autobump', description: '💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!', default_member_permissions: ADMIN },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
+);
 
 // ==========================================
 // REST DISCORD COMMAND DEPLOYER FUNCTION
