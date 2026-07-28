@@ -31,7 +31,7 @@ const autoroleCommandDef = {
 };
 
 // ==========================================
-// INITIALIZE COMMANDS ARRAY (Fixes ReferenceError)
+// INITIALIZE COMMANDS ARRAY
 // ==========================================
 const commands = [
     // ================= SOCIAL & TELEMETRY =================
@@ -163,7 +163,7 @@ commands.push(
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] }
 );
 // ==========================================
-// SETUP, UTILITIES, PREMIUM & WEB DIRECTORY
+// SETUP, UTILITIES, PREMIUM & UPGRADED TRACKER
 // ==========================================
 commands.push(
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel for logs' }] },
@@ -195,7 +195,30 @@ commands.push(
     { name: 'deactivatepremium', description: 'Deactivate Premium for a server', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }] },
     { name: 'removepremium', description: 'Alias for deactivating Premium', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }] },
     { name: 'premiumcheck', description: 'Check whether this server has Premium' },
-    { name: 'tracker', description: 'Manage the 14-day inactivity tracker and historical scraper', default_member_permissions: MANAGE_GUILD, options: [{ name: 'setup', description: 'Setup the 14-day inactivity log channel', type: 1, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send 14-day inactivity alerts to' }] }, { name: 'scrape', description: 'Premium: Scrape historical messages into MongoDB', type: 1, options: [{ name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' }] }] },
+
+    // ⚡ UPDATED TRACKER COMMAND WITH AFTER_DAYS SUB-OPTION ⚡
+    { 
+        name: 'tracker', 
+        description: 'Manage the 14-day inactivity tracker and historical scraper', 
+        default_member_permissions: MANAGE_GUILD, 
+        options: [
+            { 
+                name: 'setup', 
+                description: 'Setup the 14-day inactivity log channel & preview embeds', 
+                type: 1, 
+                options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send 14-day inactivity alerts to' }] 
+            }, 
+            { 
+                name: 'scrape', 
+                description: 'Premium: Scrape historical messages into MongoDB', 
+                type: 1, 
+                options: [
+                    { name: 'private_channel', type: 7, required: true, description: 'The private channel for the live scraping dashboard' },
+                    { name: 'after_days', type: 4, required: false, description: 'Fetch data only from last X days (e.g. 7, 30, 90). Leave blank for full scrape.', min_value: 1 }
+                ] 
+            }
+        ] 
+    },
 
     // ================= SERVER DIRECTORY COMMANDS =================
     { name: 'set-listing', description: 'Configure how your server appears on the Starry Server Web List!', default_member_permissions: ADMIN, options: [{ name: 'description', type: 3, required: true, description: 'A short description of your server (Max 150 chars)' }, { name: 'tags', type: 3, required: false, description: 'Comma-separated tags (e.g., Gaming, Anime, Chill)' }] },
