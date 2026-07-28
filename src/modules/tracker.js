@@ -148,7 +148,7 @@ const universalTrackerModule = (client) => {
         client.commands.set('tracker', { data: trackerCommandSchema, execute: handleCommand });
     }
 
-    // --- INVITE CACHING ---
+    // --- INVITE CACHING & SERVER STATS SYNC ---
     const invitesCache = new Map();
 
     client.once('ready', async () => {
@@ -159,7 +159,7 @@ const universalTrackerModule = (client) => {
                     if (guildInvites) invitesCache.set(guildId, new Map(guildInvites.map(inv => [inv.code, inv.uses])));
                 }
             }
-            console.log('✅ Universal Tracker Loaded (Invites + Mod Panel + 14-Day Inactivity).');
+            console.log(`✅ Universal Tracker Loaded across ${client.guilds.cache.size} servers.`);
         } catch (err) {}
     });
 
@@ -475,7 +475,7 @@ const universalTrackerModule = (client) => {
     });
 };
 
-// Hybrid Export Strategy: Compatible with module function calls & slash deploys
+// Universal Hybrid Export
 universalTrackerModule.data = trackerCommandSchema;
 universalTrackerModule.execute = async (interaction) => {
     if (interaction.isChatInputCommand() && interaction.commandName === 'tracker') {
