@@ -1,5 +1,5 @@
 // ==========================================
-// 1. IMPORTS & COMMAND SCHEMA
+// 1. IMPORTS & SCHEMAS
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -8,12 +8,16 @@ const {
     PermissionFlagsBits,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    ChannelType
 } = require('discord.js');
+const mongoose = require('mongoose');
 
-const UserActivity = require('../models/UserActivity');
-const ChannelScrapeState = require('../models/ChannelScrapeState');
-const GuildTrackerSettings = require('../models/GuildTrackerSettings');
+// Safe Schema Fallbacks
+let UserActivity, ChannelScrapeState, GuildTrackerSettings;
+try { UserActivity = require('../models/UserActivity'); } catch (e) { UserActivity = mongoose.models.UserActivity; }
+try { ChannelScrapeState = require('../models/ChannelScrapeState'); } catch (e) { ChannelScrapeState = mongoose.models.ChannelScrapeState; }
+try { GuildTrackerSettings = require('../models/GuildTrackerSettings'); } catch (e) { GuildTrackerSettings = mongoose.models.GuildTrackerSettings; }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -31,14 +35,14 @@ function getAccountAge(createdAt) {
 }
 
 function generateProgressBar(current, total, length = 12) {
-    if (!total || total === 0) return '░'.repeat(length) + ' 0%';
+    if (!total || total === 0) return '`░░░░░░░░░░░░` 0%';
     const progress = Math.min(Math.max(current / total, 0), 1);
     const fill = Math.round(length * progress);
     const bar = '█'.repeat(fill) + '░'.repeat(length - fill);
-    return `\`${bar}\` ${Math.floor(progress * 100)}%`;
+    return `\`${bar}\` **${Math.floor(progress * 100)}%**`;
 }
 
-// ⚡ SLASH COMMAND SCHEMA
+// Slash Command Definition
 const trackerCommandSchema = new SlashCommandBuilder()
     .setName('tracker')
     .setDescription('Universal Invite Tracker & 14-Day Inactivity System')
@@ -54,7 +58,7 @@ const trackerCommandSchema = new SlashCommandBuilder()
     .addSubcommand(subcommand =>
         subcommand
             .setName('scrape')
-            .setDescription('Premium: Scrape historical messages into MongoDB')
+            .setDescription('Premium: Scrape historical messages into MongoDB Cloud')
             .addChannelOption(option =>
                 option.setName('private_channel')
                     .setDescription('The private channel for the live scraping dashboard')
@@ -64,9 +68,8 @@ const trackerCommandSchema = new SlashCommandBuilder()
                     .setDescription('Fetch data only from last X days (e.g. 7, 30, 90). Leave blank for full scrape.')
                     .setRequired(false)
                     .setMinValue(1)));
-
 // ==========================================
-// 2. HELPER EMBED & COMPONENT BUILDERS
+// 2. EMBED BUILDERS & INTERACTIVE BUTTONS
 // ==========================================
 function buildModPanelRow(targetUserId) {
     return new ActionRowBuilder().addComponents(
@@ -103,21 +106,28 @@ function buildLiveTrackingEmbed(member, inviterId, inviteCode, joinedAtMs, stats
     return new EmbedBuilder()
         .setColor('#5865F2')
         .setAuthor({ 
-            name: 'Invite used', 
+            name: 'Invite Tracker • Member Joined', 
             iconURL: member.guild.iconURL({ dynamic: true }) || undefined 
         })
-        .setTitle('👋 New member joined through this invite')
+        .setTitle(`👋 Welcome to ${member.guild.name}`)
         .setDescription(
             `<@${member.id}> joined with invite code \`${inviteCode}\` created by ${inviterMention}.\n\n` +
-            `**Nickname**\n${member.nickname || 'None'}\n\n` +
-            `**Global name**\n\`${member.user.globalName || member.user.username}\`\n\n` +
-            `**Joined**\n<t:${joinedUnix}:F>\n<t:${joinedUnix}:R>\n\n` +
-            `**Account age**\n<t:${createdAtUnix}:F>\n<t:${createdAtUnix}:R>\n**Age:** ${ageStr}\n\n` +
-            `**Activity counter**\nMessages: **${stats.msgs}**\nMedia: **${stats.media}**\nLinks: **${stats.links}**\nVoice joins: **${stats.voice}**\nReactions: **${stats.reacts}**\n\n` +
-            `**Tracking ends**\n<t:${endsAtUnix}:F>\n<t:${endsAtUnix}:R>`
+            `**Nickname:** ${member.nickname || 'None'}\n` +
+            `**Global Name:** \`${member.user.globalName || member.user.username}\`\n\n` +
+            `**Joined Server:** <t:${joinedUnix}:F> (<t:${joinedUnix}:R>)\n` +
+            `**Account Created:** <t:${createdAtUnix}:F> (<t:${createdAtUnix}:R>)\n` +
+            `**Account Age:** ${ageStr}\n\n` +
+            `📊 **Activity Counter (14-Day Window)**\n` +
+            `• Messages: **${stats.msgs}**\n` +
+            `• Media/Attachments: **${stats.media}**\n` +
+            `• Web Links: **${stats.links}**\n` +
+            `• Voice Connections: **${stats.voice}**\n` +
+            `• Reactions Added: **${stats.reacts}**\n\n` +
+            `⏳ **Tracking Period Ends:** <t:${endsAtUnix}:F> (<t:${endsAtUnix}:R>)`
         )
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-        .setFooter({ text: `User ID: ${member.id} • Activity counter` });
+        .setFooter({ text: `User ID: ${member.id} • Starry Activity Engine` })
+        .setTimestamp();
 }
 
 function buildInactivityAlertEmbed(member, inviterId, inviteCode, joinedAtMs) {
@@ -127,20 +137,25 @@ function buildInactivityAlertEmbed(member, inviterId, inviteCode, joinedAtMs) {
 
     return new EmbedBuilder()
         .setColor('#ED4245')
-        .setTitle('⚠️ No activity after 14 days')
+        .setTitle('🚨 14-Day Inactivity Notice')
         .setDescription(
-            `The user <@${member.id}> had no interaction within **14 days** after joining.\n\n` +
-            `The user joined through invite code \`${inviteCode}\` created by ${inviterMention} on <t:${joinedUnix}:F>.\n\n` +
-            `**Account age:** ${ageStr} • **User ID:** ${member.id}`
+            `The user <@${member.id}> (\`${member.user.tag}\`) had **ZERO recorded interaction** within 14 days after joining.\n\n` +
+            `**Invite Used:** \`${inviteCode}\` (Created by ${inviterMention})\n` +
+            `**Joined Date:** <t:${joinedUnix}:F>\n` +
+            `**Account Age:** ${ageStr}\n` +
+            `**User ID:** \`${member.id}\``
         )
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+        .setFooter({ text: 'Starry Moderation Assistant' })
+        .setTimestamp();
 }
 // ==========================================
-// 3. MAIN MODULE FUNCTION & SCRAPING ENGINE
+// 3. MAIN MODULE & UNSTOPPABLE SCRAPER ENGINE
 // ==========================================
 const universalTrackerModule = (client) => {
 
     client.getUserActivity = async (guildId, userId) => {
+        if (!UserActivity) return null;
         return await UserActivity.findOne({ guildId, userId });
     };
 
@@ -148,18 +163,18 @@ const universalTrackerModule = (client) => {
         client.commands.set('tracker', { data: trackerCommandSchema, execute: handleCommand });
     }
 
-    // --- INVITE CACHING & SERVER STATS SYNC ---
+    // --- INVITE CACHING ---
     const invitesCache = new Map();
 
     client.once('ready', async () => {
         try {
             for (const [guildId, guild] of client.guilds.cache) {
-                if (guild.members.me.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+                if (guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
                     const guildInvites = await guild.invites.fetch().catch(() => null);
                     if (guildInvites) invitesCache.set(guildId, new Map(guildInvites.map(inv => [inv.code, inv.uses])));
                 }
             }
-            console.log(`✅ Universal Tracker Loaded across ${client.guilds.cache.size} servers.`);
+            console.log(`✅ Universal Tracker Engine synchronized across ${client.guilds.cache.size} servers.`);
         } catch (err) {}
     });
 
@@ -173,21 +188,20 @@ const universalTrackerModule = (client) => {
         if (guildInvites) guildInvites.delete(invite.code);
     });
 
-    // --- MEMBER JOIN TRACKER ---
+    // --- MEMBER JOIN LISTENER ---
     client.on('guildMemberAdd', async member => {
         if (member.user.bot) return;
         const guild = member.guild;
 
         let inviterId = 'Unknown';
         let inviteCode = 'Direct/Vanity';
-        let usedInvite = null;
 
-        if (guild.members.me.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+        if (guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
             const cachedInvites = invitesCache.get(guild.id);
             const newInvites = await guild.invites.fetch().catch(() => null);
 
             if (cachedInvites && newInvites) {
-                usedInvite = newInvites.find(inv => {
+                const usedInvite = newInvites.find(inv => {
                     const oldUses = cachedInvites.get(inv.code) || 0;
                     return inv.uses > oldUses;
                 });
@@ -200,10 +214,15 @@ const universalTrackerModule = (client) => {
             }
         }
 
-        const settings = await GuildTrackerSettings.findOne({ guildId: guild.id });
-        const logChannel = settings?.customLogChannel 
-            ? guild.channels.cache.get(settings.customLogChannel) 
-            : (typeof client.getLogChannel === 'function' ? client.getLogChannel(guild, 'access') : guild.systemChannel);
+        let logChannel = null;
+        if (GuildTrackerSettings) {
+            const settings = await GuildTrackerSettings.findOne({ guildId: guild.id }).catch(() => null);
+            if (settings?.customLogChannel) logChannel = guild.channels.cache.get(settings.customLogChannel);
+        }
+
+        if (!logChannel && typeof client.getLogChannel === 'function') {
+            logChannel = client.getLogChannel(guild, 'access');
+        }
 
         let trackingMsgId = null;
         const joinedAtMs = Date.now();
@@ -214,20 +233,22 @@ const universalTrackerModule = (client) => {
             if (sentMsg) trackingMsgId = sentMsg.id;
         }
 
-        await UserActivity.findOneAndUpdate(
-            { guildId: guild.id, userId: member.id },
-            {
-                joinedAt: joinedAtMs, inviterId, inviteCode,
-                logChannelId: logChannel ? logChannel.id : null, logMessageId: trackingMsgId,
-                is14DayTracker: true, alerted: false,
-                $setOnInsert: { stats: { msgs: 0, media: 0, links: 0, voice: 0, reacts: 0, invites: 0 } }
-            },
-            { upsert: true, new: true }
-        );
+        if (UserActivity) {
+            await UserActivity.findOneAndUpdate(
+                { guildId: guild.id, userId: member.id },
+                {
+                    joinedAt: joinedAtMs, inviterId, inviteCode,
+                    logChannelId: logChannel ? logChannel.id : null, logMessageId: trackingMsgId,
+                    is14DayTracker: true, alerted: false,
+                    $setOnInsert: { stats: { msgs: 0, media: 0, links: 0, voice: 0, reacts: 0, invites: 0 } }
+                },
+                { upsert: true, new: true }
+            ).catch(() => {});
+        }
     });
 
-    // --- LIVE SCRAPING DASHBOARD ---
-    async function updateLiveDashboard(logMessage, currentChannel, messagesInChannel, completed = 0, total = 0, timeframeDays = null) {
+    // --- LIVE DASHBOARD BUILDER ---
+    async function updateLiveDashboard(logMessage, currentChannel, processedMsgs, completed = 0, total = 0, timeframeDays = null) {
         try {
             const progressBar = generateProgressBar(completed, total);
             const timeFilterText = timeframeDays ? `Last **${timeframeDays} days**` : '**All Time (Full Scrape)**';
@@ -236,49 +257,50 @@ const universalTrackerModule = (client) => {
                 .setColor('#5865F2')
                 .setAuthor({ name: '🧠 AI Data Bridge • Historical Scraper', iconURL: logMessage.guild.iconURL({ dynamic: true }) || undefined })
                 .setTitle('🚀 Live Scraper Engine Active')
-                .setDescription('Reading past channel histories to sync activity data into MongoDB. **Do not restart the bot during this process.**')
+                .setDescription('Reading past channel histories to sync activity data into MongoDB Cloud. **Do not restart the bot during this process.**')
                 .addFields(
-                    { name: '📍 Current Target', value: `${currentChannel} (\`#${currentChannel.name}\`)`, inline: true },
-                    { name: '💬 Messages Processed', value: `\`${messagesInChannel.toLocaleString()}\` msgs`, inline: true },
+                    { name: '📍 Current Target', value: `\`#${currentChannel.name}\``, inline: true },
+                    { name: '💬 Messages Processed', value: `\`${processedMsgs.toLocaleString()}\` msgs`, inline: true },
                     { name: '⏱️ Time Filter', value: timeFilterText, inline: true },
-                    { name: '📈 Overall Progress', value: `${progressBar}\n**${completed}** of **${total}** Channels Completed`, inline: false }
+                    { name: '📈 Overall Progress', value: `${progressBar}\n**${completed}** of **${total}** Channels Processed`, inline: false }
                 )
-                .setFooter({ text: '💎 Premium Engine • Safe Rate-Limit Throttling Active' })
+                .setFooter({ text: 'Starry Premium Engine • Safe Rate-Limit Throttling Active' })
                 .setTimestamp();
 
-            await logMessage.edit({ embeds: [embed] });
+            await logMessage.edit({ embeds: [embed] }).catch(() => {});
         } catch (err) {}
     }
 
+    // --- UNSTOPPABLE CHANNEL SCRAPER ---
     async function scrapeChannelHistory(channel, logMessage, totalChannels, completedChannels, minTimestamp = 0, timeframeDays = null) {
-        let state = await ChannelScrapeState.findOne({ channelId: channel.id }) || 
-                    new ChannelScrapeState({ guildId: channel.guild.id, channelId: channel.id });
+        let totalProcessedInChannel = 0;
+        let lastMessageId = null;
+        let channelDone = false;
 
-        let fetchOptions = { limit: 100 };
-        if (state.newestScrapedId) fetchOptions.after = state.newestScrapedId;
+        while (!channelDone) {
+            const options = { limit: 100 };
+            if (lastMessageId) options.before = lastMessageId;
 
-        let hasMoreMessages = true;
-        let batchCount = 0;
-
-        while (hasMoreMessages) {
+            let fetchedMessages;
             try {
-                const messages = await channel.messages.fetch(fetchOptions);
-                if (messages.size === 0) {
-                    hasMoreMessages = false;
+                fetchedMessages = await channel.messages.fetch(options);
+            } catch (err) {
+                break; // Skip channel on error safely
+            }
+
+            if (!fetchedMessages || fetchedMessages.size === 0) break;
+
+            const bulkOps = [];
+            for (const msg of fetchedMessages.values()) {
+                if (msg.author.bot) continue;
+
+                if (minTimestamp > 0 && msg.createdTimestamp < minTimestamp) {
+                    channelDone = true;
                     break;
                 }
 
-                const bulkOps = [];
-                let reachedTimeLimit = false;
-
-                messages.forEach(msg => {
-                    if (msg.author.bot) return;
-
-                    if (minTimestamp > 0 && msg.createdTimestamp < minTimestamp) {
-                        reachedTimeLimit = true;
-                        return;
-                    }
-
+                totalProcessedInChannel++;
+                if (UserActivity) {
                     bulkOps.push({
                         updateOne: {
                             filter: { guildId: channel.guild.id, userId: msg.author.id },
@@ -292,36 +314,18 @@ const universalTrackerModule = (client) => {
                             upsert: true
                         }
                     });
-                });
-
-                if (bulkOps.length > 0) await UserActivity.bulkWrite(bulkOps);
-
-                const sortedIds = Array.from(messages.keys()).sort();
-                if (!state.oldestScrapedId || sortedIds[0] < state.oldestScrapedId) state.oldestScrapedId = sortedIds[0];
-                if (!state.newestScrapedId || sortedIds[sortedIds.length - 1] > state.newestScrapedId) state.newestScrapedId = sortedIds[sortedIds.length - 1];
-
-                state.totalMessagesProcessed += messages.size;
-                await state.save();
-
-                if (reachedTimeLimit) {
-                    hasMoreMessages = false;
-                    break;
                 }
-
-                if (state.isFullyScraped) fetchOptions.after = sortedIds[sortedIds.length - 1];
-                else fetchOptions.before = sortedIds[0];
-
-                batchCount++;
-                if (batchCount % 3 === 0) {
-                    await updateLiveDashboard(logMessage, channel, state.totalMessagesProcessed, completedChannels, totalChannels, timeframeDays);
-                }
-                await sleep(1200);
-            } catch (error) {
-                await sleep(5000);
             }
+
+            if (bulkOps.length > 0 && UserActivity) {
+                await UserActivity.bulkWrite(bulkOps).catch(() => {});
+            }
+
+            lastMessageId = fetchedMessages.last()?.id;
+            await sleep(250); // Rate limit throttle delay
         }
-        state.isFullyScraped = true;
-        await state.save();
+
+        return totalProcessedInChannel;
     }
 
     async function startServerScrape(guild, privateAdminChannelId, timeframeDays = null) {
@@ -330,35 +334,48 @@ const universalTrackerModule = (client) => {
 
         const minTimestamp = timeframeDays ? Date.now() - (timeframeDays * 24 * 60 * 60 * 1000) : 0;
 
+        const textChannels = Array.from(guild.channels.cache.values()).filter(c => c.isTextBased());
+
         const initEmbed = new EmbedBuilder()
             .setColor('#FEE75C')
             .setTitle('⏳ Initializing Historical Data Engine...')
-            .setDescription(`Preparing MongoDB sync... Time Filter: ${timeframeDays ? `**Last ${timeframeDays} Days**` : '**All Time**'}`)
+            .setDescription(`Preparing MongoDB sync for **${textChannels.length} channels**...\nTime Filter: ${timeframeDays ? `**Last ${timeframeDays} Days**` : '**All Time**'}`)
             .setTimestamp();
 
-        const logMessage = await adminChannel.send({ embeds: [initEmbed] });
-        const textChannels = guild.channels.cache.filter(c => c.isTextBased());
-        let channelsCompleted = 0;
+        let logMessage;
+        try {
+            logMessage = await adminChannel.send({ embeds: [initEmbed] });
+        } catch (e) { return; }
 
-        for (const [id, channel] of textChannels) {
-            await updateLiveDashboard(logMessage, channel, 0, channelsCompleted, textChannels.size, timeframeDays);
-            await scrapeChannelHistory(channel, logMessage, textChannels.size, channelsCompleted, minTimestamp, timeframeDays);
+        let channelsCompleted = 0;
+        let totalServerMsgs = 0;
+
+        for (const channel of textChannels) {
+            const perms = channel.permissionsFor(guild.members.me);
+            if (!perms || !perms.has(PermissionsBitField.Flags.ViewChannel) || !perms.has(PermissionsBitField.Flags.ReadMessageHistory)) {
+                channelsCompleted++;
+                continue;
+            }
+
+            await updateLiveDashboard(logMessage, channel, totalServerMsgs, channelsCompleted, textChannels.length, timeframeDays);
+            const count = await scrapeChannelHistory(channel, logMessage, textChannels.length, channelsCompleted, minTimestamp, timeframeDays);
+            totalServerMsgs += count;
             channelsCompleted++;
         }
 
         const doneEmbed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor('#23A559')
             .setAuthor({ name: '🧠 AI Data Bridge • Complete', iconURL: guild.iconURL({ dynamic: true }) || undefined })
             .setTitle('✅ Historical Scrape Completed Successfully')
             .setDescription(
-                `Successfully processed **${textChannels.size} channels** into MongoDB.\n\n` +
+                `Successfully processed **${channelsCompleted} channels** and indexed **${totalServerMsgs.toLocaleString()} messages** into MongoDB Cloud.\n\n` +
                 `• **Time Window:** ${timeframeDays ? `Last ${timeframeDays} days` : 'Full History'}\n` +
-                `• **Status:** Database successfully populated & synced.`
+                `• **Status:** System ready for tracking.`
             )
-            .setFooter({ text: 'Universal Tracker System' })
+            .setFooter({ text: 'Starry Tracking Core • Data Sync Ready' })
             .setTimestamp();
 
-        await logMessage.edit({ embeds: [doneEmbed] });
+        await logMessage.edit({ embeds: [doneEmbed] }).catch(() => {});
     }
     // --- MODERATION PANEL BUTTON LISTENER ---
     client.on('interactionCreate', async (interaction) => {
@@ -403,12 +420,20 @@ const universalTrackerModule = (client) => {
         if (subCommand === 'setup') {
             await interaction.deferReply();
             const channel = interaction.options.getChannel('channel', true);
-            
-            await GuildTrackerSettings.findOneAndUpdate(
-                { guildId: interaction.guildId },
-                { customLogChannel: channel.id },
-                { upsert: true }
-            );
+            const botMember = interaction.guild.members.me;
+
+            const perms = channel.permissionsFor(botMember);
+            if (!perms.has(PermissionsBitField.Flags.SendMessages) || !perms.has(PermissionsBitField.Flags.EmbedLinks)) {
+                return interaction.editReply({ content: `❌ **Permission Error:** Please give me **Send Messages** and **Embed Links** permissions in ${channel}!` });
+            }
+
+            if (GuildTrackerSettings) {
+                await GuildTrackerSettings.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    { customLogChannel: channel.id },
+                    { upsert: true }
+                ).catch(() => {});
+            }
 
             const sampleMember = interaction.member;
             const sampleJoinedMs = Date.now();
@@ -418,7 +443,7 @@ const universalTrackerModule = (client) => {
             const modPanelRow = buildModPanelRow(sampleMember.id);
 
             await channel.send({
-                content: '⚙️ **Universal Tracker Configured!** Below is a preview of the tracking cards:',
+                content: '⚙️ **Universal Tracker Configured!** Below is a live preview of tracking embeds:',
                 embeds: [livePreview]
             }).catch(() => {});
 
@@ -436,15 +461,17 @@ const universalTrackerModule = (client) => {
             const privateChannel = interaction.options.getChannel('private_channel', true);
             const afterDays = interaction.options.getInteger('after_days');
 
-            await GuildTrackerSettings.findOneAndUpdate(
-                { guildId: interaction.guildId },
-                { privateAdminChannel: privateChannel.id },
-                { upsert: true }
-            );
+            if (GuildTrackerSettings) {
+                await GuildTrackerSettings.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    { privateAdminChannel: privateChannel.id },
+                    { upsert: true }
+                ).catch(() => {});
+            }
 
             const filterNotice = afterDays ? ` (Filtering last **${afterDays} days**)` : ' (Full Server History)';
 
-            interaction.editReply({ 
+            await interaction.editReply({ 
                 content: `🚀 **Scraper Started!** Check ${privateChannel} for the live dashboard${filterNotice}. Do not restart the bot.` 
             });
 
@@ -457,7 +484,7 @@ const universalTrackerModule = (client) => {
         await handleCommand(interaction);
     });
 
-    // --- RESTORED DEVELOPER TEST COMMAND (.testalert) ---
+    // --- DEVELOPER TEST COMMAND (.testalert) ---
     client.on('messageCreate', async (message) => {
         if (!message.content.startsWith('.testalert')) return;
 
@@ -468,14 +495,13 @@ const universalTrackerModule = (client) => {
         const modRow = buildModPanelRow(targetMember.id);
 
         await message.channel.send({
-            content: `<@${message.author.id}>\nThe user <@${targetMember.id}> had no interaction within 14 days after joining.`,
+            content: `<@${message.author.id}>\nThe user <@${targetMember.id}> had no interaction within 14 days after joining. *(Test Alert)*`,
             embeds: [alertEmbed],
             components: [modRow]
-        });
+        }).catch(() => {});
     });
 };
 
-// Universal Hybrid Export
 universalTrackerModule.data = trackerCommandSchema;
 universalTrackerModule.execute = async (interaction) => {
     if (interaction.isChatInputCommand() && interaction.commandName === 'tracker') {
