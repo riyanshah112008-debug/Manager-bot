@@ -34,12 +34,8 @@ const autoroleCommandDef = {
 // INITIALIZE COMMANDS ARRAY
 // ==========================================
 const commands = [
-    // ================= SOCIAL & TELEMETRY =================
-
+    // ================= TELEMETRY =================
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
-const { socialCommandsPayload } = require('./src/modules/socialActions');
-socialCommandsPayload.forEach(cmd => commands.push(cmd));
-
 
     // ================= MUSIC & VOICE AI =================
     { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
@@ -56,6 +52,16 @@ socialCommandsPayload.forEach(cmd => commands.push(cmd));
     // ================= MODERATION & SECURITY =================
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
+
+// Safely Load Dynamic Social & Expression Commands
+try {
+    const { socialCommandsPayload } = require('./src/modules/socialActions');
+    if (Array.isArray(socialCommandsPayload)) {
+        socialCommandsPayload.forEach(cmd => commands.push(cmd));
+    }
+} catch (err) {
+    console.warn('⚠️ Could not load socialActions module commands:', err.message);
+}
 // ==========================================
 // GIVEAWAY SLASH COMMAND BUILDERS
 // ==========================================
@@ -132,9 +138,12 @@ commands.push(
     { name: 'warnings', description: 'View a member’s warnings', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'target', type: 6, required: true, description: 'Member whose warnings should be shown' }] },
     { name: 'delwarn', description: 'Delete a warning by its ID', default_member_permissions: MANAGE_MESSAGES, options: [{ name: 'id', type: 4, required: true, description: 'Warning ID' }] },
 
-    autoroleCommandDef,
-
-    // ================= AUTOMOD & ROLES =================
+    autoroleCommandDef
+);
+// ==========================================
+// AUTOMOD, ROLES & UTILITIES
+// ==========================================
+commands.push(
     { name: 'automod', description: 'Configure the server-wide automod switch', default_member_permissions: ADMIN, options: [{ name: 'action', type: 3, required: true, description: 'Automod action', choices: [{ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' }] }] },
     { name: 'ignore', description: 'Disable automod filters in a channel', default_member_permissions: ADMIN, options: [{ name: 'type', type: 3, required: true, description: 'Filter to ignore', choices: [{ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' }, { name: 'Status', value: 'status' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
     { name: 'unignore', description: 'Re-enable automod filters in a channel', default_member_permissions: ADMIN, options: [{ name: 'type', type: 3, required: true, description: 'Filter to re-enable', choices: [{ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' }] }, { name: 'channel', type: 7, required: false, description: 'Channel; defaults to the current channel' }] },
@@ -143,12 +152,9 @@ commands.push(
     { name: 'protect', description: 'Protect a member from staff actions', options: [{ name: 'user', type: 6, required: true, description: 'Member to protect' }] },
     { name: 'unprotect', description: 'Remove a member’s protection', options: [{ name: 'user', type: 6, required: true, description: 'Member to unprotect' }] },
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create a role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }, { name: 'color', type: 3, required: false, description: 'Hex color, for example #FF0000' }] }, { name: 'delete', type: 1, description: 'Delete a role', options: [{ name: 'role', type: 8, required: true, description: 'Role to delete' }] }, { name: 'give', type: 1, description: 'Give a role to a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to give' }] }, { name: 'remove', type: 1, description: 'Remove a role from a member', options: [{ name: 'user', type: 6, required: true, description: 'Member' }, { name: 'role', type: 8, required: true, description: 'Role to remove' }] }] },
-    { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] }
-);
-// ==========================================
-// SETUP, UTILITIES, PREMIUM, TRACKERS & DIRECTORY
-// ==========================================
-commands.push(
+    { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] },
+
+    // ================= SETUP, UTILITIES & PREMIUM =================
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel for logs' }] },
     { name: 'setlevelchannel', description: 'Set a specific channel for level-up notifications', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send level-up alerts to' }] },
     { name: 'setupvc', description: 'Configure a join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel to use as the hub' }] },
@@ -214,7 +220,6 @@ commands.push(
     { name: 'autobump', description: '💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!', default_member_permissions: ADMIN },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
 );
-
 // ==========================================
 // DEDUPLICATION & DEPLOYMENT ENGINE
 // ==========================================
@@ -244,7 +249,6 @@ async function deployCommands() {
             throw new Error('🛑 Could not parse CLIENT_ID from TOKEN. Please set CLIENT_ID explicitly.');
         }
     }
-
     const rest = new REST({ version: '10' }).setToken(token);
 
     const isGlobal = process.argv.includes('--global') || (!guildId && process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true');
