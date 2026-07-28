@@ -252,7 +252,7 @@ client.manager = new Kazagumo({
 });
 
 client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', () => {}); // Silenced to prevent Render log spam when fallback node is offline
+client.manager.shoukaku.on('error', () => {}); // Silenced to prevent Render console log spam
 client.manager.shoukaku.on('disconnect', () => {});
 
 client.manager.on('playerStart', async (player, track) => {
@@ -424,10 +424,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // Direct Bypass for standalone modules handled internally (e.g., premium, bump, tracker)
+    // DIRECT BYPASS: Directs modules that handle their interactions internally without needing external command files!
     const moduleCommands = [
         'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
-        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump'
+        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
+        'setup-starry', 'ahelp'
     ];
     if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
         return;
@@ -672,7 +673,7 @@ const loadModule = (name, filePath) => {
     try { 
         const mod = require(filePath);
         if (typeof mod === 'function') {
-            mod(client, app); // Passes both client and Express app instance
+            mod(client, app);
             console.log(`✅ ${name} Module Loaded`); 
         } else {
             console.log(`✅ ${name} Module Loaded (Object Export)`);
