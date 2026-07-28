@@ -163,7 +163,7 @@ commands.push(
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create a reaction-role panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel for the panel' }, { name: 'title', type: 3, required: true, description: 'Panel title' }, { name: 'text', type: 3, required: true, description: 'Panel text' }] }, { name: 'add', type: 1, description: 'Add a role to a panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel containing the panel' }, { name: 'message_id', type: 3, required: true, description: 'Panel message ID' }, { name: 'role', type: 8, required: true, description: 'Role to assign' }, { name: 'emoji', type: 3, required: true, description: 'Reaction emoji' }] }] }
 );
 // ==========================================
-// SETUP, UTILITIES, PREMIUM & UPGRADED TRACKER
+// SETUP, UTILITIES,PREMIUM & UPGRADED TRACKER
 // ==========================================
 commands.push(
     { name: 'setlogs', description: 'Set the server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel for logs' }] },
@@ -190,10 +190,18 @@ commands.push(
     { name: 'ping', description: 'Check bot latency' },
     { name: 'Steal Emojis', type: ApplicationCommandType.Message },
 
-    // ================= PREMIUM, TRACKERS & WEB DASHBOARD =================
-    { name: 'activatepremium', description: 'Activate Premium for a server', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to activate' }] },
-    { name: 'deactivatepremium', description: 'Deactivate Premium for a server', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }] },
-    { name: 'removepremium', description: 'Alias for deactivating Premium', options: [{ name: 'server_id', type: 3, required: true, description: 'Server ID to deactivate' }] },
+    
+        // ================= PREMIUM, TRACKERS & WEB DASHBOARD =================
+    { 
+        name: 'activatepremium', 
+        description: 'Activate Premium for a server or user with optional duration', 
+        options: [
+            { name: 'server_id', type: 3, required: false, description: 'Server ID or User ID (Leave blank for current server)' },
+            { name: 'duration', type: 3, required: false, description: 'Duration (e.g. 7d, 30d, 90d, 1y, lifetime). Default: Lifetime' }
+        ] 
+    },
+    { name: 'deactivatepremium', description: 'Deactivate Premium for a server', options: [{ name: 'server_id', type: 3, required: false, description: 'Server ID or User ID' }] },
+    { name: 'removepremium', description: 'Alias for deactivating Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server ID or User ID' }] },
     { name: 'premiumcheck', description: 'Check whether this server has Premium' },
 
     // ⚡ UPDATED TRACKER COMMAND WITH AFTER_DAYS SUB-OPTION ⚡
