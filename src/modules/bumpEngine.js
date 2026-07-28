@@ -30,13 +30,14 @@ const serverListingSchema = new mongoose.Schema({
 
 const ServerListing = mongoose.models.ServerListing || mongoose.model('ServerListing', serverListingSchema);
 
-// --- BUMP SYSTEM CONFIG SCHEMA (For Auto Reminders) ---
+// --- BUMP SYSTEM CONFIG SCHEMA (For Reminders & Premium Auto-Bump) ---
 const bumpSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     reminderChannelId: { type: String, default: null }, 
     pingRoleId: { type: String, default: null },        
     nextBump: { type: Date, default: null },            
-    isReady: { type: Boolean, default: true }           
+    isReady: { type: Boolean, default: true },
+    autoBumpEnabled: { type: Boolean, default: false } // 💎 Premium Auto-Bump Feature
 });
 
 const BumpSystem = mongoose.models.BumpSystem || mongoose.model('BumpSystem', bumpSchema);
@@ -60,14 +61,18 @@ const setListingCommand = new SlashCommandBuilder()
 
 const bumpSetupCommand = new SlashCommandBuilder()
     .setName('bump-setup')
-    .setDescription('Configure the auto-bump reminder system.')
+    .setDescription('Configure the auto-bump reminder system & Premium Auto-Bumper.')
     .addRoleOption(option => 
         option.setName('ping_role')
             .setDescription('The role to ping when the 2-hour cooldown is over.')
             .setRequired(false))
     .addChannelOption(option =>
         option.setName('channel')
-            .setDescription('The channel to send the reminder in.')
+            .setDescription('The channel to send reminders and auto-bump logs in.')
+            .setRequired(false))
+    .addBooleanOption(option =>
+        option.setName('auto_bump')
+            .setDescription('💎 Premium Only: Enable 24/7 Automatic Bumping every 2 hours.')
             .setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
@@ -128,10 +133,8 @@ function setupWebDirectoryAPI(app) {
 // ==========================================
 const bumpEngineModule = (client, expressApp) => {
 
-    // Attach REST API to Express Server if provided
     if (expressApp) setupWebDirectoryAPI(expressApp);
 
-    // Register Commands in client memory
     if (client.commands && typeof client.commands.set === 'function') {
         client.commands.set('set-listing', { data: setListingCommand, execute: handleSetListing });
         client.commands.set('bump-setup', { data: bumpSetupCommand, execute: handleBumpSetup });
@@ -176,7 +179,6 @@ const bumpEngineModule = (client, expressApp) => {
         }
     }
 
-    // Sync all joined servers on bot startup
     client.once('ready', async () => {
         console.log('🌐 Synchronizing server directory metadata for Mike\'s website...');
         for (const [id, guild] of client.guilds.cache) {
@@ -185,18 +187,84 @@ const bumpEngineModule = (client, expressApp) => {
         console.log('✅ Disboard-Style Directory Auto-Sync Completed.');
     });
 
-    // Auto-sync when bot joins a new server or member counts change
     client.on('guildCreate', async (guild) => await syncGuildData(guild));
     client.on('guildUpdate', async (oldG, newG) => await syncGuildData(newG));
     client.on('guildMemberAdd', async (m) => await syncGuildData(m.guild));
     client.on('guildMemberRemove', async (m) => await syncGuildData(m.guild));
 
     // ==========================================
-    // ⏰ BACKGROUND COOLDOWN & REMINDER TIMER
+    // 💎 1. PREMIUM 24/7 AUTO-BUMP WORKER (Runs every 2 mins)
     // ==========================================
     setInterval(async () => {
         try {
-            const dueBumps = await BumpSystem.find({ nextBump: { $lte: new Date() }, isReady: false });
+            const now = new Date();
+            const twoHours = 2 * 60 * 60 * 1000;
+
+            const autoBumpConfigs = await BumpSystem.find({ autoBumpEnabled: true });
+
+            for (const config of autoBumpConfigs) {
+                const guild = client.guilds.cache.get(config.guildId);
+                if (!guild) continue;
+
+                // Check Premium Status
+                const isPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
+                if (!isPremium) {
+                    config.autoBumpEnabled = false;
+                    await config.save();
+                    continue;
+                }
+
+                let listing = await ServerListing.findOne({ guildId: guild.id });
+                if (!listing) listing = new ServerListing({ guildId: guild.id, name: guild.name });
+
+                // Check 2-hour cooldown status
+                if (!listing.lastBump || (now.getTime() - listing.lastBump.getTime() >= twoHours)) {
+                    
+                    let inviteUrl = listing.inviteLink;
+                    if (guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
+                        const channel = guild.systemChannel || guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreateInstantInvite));
+                        if (channel) {
+                            const inv = await channel.createInvite({ maxAge: 0, maxUses: 0, reason: 'Starry Premium Auto-Bump' }).catch(() => null);
+                            if (inv) inviteUrl = inv.url;
+                        }
+                    }
+
+                    listing.name = guild.name;
+                    listing.iconUrl = guild.iconURL({ extension: 'png', size: 256 }) || null;
+                    listing.memberCount = guild.memberCount;
+                    listing.inviteLink = inviteUrl;
+                    listing.bumps = (listing.bumps || 0) + 1;
+                    listing.lastBump = now;
+                    await listing.save();
+
+                    config.nextBump = new Date(now.getTime() + twoHours);
+                    config.isReady = false;
+                    await config.save();
+
+                    const logChannel = guild.channels.cache.get(config.reminderChannelId) || guild.systemChannel;
+                    if (logChannel) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#FEE75C')
+                            .setTitle('💎 Premium Auto-Bump Executed!')
+                            .setDescription(`**${guild.name}** was automatically bumped to the top of the Global Web Directory!\n\n📈 Total Bumps: \`${listing.bumps}\`\n⏳ Next Auto-Bump: <t:${Math.floor((now.getTime() + twoHours) / 1000)}:R>`)
+                            .setThumbnail(listing.iconUrl)
+                            .setFooter({ text: 'Starry Premium Service 24/7' });
+
+                        await logChannel.send({ embeds: [embed] }).catch(() => {});
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Premium Auto-Bump Worker Error:', error);
+        }
+    }, 2 * 60 * 1000);
+
+    // ==========================================
+    // ⏰ 2. COOLDOWN REMINDER TIMER (For manual bumps)
+    // ==========================================
+    setInterval(async () => {
+        try {
+            const dueBumps = await BumpSystem.find({ nextBump: { $lte: new Date() }, isReady: false, autoBumpEnabled: false });
 
             for (const data of dueBumps) {
                 data.isReady = true;
@@ -272,7 +340,7 @@ const bumpEngineModule = (client, expressApp) => {
     // ==========================================
     // ⚙️ COMMAND HANDLERS
     // ==========================================
-    
+
     // --- 1. /set-listing HANDLER ---
     async function handleSetListing(interaction) {
         await interaction.deferReply();
@@ -319,12 +387,30 @@ const bumpEngineModule = (client, expressApp) => {
 
         const pingRole = interaction.options.getRole('ping_role');
         const channel = interaction.options.getChannel('channel');
+        const autoBumpOpt = interaction.options.getBoolean('auto_bump');
 
         let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
         if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
 
         if (pingRole) bumpData.pingRoleId = pingRole.id;
         if (channel) bumpData.reminderChannelId = channel.id;
+
+        let autoBumpMsg = '`Disabled`';
+
+        if (autoBumpOpt !== null) {
+            const isPremium = typeof client.isPremium === 'function' ? client.isPremium(interaction.guildId) : false;
+
+            if (autoBumpOpt && !isPremium) {
+                return interaction.editReply({ 
+                    content: '💎 **Premium Only Feature!** Auto-Bump is exclusive to Premium servers. Upgrade this server to enable 24/7 continuous bumping!' 
+                });
+            }
+
+            bumpData.autoBumpEnabled = autoBumpOpt;
+            autoBumpMsg = autoBumpOpt ? '💎 `Enabled (24/7 Bumping)`' : '`Disabled`';
+        } else {
+            autoBumpMsg = bumpData.autoBumpEnabled ? '💎 `Enabled (24/7 Bumping)`' : '`Disabled`';
+        }
 
         await bumpData.save();
 
@@ -334,7 +420,8 @@ const bumpEngineModule = (client, expressApp) => {
             .setDescription('The bump reminder engine preferences have been saved!')
             .addFields(
                 { name: 'Reminder Channel', value: bumpData.reminderChannelId ? `<#${bumpData.reminderChannelId}>` : '`Not Set (Defaults to current channel)`', inline: true },
-                { name: 'Role to Ping', value: bumpData.pingRoleId ? `<@&${bumpData.pingRoleId}>` : '`None`', inline: true }
+                { name: 'Role to Ping', value: bumpData.pingRoleId ? `<@&${bumpData.pingRoleId}>` : '`None`', inline: true },
+                { name: '24/7 Auto-Bump Status', value: autoBumpMsg, inline: false }
             );
 
         return interaction.editReply({ embeds: [embed] });
@@ -379,7 +466,6 @@ const bumpEngineModule = (client, expressApp) => {
 
         await listing.save();
 
-        // Update Bump System reminder state
         let bumpData = await BumpSystem.findOne({ guildId: guild.id });
         if (!bumpData) bumpData = new BumpSystem({ guildId: guild.id });
 
@@ -402,7 +488,6 @@ const bumpEngineModule = (client, expressApp) => {
         return interaction.editReply({ embeds: [embed] });
     }
 
-    // Unified Slash Listener Fallback
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'set-listing') await handleSetListing(interaction);
