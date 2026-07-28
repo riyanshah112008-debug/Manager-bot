@@ -462,7 +462,7 @@ module.exports = (client) => {
             }
         }
     });
-    // ==========================================
+     // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE (ULTRA FAST)
     // ==========================================
     client.on('messageCreate', async (message) => {
@@ -500,16 +500,65 @@ module.exports = (client) => {
             return message.reply('❌ **AI is a Premium feature!** Contact the bot owner to upgrade this server.').catch(() => {});
         }
 
+        // Helper Function to Alert Bot Owners via DM on API issues
+        const sendOwnerApiAlert = async (errType, guildName, triggerUserTag) => {
+            const ownerIds = (process.env.OWNER_ID || '1465049039153135639,1257676837249617971').split(',').map(id => id.trim());
+            for (const ownerId of ownerIds) {
+                try {
+                    const owner = await client.users.fetch(ownerId).catch(() => null);
+                    if (owner) {
+                        await owner.send(`⚠️ **API Quota / Server Alert!**\nStarry encountered an issue: \`${errType}\`\n**Location:** ${guildName}\n**Triggered by:** ${triggerUserTag}`);
+                    }
+                } catch (dmErr) {}
+            }
+        };
+
         // ==========================================
-        // ⚡ 1. INSTANT LOCAL PRE-PARSER (0ms DELAY)
+        // ⚡ 1. INSTANT LOCAL MODERATION & ROLE PRE-PARSER (0ms DELAY)
         // ==========================================
+        const botMember = message.guild ? message.guild.members.me : null;
+
+        // A. TIMEOUT PRE-PARSER (e.g. "Timeout @lexi for 1 min", "starry timeout @user 10m")
+        const timeoutRegex = /timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)\s*(m|min|mins|minute|minutes|h|hr|hours|d|day|days)?/i;
+        const timeoutMatch = message.content.match(timeoutRegex);
+
+        if (timeoutMatch && message.guild) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                return message.reply("❌ You or I lack **Moderate Members** permission.");
+            }
+            const targetId = timeoutMatch[1];
+            const amount = parseInt(timeoutMatch[2]) || 1;
+            const unit = (timeoutMatch[3] || 'm').toLowerCase();
+            let durationMs = amount * 60 * 1000;
+            if (unit.startsWith('h')) durationMs = amount * 60 * 60 * 1000;
+            if (unit.startsWith('d')) durationMs = amount * 24 * 60 * 60 * 1000;
+
+            const tMember = await message.guild.members.fetch(targetId).catch(() => null);
+            if (!tMember) return message.reply("❌ Target member not found in server.");
+
+            if (tMember.id === message.guild.ownerId) return message.reply("❌ I cannot moderate the **Server Owner**!");
+            if (tMember.id === client.user.id) return message.reply("❌ I cannot moderate **myself**!");
+
+            const isTargetHigherOrEqual = tMember.roles.highest.position >= botMember.roles.highest.position;
+            if (isTargetHigherOrEqual) {
+                return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their highest role is equal to or above mine!`);
+            }
+
+            const caseId = Math.floor(Math.random() * 90000) + 10000;
+            const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', 'Direct Staff Command', `${amount} ${unit}`, message.guild, caseId);
+            
+            await tMember.timeout(durationMs, `Requested by ${message.author.tag}`).catch(() => {});
+            return message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+        }
+
+        // B. CREATE ROLE PRE-PARSER (e.g. "Create role bump-me", "Create a role named VIP")
         const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
         const roleMatch = message.content.match(createRoleRegex);
 
-        if (roleMatch) {
+        if (roleMatch && message.guild) {
             const roleName = roleMatch[1].trim();
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !message.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                return message.reply('❌ Missing permissions to manage roles in this server.');
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                return message.reply('❌ Missing **Manage Roles** permission.');
             }
             try {
                 const newRole = await message.guild.roles.create({ name: roleName, reason: `Requested by ${message.author.tag}` });
@@ -519,7 +568,22 @@ module.exports = (client) => {
             }
         }
 
-        // --- IMAGE GENERATION ---
+        // C. CLEAR / PURGE PRE-PARSER (e.g. "Clear 10", "Starry purge 5 messages")
+        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?/i;
+        const clearMatch = message.content.match(clearRegex);
+
+        if (clearMatch && message.guild) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+                return message.reply('❌ Missing **Manage Messages** permission.');
+            }
+            const count = parseInt(clearMatch[1]);
+            if (count <= 0) return message.reply('❌ Please specify a valid number of messages to clear.');
+            const deleteCount = Math.min(count, 99) + 1;
+            await message.channel.bulkDelete(deleteCount, true).catch(() => {});
+            return message.channel.send(`🧹 Successfully cleared ${count} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
+        }
+
+        // --- IMAGE GENERATION (POLLINATIONS) ---
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -549,15 +613,14 @@ module.exports = (client) => {
         }
 
         // ==========================================
-        // 🧠 2. QUAD-MODEL AI FAILOVER ENGINE
+        // 🧠 2. QUAD-MODEL AI FAILOVER & OWNER ALERTS
         // ==========================================
         if (!process.env.GEMINI_API_KEY) return message.reply("❌ **Setup Error:** API Key missing!");        
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT. For clearing, use [CMD:CLEAR|AMOUNT:10]).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses ultra concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord bot. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses ultra concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
 
-            // Quad-model fallback pool to bypass 503 errors instantly
             const aiModels = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
             let geminiResponse = null;
             let lastError = null;
@@ -573,6 +636,8 @@ module.exports = (client) => {
             }
 
             if (!geminiResponse || !geminiResponse.text) {
+                const locationStr = message.guild ? message.guild.name : 'DMs';
+                await sendOwnerApiAlert('503 / High Demand Spike', locationStr, message.author.tag);
                 return message.reply("⏳ **High Demand Notice:** Google AI servers are currently busy. Please try your request again in a moment!");
             }
 
@@ -615,7 +680,7 @@ module.exports = (client) => {
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
                     const deleteCount = Math.min(args.amount, 99) + 1;
                     await message.channel.bulkDelete(deleteCount, true).catch(()=>{});
-                    return message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete(), 3500));
+                    return message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(()=>m.delete().catch(()=>{}), 3500));
                 }
 
                 const tId = (args.userId || '').replace(/\D/g, '');
@@ -630,7 +695,6 @@ module.exports = (client) => {
                     return message.reply("❌ Target member could not be found in this server.");
                 }
 
-                // 🛡️ Hierarchy Safeguards
                 if (tMember.id === message.guild.ownerId) {
                     return message.reply("❌ I cannot moderate the **Server Owner**!");
                 }
@@ -694,7 +758,9 @@ module.exports = (client) => {
 
         } catch (error) {
             console.error("Gemini AI error:", error);
-            return message.reply(`❌ **AI Execution Error:** \`${error.message || error}\``).catch(console.error);
+            const locationStr = message.guild ? message.guild.name : 'DMs';
+            await sendOwnerApiAlert(error.status || error.message || 'AI Crash', locationStr, message.author.tag);
+            return message.reply(`⏳ **High Demand Notice:** Google AI servers are currently busy. Please try your request again in a moment!`).catch(console.error);
         }
     }); 
 };
