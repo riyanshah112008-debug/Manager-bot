@@ -88,12 +88,12 @@ const autoBumpCommand = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 // ==========================================
-// 🌐 3. REST API ENDPOINTS FOR WEB APP
+// 🌐 3. REST API ENDPOINTS FOR WEBSITE FRONTEND
 // ==========================================
 function setupWebDirectoryAPI(app) {
     if (!app) return;
 
-    // GET /api/v1/servers/recently-bumped - Homepage Feed
+    // GET /api/v1/servers/recently-bumped - Homepage feed
     app.get('/api/v1/servers/recently-bumped', async (req, res) => {
         try {
             const limit = parseInt(req.query.limit) || 6;
@@ -104,11 +104,11 @@ function setupWebDirectoryAPI(app) {
             const formatted = servers.map(s => ({
                 id: s.guildId,
                 name: s.name,
-                icon: s.iconUrl || 'https://picsum.photos/100/100?blur=2',
-                onlineCount: Math.floor(s.memberCount * 0.35) || 10,
+                icon: s.iconUrl || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                onlineCount: Math.floor(s.memberCount * 0.35) || 12,
                 bumpedTime: s.lastBump ? getTimeAgo(s.lastBump) : 'recently',
                 rating: 5.0,
-                reviewCount: s.bumps,
+                reviewCount: s.bumps || 1,
                 description: s.description,
                 tags: s.tags,
                 inviteUrl: s.inviteLink
@@ -120,7 +120,7 @@ function setupWebDirectoryAPI(app) {
         }
     });
 
-    // GET /api/v1/servers - Full Search & Directory Feed
+    // GET /api/v1/servers - Full search and directory listing endpoint
     app.get('/api/v1/servers', async (req, res) => {
         try {
             const { q, sort = 'bumped', page = 1, limit = 12, nsfw = 0 } = req.query;
@@ -146,11 +146,11 @@ function setupWebDirectoryAPI(app) {
             const list = rawList.map(s => ({
                 id: s.guildId,
                 name: s.name,
-                icon: s.iconUrl || 'https://picsum.photos/100/100?blur=2',
+                icon: s.iconUrl || 'https://cdn.discordapp.com/embed/avatars/0.png',
                 onlineCount: Math.floor(s.memberCount * 0.35) || 10,
                 bumpedTime: s.lastBump ? getTimeAgo(s.lastBump) : 'recently',
                 rating: 5.0,
-                reviewCount: s.bumps,
+                reviewCount: s.bumps || 1,
                 description: s.description,
                 tags: s.tags,
                 inviteUrl: s.inviteLink
@@ -159,6 +159,16 @@ function setupWebDirectoryAPI(app) {
             res.json({ success: true, data: { total, list } });
         } catch (err) {
             res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // Keep legacy fallback route so old links don't break
+    app.get('/api/servers', async (req, res) => {
+        try {
+            const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
+            res.json(servers);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
         }
     });
 }
@@ -171,8 +181,7 @@ function getTimeAgo(date) {
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
-}
-// ==========================================
+}// ==========================================
 // 4. MAIN ENGINE MODULE FUNCTION
 // ==========================================
 const bumpEngineModule = (client, expressApp) => {
