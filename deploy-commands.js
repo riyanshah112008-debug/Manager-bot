@@ -129,7 +129,7 @@ commands.push(
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
     
-    // Updated /setup-starry with prompt option
+    // Updated /setup-starry with prompt parameter
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
@@ -137,7 +137,7 @@ commands.push(
         options: [
             {
                 name: 'prompt',
-                type: 3, // String type
+                type: 3, // String
                 required: false,
                 description: 'Describe your server theme (e.g., "Anime Chill Server", "Cyberpunk Gaming Community")'
             }
@@ -150,7 +150,7 @@ commands.push(
     { name: 'emergency-unban', description: '🏥 EMERGENCY: Unbans every single user in the server ban list. (Admins Only)', default_member_permissions: '8' },
     { name: 'emergency-nuke', description: '⚠️ EMERGENCY: Deletes all channels except General. (Admins Only)', default_member_permissions: '8' },
     { name: 'set-name', description: 'Change the bot\'s trigger word/name for this server (Admins Only)', default_member_permissions: '8', options: [{ name: 'name', description: 'The new trigger word (e.g., Jarvis, HelperBot)', type: 3, required: true }] },
-    { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', description: 'The channel to send boost messages in', type: 7, required: true }] },
+    { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send boost messages in' }] },
     { name: 'setup-server', description: 'Automatically generates a professional server layout (Roles, Categories, Channels)!', default_member_permissions: '8' },
     { name: 'modpanel', description: 'Open the interactive moderation dashboard', default_member_permissions: MODERATE_MEMBERS, options: [{ name: 'user', type: 6, required: true, description: 'The user to moderate' }] },
     { name: 'devpanel', description: '💻 Open the interactive developer control panel with clickable buttons' },
@@ -263,24 +263,24 @@ async function deployCommands() {
     
     const rest = new REST({ version: '10' }).setToken(token);
 
-    // Auto-detect instant guild registration if GUILD_ID is provided
     const isGlobal = process.argv.includes('--global');
     const isLocal = guildId && guildId !== 'PASTE_YOUR_SERVER_ID_HERE' && !isGlobal;
 
-    const route = isLocal 
-        ? Routes.applicationGuildCommands(clientId, guildId)
-        : Routes.applicationCommands(clientId);
-
-    if (isLocal) {
-        console.log(`⚡ [INSTANT SYNC] Registering ${finalPayload.length} application commands directly to Test Guild ID: ${guildId}`);
-    } else {
-        console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally (may take up to 1 hour to propagate)...`);
-    }
-
     try {
-        const result = await rest.put(route, { body: finalPayload });
-        console.log(`✅ Successfully registered ${result.length} commands with Discord API!`);
-        return result;
+        if (isLocal) {
+            console.log(`🧹 Clearing stale global commands to resolve duplicates...`);
+            await rest.put(Routes.applicationCommands(clientId), { body: [] }); // Wipes global commands to prevent duplicates
+
+            console.log(`⚡ [INSTANT SYNC] Deploying ${finalPayload.length} commands to Guild ID: ${guildId}`);
+            const result = await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: finalPayload });
+            console.log(`✅ Successfully synchronized ${result.length} commands with Test Guild!`);
+            return result;
+        } else {
+            console.log(`🌍 [GLOBAL SYNC] Deploying ${finalPayload.length} application commands globally...`);
+            const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
+            console.log(`✅ Successfully registered ${result.length} commands globally!`);
+            return result;
+        }
     } catch (error) {
         console.error('❌ Discord API Rejected Command Payload:');
         if (error.rawError && error.rawError.errors) {
