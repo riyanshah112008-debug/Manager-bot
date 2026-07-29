@@ -1,60 +1,85 @@
 // ==========================================
-// 1. IMPORTS, SCHEMAS & GIF DATABASE
+// 1. IMPORTS, SCHEMAS & HIGH-AVAILABILITY GIF DATABASE
 // ==========================================
 const { 
     SlashCommandBuilder, 
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle 
+    ButtonStyle,
+    MessageFlags
 } = require('discord.js');
 const mongoose = require('mongoose');
 
 // Fallback User Schema in case models/User.js is loaded dynamically
-const User = mongoose.models.User || require('../models/User');
+const User = mongoose.models.User || (function() {
+    try {
+        return require('../models/User');
+    } catch (e) {
+        const userSchema = new mongoose.Schema({
+            userId: { type: String, required: true },
+            guildId: { type: String, required: true }
+        }, { strict: false });
+        return mongoose.models.User || mongoose.model('User', userSchema);
+    }
+})();
 
+// EPHEMERAL RESPONSE FLAG (BITFIELD 6)
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
+
+// High-Availability Multi-Source GIF Database
 const GIF_DATABASE = {
     kiss: [
         'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
-        'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_002.gif'
+        'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_002.gif',
+        'https://media.tenor.com/G3va39rn8E4AAAAC/anime-kiss.gif'
     ],
     pat: [
         'https://cdn.nekos.life/pat/pat_001.gif', 'https://cdn.nekos.life/pat/pat_002.gif',
-        'https://purrbot.site/img/sfw/pat/gif/pat_001.gif', 'https://purrbot.site/img/sfw/pat/gif/pat_002.gif'
+        'https://purrbot.site/img/sfw/pat/gif/pat_001.gif', 'https://purrbot.site/img/sfw/pat/gif/pat_002.gif',
+        'https://media.tenor.com/L2z7ILmjTOzmM/anime-pat.gif'
     ],
     hug: [
         'https://cdn.nekos.life/hug/hug_001.gif', 'https://cdn.nekos.life/hug/hug_002.gif',
-        'https://purrbot.site/img/sfw/hug/gif/hug_001.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_002.gif'
+        'https://purrbot.site/img/sfw/hug/gif/hug_001.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_002.gif',
+        'https://media.tenor.com/l2QDM9Jnim1YV55YA/anime-hug.gif'
     ],
     slap: [
-        'https://cdn.nekos.life/slap/slap_001.gif', 'https://purrbot.site/img/sfw/slap/gif/slap_001.gif'
+        'https://cdn.nekos.life/slap/slap_001.gif', 'https://purrbot.site/img/sfw/slap/gif/slap_001.gif',
+        'https://media.tenor.com/j3iGKfXRKlLqw/anime-slap.gif'
     ],
     cuddle: [
-        'https://cdn.nekos.life/cuddle/cuddle_001.gif', 'https://purrbot.site/img/sfw/cuddle/gif/cuddle_001.gif'
+        'https://cdn.nekos.life/cuddle/cuddle_001.gif', 'https://purrbot.site/img/sfw/cuddle/gif/cuddle_001.gif',
+        'https://media.tenor.com/PHZ7v9tfQu0o0/anime-cuddle.gif'
     ],
     bite: [
-        'https://purrbot.site/img/sfw/bite/gif/bite_001.gif', 'https://purrbot.site/img/sfw/bite/gif/bite_002.gif'
+        'https://purrbot.site/img/sfw/bite/gif/bite_001.gif', 'https://purrbot.site/img/sfw/bite/gif/bite_002.gif',
+        'https://media.tenor.com/793_1yC3-pAAAAAC/anime-bite.gif'
     ],
     poke: [
-        'https://cdn.nekos.life/poke/poke_001.gif', 'https://purrbot.site/img/sfw/poke/gif/poke_001.gif'
+        'https://cdn.nekos.life/poke/poke_001.gif', 'https://purrbot.site/img/sfw/poke/gif/poke_001.gif',
+        'https://media.tenor.com/y88W09-L7O0AAAAC/anime-poke.gif'
     ],
     punch: [
-        'https://purrbot.site/img/sfw/punch/gif/punch_001.gif'
+        'https://purrbot.site/img/sfw/punch/gif/punch_001.gif', 'https://media.tenor.com/SwV3qf9N4L4AAAAC/anime-punch.gif'
     ],
     tickle: [
-        'https://cdn.nekos.life/tickle/tickle_001.gif', 'https://purrbot.site/img/sfw/tickle/gif/tickle_001.gif'
+        'https://cdn.nekos.life/tickle/tickle_001.gif', 'https://purrbot.site/img/sfw/tickle/gif/tickle_001.gif',
+        'https://media.tenor.com/8Q_a4Kqf8jAAAAAC/anime-tickle.gif'
     ],
     feed: [
-        'https://cdn.nekos.life/feed/feed_001.gif', 'https://purrbot.site/img/sfw/feed/gif/feed_001.gif'
+        'https://cdn.nekos.life/feed/feed_001.gif', 'https://purrbot.site/img/sfw/feed/gif/feed_001.gif',
+        'https://media.tenor.com/m40fH9PZ1JkAAAAC/anime-feed.gif'
     ],
     lick: [
-        'https://cdn.nekos.life/lick/lick_001.gif', 'https://purrbot.site/img/sfw/lick/gif/lick_001.gif'
+        'https://cdn.nekos.life/lick/lick_001.gif', 'https://purrbot.site/img/sfw/lick/gif/lick_001.gif',
+        'https://media.tenor.com/x8mR9xK6K8AAAAAC/anime-lick.gif'
     ],
     highfive: [
-        'https://purrbot.site/img/sfw/highfive/gif/highfive_001.gif'
+        'https://purrbot.site/img/sfw/highfive/gif/highfive_001.gif', 'https://media.tenor.com/10gLW3UxzKYSxa/anime-highfive.gif'
     ],
     wave: [
-        'https://purrbot.site/img/sfw/wave/gif/wave_001.gif'
+        'https://purrbot.site/img/sfw/wave/gif/wave_001.gif', 'https://media.tenor.com/6Uq4vA5C_mUAAAAC/anime-wave.gif'
     ],
     sleep: [
         'https://purrbot.site/img/sfw/sleep/gif/sleep_001.gif', 'https://media.tenor.com/7L3f6n4I5e8AAAAC/anime-sleep.gif'
@@ -72,13 +97,13 @@ const GIF_DATABASE = {
         'https://purrbot.site/img/sfw/dance/gif/dance_001.gif', 'https://media.tenor.com/x8mR9xK6K8AAAAAC/anime-dance.gif'
     ],
     blush: [
-        'https://purrbot.site/img/sfw/blush/gif/blush_001.gif'
+        'https://purrbot.site/img/sfw/blush/gif/blush_001.gif', 'https://media.tenor.com/G3va39rn8E4AAAAC/anime-blush.gif'
     ],
     pout: [
-        'https://purrbot.site/img/sfw/pout/gif/pout_001.gif'
+        'https://purrbot.site/img/sfw/pout/gif/pout_001.gif', 'https://media.tenor.com/E74C3C/anime-pout.gif'
     ],
     smile: [
-        'https://purrbot.site/img/sfw/smile/gif/smile_001.gif'
+        'https://purrbot.site/img/sfw/smile/gif/smile_001.gif', 'https://media.tenor.com/2ECC71/anime-smile.gif'
     ],
     bored: [
         'https://media.tenor.com/6Uq4vA5C_mUAAAAC/anime-bored.gif'
@@ -100,7 +125,7 @@ const ACTION_CONFIG = {
     lick: { verb: 'licks', emoji: '👅', color: '#E91E63', group: 'action', dbField: 'licks', requiresTarget: true },
     highfive: { verb: 'highfives', emoji: '🙌', color: '#F1C40F', group: 'action', dbField: 'highfives', requiresTarget: true },
     wave: { verb: 'waves at', emoji: '👋', color: '#34495E', group: 'action', dbField: 'waves', requiresTarget: true },
-    
+
     // Group 2: express (Solo Expressions)
     sleep: { verb: 'is sleeping zzz...', emoji: '😴', color: '#2C3E50', group: 'express', requiresTarget: false },
     wakeup: { verb: 'just woke up!', emoji: '⏰', color: '#E67E22', group: 'express', requiresTarget: false },
@@ -121,7 +146,7 @@ const socialCommandBuilder = new SlashCommandBuilder()
     .setContexts([0, 1, 2])
     .setIntegrationTypes([0, 1]);
 
-// Subcommand Group 1: Action (Targeted)
+// Subcommand Group 1: Action (Targeted Interactions)
 socialCommandBuilder.addSubcommandGroup(group => {
     group.setName('action').setDescription('Targeted social actions with other members');
     Object.keys(ACTION_CONFIG).filter(k => ACTION_CONFIG[k].group === 'action').forEach(actionKey => {
@@ -134,7 +159,7 @@ socialCommandBuilder.addSubcommandGroup(group => {
     return group;
 });
 
-// Subcommand Group 2: Express (Solo)
+// Subcommand Group 2: Express (Solo Expressions)
 socialCommandBuilder.addSubcommandGroup(group => {
     group.setName('express').setDescription('Express individual feelings or emotions');
     Object.keys(ACTION_CONFIG).filter(k => ACTION_CONFIG[k].group === 'express').forEach(actionKey => {
@@ -147,7 +172,7 @@ socialCommandBuilder.addSubcommandGroup(group => {
 });
 
 // ==========================================
-// 3. ACTION EXECUTOR ENGINE
+// 3. SUPREME ACTION EXECUTOR ENGINE
 // ==========================================
 async function executeSocialAction(actionKey, context, isSlash) {
     const config = ACTION_CONFIG[actionKey];
@@ -175,12 +200,16 @@ async function executeSocialAction(actionKey, context, isSlash) {
 
         if (!target) {
             const reqMsg = `❌ Please reply to a message or mention a user to ${actionKey} them!`;
-            return isSlash ? context.reply({ content: reqMsg, ephemeral: true }) : context.reply(reqMsg);
+            return isSlash 
+                ? context.reply({ content: reqMsg, flags: [EPHEMERAL_FLAG] }) 
+                : context.reply(reqMsg);
         }
 
         if (target.id === authorId) {
-            const errReply = `❌ You can't ${actionKey} yourself!`;
-            return isSlash ? context.reply({ content: errReply, ephemeral: true }) : context.reply(errReply);
+            const errReply = `❌ You can't ${actionKey} yourself! Mention someone else.`;
+            return isSlash 
+                ? context.reply({ content: errReply, flags: [EPHEMERAL_FLAG] }) 
+                : context.reply(errReply);
         }
     }
 
@@ -214,7 +243,7 @@ async function executeSocialAction(actionKey, context, isSlash) {
     if (target && !target.bot) {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId(`social_${actionKey}_back`)
+                .setCustomId(`social_${actionKey}_back_${target.id}_${authorId}`)
                 .setLabel(`${actionKey.charAt(0).toUpperCase() + actionKey.slice(1)} back`)
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji(config.emoji)
@@ -222,14 +251,19 @@ async function executeSocialAction(actionKey, context, isSlash) {
         components.push(row);
     }
 
-    let response = isSlash ? await context.editReply({ embeds: [embed], components }) : await context.reply({ embeds: [embed], components });
+    let response = isSlash 
+        ? await context.editReply({ embeds: [embed], components }) 
+        : await context.reply({ embeds: [embed], components });
 
     if (components.length === 0) return;
 
     const collector = response.createMessageComponentCollector({ time: 300000 });
 
     collector.on('collect', async (i) => {
-        if (i.user.id === authorId) return i.reply({ content: `You can't ${actionKey} yourself back!`, ephemeral: true });
+        // Ensure only the targeted user can click "Action Back"
+        if (i.user.id !== target.id) {
+            return i.reply({ content: `❌ Only ${target.username} can use this button!`, flags: [EPHEMERAL_FLAG] });
+        }
 
         await i.deferReply();
         let backMutualCount = 1;
@@ -261,25 +295,37 @@ async function executeSocialAction(actionKey, context, isSlash) {
 // 4. MODULE INITIALIZER & EXPORTS
 // ==========================================
 module.exports = (client) => {
-    // Handle Slash Command /social
+    // A. Handle Master Slash Command /social (Subcommands & Subcommand Groups)
     client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'social') return;
-        const subCommand = interaction.options.getSubcommand();
-        if (subCommand) await executeSocialAction(subCommand, interaction, true);
+        if (!interaction.isChatInputCommand()) return;
+
+        if (interaction.commandName === 'social') {
+            const group = interaction.options.getSubcommandGroup(false);
+            const subCommand = interaction.options.getSubcommand(false);
+            const targetAction = subCommand || group;
+
+            if (targetAction) {
+                await executeSocialAction(targetAction, interaction, true);
+            }
+        }
     });
 
-    // Handle Prefix Text Commands (.hug, .kiss, .slap, .sleep, etc.)
+    // B. Handle Prefix Text Commands (.hug, .kiss, .slap, .sleep, etc.)
     client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.content) return;
+        if (message.author.bot || !message.content || !message.guild) return;
 
-        const firstWord = message.content.toLowerCase().trim().split(' ')[0];
+        const content = message.content.toLowerCase().trim();
+        const firstWord = content.split(' ')[0];
 
-        Object.keys(ACTION_CONFIG).forEach(async (actionKey) => {
+        // Check if message matches an action key with prefix '.' or raw word
+        for (const actionKey of Object.keys(ACTION_CONFIG)) {
             if (firstWord === `.${actionKey}` || firstWord === actionKey) {
                 await executeSocialAction(actionKey, message, false);
+                break;
             }
-        });
+        }
     });
 };
 
+// Export the command payload for deploy-commands.js
 module.exports.socialCommandPayload = socialCommandBuilder.toJSON();
