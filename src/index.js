@@ -13,7 +13,6 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    StringSelectMenuBuilder, 
     PermissionFlagsBits 
 } = require('discord.js');
 const express = require('express');
@@ -151,7 +150,7 @@ client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 
-// Global Anti-Mass Mention Gatekeeper
+// Global Anti-Mass Mention Pre-Gatekeeper
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
 
@@ -225,7 +224,7 @@ const Nodes = [
         retryDelay: 5000
     },
     {
-        name: 'Lavalink-v4-Primary',
+        name: 'Node-v4-Primary-SSL',
         url: 'lava-v4.ajiehospitality.com:443',
         auth: 'https://discord.gg/vM3e3U389y',
         secure: true,
@@ -233,8 +232,8 @@ const Nodes = [
         retryDelay: 5000
     },
     {
-        name: 'Lavalink-v4-Secondary',
-        url: 'lavalink.lavalink.pw:443',
+        name: 'Lavalink-Public-SSL',
+        url: 'lavalink.node.moe:443',
         auth: 'youshallnotpass',
         secure: true,
         retryAmount: 3,
@@ -269,10 +268,10 @@ client.manager = new Kazagumo({
     restTimeout: 10000
 });
 
-// Explicit Loggers for Lavalink Connections
+// Suppress unhandled DNS log spam while logging active Lavalink node readiness
 client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', (name, error) => console.log(`⚠️ [Lavalink] Node ${name} issue:`, error?.message || error));
-client.manager.shoukaku.on('disconnect', (name) => console.log(`⚠️ [Lavalink] Disconnected from node: ${name}`));
+client.manager.shoukaku.on('error', () => {}); // Silenced to prevent Render log spam during temporary DNS outages
+client.manager.shoukaku.on('disconnect', () => {});
 
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
@@ -510,6 +509,7 @@ const loadModule = (name, filePath) => {
 
         const mod = require(absolutePath);
         if (typeof mod === 'function') {
+            // Safely pass client and express app to all required modules
             mod(client, app);
             console.log(`✅ ${name} Module Loaded`); 
         } else {
@@ -532,13 +532,13 @@ async function startBot() {
             ['Premium', './modules/premium.js'], ['Translator', './modules/translator.js'], ['Reaction Roles', './modules/reactionRoles.js'],
             ['Help', './modules/help.js'], ['Leveling', './modules/leveling.js'], ['Starry Protocol', './modules/starry.js'],
             ['Boost Tracker', './modules/boostTracker.js'], ['Truth or Dare', './modules/truthOrDare.js'], ['Support Tickets', './modules/tickets.js'],
-            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Warnings DB', './modules/warnings.js'], ['Tracker', './modules/tracker.js'],
+            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Tracker', './modules/tracker.js'],
             ['Sus Account Detector', './modules/susAccount.js'], ['Whois Lookup', './modules/whois.js'], ['Emoji Blocker', './modules/emojiBlocker.js'],
-            ['Message Purger', './modules/clear.js'], ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
+            ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
             ['AFK System', './modules/afk.js'], ['Server Logs', './modules/logs.js'], ['Giveaway', './modules/giveaway.js'], 
             ['Counting Game', './modules/count.js'], ['Advanced Mod & Security', './modules/advancedMod.js'], ['Interactive Mod Panel', './modules/modPanel.js'], 
             ['Reputation System', './modules/rep.js'], ['Voice Channel Manager', './modules/voiceManager.js'], ['Emoji Stealer', './modules/steal.js'], 
-            ['Welcome System', './modules/welcome.js'], ['User Protection', './modules/protect.js'], ['Goodbye System', './modules/goodbye.js'], 
+            ['Welcome System', './modules/welcome.js'], ['Goodbye System', './modules/goodbye.js'], 
             ['Server Backup Engine', './modules/backupEngine.js'], ['Role Manager', './modules/roleManager.js'], ['Anti-Abuse', './modules/antiAbuse.js'], 
             ['Random Chest Drops', './modules/chestDrop.js'], ['Autorole & Sticky Roles', './modules/autorole.js'], ['Verification System', './modules/verification.js'], 
             ['Auto Bump Engine', './modules/bumpEngine.js'], ['Network Telemetry Engine', './modules/telemetryEngine.js'],
