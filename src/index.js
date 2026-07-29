@@ -371,7 +371,18 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
-    console.log('ℹ️ Slash commands are deployed with `npm run deploy`.');
+    
+    // Automatically deploy updated slash commands on ready
+    try {
+        console.log("🔄 Auto-deploying updated command payload to Discord...");
+        const deployPath = path.resolve(__dirname, '../deploy-commands.js');
+        if (fs.existsSync(deployPath)) {
+            const { deployCommands } = require(deployPath);
+            await deployCommands();
+        }
+    } catch (err) {
+        console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
+    }
 });
 
 // Advanced Hybrid File Loader
@@ -446,7 +457,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.deferUpdate().catch(() => {});
 
         if (!voiceChannel && action !== 'dj_refresh_panel') {
-            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true }).catch(() => {});
+            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [6] }).catch(() => {});
         }
 
         try {
@@ -466,7 +477,7 @@ client.on(Events.InteractionCreate, async interaction => {
     // Unified Command Router (Loads directly from client.commands collection)
     const command = client.commands.get(interaction.commandName);
     if (!command) {
-        return interaction.reply({ content: '❌ This command is not recognized.', ephemeral: true }).catch(() => {});
+        return interaction.reply({ content: '❌ This command is not recognized.', flags: [6] }).catch(() => {});
     }
 
     try { 
@@ -474,9 +485,9 @@ client.on(Events.InteractionCreate, async interaction => {
     } catch (error) {
         console.error(`❌ Error executing /${interaction.commandName}:`, error);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
         } else {
-            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', ephemeral: true }).catch(() => {});
+            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
         }
     }
 });
@@ -513,7 +524,6 @@ async function startBot() {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-        // Explicitly initialize bumpEngine with express app and register commands
         try {
             const bumpModule = require('./modules/bumpEngine');
             if (typeof bumpModule === 'function') {
@@ -545,11 +555,6 @@ async function startBot() {
 
         if (fs.existsSync('./modules/modApply.js')) loadModule('Mod Apply', './modules/modApply.js'); 
 
-        if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
-            console.log("🔄 Auto-deploying commands...");
-            const { deployCommands } = require('../deploy-commands.js');
-            await deployCommands().catch(err => console.error("❌ Auto-deploy failed:\n", err.stack || err));
-        }
         await client.login(process.env.TOKEN);
     } catch (error) {
         console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
