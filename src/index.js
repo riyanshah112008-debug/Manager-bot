@@ -33,10 +33,9 @@ const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
 // ==========================================
 // 1. WEB SERVER & DASHBOARD HOSTING
 // ==========================================
-const app = express(); // <-- app initialized HERE FIRST!
+const app = express();
 const port = process.env.PORT || 10000;
 
-// Enable CORS for all incoming requests (Fixes Netlify <-> Render fetch block)
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
@@ -131,6 +130,7 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
+
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -215,6 +215,7 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
+
 // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -358,6 +359,7 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
+
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
@@ -427,27 +429,14 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
+
 // ==========================================
-// 5. INTERACTION ENGINE (SUPREME EDITION)
+// 5. INTERACTION ENGINE (UNIFIED & CRASH-PROOF)
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
-    if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
-        return; 
-    }
-
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // DIRECT BYPASS: Directs modules that handle their interactions internally without needing external command files!
-    const moduleCommands = [
-        'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
-        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
-        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel',
-        'rep', 'checkrep', 'leaderboard', 'social'
-    ];
-    if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
-        return; // Handled directly inside module listeners
-    }
-
+    // Handle button controls for music
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
@@ -460,34 +449,11 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true }).catch(() => {});
         }
 
-        if (action.startsWith('dj_') && action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-            return interaction.followUp({ content: '❌ You need **Manage Channels** permission for VC control actions!', ephemeral: true }).catch(() => {});
-        }
-
         try {
-            if (action === 'dj_lock' && voiceChannel) {
-                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
-            }
-            if (action === 'dj_unlock' && voiceChannel) {
-                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
-            }
-
             if (player) {
                 if (action === 'music_pause') player.pause(!player.paused);
                 if (action === 'music_skip') player.skip();
                 if (action === 'music_stop') player.destroy();
-                if (action === 'music_loop' || action === 'dj_loop') {
-                    const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
-                    player.setLoop(nextLoop);
-                }
-                if (action === 'dj_vol_up') {
-                    let newVol = Math.min(player.volume + 10, 100);
-                    await player.setVolume(newVol);
-                }
-                if (action === 'dj_vol_down') {
-                    let newVol = Math.max(player.volume - 10, 0);
-                    await player.setVolume(newVol);
-                }
             }
         } catch (err) {
             console.error('❌ Button Execution Error:', err);
@@ -495,79 +461,33 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
-        const player = client.manager.getPlayer(interaction.guild.id);
-        if (!player) return interaction.reply({ content: '❌ No music is currently playing.', ephemeral: true });
-        if (interaction.member.voice?.channelId !== player.voiceId) return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
-
-        const filter = interaction.values[0];
-        await interaction.deferReply({ ephemeral: true });
-
-        if (filter === 'clear') { player.shoukaku.clearFilters(); return interaction.editReply('🚫 Filters cleared.'); }
-        else if (filter === 'bassboost') { player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] }); return interaction.editReply('🎸 **Bassboost** applied!'); }
-        else if (filter === '8d') { player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } }); return interaction.editReply('🌀 **8D Audio** applied!'); }
-        else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ **Nightcore** applied!'); }
-        else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 **Daycore** applied!'); }
-        else if (filter === 'vaporwave') { player.shoukaku.setFilters({ timescale: { speed: 0.85, pitch: 0.8, rate: 1.0 }, tremolo: { frequency: 14.0, depth: 0.3 } }); return interaction.editReply('🪩 **Vaporwave** applied!'); }
-        else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 **Karaoke** applied!'); }
-        else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
-        else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
-    }
-
     if (!interaction.isChatInputCommand()) return;
 
-    if (interaction.commandName === 'telemetry') {
-        const botOwners = ['1465049039153135639', '1257676837249617971']; 
-        if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-        if (!botOwners.includes(interaction.user.id)) return interaction.reply({ content: '❌ Access Denied.', ephemeral: true });
-
-        await interaction.deferReply(); 
-
-        const buildTelemetryEmbed = async (statusText, statusColor) => {
-            const GuildTelemetry = require('./models/GuildTelemetry');
-            const allData = await GuildTelemetry.find({}).catch(() => []);
-            const totalServers = client.guilds.cache.size;
-            const totalGlobalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
-
-            return new EmbedBuilder()
-                .setColor(statusColor)
-                .setTitle('🌐 Starry Global Network Intelligence')
-                .setDescription(statusText)
-                .addFields(
-                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Active Servers\n• **${totalGlobalMembers.toLocaleString()}** Total Users`, inline: true }
-                )
-                .setFooter({ text: 'Starry Central Command', iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
-        };
-
-        try {
-            const firstEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle', '#23a559');
-            await interaction.editReply({ embeds: [firstEmbed] });
-            return;
-        } catch (error) {
-            return interaction.editReply({ content: '❌ Failed to initialize telemetry dashboard.' });
-        }
-    }
-
+    // Unified Command Router (Loads directly from client.commands collection)
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    if (!command) {
+        return interaction.reply({ content: '❌ This command is not recognized.', ephemeral: true }).catch(() => {});
+    }
 
     try { 
         await command.execute(interaction, client); 
     } catch (error) {
         console.error(`❌ Error executing /${interaction.commandName}:`, error);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', ephemeral: true }).catch(() => {});
+        } else {
+            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', ephemeral: true }).catch(() => {});
+        }
     }
 });
+
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
 const loadModule = (name, filePath) => {
     try { 
         const absolutePath = path.resolve(__dirname, filePath);
-        
-        if (!fs.existsSync(absolutePath)) {
-            return;
-        }
+        if (!fs.existsSync(absolutePath)) return;
 
         const mod = require(absolutePath);
         if (typeof mod === 'function') {
@@ -593,7 +513,7 @@ async function startBot() {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-        // Explicitly initialize bumpEngine with express app to register API routes
+        // Explicitly initialize bumpEngine with express app and register commands
         try {
             const bumpModule = require('./modules/bumpEngine');
             if (typeof bumpModule === 'function') {
