@@ -15,14 +15,13 @@ const {
 const { GoogleGenAI } = require('@google/genai');
 
 // Safely require MongoDB models with fallback handling
-let ServerSettings, ChestChannel, BoostChannel, User;
+let ServerSettings, ChestChannel, BoostChannel;
 try {
     ServerSettings = require('../models/ServerSettings');
     ChestChannel = require('../models/ChestChannel');
     BoostChannel = require('../models/BoostChannel');
-    User = require('../models/User');
 } catch (e) {
-    // Models loaded dynamically if needed
+    // Models will be loaded dynamically if needed
 }
 
 // Multi-API Key Support (Comma-separated in process.env.GEMINI_API_KEY)
@@ -48,7 +47,7 @@ const AI_MODELS = [
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fail-Safe AI Generator with Retries & Exponential Backoff
+// Fail-Safe Generator with Retries & Exponential Backoff
 async function generateAIResponseWithRetry(prompt) {
     if (apiKeys.length === 0) {
         throw new Error('Missing GEMINI_API_KEY environment variable.');
@@ -74,10 +73,10 @@ async function generateAIResponseWithRetry(prompt) {
                 const isRateLimit = errStatus === 429 || errStatus === 503 || (err.message && err.message.includes('high demand'));
 
                 if (isRateLimit && attempt < 3) {
-                    await sleep(attempt * 1000);
+                    await sleep(attempt * 1000); // Backoff delay (1s, 2s)
                     continue;
                 }
-                break;
+                break; // Switch to next model if not rate limit or retries exhausted
             }
         }
     }
@@ -89,9 +88,93 @@ const blacklistedUsers = new Set();
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
-        console.log('✅ Starry Omnipotent Master Protocol Initialized!'); 
+        console.log('✅ Starry Protocol Module Loaded (Powered by upgraded Gemini Engine!)'); 
     });
 
+    // ==========================================
+    // 🛡️ 1. AUTOMOD ENGINE: ANTI-MASS PING DETECTOR
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        if (!message.guild || message.author.bot || !message.member) return;
+
+        // Bypass checks: Server Owner, Admins, or Users with Moderate Members permission
+        if (
+            message.author.id === message.guild.ownerId ||
+            message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+            message.member.permissions.has(PermissionFlagsBits.ModerateMembers) ||
+            client.isOwner(message.author.id)
+        ) {
+            return;
+        }
+
+        // Count total user pings, role pings, and @everyone / @here
+        const userMentionCount = message.mentions.users.size;
+        const roleMentionCount = message.mentions.roles.size;
+        const everyoneMention = message.mentions.everyone ? 1 : 0;
+        const totalPings = userMentionCount + roleMentionCount + everyoneMention;
+
+        // Threshold: 5 or more mentions in a single message triggers AutoMod
+        const PING_LIMIT = 5;
+
+        if (totalPings >= PING_LIMIT) {
+            const botMember = message.guild.members.me;
+
+            // Delete the mass-ping message immediately
+            if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+                await message.delete().catch(() => {});
+            }
+
+            // Timeout the offending user for 10 minutes
+            const durationMs = 10 * 60 * 1000;
+            const caseId = Math.floor(Math.random() * 90000) + 10000;
+            const reason = `Automated Anti-Mass Ping (${totalPings} mentions in single message)`;
+
+            if (
+                botMember.permissions.has(PermissionFlagsBits.ModerateMembers) &&
+                message.member.roles.highest.position < botMember.roles.highest.position
+            ) {
+                // Send DM Notice
+                const dmSent = await client.sendPremiumModDM(
+                    message.member,
+                    botMember,
+                    'timeout',
+                    reason,
+                    '10 minutes',
+                    message.guild,
+                    caseId
+                );
+
+                await message.member.timeout(durationMs, reason).catch(() => {});
+
+                // Send public warning alert in channel
+                const warningMsg = await message.channel.send(
+                    `🛡️ **AutoMod Triggered:** <@${message.author.id}> was timed out for **10 minutes** due to Mass Mentioning (${totalPings} pings)! ${dmSent ? '*(User Notified)*' : ''}`
+                ).catch(() => null);
+
+                if (warningMsg) {
+                    setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
+                }
+
+                // Log to moderation log channel
+                const modLogChannel = client.getLogChannel(message.guild, 'moderate');
+                if (modLogChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setColor('#ED4245')
+                        .setTitle('🛡️ AutoMod Action: Anti-Mass Ping')
+                        .addFields(
+                            { name: 'Offender', value: `<@${message.author.id}> (\`${message.author.id}\`)`, inline: true },
+                            { name: 'Channel', value: `<#${message.channel.id}>`, inline: true },
+                            { name: 'Total Mentions', value: `\`${totalPings}\``, inline: true },
+                            { name: 'Action Taken', value: '`Message Deleted + 10m Timeout`', inline: true },
+                            { name: 'Case ID', value: `\`#${caseId}\``, inline: true }
+                        )
+                        .setTimestamp();
+
+                    await modLogChannel.send({ embeds: [logEmbed] }).catch(() => {});
+                }
+            }
+        }
+    });
     // ==========================================
     // 🔄 FORCE COMMAND REGISTRATION WITH DISCORD
     // ==========================================
@@ -165,6 +248,7 @@ module.exports = (client) => {
 
         return channel || null;
     };
+
     // ==========================================
     // 🛠️ UTILITIES: SERVER DUMP GENERATOR
     // ==========================================
@@ -190,7 +274,6 @@ module.exports = (client) => {
 
         return Buffer.from(dump, 'utf-8');
     };
-
     // ==========================================
     // 🧠 MASTER COMMAND: /setup-starry
     // ==========================================
@@ -329,7 +412,7 @@ module.exports = (client) => {
             .setTitle(`${actionEmoji} ${actionTitle}`)
             .setDescription(`Hello **${member.user.username}**, you have received a formal moderation action in **${guild.name}**.\n\nPlease review the details below carefully.`)
             .addFields(
-                { name: '👤 Moderator', value: `\`${moderator.user.username}\``, inline: true },
+                { name: '👤 Moderator', value: `\`${moderator.user ? moderator.user.username : 'Starry AutoMod'}\``, inline: true },
                 { name: '🛡️ Action', value: `\`${actionType.charAt(0).toUpperCase() + actionType.slice(1)}\``, inline: true },
                 { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
                 { name: '📝 Reason for Action', value: `>>> ${reason || 'No specific reason was provided.'}`, inline: false },
@@ -359,394 +442,346 @@ module.exports = (client) => {
     };
 
     // ==========================================
-    // 📡 DEVELOPER CLI & INTERACTIVE PANEL
+    // 📡 DEVELOPER CLI TEXT COMMANDS
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
         const text = message.content.toLowerCase();
         const isOwner = client.isOwner(message.author.id);
+        const notOwnerMsg = "❌ **Access Denied:** You are not recognized as a bot owner!";
 
-        if (text === '.dev' && isOwner) {
+        if (text === '.dev') {
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const devEmbed = new EmbedBuilder()
                 .setColor('#2C2F33')
                 .setTitle('💻 Starry Developer Menu')
-                .setDescription('` .sysinfo ` - Bot stats.\n` .eval <code> ` - Run raw JS.\n` .broadcast <msg> ` - Global message.');
-            return message.reply({ embeds: [devEmbed] }).catch(() => {});
+                .setDescription('**Owner-Only Text Commands:**\n\n` .sysinfo ` - Bot stats.\n` .eval <code> ` - Run raw JS.\n` .broadcast <msg> ` - Global broadcast.')
+                .setFooter({ text: 'Starry Developer CLI' });
+            try {
+                await message.author.send({ embeds: [devEmbed] });
+                return message.reply('📬 Sent the developer CLI guide to your DMs!').catch(() => {});
+            } catch (err) { return message.reply('❌ I couldn\'t DM you!').catch(() => {}); }
         }
 
-        if (text === '.sysinfo' && isOwner) {
+        if (text === '.sysinfo') {
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-            return message.reply(`📊 **RAM:** ${memory} MB | **Servers:** ${client.guilds.cache.size} | **Ping:** ${client.ws.ping}ms`).catch(() => {});
+            return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms\n- **Servers:** ${client.guilds.cache.size}`).catch(()=>{});
         }
 
-        if (text.startsWith('.eval ') && isOwner) {
+        if (text.startsWith('.eval ')) {
+            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
             try {
                 let evaled = eval(message.content.slice(6));
                 if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                return message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(() => {});
-            } catch (err) {
-                return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(() => {});
-            }
+                return message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
+            } catch (err) { return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
         }
     });
     // ==========================================
-    // ⚡ OMNIPOTENT INSTANT PRE-PARSERS (GROUP 1)
+    // 🎛️ INTERACTIVE DEV PANEL (UI)
     // ==========================================
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.guild || blacklistedUsers.has(message.author.id)) return;
+    client.on('interactionCreate', async (interaction) => {
+        if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
+            return; 
+        }
 
-        const isOwner = client.isOwner(message.author.id) || message.author.id === message.guild.ownerId;
-        const isStaff = message.member && (
-            message.member.permissions.has(PermissionFlagsBits.Administrator) ||
-            message.member.permissions.has(PermissionFlagsBits.ModerateMembers) ||
-            message.member.permissions.has(PermissionFlagsBits.ManageMessages)
-        );
+        const isDevCommand = interaction.isChatInputCommand() && interaction.commandName === 'devpanel';
+        const isDevButton = interaction.isButton() && interaction.customId.startsWith('dev_');
+        const isDevModal = interaction.isModalSubmit() && interaction.customId.startsWith('modal_');
 
-        // ==========================================
-        // 🚨 1. PASSIVE MASS MENTION PROTECTION SHIELD
-        // ==========================================
-        if (!isStaff && !isOwner) {
-            const userMentions = message.mentions.users.size;
-            const roleMentions = message.mentions.roles.size;
-            const totalMentions = userMentions + roleMentions;
-
-            // Trigger: 5 or more mentions in a single message
-            if (totalMentions >= 5 || message.mentions.everyone) {
-                await message.delete().catch(() => {});
-                await message.member.timeout(10 * 60 * 1000, "Automod: Mass Mention Anti-Raid Shield").catch(() => {});
-                const warn = await message.channel.send(`🚨 <@${message.author.id}> has been timed out for **10 minutes** for mass mentioning users/roles!`).catch(() => {});
-                if (warn) setTimeout(() => warn.delete().catch(() => {}), 5000);
+        if (isDevCommand || isDevButton || isDevModal) {
+            if (!client.isOwner(interaction.user.id)) {
+                if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
                 return;
             }
         }
 
+        if (isDevCommand) {
+            const embed = new EmbedBuilder()
+                .setTitle('💻 Starry Developer Control Panel')
+                .setDescription('Select an operation below.')
+                .setColor('#5865F2')
+                .setFooter({ text: 'Powered by Starry Protocol • Authorized Personnel Only' });
+
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
+                new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐')
+            );
+            const row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
+                new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📢')
+            );
+
+            return interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('dev_')) {
+            const id = interaction.customId;
+            if (id === 'dev_sysinfo') {
+                const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
+            }
+            if (id === 'dev_servers') {
+                let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;                
+                client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
+                return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
+            }
+            if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+            if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+        }
+
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_')) {
+            const id = interaction.customId;
+            if (id === 'modal_eval') { 
+                await interaction.deferReply({ ephemeral: true }); 
+                try { 
+                    let evaled = eval(interaction.fields.getTextInputValue('eval_code')); 
+                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled); 
+                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``); 
+                } catch (err) { 
+                    return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); 
+                } 
+            }
+            if (id === 'modal_broadcast') { 
+                await interaction.deferReply({ ephemeral: true }); 
+                const msg = interaction.fields.getTextInputValue('broadcast_msg'); 
+                let count = 0; 
+                client.guilds.cache.forEach(guild => { 
+                    const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages')); 
+                    if (channel) { channel.send(`📢 **System Announcement:**\n\n>>> ${msg}`).catch(()=>{}); count++; } 
+                }); 
+                return interaction.editReply(`✅ Broadcast sent to ${count} servers!`); 
+            }
+        }
+    });
+    // ==========================================
+    // 🤖 AI & NLP MODERATION ENGINE
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
+
         let triggerWord = 'starry';
         let displayName = 'Starry'; 
 
-        try {
-            if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
-            const settings = await ServerSettings.findOne({ guildId: message.guild.id });
-            if (settings && settings.triggerWord) {
-                triggerWord = settings.triggerWord.toLowerCase();
-                displayName = settings.triggerWord;
-            }
-        } catch (err) {}
+        if (message.guild) {
+            try {
+                if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
+                const settings = await ServerSettings.findOne({ guildId: message.guild.id });
+                if (settings && settings.triggerWord) {
+                    triggerWord = settings.triggerWord.toLowerCase();
+                    displayName = settings.triggerWord;
+                }
+            } catch (err) {}
+        }
 
         const text = message.content.toLowerCase().trim();
         const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
         const hasName = text.includes(triggerWord) || text.includes('jarvis');
+        const isOwner = client.isOwner(message.author.id);
         let isReplyToBot = false;
 
         if (message.reference) {
-            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
             if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
         }
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        if (!isOwner && (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id, message.author.id))) {
+        if (!isOwner && (!message.guild || (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id, message.author.id)))) {
             return message.reply('❌ **AI is a Premium feature!** Contact the bot owner to upgrade this server.').catch(() => {});
         }
 
-        const botMember = message.guild.members.me;
+        // ==========================================
+        // ⚡ INSTANT LOCAL PRE-PARSERS (0ms DELAY)
+        // ==========================================
+        const botMember = message.guild ? message.guild.members.me : null;
 
-        // 2. PIN / UNPIN REPLIED MESSAGE
-        if ((text.includes('pin this') || text.includes('unpin this')) && message.reference) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && !isOwner) {
-                return message.reply("❌ You need **Manage Messages** permission.");
+        // A. TIMEOUT PRE-PARSER
+        const timeoutRegex = /timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)\s*(m|min|mins|minute|minutes|h|hr|hours|d|day|days)?/i;
+        const timeoutMatch = message.content.match(timeoutRegex);
+
+        if (timeoutMatch && message.guild) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                return message.reply("❌ You or I lack **Moderate Members** permission.");
             }
-            try {
-                const targetMsg = await message.channel.messages.fetch(message.reference.messageId);
-                if (text.includes('unpin')) {
-                    await targetMsg.unpin();
-                    return message.reply("📌 Message unpinned successfully!");
-                } else {
-                    await targetMsg.pin();
-                    return message.reply("📌 Message pinned successfully!");
-                }
-            } catch (e) {
-                return message.reply("❌ Failed to pin/unpin message.");
+            const targetId = timeoutMatch[1];
+            const amount = parseInt(timeoutMatch[2]) || 1;
+            const unit = (timeoutMatch[3] || 'm').toLowerCase();
+            let durationMs = amount * 60 * 1000;
+            if (unit.startsWith('h')) durationMs = amount * 60 * 60 * 1000;
+            if (unit.startsWith('d')) durationMs = amount * 24 * 60 * 60 * 1000;
+
+            const tMember = await message.guild.members.fetch(targetId).catch(() => null);
+            if (!tMember) return message.reply("❌ Target member not found in server.");
+
+            if (tMember.id === message.guild.ownerId) return message.reply("❌ I cannot moderate the **Server Owner**!");
+            if (tMember.id === client.user.id) return message.reply("❌ I cannot moderate **myself**!");
+
+            if (tMember.roles.highest.position >= botMember.roles.highest.position) {
+                return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role is higher than or equal to mine!`);
             }
+
+            const caseId = Math.floor(Math.random() * 90000) + 10000;
+            const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', 'Direct Staff Command', `${amount} ${unit}`, message.guild, caseId);
+
+            await tMember.timeout(durationMs, `Requested by ${message.author.tag}`).catch(() => {});
+            return message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
         }
 
-        // 3. DELETE ROLE PRE-PARSER
-        const deleteRoleRegex = /(?:delete|remove|destroy) (?:the )?role (?:<@&(\d+)>|([a-zA-Z0-9_\-\s]+))/i;
-        const deleteRoleMatch = message.content.match(deleteRoleRegex);
-        if (deleteRoleMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) && !isOwner) return message.reply("❌ You lack **Manage Roles** permission.");
-            if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply("❌ I am missing **Manage Roles** permission!");
+        // B. CREATE ROLE PRE-PARSER
+        const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
+        const roleMatch = message.content.match(createRoleRegex);
 
-            const roleId = deleteRoleMatch[1];
-            const q = deleteRoleMatch[2]?.trim().toLowerCase();
-            let targetRole = roleId ? message.guild.roles.cache.get(roleId) : message.guild.roles.cache.find(r => r.name.toLowerCase() === q || r.name.toLowerCase().includes(q));
-
-            if (!targetRole) return message.reply("❌ Target role not found!");
-            if (targetRole.position >= botMember.roles.highest.position) return message.reply("❌ Role is equal to or higher than my highest role!");
-
+        if (roleMatch && message.guild) {
+            const roleName = roleMatch[1].trim();
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                return message.reply('❌ Missing **Manage Roles** permission.');
+            }
             try {
-                const name = targetRole.name;
-                await targetRole.delete(`Deleted by ${message.author.tag}`);
-                return message.reply(`🗑️ Successfully deleted role **${name}**!`);
+                const newRole = await message.guild.roles.create({ name: roleName, reason: `Requested by ${message.author.tag}` });
+                return message.reply(`✅ Successfully created role **${newRole.name}**!`);
             } catch (err) {
-                return message.reply(`❌ Failed to delete role: \`${err.message}\``);
+                return message.reply(`❌ Failed to create role: \`${err.message}\``);
             }
         }
 
-        // 4. GIVE / REMOVE ROLE TO MEMBER
-        const assignRoleRegex = /(give|remove|take) (?:the )?role (?:<@&(\d+)>|([a-zA-Z0-9_\-\s]+)) (?:to|from) <@!?(\d+)>/i;
-        const assignRoleMatch = message.content.match(assignRoleRegex);
-        if (assignRoleMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) && !isOwner) return message.reply("❌ You lack **Manage Roles** permission.");
-            const action = assignRoleMatch[1].toLowerCase();
-            const roleId = assignRoleMatch[2];
-            const roleName = assignRoleMatch[3]?.trim().toLowerCase();
-            const targetUserId = assignRoleMatch[4];
+        // C. CLEAR / PURGE PRE-PARSER
+        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?/i;
+        const clearMatch = message.content.match(clearRegex);
 
-            let role = roleId ? message.guild.roles.cache.get(roleId) : message.guild.roles.cache.find(r => r.name.toLowerCase() === roleName);
-            const targetMem = await message.guild.members.fetch(targetUserId).catch(() => null);
-
-            if (!role || !targetMem) return message.reply("❌ Invalid role or user!");
-
-            if (action === 'give') {
-                await targetMem.roles.add(role).catch(() => {});
-                return message.reply(`✅ Granted role **${role.name}** to ${targetMem}!`);
-            } else {
-                await targetMem.roles.remove(role).catch(() => {});
-                return message.reply(`✅ Removed role **${role.name}** from ${targetMem}!`);
+        if (clearMatch && message.guild) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+                return message.reply('❌ Missing **Manage Messages** permission.');
             }
+            const count = parseInt(clearMatch[1]);
+            if (count <= 0) return message.reply('❌ Please specify a valid number of messages to clear.');
+            const deleteCount = Math.min(count, 99) + 1;
+            await message.channel.bulkDelete(deleteCount, true).catch(() => {});
+            return message.channel.send(`🧹 Successfully cleared ${count} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
         }
 
-        // 5. SET OR RESET NICKNAME
-        const nickRegex = /(?:set|change|reset) nickname (?:of )?<@!?(\d+)>(?: (?:to )?([a-zA-Z0-9_\-\s]+))?/i;
-        const nickMatch = message.content.match(nickRegex);
-        if (nickMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageNicknames) && !isOwner) return message.reply("❌ Missing **Manage Nicknames** permission.");
-            const targetMem = await message.guild.members.fetch(nickMatch[1]).catch(() => null);
-            if (targetMem) {
-                const newNick = nickMatch[2] ? nickMatch[2].trim() : null;
-                await targetMem.setNickname(newNick).catch(() => {});
-                return message.reply(newNick ? `✏️ Updated nickname of ${targetMem} to **${newNick}**!` : `✏️ Reset nickname for ${targetMem}!`);
-            }
-        }
-        // 6. SET CHANNEL TOPIC
-        const topicRegex = /(?:set|change) (?:channel )?topic (?:to )?(.+)/i;
-        const topicMatch = message.content.match(topicRegex);
-        if (topicMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && !isOwner) return message.reply("❌ Missing **Manage Channels** permission.");
-            const newTopic = topicMatch[1].trim();
-            await message.channel.setTopic(newTopic).catch(() => {});
-            return message.reply(`📝 Updated channel topic to: *"${newTopic}"*`);
-        }
-
-        // 7. CREATE / DELETE CHANNELS
-        const createChanRegex = /(?:create|make) (text|voice|category) channel ([a-zA-Z0-9_\-\s]+)/i;
-        const createChanMatch = message.content.match(createChanRegex);
-        if (createChanMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && !isOwner) return message.reply("❌ Missing **Manage Channels** permission.");
-            const type = createChanMatch[1] === 'voice' ? ChannelType.GuildVoice : createChanMatch[1] === 'category' ? ChannelType.GuildCategory : ChannelType.GuildText;
-            const newChan = await message.guild.channels.create({ name: createChanMatch[2].trim(), type }).catch(() => null);
-            if (newChan) return message.reply(`📁 Created channel ${newChan}!`);
-        }
-
-        const deleteChanRegex = /(?:delete|remove) channel (?:<#(\d+)>|([a-zA-Z0-9_\-\s]+))/i;
-        const deleteChanMatch = message.content.match(deleteChanRegex);
-        if (deleteChanMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && !isOwner) return message.reply("❌ Missing **Manage Channels** permission.");
-            const cId = deleteChanMatch[1];
-            const q = deleteChanMatch[2]?.trim().toLowerCase();
-            let chan = cId ? message.guild.channels.cache.get(cId) : message.guild.channels.cache.find(c => c.name.toLowerCase() === q);
-            if (chan) {
-                const name = chan.name;
-                await chan.delete().catch(() => {});
-                return message.reply(`🗑️ Deleted channel **#${name}**!`);
-            }
-        }
-
-        // 8. SLOWMODE, LOCK, UNLOCK
-        if (text.includes('lock channel')) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && !isOwner) return message.reply("❌ Missing permission.");
-            await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
-            return message.reply("🔒 Channel locked.");
-        }
-
-        if (text.includes('unlock channel')) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && !isOwner) return message.reply("❌ Missing permission.");
-            await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null });
-            return message.reply("🔓 Channel unlocked.");
-        }
-
-        const slowmodeMatch = message.content.match(/(?:set )?slowmode (?:to )?(\d+|off)(s|m|h)?/i);
-        if (slowmodeMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && !isOwner) return message.reply("❌ Missing permission.");
-            const val = slowmodeMatch[1].toLowerCase();
-            if (val === 'off' || val === '0') {
-                await message.channel.setRateLimitPerUser(0);
-                return message.reply("⏱️ Slowmode disabled.");
-            }
-            let secs = parseInt(val);
-            if (slowmodeMatch[2] === 'm') secs *= 60;
-            if (slowmodeMatch[2] === 'h') secs *= 3600;
-            await message.channel.setRateLimitPerUser(Math.min(secs, 21600));
-            return message.reply(`⏱️ Slowmode set to **${secs}s**.`);
-        }
-
-        // 9. IMAGE GENERATION
-        const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|art) (?:of )?(.*)/i;
+        // --- IMAGE GENERATION (POLLINATIONS) ---
+        const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
-        let imagePrompt = isImagine ? message.content.slice(9).trim() : "";
-        if (!isImagine && (hasName || mentionsBot)) {
-            const m = message.content.match(imageRegex);
-            if (m) { isImageRequest = true; imagePrompt = m[1].trim(); }
+        let imagePrompt = "";
+
+        if (isImagine) {
+            imagePrompt = message.content.slice(9).trim();
+        } else if (hasName || mentionsBot) {
+            const match = message.content.match(imageRegex);
+            if (match) { isImageRequest = true; imagePrompt = match[1].trim(); }
         }
 
         if (isImageRequest) {
-            if (!imagePrompt) return message.reply('❌ Please specify what to draw!');
-            const replyMsg = await message.reply('🎨 Painting your picture...').catch(() => null);
+            if (!imagePrompt) return message.reply('❌ Please tell me what to draw!').catch(() => {});
+            const replyMsg = await message.reply('🎨 Painting your picture... Please wait.').catch(() => null);
+            if (!replyMsg) return;
             try {
                 const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
                 const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true`;
-                await message.reply({ content: `🖼️ **"${imagePrompt}"**`, files: [{ attachment: imageUrl, name: `${displayName}_Art.png` }] });
-                return await replyMsg?.delete().catch(() => {});
-            } catch (err) {
-                return replyMsg?.edit('❌ Failed to draw image.');
+                await message.reply({ 
+                    content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, 
+                    files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] 
+                }).catch(() => {});
+                return await replyMsg.delete().catch(() => {});
+            } catch (error) { 
+                return replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
             }
         }
+
         // ==========================================
-        // 🧠 OMNIPOTENT AI EXECUTION ENGINE
+        // 🧠 FAIL-SAFE RETRY AI EXECUTION ENGINE
         // ==========================================
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, an omnipotent Discord master assistant.\n` +
-                `SUPPORTED COMMAND PROTOCOLS:\n` +
-                `• Delete Role: [CMD:DELETEROLE|ROLE:role_name_or_id]\n` +
-                `• Create Role: [CMD:CREATEROLE|NAME:role_name]\n` +
-                `• Give Role: [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456]\n` +
-                `• Remove Role: [CMD:REMOVEROLE|USER_ID:123|ROLE_ID:456]\n` +
-                `• Create Channel: [CMD:CREATECHANNEL|NAME:name|TYPE:text_or_voice]\n` +
-                `• Delete Channel: [CMD:DELETECHANNEL|CHANNEL:name_or_id]\n` +
-                `• Set Nickname: [CMD:SETNICK|USER_ID:123|NICK:new_nickname]\n` +
-                `• Pin Message: [CMD:PINMESSAGE]\n` +
-                `• Moderate: [CMD:KICK|ID:123|REASON:reason], [CMD:BAN|ID:123|REASON:reason], [CMD:TIMEOUT|ID:123|MINUTES:10]\n` +
-                `• Clear: [CMD:CLEAR|AMOUNT:10]\n\n` +
-                `RULE: Emit the [CMD:] tag inline when asked to perform server admin tasks.\n\n` +
-                `[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord AI companion. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
 
             let replyText = await generateAIResponseWithRetry(prompt);
 
             let functionName = null; 
             let args = {};
 
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|CREATECHANNEL|DELETECHANNEL|SETNICK|PINMESSAGE)(?:\|(.*?))?\]/i);
+            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE)(?:\|(.*?))?\]/i);
             if (cmdMatch) {
                 const action = cmdMatch[1].toUpperCase(); 
                 const params = (cmdMatch[2] || '').split('|');
                 const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
 
-                if (action === 'DELETEROLE') { functionName = 'delete_role'; args.roleQuery = getParam('ROLE') || getParam('NAME'); }
-                else if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME') || getParam('ROLE'); }
-                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.chanName = getParam('NAME'); args.chanType = getParam('TYPE'); }
-                else if (action === 'DELETECHANNEL') { functionName = 'delete_channel'; args.chanQuery = getParam('CHANNEL') || getParam('NAME'); }
-                else if (action === 'SETNICK') { functionName = 'set_nick'; args.userId = getParam('USER_ID'); args.nick = getParam('NICK'); }
-                else if (action === 'PINMESSAGE') { functionName = 'pin_msg'; }
+                if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME') || getParam('ROLE'); }
                 else if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 10; }
-                else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 2; args.reason = getParam('REASON') || "AI Action"; }
-                else if (action === 'KICK' || action === 'BAN') { functionName = action.toLowerCase() + '_member'; args.userId = getParam('ID'); args.reason = getParam('REASON') || "AI Action"; }
+                else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 2; args.reason = getParam('REASON') || "AI Moderation"; }
+                else if (action === 'UNTIMEOUT') { functionName = 'untimeout_member'; args.userId = getParam('ID'); }
+                else if (action === 'UNBAN') { functionName = 'unban_member'; args.userId = getParam('ID'); }
+                else if (action === 'KICK' || action === 'BAN') { functionName = action.toLowerCase() + '_member'; args.userId = getParam('ID'); args.reason = getParam('REASON') || "AI Moderation"; }
+                else if (action === 'GIVEROLE' || action === 'REMOVEROLE') { functionName = action === 'GIVEROLE' ? 'give_role' : 'remove_role'; args.userId = getParam('USER_ID'); args.roleId = getParam('ROLE_ID'); }
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 
-            // Universal AI Action Executor
-            if (functionName && message.guild) {
-                const bMem = message.guild.members.me;
+            // Execute Moderation Actions Generated by AI
+            if (functionName) {
+                const botMember = message.guild ? message.guild.members.me : null;
+                const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
 
-                if (functionName === "delete_role" && bMem.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                    const q = args.roleQuery?.toLowerCase();
-                    const r = message.guild.roles.cache.find(role => role.id === q || role.name.toLowerCase() === q || role.name.toLowerCase().includes(q));
-                    if (r && r.position < bMem.roles.highest.position) {
-                        const name = r.name;
-                        await r.delete().catch(() => {});
-                        await message.reply(`🗑️ Successfully deleted role **${name}**!`);
-                    }
-                }
-
-                if (functionName === "set_nick" && bMem.permissions.has(PermissionFlagsBits.ManageNicknames)) {
-                    const tMem = await message.guild.members.fetch(args.userId).catch(() => null);
-                    if (tMem) {
-                        await tMem.setNickname(args.nick || null).catch(() => {});
-                        await message.reply(`✏️ Nickname updated for ${tMem}!`);
-                    }
-                }
-
-                if (functionName === "pin_msg" && message.reference && bMem.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                    const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
-                    if (refMsg) {
-                        await refMsg.pin().catch(() => {});
-                        await message.reply("📌 Message pinned successfully!");
-                    }
-                }
-
-                if (functionName === "create_role" && bMem.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                if (functionName === "create_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
                     const newRole = await message.guild.roles.create({ name: args.roleName || 'new-role' }).catch(() => null);
                     if (newRole) await message.reply(`✅ Created role **${newRole.name}**!`);
                 }
 
-                if (functionName === "create_channel" && bMem.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                    const type = args.chanType?.toLowerCase() === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
-                    const chan = await message.guild.channels.create({ name: args.chanName || 'new-channel', type }).catch(() => null);
-                    if (chan) await message.reply(`📁 Created channel ${chan}!`);
-                }
-
-                if (functionName === "delete_channel" && bMem.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                    const q = args.chanQuery?.toLowerCase();
-                    const chan = message.guild.channels.cache.find(c => c.id === q || c.name.toLowerCase() === q || c.name.toLowerCase().includes(q));
-                    if (chan) {
-                        const name = chan.name;
-                        await chan.delete().catch(() => {});
-                        await message.reply(`🗑️ Successfully deleted channel **#${name}**!`);
-                    }
-                }
-
-                if (functionName === "clear_messages" && bMem.permissions.has(PermissionFlagsBits.ManageMessages)) {
+                if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
                     const deleteCount = Math.min(args.amount, 99) + 1;
                     await message.channel.bulkDelete(deleteCount, true).catch(() => {});
-                    await message.channel.send(`🧹 Cleared ${args.amount} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
+                    await message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
                 }
 
                 const tId = (args.userId || '').replace(/\D/g, '');
-                if (tId) {
+                if (tId && message.guild) {
                     const tMember = await message.guild.members.fetch(tId).catch(() => null);
+
                     if (tMember && tMember.id !== message.guild.ownerId && tMember.id !== client.user.id) {
-                        if (tMember.roles.highest.position < bMem.roles.highest.position) {
-                            if (functionName === "timeout_member" && bMem.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                        const isHigher = tMember.roles.highest.position >= botMember.roles.highest.position;
+
+                        if (!isHigher) {
+                            if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
+                                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
                                 await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(() => {}); 
-                                await message.reply(`⏰ Timed out <@${tId}> for ${args.minutes}m.`);
+                                await message.reply(`⏰ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                             }
-                            if (functionName === "kick_member" && bMem.permissions.has(PermissionFlagsBits.KickMembers)) {
+
+                            if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
+                                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
                                 await tMember.kick(args.reason).catch(() => {});
-                                await message.reply(`👢 Kicked <@${tId}>.`);
+                                await message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                             }
-                            if (functionName === "ban_member" && bMem.permissions.has(PermissionFlagsBits.BanMembers)) {
+
+                            if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
+                                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
                                 await tMember.ban({ reason: args.reason }).catch(() => {});
-                                await message.reply(`🔨 Banned <@${tId}>.`);
+                                await message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
                             }
                         }
                     }
                 }
             }
 
+            // Deliver AI Response
             if (replyText && replyText.trim().length > 0) {
-                const chunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
-                for (const chunk of chunks) {
+                const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
+                for (const chunk of textChunks) {
                     await message.reply(chunk).catch(() => {});
                 }
             }
 
         } catch (error) {
             console.error("Gemini AI error:", error.message || error);
-            return message.reply(`⏳ **High Demand Notice:** Google AI servers are experiencing a brief spike in traffic. Please try again in a few seconds!`).catch(() => {});
+            return message.reply(`⏳ **High Demand Notice:** Google AI servers are currently experiencing a temporary traffic spike. Please try again in a few seconds!`).catch(() => {});
         }
     }); 
 };
