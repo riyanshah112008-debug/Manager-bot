@@ -581,6 +581,7 @@ const loadModule = (name, filePath) => {
         console.error(`❌ Error loading ${name}:`, err.message); 
     }
 };
+
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
         console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
@@ -589,6 +590,18 @@ async function startBot() {
     try {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
+
+        // Explicitly initialize bumpEngine with express app to register API routes
+        try {
+            const bumpModule = require('./modules/bumpEngine');
+            if (typeof bumpModule === 'function') {
+                bumpModule(client, app);
+                console.log('✅ Registered Directory API Endpoints with Express Web Server!');
+            }
+        } catch (e) {
+            console.error('⚠️ Could not load bumpEngine API routes:', e.message);
+        }
+
         const mods = [
             ['Moderation', './modules/moderation.js'], ['Automod', './modules/automod.js'], ['Media Only', './modules/mediaOnly.js'],
             ['Premium', './modules/premium.js'], ['Translator', './modules/translator.js'], ['Reaction Roles', './modules/reactionRoles.js'],
@@ -603,8 +616,7 @@ async function startBot() {
             ['Welcome System', './modules/welcome.js'], ['Goodbye System', './modules/goodbye.js'], 
             ['Server Backup Engine', './modules/backupEngine.js'], ['Role Manager', './modules/roleManager.js'], ['Anti-Abuse', './modules/antiAbuse.js'], 
             ['Random Chest Drops', './modules/chestDrop.js'], ['Autorole & Sticky Roles', './modules/autorole.js'], ['Verification System', './modules/verification.js'], 
-            ['Auto Bump Engine', './modules/bumpEngine.js'], ['Network Telemetry Engine', './modules/telemetryEngine.js'],
-            ['Social Actions Engine', './modules/socialActions.js']
+            ['Network Telemetry Engine', './modules/telemetryEngine.js'], ['Social Actions Engine', './modules/socialActions.js']
         ];
         
         mods.forEach(([name, path]) => loadModule(name, path));
