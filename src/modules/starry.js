@@ -73,10 +73,10 @@ async function generateAIResponseWithRetry(prompt) {
                 const isRateLimit = errStatus === 429 || errStatus === 503 || (err.message && err.message.includes('high demand'));
 
                 if (isRateLimit && attempt < 3) {
-                    await sleep(attempt * 1000); // Backoff delay (1s, 2s)
+                    await sleep(attempt * 1000);
                     continue;
                 }
-                break; // Switch to next model if not rate limit or retries exhausted
+                break;
             }
         }
     }
@@ -97,7 +97,6 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || !message.member) return;
 
-        // Calculate mentions using both Discord API objects and raw Regex matching
         const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
         const userMentionCount = message.mentions.users.size;
         const roleMentionCount = message.mentions.roles.size;
@@ -108,18 +107,15 @@ module.exports = (client) => {
             rawPingMatches.length
         );
 
-        // Threshold: 5 or more mentions triggers AutoMod
         const PING_LIMIT = 5;
 
         if (totalPings >= PING_LIMIT) {
             const botMember = message.guild.members.me;
 
-            // Delete the mass-ping message immediately
             if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
                 await message.delete().catch(() => {});
             }
 
-            // Timeout the offending user for 10 minutes
             const durationMs = 10 * 60 * 1000;
             const caseId = Math.floor(Math.random() * 90000) + 10000;
             const reason = `Automated Anti-Mass Ping (${totalPings} mentions in single message)`;
@@ -129,7 +125,6 @@ module.exports = (client) => {
                 message.member.roles.highest.position < botMember.roles.highest.position &&
                 message.author.id !== message.guild.ownerId
             ) {
-                // Send DM Notice
                 const dmSent = await client.sendPremiumModDM(
                     message.member,
                     botMember,
@@ -142,7 +137,6 @@ module.exports = (client) => {
 
                 await message.member.timeout(durationMs, reason).catch(() => {});
 
-                // Send public warning alert in channel
                 const warningMsg = await message.channel.send(
                     `🛡️ **AutoMod Triggered:** <@${message.author.id}> was timed out for **10 minutes** due to Mass Mentioning (${totalPings} pings)! ${dmSent ? '*(User Notified)*' : ''}`
                 ).catch(() => null);
@@ -151,7 +145,6 @@ module.exports = (client) => {
                     setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
                 }
 
-                // Log to moderation log channel
                 const modLogChannel = client.getLogChannel(message.guild, 'moderate');
                 if (modLogChannel) {
                     const logEmbed = new EmbedBuilder()
@@ -248,7 +241,7 @@ module.exports = (client) => {
     };
 
     // ==========================================
-    // 🧠 AUTONOMOUS MASTER COMMAND: /setup-starry
+    // 🧠 AUTONOMOUS PROMPT-DRIVEN BUILDER: /setup-starry
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setup-starry') return;
@@ -258,91 +251,204 @@ module.exports = (client) => {
         }
 
         const guild = interaction.guild;
+        const botMember = guild.members.me;
 
-        if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels) || 
-            !guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels) || 
+            !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
             return interaction.reply({ content: '❌ I need **Manage Channels** and **Manage Roles** permissions to auto-build your server layout!', flags: [6] });
         }
 
-        await interaction.reply({ content: '🛠️ **Starry AI is scanning your server and auto-building channels, ticket panels, and application desks...** Please wait.', flags: [6] });
+        await interaction.deferReply();
+
+        const ownerPrompt = interaction.options.getString('prompt') || 'Standard High-Security Community Server';
 
         try {
-            // 1. Create Category
-            const category = await guild.channels.create({
-                name: '🌟 STARRY COMMAND HUB',
-                type: ChannelType.GuildCategory,
+            await interaction.editReply({ content: `🧠 **Starry Neural Engine Active...**\nAnalyzing request: *"${ownerPrompt}"*\nGenerating custom structure & provisioning security infrastructure...` });
+
+            // 1. Generate Custom Themed Categories & Channels via Gemini
+            let customLayout = {
+                categories: [
+                    { name: '📢 INFORMATION & WELCOME', channels: ['welcome', 'rules', 'announcements', 'roles'] },
+                    { name: '💬 MAIN COMMUNITY', channels: ['general-chat', 'media-sharing', 'bot-commands', 'memes'] },
+                    { name: '🎮 GAMING & LOUNGE', channels: ['game-discussion', 'clips-and-highlights', 'looking-for-group'] },
+                    { name: '🔊 VOICE VCBOUND', channels: ['Lounge 1', 'Lounge 2', 'Gaming VC 1', 'Gaming VC 2'] }
+                ]
+            };
+
+            try {
+                const aiPrompt = `Generate a comprehensive Discord server structure for the theme: "${ownerPrompt}".
+Return ONLY a valid JSON object matching this exact structure (no markdown formatting, no text outside JSON):
+{
+  "categories": [
+    { "name": "CATEGORY NAME 1", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] },
+    { "name": "CATEGORY NAME 2", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] },
+    { "name": "CATEGORY NAME 3", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] },
+    { "name": "CATEGORY NAME 4", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] }
+  ]
+}
+Ensure there are at least 4 categories with 3 to 5 channels each tailored specifically to "${ownerPrompt}".`;
+
+                const aiRaw = await generateAIResponseWithRetry(aiPrompt);
+                const cleanedJson = aiRaw.replace(/```json/gi, '').replace(/```/g, '').trim();
+                customLayout = JSON.parse(cleanedJson);
+            } catch (aiErr) {
+                console.warn('⚠️ AI Layout generation fallback triggered:', aiErr.message);
+            }
+
+            // ==========================================
+            // 2. PROVISION SYSTEM & INFRASTRUCTURE CATEGORY
+            // ==========================================
+            const sysCat = await guild.channels.create({
+                name: '🛡️ SECURITY & SYSTEM LOGS',
+                type: ChannelType.GuildCategory
             });
 
-            // 2. Build Standard Channels
-            const coreChannels = ['welcome', 'rules', 'general-chat', 'bots-and-commands'];
-            for (const chName of coreChannels) {
+            const logChannels = [
+                { name: 'logs-access', topic: 'User Joins, Leaves & Invites' },
+                { name: 'logs-moderate', topic: 'Automod, Timeouts, Bans, Kicks & Warnings' },
+                { name: 'logs-messages', topic: 'Deleted & Edited Message Logs' },
+                { name: 'logs-voice', topic: 'Voice State & Channel Activity Logs' },
+                { name: 'logs-channels', topic: 'Channel Updates & Permission Changes' },
+                { name: 'logs-members', topic: 'Role Assignments & Nickname Changes' },
+                { name: 'sus-account-tracker', topic: 'Flagged suspicious / newly created alt accounts' },
+                { name: 'inactivity-tracker', topic: '14-Day Inactivity Tracker Logs' }
+            ];
+
+            for (const logItem of logChannels) {
                 await guild.channels.create({
-                    name: chName,
+                    name: logItem.name,
                     type: ChannelType.GuildText,
-                    parent: category.id,
-                    topic: `Automated Starry channel for ${chName}`
+                    parent: sysCat.id,
+                    topic: logItem.topic,
+                    permissionOverwrites: [
+                        {
+                            id: guild.roles.everyone.id,
+                            deny: [PermissionFlagsBits.ViewChannel]
+                        },
+                        {
+                            id: botMember.id,
+                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+                        }
+                    ]
                 });
             }
 
-            // 3. Build Ticket Desk
+            // ==========================================
+            // 3. PROVISION SUPPORT, TICKETS & DESKS
+            // ==========================================
+            const deskCat = await guild.channels.create({
+                name: '🎫 SUPPORT & APPLICATIONS',
+                type: ChannelType.GuildCategory
+            });
+
+            // Ticket Channel & Panel
             const ticketChannel = await guild.channels.create({
-                name: '🎫-support-tickets',
+                name: 'open-a-ticket',
                 type: ChannelType.GuildText,
-                parent: category.id,
-                topic: 'Click the button below to open a private support ticket with staff.'
+                parent: deskCat.id,
+                topic: 'Click the button below to open a private support ticket.'
             });
 
             const ticketEmbed = new EmbedBuilder()
                 .setColor('#00F2FE')
-                .setTitle('🎫 Starry Support Center')
-                .setDescription('Need help? Click the button below to open a private ticket with our staff team instantly.');
-            
+                .setTitle('🎫 Starry Support Desk')
+                .setDescription('Need help or have questions? Click below to open a private ticket with our staff team.')
+                .setFooter({ text: `${guild.name} Support System` });
+
             const ticketRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('create_ticket').setLabel('Open Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
             );
             await ticketChannel.send({ embeds: [ticketEmbed], components: [ticketRow] }).catch(() => {});
 
-            // 4. Build Staff Desk
+            // Applications Channel & Panel
             const applyChannel = await guild.channels.create({
-                name: '📝-staff-applications',
+                name: 'staff-applications',
                 type: ChannelType.GuildText,
-                parent: category.id,
-                topic: 'Apply to join our moderation and staffing team!'
+                parent: deskCat.id,
+                topic: 'Apply to join our server staff team!'
             });
 
             const applyEmbed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle('📝 Staff Recruitment Desk')
-                .setDescription('Want to join our team? Click below to fill out your application questionnaire.');
+                .setDescription('Interested in becoming a moderator or staff member? Click the button below to start your questionnaire.')
+                .setFooter({ text: `${guild.name} Recruitment` });
 
             const applyRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('apply_staff').setLabel('Apply Now').setStyle(ButtonStyle.Primary).setEmoji('📋')
             );
             await applyChannel.send({ embeds: [applyEmbed], components: [applyRow] }).catch(() => {});
 
-            // 5. Update Config & Return Response
+            // Verification Channel & Panel
+            const verifyChannel = await guild.channels.create({
+                name: 'verify-here',
+                type: ChannelType.GuildText,
+                parent: deskCat.id,
+                topic: 'Verify your account to access the rest of the server.'
+            });
+
+            const verifyEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('🛡️ Server Verification')
+                .setDescription('Welcome! Click the button below to complete security verification and unlock full server access.')
+                .setFooter({ text: `${guild.name} Protection Engine` });
+
+            const verifyRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('verify_user').setLabel('Verify Account').setStyle(ButtonStyle.Success).setEmoji('✅')
+            );
+            await verifyChannel.send({ embeds: [verifyEmbed], components: [verifyRow] }).catch(() => {});
+
+            // ==========================================
+            // 4. PROVISION CUSTOM AI THEMED CATEGORIES
+            // ==========================================
+            let totalCustomChannels = 0;
+            if (customLayout.categories && Array.isArray(customLayout.categories)) {
+                for (const catData of customLayout.categories) {
+                    const createdCat = await guild.channels.create({
+                        name: catData.name.toUpperCase(),
+                        type: ChannelType.GuildCategory
+                    });
+
+                    if (Array.isArray(catData.channels)) {
+                        for (const chName of catData.channels) {
+                            const isVoice = chName.toLowerCase().includes('vc') || chName.toLowerCase().includes('lounge');
+                            await guild.channels.create({
+                                name: chName.toLowerCase().replace(/[^a-z0-9\-_ ]/g, '-'),
+                                type: isVoice ? ChannelType.GuildVoice : ChannelType.GuildText,
+                                parent: createdCat.id
+                            });
+                            totalCustomChannels++;
+                        }
+                    }
+                }
+            }
+
             try {
                 if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
                 await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { setupCompleted: true, triggerWord: 'Starry' }, { upsert: true });
             } catch (err) {}
 
-            const successEmbed = new EmbedBuilder()
+            // ==========================================
+            // 5. SUCCESS REPORT EMBED
+            // ==========================================
+            const reportEmbed = new EmbedBuilder()
                 .setColor('#2ecc71')
-                .setTitle('✨ Autonomous Server Setup Complete!')
-                .setDescription(
-                    'I have successfully scanned your server and deployed:\n' +
-                    '📁 **Master Category & Channels** (`welcome`, `rules`, `general-chat`)\n' +
-                    '🎫 **Live Support Ticket Panel**\n' +
-                    '📝 **Staff Application Desk**\n\n' +
-                    'Your server features are now synchronized and automated!'
+                .setTitle('✨ Autonomous AI Server Setup Complete!')
+                .setDescription(`I have built your custom server layout and wired all security systems as requested.`)
+                .addFields(
+                    { name: '🎯 Applied Theme', value: `\`${ownerPrompt}\``, inline: false },
+                    { name: '🛡️ Infrastructure', value: `Created **8 Log & Tracker Channels** under \`SECURITY & SYSTEM LOGS\``, inline: false },
+                    { name: '🎫 Desks Built', value: `Deployed **Tickets**, **Applications**, & **Verification** panels`, inline: false },
+                    { name: '📁 AI Custom Content', value: `Generated **${customLayout.categories.length} Categories** & **${totalCustomChannels} Channels** tailored to your theme`, inline: false }
                 )
-                .setFooter({ text: 'Starry Master Brain', iconURL: client.user.displayAvatarURL() });
+                .setFooter({ text: 'Starry Master AI Builder', iconURL: client.user.displayAvatarURL() })
+                .setTimestamp();
 
-            return interaction.editReply({ embeds: [successEmbed] });
+            return interaction.editReply({ content: null, embeds: [reportEmbed] });
 
         } catch (error) {
-            console.error('Setup-Starry Autonomous Error:', error);
-            return interaction.editReply({ content: '❌ An error occurred while auto-building channels. Ensure my role is at the top of your role list!' });
+            console.error('Setup-Starry AI Autonomous Error:', error);
+            return interaction.editReply({ content: `❌ Setup encountered an error: \`${error.message}\`. Make sure my bot role is higher than other roles and has Administrator permissions!` });
         }
     });
 
@@ -572,9 +678,6 @@ module.exports = (client) => {
             return message.reply('❌ **AI is a Premium feature!** Contact the bot owner to upgrade this server.').catch(() => {});
         }
 
-        // ==========================================
-        // ⚡ INSTANT LOCAL PRE-PARSERS (0ms DELAY)
-        // ==========================================
         const botMember = message.guild ? message.guild.members.me : null;
 
         // A. TIMEOUT PRE-PARSER
@@ -641,7 +744,7 @@ module.exports = (client) => {
             return message.channel.send(`🧹 Successfully cleared ${count} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
         }
 
-        // --- IMAGE GENERATION (POLLINATIONS) ---
+        // IMAGE GENERATION
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -670,9 +773,7 @@ module.exports = (client) => {
             }
         }
 
-        // ==========================================
-        // 🧠 FAIL-SAFE RETRY AI EXECUTION ENGINE
-        // ==========================================
+        // AI EXECUTION ENGINE
         await message.channel.sendTyping().catch(() => {});
 
         try {
@@ -700,7 +801,6 @@ module.exports = (client) => {
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 
-            // Execute Moderation Actions Generated by AI
             if (functionName) {
                 const botMember = message.guild ? message.guild.members.me : null;
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
@@ -749,7 +849,6 @@ module.exports = (client) => {
                 }
             }
 
-            // Deliver AI Response
             if (replyText && replyText.trim().length > 0) {
                 const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
                 for (const chunk of textChunks) {
