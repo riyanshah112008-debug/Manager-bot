@@ -88,7 +88,7 @@ const blacklistedUsers = new Set();
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
-        console.log('✅ Starry Protocol Module Loaded (Powered by upgraded Gemini Engine!)'); 
+        console.log('✅ Supreme Starry Protocol Engine Loaded (Powered by upgraded Gemini Engine!)'); 
     });
 
     // ==========================================
@@ -248,6 +248,105 @@ module.exports = (client) => {
     };
 
     // ==========================================
+    // 🧠 AUTONOMOUS MASTER COMMAND: /setup-starry
+    // ==========================================
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand() || interaction.commandName !== 'setup-starry') return;
+
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Only Administrators can run `/setup-starry`.', flags: [6] });
+        }
+
+        const guild = interaction.guild;
+
+        if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels) || 
+            !guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return interaction.reply({ content: '❌ I need **Manage Channels** and **Manage Roles** permissions to auto-build your server layout!', flags: [6] });
+        }
+
+        await interaction.reply({ content: '🛠️ **Starry AI is scanning your server and auto-building channels, ticket panels, and application desks...** Please wait.', flags: [6] });
+
+        try {
+            // 1. Create Category
+            const category = await guild.channels.create({
+                name: '🌟 STARRY COMMAND HUB',
+                type: ChannelType.GuildCategory,
+            });
+
+            // 2. Build Standard Channels
+            const coreChannels = ['welcome', 'rules', 'general-chat', 'bots-and-commands'];
+            for (const chName of coreChannels) {
+                await guild.channels.create({
+                    name: chName,
+                    type: ChannelType.GuildText,
+                    parent: category.id,
+                    topic: `Automated Starry channel for ${chName}`
+                });
+            }
+
+            // 3. Build Ticket Desk
+            const ticketChannel = await guild.channels.create({
+                name: '🎫-support-tickets',
+                type: ChannelType.GuildText,
+                parent: category.id,
+                topic: 'Click the button below to open a private support ticket with staff.'
+            });
+
+            const ticketEmbed = new EmbedBuilder()
+                .setColor('#00F2FE')
+                .setTitle('🎫 Starry Support Center')
+                .setDescription('Need help? Click the button below to open a private ticket with our staff team instantly.');
+            
+            const ticketRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('create_ticket').setLabel('Open Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
+            );
+            await ticketChannel.send({ embeds: [ticketEmbed], components: [ticketRow] }).catch(() => {});
+
+            // 4. Build Staff Desk
+            const applyChannel = await guild.channels.create({
+                name: '📝-staff-applications',
+                type: ChannelType.GuildText,
+                parent: category.id,
+                topic: 'Apply to join our moderation and staffing team!'
+            });
+
+            const applyEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setTitle('📝 Staff Recruitment Desk')
+                .setDescription('Want to join our team? Click below to fill out your application questionnaire.');
+
+            const applyRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('apply_staff').setLabel('Apply Now').setStyle(ButtonStyle.Primary).setEmoji('📋')
+            );
+            await applyChannel.send({ embeds: [applyEmbed], components: [applyRow] }).catch(() => {});
+
+            // 5. Update Config & Return Response
+            try {
+                if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
+                await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { setupCompleted: true, triggerWord: 'Starry' }, { upsert: true });
+            } catch (err) {}
+
+            const successEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('✨ Autonomous Server Setup Complete!')
+                .setDescription(
+                    'I have successfully scanned your server and deployed:\n' +
+                    '📁 **Master Category & Channels** (`welcome`, `rules`, `general-chat`)\n' +
+                    '🎫 **Live Support Ticket Panel**\n' +
+                    '📝 **Staff Application Desk**\n\n' +
+                    'Your server features are now synchronized and automated!'
+                )
+                .setFooter({ text: 'Starry Master Brain', iconURL: client.user.displayAvatarURL() });
+
+            return interaction.editReply({ embeds: [successEmbed] });
+
+        } catch (error) {
+            console.error('Setup-Starry Autonomous Error:', error);
+            return interaction.editReply({ content: '❌ An error occurred while auto-building channels. Ensure my role is at the top of your role list!' });
+        }
+    });
+
+    // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE
     // ==========================================
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A', appealLink = null) => {
@@ -371,7 +470,7 @@ module.exports = (client) => {
 
         if (isDevCommand || isDevButton || isDevModal) {
             if (!client.isOwner(interaction.user.id)) {
-                if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
+                if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', flags: [6] });
                 return;
             }
         }
@@ -392,19 +491,19 @@ module.exports = (client) => {
                 new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📢')
             );
 
-            return interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
+            return interaction.reply({ embeds: [embed], components: [row1, row2], flags: [6] });
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('dev_')) {
             const id = interaction.customId;
             if (id === 'dev_sysinfo') {
                 const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
+                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, flags: [6] });
             }
             if (id === 'dev_servers') {
                 let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;                
                 client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
-                return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
+                return interaction.reply({ content: serverList.slice(0, 1999), flags: [6] });
             }
             if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
             if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
@@ -413,7 +512,7 @@ module.exports = (client) => {
         if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_')) {
             const id = interaction.customId;
             if (id === 'modal_eval') { 
-                await interaction.deferReply({ ephemeral: true }); 
+                await interaction.deferReply({ flags: [6] }); 
                 try { 
                     let evaled = eval(interaction.fields.getTextInputValue('eval_code')); 
                     if (typeof evaled !== "string") evaled = require("util").inspect(evaled); 
@@ -423,7 +522,7 @@ module.exports = (client) => {
                 } 
             }
             if (id === 'modal_broadcast') { 
-                await interaction.deferReply({ ephemeral: true }); 
+                await interaction.deferReply({ flags: [6] }); 
                 const msg = interaction.fields.getTextInputValue('broadcast_msg'); 
                 let count = 0; 
                 client.guilds.cache.forEach(guild => { 
