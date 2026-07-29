@@ -128,7 +128,22 @@ commands.push(
     { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check your active pet and its happiness level', type: 1 }, { name: 'equip', description: 'Equip a different pet from your inventory', type: 1, options: [{ name: 'name', description: 'The exact name of the pet you want to equip', type: 3, required: true }] }] },
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
-    { name: 'setup-starry', description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.', default_member_permissions: '8' },
+    
+    // Updated /setup-starry with prompt option
+    { 
+        name: 'setup-starry', 
+        description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
+        default_member_permissions: '8',
+        options: [
+            {
+                name: 'prompt',
+                type: 3, // String type
+                required: false,
+                description: 'Describe your server theme (e.g., "Anime Chill Server", "Cyberpunk Gaming Community")'
+            }
+        ]
+    },
+    
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
     { name: 'emergency-lockdown', description: '🚨 EMERGENCY: Freezes the entire server. Nobody can type or join VC. (Admins Only)', default_member_permissions: '8' },
     { name: 'emergency-secure', description: '🛡️ EMERGENCY: Strips all dangerous permissions from all roles. (Admins Only)', default_member_permissions: '8' },
