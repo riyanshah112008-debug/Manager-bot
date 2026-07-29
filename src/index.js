@@ -17,10 +17,7 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const express = require('express');
-const cors = require('cors');
-
-// Allow ALL websites (or specifically Netlify) to call your API
-app.use(cors({ origin: '*' }));
+const cors = require('cors'); 
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Connectors } = require('shoukaku');
@@ -36,10 +33,11 @@ const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
 // ==========================================
 // 1. WEB SERVER & DASHBOARD HOSTING
 // ==========================================
-const app = express();
+const app = express(); // <-- app initialized HERE FIRST!
 const port = process.env.PORT || 10000;
 
-app.use(cors());
+// Enable CORS for all incoming requests (Fixes Netlify <-> Render fetch block)
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
 
