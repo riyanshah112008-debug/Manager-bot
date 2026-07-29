@@ -96,17 +96,16 @@ app.get('/', (req, res) => {
                     servers.forEach(s => {
                         const defaultIcon = 'https://cdn.discordapp.com/embed/avatars/0.png';
                         const timeAgo = s.lastBump ? new Date(s.lastBump).toLocaleString() : 'Recently';
-                        let tagsHtml = (s.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
-                        container.innerHTML += `
-                            <div class="card">
-                                <img src="${s.iconUrl || defaultIcon}" class="icon" alt="Icon">
-                                <h2 class="name">${s.name}</h2>
-                                <p class="desc">${s.description}</p>
-                                <div class="stats"><span>👥 ${s.memberCount} Members</span><span>🚀 ${s.bumps || 0} Bumps</span></div>
-                                <div class="tags">${tagsHtml}</div>
-                                <a href="${s.inviteLink}" target="_blank" class="join-btn">Join Server</a>
-                                <span class="bump-time">Last bumped: ${timeAgo}</span>
-                            </div>`;
+                        let tagsHtml = (s.tags || []).map(function(t) { return '<span class="tag">' + t + '</span>'; }).join('');
+                        container.innerHTML += '<div class="card">' +
+                            '<img src="' + (s.iconUrl || defaultIcon) + '" class="icon" alt="Icon">' +
+                            '<h2 class="name">' + s.name + '</h2>' +
+                            '<p class="desc">' + s.description + '</p>' +
+                            '<div class="stats"><span>👥 ' + s.memberCount + ' Members</span><span>🚀 ' + (s.bumps || 0) + ' Bumps</span></div>' +
+                            '<div class="tags">' + tagsHtml + '</div>' +
+                            '<a href="' + s.inviteLink + '" target="_blank" class="join-btn">Join Server</a>' +
+                            '<span class="bump-time">Last bumped: ' + timeAgo + '</span>' +
+                            '</div>';
                     });
                 } catch(e) {
                     document.getElementById('server-list').innerHTML = '<p>Error loading servers. Check back later!</p>';
@@ -152,7 +151,7 @@ client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 
-// Global Anti-Mass Mention Pre-Gatekeeper
+// Global Anti-Mass Mention Gatekeeper
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
 
@@ -251,8 +250,8 @@ client.manager = new Kazagumo({
     },
     plugins: [
         new KazagumoSpotify({ 
-            clientId: process.process?.env?.SPOTIFY_CLIENT_ID || 'dummy_id', 
-            clientSecret: process.process?.env?.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
+            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
             playlistPageLimit: 2, 
             albumPageLimit: 1, 
             searchMarket: 'IN', 
@@ -270,9 +269,9 @@ client.manager = new Kazagumo({
     restTimeout: 10000
 });
 
-// Always Log Lavalink Node Connection Status
+// Explicit Loggers for Lavalink Connections
 client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', (name, err) => console.log(`⚠️ [Lavalink] Node ${name} notice:`, err?.message || 'Connecting...'));
+client.manager.shoukaku.on('error', (name, error) => console.log(`⚠️ [Lavalink] Node ${name} issue:`, error?.message || error));
 client.manager.shoukaku.on('disconnect', (name) => console.log(`⚠️ [Lavalink] Disconnected from node: ${name}`));
 
 client.manager.on('playerStart', async (player, track) => {
@@ -432,7 +431,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
-        const player = client.manager?.getPlayer ? client.manager.getPlayer(interaction.guild.id) : null;
+        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
         const action = interaction.customId;
 
         await interaction.deferUpdate().catch(() => {});
@@ -504,7 +503,7 @@ const loadModule = (name, filePath) => {
     try { 
         const absolutePath = path.resolve(__dirname, filePath);
         
-        // Remove 'Cannot find module' log spam for optional/deleted files
+        // Quietly skip missing optional module files without dumping error stacks into Render logs
         if (!fs.existsSync(absolutePath)) {
             return;
         }
@@ -517,7 +516,7 @@ const loadModule = (name, filePath) => {
             console.log(`✅ ${name} Module Loaded (Object Export)`);
         }
     } catch (err) { 
-        console.error(`❌ Error in ${name}:`, err.message); 
+        console.error(`❌ Error loading ${name}:`, err.message); 
     }
 };
 async function startBot() {
@@ -528,19 +527,18 @@ async function startBot() {
     try {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
-
         const mods = [
             ['Moderation', './modules/moderation.js'], ['Automod', './modules/automod.js'], ['Media Only', './modules/mediaOnly.js'],
             ['Premium', './modules/premium.js'], ['Translator', './modules/translator.js'], ['Reaction Roles', './modules/reactionRoles.js'],
             ['Help', './modules/help.js'], ['Leveling', './modules/leveling.js'], ['Starry Protocol', './modules/starry.js'],
             ['Boost Tracker', './modules/boostTracker.js'], ['Truth or Dare', './modules/truthOrDare.js'], ['Support Tickets', './modules/tickets.js'],
-            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Tracker', './modules/tracker.js'],
+            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Warnings DB', './modules/warnings.js'], ['Tracker', './modules/tracker.js'],
             ['Sus Account Detector', './modules/susAccount.js'], ['Whois Lookup', './modules/whois.js'], ['Emoji Blocker', './modules/emojiBlocker.js'],
-            ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
+            ['Message Purger', './modules/clear.js'], ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
             ['AFK System', './modules/afk.js'], ['Server Logs', './modules/logs.js'], ['Giveaway', './modules/giveaway.js'], 
             ['Counting Game', './modules/count.js'], ['Advanced Mod & Security', './modules/advancedMod.js'], ['Interactive Mod Panel', './modules/modPanel.js'], 
             ['Reputation System', './modules/rep.js'], ['Voice Channel Manager', './modules/voiceManager.js'], ['Emoji Stealer', './modules/steal.js'], 
-            ['Welcome System', './modules/welcome.js'], ['Goodbye System', './modules/goodbye.js'], 
+            ['Welcome System', './modules/welcome.js'], ['User Protection', './modules/protect.js'], ['Goodbye System', './modules/goodbye.js'], 
             ['Server Backup Engine', './modules/backupEngine.js'], ['Role Manager', './modules/roleManager.js'], ['Anti-Abuse', './modules/antiAbuse.js'], 
             ['Random Chest Drops', './modules/chestDrop.js'], ['Autorole & Sticky Roles', './modules/autorole.js'], ['Verification System', './modules/verification.js'], 
             ['Auto Bump Engine', './modules/bumpEngine.js'], ['Network Telemetry Engine', './modules/telemetryEngine.js'],
