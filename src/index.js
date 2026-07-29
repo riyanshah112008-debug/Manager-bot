@@ -13,6 +13,7 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
+    StringSelectMenuBuilder, 
     PermissionFlagsBits 
 } = require('discord.js');
 const express = require('express');
@@ -230,14 +231,6 @@ const Nodes = [
         secure: true,
         retryAmount: 3,
         retryDelay: 5000
-    },
-    {
-        name: 'Lavalink-Public-SSL',
-        url: 'lavalink.node.moe:443',
-        auth: 'youshallnotpass',
-        secure: true,
-        retryAmount: 3,
-        retryDelay: 5000
     }
 ];
 
@@ -268,9 +261,8 @@ client.manager = new Kazagumo({
     restTimeout: 10000
 });
 
-// Suppress unhandled DNS log spam while logging active Lavalink node readiness
 client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', () => {}); // Silenced to prevent Render log spam during temporary DNS outages
+client.manager.shoukaku.on('error', () => {}); 
 client.manager.shoukaku.on('disconnect', () => {});
 
 client.manager.on('playerStart', async (player, track) => {
@@ -314,7 +306,28 @@ client.manager.on('playerStart', async (player, track) => {
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
-    const messageData = { embeds: [embed], components: [row1] };
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+    );
+
+    const filterRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
+            { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
+            { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
+            { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
+            { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
+            { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
+            { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' },
+            { label: 'Karaoke', description: 'Reduces vocal volume', value: 'karaoke', emoji: '🎤' },
+            { label: 'Tremolo', description: 'Modulates volume', value: 'tremolo', emoji: '🌊' },
+            { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
+        ])
+    );
+
+    const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
 
     try {
         if (interaction) {
@@ -323,7 +336,12 @@ client.manager.on('playerStart', async (player, track) => {
             const msg = await channel.send(messageData);
             player.data.set('nowPlayingMessage', msg);
         }
-    } catch (e) {}
+    } catch (e) {
+        if (channel) {
+            const msg = await channel.send(messageData).catch(() => {});
+            if (msg) player.data.set('nowPlayingMessage', msg);
+        }
+    }
 });
 
 client.manager.on('playerException', (player) => {
@@ -430,7 +448,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
-        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
+        const player = client.manager.getPlayer(interaction.guild.id);
         const action = interaction.customId;
 
         await interaction.deferUpdate().catch(() => {});
@@ -439,16 +457,58 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true }).catch(() => {});
         }
 
+        if (action.startsWith('dj_') && action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+            return interaction.followUp({ content: '❌ You need **Manage Channels** permission for VC control actions!', ephemeral: true }).catch(() => {});
+        }
+
         try {
+            if (action === 'dj_lock' && voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
+            }
+            if (action === 'dj_unlock' && voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
+            }
+
             if (player) {
                 if (action === 'music_pause') player.pause(!player.paused);
                 if (action === 'music_skip') player.skip();
                 if (action === 'music_stop') player.destroy();
+                if (action === 'music_loop' || action === 'dj_loop') {
+                    const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
+                    player.setLoop(nextLoop);
+                }
+                if (action === 'dj_vol_up') {
+                    let newVol = Math.min(player.volume + 10, 100);
+                    await player.setVolume(newVol);
+                }
+                if (action === 'dj_vol_down') {
+                    let newVol = Math.max(player.volume - 10, 0);
+                    await player.setVolume(newVol);
+                }
             }
         } catch (err) {
             console.error('❌ Button Execution Error:', err);
         }
         return;
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
+        const player = client.manager.getPlayer(interaction.guild.id);
+        if (!player) return interaction.reply({ content: '❌ No music is currently playing.', ephemeral: true });
+        if (interaction.member.voice?.channelId !== player.voiceId) return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
+
+        const filter = interaction.values[0];
+        await interaction.deferReply({ ephemeral: true });
+
+        if (filter === 'clear') { player.shoukaku.clearFilters(); return interaction.editReply('🚫 Filters cleared.'); }
+        else if (filter === 'bassboost') { player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] }); return interaction.editReply('🎸 **Bassboost** applied!'); }
+        else if (filter === '8d') { player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } }); return interaction.editReply('🌀 **8D Audio** applied!'); }
+        else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ **Nightcore** applied!'); }
+        else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 **Daycore** applied!'); }
+        else if (filter === 'vaporwave') { player.shoukaku.setFilters({ timescale: { speed: 0.85, pitch: 0.8, rate: 1.0 }, tremolo: { frequency: 14.0, depth: 0.3 } }); return interaction.editReply('🪩 **Vaporwave** applied!'); }
+        else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 **Karaoke** applied!'); }
+        else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
+        else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
     }
 
     if (!interaction.isChatInputCommand()) return;
@@ -496,22 +556,23 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 // ==========================================
-// 6. RESILIENT MASTER BOOTSTRAP SEQUENCE
+// 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
 const loadModule = (name, filePath) => {
     try { 
         const absolutePath = path.resolve(__dirname, filePath);
         
-        // Quietly skip missing optional module files without dumping error stacks into Render logs
         if (!fs.existsSync(absolutePath)) {
             return;
         }
 
         const mod = require(absolutePath);
         if (typeof mod === 'function') {
-            // Safely pass client and express app to all required modules
             mod(client, app);
             console.log(`✅ ${name} Module Loaded`); 
+        } else if (mod && typeof mod.init === 'function') {
+            mod.init(client, app);
+            console.log(`✅ ${name} Module Loaded (Object Init)`);
         } else {
             console.log(`✅ ${name} Module Loaded (Object Export)`);
         }
