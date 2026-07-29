@@ -120,8 +120,10 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-app.get('/health', (req, res) => res.status(200).send('awake'));
+// Serve static frontend files directly from the repository root folder
+app.use(express.static(path.join(__dirname, '../')));
 
+app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
     setInterval(() => {
