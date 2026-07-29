@@ -240,8 +240,8 @@ module.exports = (client) => {
         return Buffer.from(dump, 'utf-8');
     };
 
-    // ==========================================
-    // 🧠 AUTONOMOUS PROMPT-DRIVEN BUILDER: /setup-starry
+   // ==========================================
+    // 🧠 AUTONOMOUS AI MASTER BUILDER ENGINE: /setup-starry
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setup-starry') return;
@@ -263,15 +263,25 @@ module.exports = (client) => {
         const ownerPrompt = interaction.options.getString('prompt') || 'Standard High-Security Community Server';
 
         try {
-            await interaction.editReply({ content: `🧠 **Starry Neural Engine Active...**\nAnalyzing request: *"${ownerPrompt}"*\nGenerating custom structure & provisioning security infrastructure...` });
+            await interaction.editReply({ content: `🧠 **Starry Neural Engine Active...**\nCreating Verified roles, setting permission overwrites, and provisioning layout...` });
 
-            // 1. Generate Custom Themed Categories & Channels via Gemini
+            // 1. Create or Resolve Verified Role
+            let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
+            if (!verifiedRole) {
+                verifiedRole = await guild.roles.create({
+                    name: 'Verified',
+                    color: '#2ecc71',
+                    reason: 'Starry Auto-Setup: Verification Role'
+                });
+            }
+
+            // 2. Generate AI Themed Layout via Gemini
             let customLayout = {
                 categories: [
                     { name: '📢 INFORMATION & WELCOME', channels: ['welcome', 'rules', 'announcements', 'roles'] },
                     { name: '💬 MAIN COMMUNITY', channels: ['general-chat', 'media-sharing', 'bot-commands', 'memes'] },
                     { name: '🎮 GAMING & LOUNGE', channels: ['game-discussion', 'clips-and-highlights', 'looking-for-group'] },
-                    { name: '🔊 VOICE VCBOUND', channels: ['Lounge 1', 'Lounge 2', 'Gaming VC 1', 'Gaming VC 2'] }
+                    { name: '🔊 VOICE LOUNGE', channels: ['Lounge 1', 'Lounge 2', 'Gaming VC 1', 'Gaming VC 2'] }
                 ]
             };
 
@@ -281,9 +291,7 @@ Return ONLY a valid JSON object matching this exact structure (no markdown forma
 {
   "categories": [
     { "name": "CATEGORY NAME 1", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] },
-    { "name": "CATEGORY NAME 2", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] },
-    { "name": "CATEGORY NAME 3", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] },
-    { "name": "CATEGORY NAME 4", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] }
+    { "name": "CATEGORY NAME 2", "channels": ["channel-1", "channel-2", "channel-3", "channel-4"] }
   ]
 }
 Ensure there are at least 4 categories with 3 to 5 channels each tailored specifically to "${ownerPrompt}".`;
@@ -295,12 +303,14 @@ Ensure there are at least 4 categories with 3 to 5 channels each tailored specif
                 console.warn('⚠️ AI Layout generation fallback triggered:', aiErr.message);
             }
 
-            // ==========================================
-            // 2. PROVISION SYSTEM & INFRASTRUCTURE CATEGORY
-            // ==========================================
+            // 3. Create Security & Log Channels (Admin/Bot Only)
             const sysCat = await guild.channels.create({
                 name: '🛡️ SECURITY & SYSTEM LOGS',
-                type: ChannelType.GuildCategory
+                type: ChannelType.GuildCategory,
+                permissionOverwrites: [
+                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                ]
             });
 
             const logChannels = [
@@ -319,94 +329,72 @@ Ensure there are at least 4 categories with 3 to 5 channels each tailored specif
                     name: logItem.name,
                     type: ChannelType.GuildText,
                     parent: sysCat.id,
-                    topic: logItem.topic,
-                    permissionOverwrites: [
-                        {
-                            id: guild.roles.everyone.id,
-                            deny: [PermissionFlagsBits.ViewChannel]
-                        },
-                        {
-                            id: botMember.id,
-                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-                        }
-                    ]
+                    topic: logItem.topic
                 });
             }
 
-            // ==========================================
-            // 3. PROVISION SUPPORT, TICKETS & DESKS
-            // ==========================================
+            // 4. Create Support & Verification Desk (Everyone can view verify-here; other desks locked to Verified role)
             const deskCat = await guild.channels.create({
                 name: '🎫 SUPPORT & APPLICATIONS',
                 type: ChannelType.GuildCategory
             });
 
-            // Ticket Channel & Panel
+            // Verification Channel (Everyone can see, but cannot type)
+            const verifyChannel = await guild.channels.create({
+                name: 'verify-here',
+                type: ChannelType.GuildText,
+                parent: deskCat.id,
+                topic: 'Click the button below to verify your account and gain full access.',
+                permissionOverwrites: [
+                    { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+                    { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] } // Hide from verified users
+                ]
+            });
+
+            const verifyEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('🛡️ Server Account Verification')
+                .setDescription('Welcome! Click the button below to complete security verification and unlock full access to the server.')
+                .setFooter({ text: `${guild.name} Protection Engine` });
+
+            const verifyRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`verify_user_${verifiedRole.id}`).setLabel('Verify Account').setStyle(ButtonStyle.Success).setEmoji('✅')
+            );
+            await verifyChannel.send({ embeds: [verifyEmbed], components: [verifyRow] }).catch(() => {});
+
+            // Ticket Desk (Verified users only)
             const ticketChannel = await guild.channels.create({
                 name: 'open-a-ticket',
                 type: ChannelType.GuildText,
                 parent: deskCat.id,
-                topic: 'Click the button below to open a private support ticket.'
+                topic: 'Click the button below to open a private support ticket.',
+                permissionOverwrites: [
+                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                ]
             });
 
             const ticketEmbed = new EmbedBuilder()
                 .setColor('#00F2FE')
-                .setTitle('🎫 Starry Support Desk')
-                .setDescription('Need help or have questions? Click below to open a private ticket with our staff team.')
-                .setFooter({ text: `${guild.name} Support System` });
+                .setTitle('🎫 Support Desk')
+                .setDescription('Need help? Click the button below to open a private support ticket with staff.');
 
             const ticketRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('create_ticket').setLabel('Open Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
             );
             await ticketChannel.send({ embeds: [ticketEmbed], components: [ticketRow] }).catch(() => {});
 
-            // Applications Channel & Panel
-            const applyChannel = await guild.channels.create({
-                name: 'staff-applications',
-                type: ChannelType.GuildText,
-                parent: deskCat.id,
-                topic: 'Apply to join our server staff team!'
-            });
-
-            const applyEmbed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setTitle('📝 Staff Recruitment Desk')
-                .setDescription('Interested in becoming a moderator or staff member? Click the button below to start your questionnaire.')
-                .setFooter({ text: `${guild.name} Recruitment` });
-
-            const applyRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('apply_staff').setLabel('Apply Now').setStyle(ButtonStyle.Primary).setEmoji('📋')
-            );
-            await applyChannel.send({ embeds: [applyEmbed], components: [applyRow] }).catch(() => {});
-
-            // Verification Channel & Panel
-            const verifyChannel = await guild.channels.create({
-                name: 'verify-here',
-                type: ChannelType.GuildText,
-                parent: deskCat.id,
-                topic: 'Verify your account to access the rest of the server.'
-            });
-
-            const verifyEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setTitle('🛡️ Server Verification')
-                .setDescription('Welcome! Click the button below to complete security verification and unlock full server access.')
-                .setFooter({ text: `${guild.name} Protection Engine` });
-
-            const verifyRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('verify_user').setLabel('Verify Account').setStyle(ButtonStyle.Success).setEmoji('✅')
-            );
-            await verifyChannel.send({ embeds: [verifyEmbed], components: [verifyRow] }).catch(() => {});
-
-            // ==========================================
-            // 4. PROVISION CUSTOM AI THEMED CATEGORIES
-            // ==========================================
+            // 5. Create Themed Categories Locked to Verified Role
             let totalCustomChannels = 0;
             if (customLayout.categories && Array.isArray(customLayout.categories)) {
                 for (const catData of customLayout.categories) {
                     const createdCat = await guild.channels.create({
                         name: catData.name.toUpperCase(),
-                        type: ChannelType.GuildCategory
+                        type: ChannelType.GuildCategory,
+                        permissionOverwrites: [
+                            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, // Unverified users cannot see main categories
+                            { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] }
+                        ]
                     });
 
                     if (Array.isArray(catData.channels)) {
@@ -423,35 +411,48 @@ Ensure there are at least 4 categories with 3 to 5 channels each tailored specif
                 }
             }
 
+            // Save Setup State
             try {
                 if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
-                await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { setupCompleted: true, triggerWord: 'Starry' }, { upsert: true });
+                await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
             } catch (err) {}
 
-            // ==========================================
-            // 5. SUCCESS REPORT EMBED
-            // ==========================================
             const reportEmbed = new EmbedBuilder()
                 .setColor('#2ecc71')
-                .setTitle('✨ Autonomous AI Server Setup Complete!')
-                .setDescription(`I have built your custom server layout and wired all security systems as requested.`)
+                .setTitle('✨ Autonomous Server Setup Complete!')
+                .setDescription(`Server structure built and secured with verification permissions!`)
                 .addFields(
-                    { name: '🎯 Applied Theme', value: `\`${ownerPrompt}\``, inline: false },
-                    { name: '🛡️ Infrastructure', value: `Created **8 Log & Tracker Channels** under \`SECURITY & SYSTEM LOGS\``, inline: false },
-                    { name: '🎫 Desks Built', value: `Deployed **Tickets**, **Applications**, & **Verification** panels`, inline: false },
-                    { name: '📁 AI Custom Content', value: `Generated **${customLayout.categories.length} Categories** & **${totalCustomChannels} Channels** tailored to your theme`, inline: false }
+                    { name: '🛡️ Role Permissions', value: `Created & configured **${verifiedRole}** role. Unverified users can only view \`#verify-here\`.`, inline: false },
+                    { name: '🔒 Security Category', value: `Created **8 Log Channels** under \`SECURITY & SYSTEM LOGS\` (Admin Only).`, inline: false },
+                    { name: '🎫 Desks Deployed', value: `Deployed **Verification** & **Ticket** panels.`, inline: false },
+                    { name: '📁 AI Content', value: `Generated **${customLayout.categories.length} Categories** & **${totalCustomChannels} Channels**.`, inline: false }
                 )
-                .setFooter({ text: 'Starry Master AI Builder', iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
+                .setFooter({ text: 'Starry Master Brain', iconURL: client.user.displayAvatarURL() });
 
             return interaction.editReply({ content: null, embeds: [reportEmbed] });
 
         } catch (error) {
             console.error('Setup-Starry AI Autonomous Error:', error);
-            return interaction.editReply({ content: `❌ Setup encountered an error: \`${error.message}\`. Make sure my bot role is higher than other roles and has Administrator permissions!` });
+            return interaction.editReply({ content: `❌ Setup failed: \`${error.message}\`. Ensure my bot role is placed at the top of your role list!` });
         }
     });
 
+    // Verification Button Interaction Handler
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isButton() || !interaction.customId.startsWith('verify_user_')) return;
+
+        const roleId = interaction.customId.replace('verify_user_', '');
+        const role = interaction.guild.roles.cache.get(roleId);
+
+        if (!role) return interaction.reply({ content: '❌ Verification role missing. Please inform an admin.', flags: [6] });
+
+        try {
+            await interaction.member.roles.add(role);
+            return interaction.reply({ content: '✅ **Verification Complete!** Full server access granted.', flags: [6] });
+        } catch (err) {
+            return interaction.reply({ content: '❌ Error assigning role. Make sure the bot role is higher than the Verified role!', flags: [6] });
+        }
+    });
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE
     // ==========================================
