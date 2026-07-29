@@ -17,7 +17,10 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const express = require('express');
-const cors = require('cors'); 
+const cors = require('cors');
+
+// Allow ALL websites (or specifically Netlify) to call your API
+app.use(cors({ origin: '*' }));
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Connectors } = require('shoukaku');
