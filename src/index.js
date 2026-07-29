@@ -96,17 +96,17 @@ app.get('/', (req, res) => {
                     servers.forEach(s => {
                         const defaultIcon = 'https://cdn.discordapp.com/embed/avatars/0.png';
                         const timeAgo = s.lastBump ? new Date(s.lastBump).toLocaleString() : 'Recently';
-                        let tagsHtml = (s.tags || []).map(t => \`<span class="tag">\${t}</span>\`).join('');
-                        container.innerHTML += \`
+                        let tagsHtml = (s.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+                        container.innerHTML += `
                             <div class="card">
-                                <img src="\${s.iconUrl || defaultIcon}" class="icon" alt="Icon">
-                                <h2 class="name">\${s.name}</h2>
-                                <p class="desc">\${s.description}</p>
-                                <div class="stats"><span>👥 \${s.memberCount} Members</span><span>🚀 \${s.bumps || 0} Bumps</span></div>
-                                <div class="tags">\${tagsHtml}</div>
-                                <a href="\${s.inviteLink}" target="_blank" class="join-btn">Join Server</a>
-                                <span class="bump-time">Last bumped: \${timeAgo}</span>
-                            </div>\`;
+                                <img src="${s.iconUrl || defaultIcon}" class="icon" alt="Icon">
+                                <h2 class="name">${s.name}</h2>
+                                <p class="desc">${s.description}</p>
+                                <div class="stats"><span>👥 ${s.memberCount} Members</span><span>🚀 ${s.bumps || 0} Bumps</span></div>
+                                <div class="tags">${tagsHtml}</div>
+                                <a href="${s.inviteLink}" target="_blank" class="join-btn">Join Server</a>
+                                <span class="bump-time">Last bumped: ${timeAgo}</span>
+                            </div>`;
                     });
                 } catch(e) {
                     document.getElementById('server-list').innerHTML = '<p>Error loading servers. Check back later!</p>';
@@ -151,6 +151,33 @@ client.commands = new Collection();
 client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
+
+// Global Anti-Mass Mention Pre-Gatekeeper
+client.on('messageCreate', async (message) => {
+    if (!message.guild || message.author.bot || !message.member) return;
+
+    const rawPings = (message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || []).length;
+    const parsedPings = message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0);
+    const totalPings = Math.max(rawPings, parsedPings);
+
+    if (totalPings >= 5) {
+        const botMember = message.guild.members.me;
+
+        if (message.author.id === message.guild.ownerId) return;
+        if (message.member.roles.highest.position >= botMember.roles.highest.position) return;
+
+        if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            await message.delete().catch(() => {});
+        }
+
+        if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+            await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} mentions)`).catch(() => {});
+            
+            const warn = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for 10 minutes for mass mentioning (${totalPings} pings)!`).catch(() => null);
+            if (warn) setTimeout(() => warn.delete().catch(() => {}), 5000);
+        }
+    }
+});
 
 app.get('/verify', (req, res) => {
     const token = req.query.token;
@@ -213,14 +240,6 @@ const Nodes = [
         secure: true,
         retryAmount: 3,
         retryDelay: 5000
-    },
-    {
-        name: 'Node-v4-Backup',
-        url: 'ssl.freelavalink.ga:443',
-        auth: 'youshallnotpass',
-        secure: true,
-        retryAmount: 3,
-        retryDelay: 5000
     }
 ];
 
@@ -232,8 +251,8 @@ client.manager = new Kazagumo({
     },
     plugins: [
         new KazagumoSpotify({ 
-            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
+            clientId: process.process?.env?.SPOTIFY_CLIENT_ID || 'dummy_id', 
+            clientSecret: process.process?.env?.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
             playlistPageLimit: 2, 
             albumPageLimit: 1, 
             searchMarket: 'IN', 
@@ -251,9 +270,10 @@ client.manager = new Kazagumo({
     restTimeout: 10000
 });
 
-client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', () => {}); // Silenced to prevent Render console log spam
-client.manager.shoukaku.on('disconnect', () => {});
+// Always Log Lavalink Node Connection Status
+client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
+client.manager.shoukaku.on('error', (name, err) => console.log(`⚠️ [Lavalink] Node ${name} notice:`, err?.message || 'Connecting...'));
+client.manager.shoukaku.on('disconnect', (name) => console.log(`⚠️ [Lavalink] Disconnected from node: ${name}`));
 
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
@@ -296,28 +316,7 @@ client.manager.on('playerStart', async (player, track) => {
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
-    const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
-    );
-
-    const filterRow = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
-            { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
-            { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
-            { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
-            { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
-            { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
-            { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' },
-            { label: 'Karaoke', description: 'Reduces vocal volume', value: 'karaoke', emoji: '🎤' },
-            { label: 'Tremolo', description: 'Modulates volume', value: 'tremolo', emoji: '🌊' },
-            { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
-        ])
-    );
-
-    const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
+    const messageData = { embeds: [embed], components: [row1] };
 
     try {
         if (interaction) {
@@ -326,12 +325,7 @@ client.manager.on('playerStart', async (player, track) => {
             const msg = await channel.send(messageData);
             player.data.set('nowPlayingMessage', msg);
         }
-    } catch (e) {
-        if (channel) {
-            const msg = await channel.send(messageData).catch(() => {});
-            if (msg) player.data.set('nowPlayingMessage', msg);
-        }
-    }
+    } catch (e) {}
 });
 
 client.manager.on('playerException', (player) => {
@@ -438,7 +432,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
-        const player = client.manager.getPlayer(interaction.guild.id);
+        const player = client.manager?.getPlayer ? client.manager.getPlayer(interaction.guild.id) : null;
         const action = interaction.customId;
 
         await interaction.deferUpdate().catch(() => {});
@@ -447,109 +441,16 @@ client.on(Events.InteractionCreate, async interaction => {
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true }).catch(() => {});
         }
 
-        if (action.startsWith('dj_') && action !== 'dj_refresh_panel' && !member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-            return interaction.followUp({ content: '❌ You need **Manage Channels** permission for VC control actions!', ephemeral: true }).catch(() => {});
-        }
-
         try {
-            if (action === 'dj_lock' && voiceChannel) {
-                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false });
-            }
-            if (action === 'dj_unlock' && voiceChannel) {
-                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: true });
-            }
-            if (action === 'dj_limit_plus' && voiceChannel) {
-                let newLimit = Math.min((voiceChannel.userLimit || 0) + 5, 99);
-                await voiceChannel.setUserLimit(newLimit);
-            }
-            if (action === 'dj_limit_minus' && voiceChannel) {
-                let newLimit = Math.max((voiceChannel.userLimit || 0) - 5, 0);
-                await voiceChannel.setUserLimit(newLimit);
-            }
-            if (action === 'dj_reset_limit' && voiceChannel) {
-                await voiceChannel.setUserLimit(0);
-            }
-
             if (player) {
                 if (action === 'music_pause') player.pause(!player.paused);
                 if (action === 'music_skip') player.skip();
                 if (action === 'music_stop') player.destroy();
-                if (action === 'music_loop' || action === 'dj_loop') {
-                    const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
-                    player.setLoop(nextLoop);
-                }
-                if (action === 'dj_shuffle' && player.queue.size) player.queue.shuffle();
-                if (action === 'dj_clear_queue' && player.queue.size) player.queue.clear();
-                if (action === 'dj_vol_up') {
-                    let newVol = Math.min(player.volume + 10, 100);
-                    await player.setVolume(newVol);
-                }
-                if (action === 'dj_vol_down') {
-                    let newVol = Math.max(player.volume - 10, 0);
-                    await player.setVolume(newVol);
-                }
-            }
-            if (action === 'dj_refresh_panel' && voiceChannel && interaction.message?.embeds?.[0]) {
-                const vcName = voiceChannel.name;
-                const vcLimit = voiceChannel.userLimit === 0 ? 'Unlimited' : voiceChannel.userLimit;
-                const vcStatus = voiceChannel.permissionsFor(interaction.guild.roles.everyone).has('Connect') ? '🔓 Unlocked' : '🔒 Locked';
-                const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setDescription(`Complete master command center for voice channel security, moderation, and music playback.\n\n🎙️ **Active VC:** \`${vcName}\`\n🔒 **Access Status:** ${vcStatus}\n👥 **Member Capacity:** \`${voiceChannel.members.size} / ${vcLimit}\``);
-                await interaction.editReply({ embeds: [updatedEmbed] }).catch(() => {});
             }
         } catch (err) {
             console.error('❌ Button Execution Error:', err);
         }
         return;
-    }
-    if (interaction.isStringSelectMenu() && interaction.customId === 'shop_buy_menu') {
-        await interaction.deferReply({ ephemeral: true });
-        const itemId = interaction.values[0];
-        const User = require('./models/User');
-        const ShopItem = require('./models/ShopItem');
-        const item = await ShopItem.findById(itemId);
-        if (!item) return interaction.editReply('❌ That item no longer exists in the shop!');
-
-        let userData = await User.findOne({ userId: interaction.user.id, guildId: interaction.guild.id });
-        if (!userData || userData.credits < item.price) return interaction.editReply(`❌ You do not have enough credits! You need 💳 **${item.price.toLocaleString()} Credits**.`);
-
-        if (item.type === 'role') {
-            const role = interaction.guild.roles.cache.get(item.roleId);
-            if (!role) return interaction.editReply('❌ That role was deleted from server settings.');
-            if (interaction.member.roles.cache.has(role.id)) return interaction.editReply('✅ You already own this role!');
-            userData.credits -= item.price;
-            await userData.save();
-            await interaction.member.roles.add(role);
-            return interaction.editReply(`🎉 Success! You purchased the **${role.name}** role!`);
-        }
-        if (item.type === 'pet') {
-            if (userData.inventory.includes(item.name)) return interaction.editReply(`✅ You already own the **${item.name}** pet!`);
-            userData.credits -= item.price;
-            userData.inventory.push(item.name);
-            userData.activePet = item.name; 
-            userData.petHappiness = 50; 
-            await userData.save();
-            return interaction.editReply(`🐾 **Adoption Successful!** You now own a **${item.name}**!`);
-        }
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'music_filter') {
-        const player = client.manager.getPlayer(interaction.guild.id);
-        if (!player) return interaction.reply({ content: '❌ No music is currently playing.', ephemeral: true });
-        if (interaction.member.voice?.channelId !== player.voiceId) return interaction.reply({ content: '❌ You must be in my voice channel to use these controls!', ephemeral: true });
-
-        const filter = interaction.values[0];
-        await interaction.deferReply({ ephemeral: true });
-
-        if (filter === 'clear') { player.shoukaku.clearFilters(); return interaction.editReply('🚫 Filters cleared.'); }
-        else if (filter === 'bassboost') { player.shoukaku.setFilters({ equalizer: [{ band: 0, gain: 0.6 }, { band: 1, gain: 0.6 }, { band: 2, gain: 0.4 }] }); return interaction.editReply('🎸 **Bassboost** applied!'); }
-        else if (filter === '8d') { player.shoukaku.setFilters({ rotation: { rotationHz: 0.2 } }); return interaction.editReply('🌀 **8D Audio** applied!'); }
-        else if (filter === 'nightcore') { player.shoukaku.setFilters({ timescale: { speed: 1.2, pitch: 1.2, rate: 1.0 } }); return interaction.editReply('✨ **Nightcore** applied!'); }
-        else if (filter === 'daycore') { player.shoukaku.setFilters({ timescale: { speed: 0.8, pitch: 0.8, rate: 1.0 } }); return interaction.editReply('🌅 **Daycore** applied!'); }
-        else if (filter === 'vaporwave') { player.shoukaku.setFilters({ timescale: { speed: 0.85, pitch: 0.8, rate: 1.0 }, tremolo: { frequency: 14.0, depth: 0.3 } }); return interaction.editReply('🪩 **Vaporwave** applied!'); }
-        else if (filter === 'karaoke') { player.shoukaku.setFilters({ karaoke: { level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 } }); return interaction.editReply('🎤 **Karaoke** applied!'); }
-        else if (filter === 'tremolo') { player.shoukaku.setFilters({ tremolo: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('🌊 **Tremolo** applied!'); }
-        else if (filter === 'vibrato') { player.shoukaku.setFilters({ vibrato: { frequency: 4.0, depth: 0.5 } }); return interaction.editReply('〰️ **Vibrato** applied!'); }
     }
 
     if (!interaction.isChatInputCommand()) return;
@@ -567,75 +468,20 @@ client.on(Events.InteractionCreate, async interaction => {
             const totalServers = client.guilds.cache.size;
             const totalGlobalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
 
-            let globalJoins = 0, globalVc = 0, globalWarns = 0, globalKicks = 0, globalBans = 0, globalAutomod = 0;
-            allData.forEach(t => {
-                globalJoins += t.joinsThisHour || 0;
-                globalVc += t.totalVcSeconds || 0;
-                globalWarns += t.modStats?.warns || 0;
-                globalKicks += t.modStats?.kicks || 0;
-                globalBans += t.modStats?.bans || 0;
-                globalAutomod += t.modStats?.automodTriggers || 0;
-            });
-
-            const topServers = [...client.guilds.cache.values()]
-                .sort((a, b) => b.memberCount - a.memberCount)
-                .slice(0, 5)
-                .map(g => {
-                    const owner = client.users.cache.get(g.ownerId) || g.members.cache.get(g.ownerId)?.user;
-                    const ownerTag = owner ? owner.tag : 'Unknown/Uncached';
-                    return `**${g.name}**\n👑 Owner: ${ownerTag} (\`${g.ownerId}\`)\n👥 ${g.memberCount.toLocaleString()} Members`;
-                }).join('\n\n');
-
             return new EmbedBuilder()
                 .setColor(statusColor)
                 .setTitle('🌐 Starry Global Network Intelligence')
                 .setDescription(statusText)
                 .addFields(
-                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Active Servers\n• **${totalGlobalMembers.toLocaleString()}** Total Users`, inline: true },
-                    { name: '👥 Network Joins', value: `• **${globalJoins}** (Past Hour)`, inline: true },
-                    { name: '🎙️ Voice Tracking', value: `• **${(globalVc / 3600).toFixed(1)}** Hours Globally`, inline: true },
-                    { name: '🛡️ Global Enforcements', value: `Warns: **${globalWarns}** | Kicks: **${globalKicks}** | Bans: **${globalBans}** | AutoMod: **${globalAutomod}**`, inline: false },
-                    { name: '🏆 Top 5 Servers in Network', value: topServers || 'No data', inline: false }
+                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Active Servers\n• **${totalGlobalMembers.toLocaleString()}** Total Users`, inline: true }
                 )
-                .setFooter({ text: 'Starry Central Command • Auto Scheduled', iconURL: client.user.displayAvatarURL() })
+                .setFooter({ text: 'Starry Central Command', iconURL: client.user.displayAvatarURL() })
                 .setTimestamp();
         };
 
         try {
-            const firstEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle (Updating every 15s)', '#23a559');
-            const msg = await interaction.editReply({ embeds: [firstEmbed] });
-
-            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-            (async () => {
-                while (true) {
-                    const activeStartTime = Date.now();
-                    const threeMinutes = 3 * 60 * 1000;
-
-                    while (Date.now() - activeStartTime < threeMinutes) {
-                        await sleep(15000);
-                        try {
-                            const liveEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle (Updating every 15s)', '#23a559');
-                            await msg.edit({ embeds: [liveEmbed] });
-                        } catch (err) {
-                            if (err.code === 10008) return;
-                        }
-                    }
-                    try {
-                        const nextRunTime = Math.floor((Date.now() + (10 * 60 * 1000)) / 1000);
-                        const pausedEmbed = await buildTelemetryEmbed(
-                            `⏸️ **PAUSED** — Resting for 10 minutes.\nNext 3-min live update cycle starts <t:${nextRunTime}:R>!`, 
-                            '#FEE75C'
-                        );
-                        await msg.edit({ embeds: [pausedEmbed] });
-                    } catch (err) {
-                        if (err.code === 10008) return;
-                    }
-
-                    await sleep(10 * 60 * 1000);
-                }
-            })();
-
+            const firstEmbed = await buildTelemetryEmbed('🔴 **LIVE** — Active 3-Min Refresh Cycle', '#23a559');
+            await interaction.editReply({ embeds: [firstEmbed] });
             return;
         } catch (error) {
             return interaction.editReply({ content: '❌ Failed to initialize telemetry dashboard.' });
@@ -643,36 +489,27 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     const command = client.commands.get(interaction.commandName);
-    if (!command) {
-        return interaction.reply({ 
-            content: `❌ **Command file not found!** Make sure the command file exists in your \`src/commands/\` directory and is exported correctly.`, 
-            ephemeral: true 
-        }).catch(console.error);
-    }
-
-    const botOwners = ['1465049039153135639', '1257676837249617971']; 
-    if (process.env.OWNER_ID) botOwners.push(process.env.OWNER_ID);
-    if (command.ownerOnly && !botOwners.includes(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Access Denied: Not bot owner.', ephemeral: true });
-    }
+    if (!command) return;
 
     try { 
         await command.execute(interaction, client); 
     } catch (error) {
         console.error(`❌ Error executing /${interaction.commandName}:`, error);
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: '❌ An error occurred while executing this command!', ephemeral: true }).catch(() => {});
-        } else {
-            await interaction.reply({ content: '❌ An error occurred while executing this command!', ephemeral: true }).catch(() => {});
-        }
     }
 });
 // ==========================================
-// 6. MASTER BOOTSTRAP SEQUENCE
+// 6. RESILIENT MASTER BOOTSTRAP SEQUENCE
 // ==========================================
 const loadModule = (name, filePath) => {
     try { 
-        const mod = require(filePath);
+        const absolutePath = path.resolve(__dirname, filePath);
+        
+        // Remove 'Cannot find module' log spam for optional/deleted files
+        if (!fs.existsSync(absolutePath)) {
+            return;
+        }
+
+        const mod = require(absolutePath);
         if (typeof mod === 'function') {
             mod(client, app);
             console.log(`✅ ${name} Module Loaded`); 
@@ -680,10 +517,9 @@ const loadModule = (name, filePath) => {
             console.log(`✅ ${name} Module Loaded (Object Export)`);
         }
     } catch (err) { 
-        console.error(`❌ Failed to load ${name}:`, err.stack || err); 
+        console.error(`❌ Error in ${name}:`, err.message); 
     }
 };
-
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
         console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
@@ -692,23 +528,25 @@ async function startBot() {
     try {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
+
         const mods = [
             ['Moderation', './modules/moderation.js'], ['Automod', './modules/automod.js'], ['Media Only', './modules/mediaOnly.js'],
             ['Premium', './modules/premium.js'], ['Translator', './modules/translator.js'], ['Reaction Roles', './modules/reactionRoles.js'],
             ['Help', './modules/help.js'], ['Leveling', './modules/leveling.js'], ['Starry Protocol', './modules/starry.js'],
             ['Boost Tracker', './modules/boostTracker.js'], ['Truth or Dare', './modules/truthOrDare.js'], ['Support Tickets', './modules/tickets.js'],
-            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Warnings DB', './modules/warnings.js'], ['Tracker', './modules/tracker.js'],
+            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Tracker', './modules/tracker.js'],
             ['Sus Account Detector', './modules/susAccount.js'], ['Whois Lookup', './modules/whois.js'], ['Emoji Blocker', './modules/emojiBlocker.js'],
-            ['Message Purger', './modules/clear.js'], ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
+            ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
             ['AFK System', './modules/afk.js'], ['Server Logs', './modules/logs.js'], ['Giveaway', './modules/giveaway.js'], 
             ['Counting Game', './modules/count.js'], ['Advanced Mod & Security', './modules/advancedMod.js'], ['Interactive Mod Panel', './modules/modPanel.js'], 
             ['Reputation System', './modules/rep.js'], ['Voice Channel Manager', './modules/voiceManager.js'], ['Emoji Stealer', './modules/steal.js'], 
-            ['Welcome System', './modules/welcome.js'], ['User Protection', './modules/protect.js'], ['Goodbye System', './modules/goodbye.js'], 
+            ['Welcome System', './modules/welcome.js'], ['Goodbye System', './modules/goodbye.js'], 
             ['Server Backup Engine', './modules/backupEngine.js'], ['Role Manager', './modules/roleManager.js'], ['Anti-Abuse', './modules/antiAbuse.js'], 
             ['Random Chest Drops', './modules/chestDrop.js'], ['Autorole & Sticky Roles', './modules/autorole.js'], ['Verification System', './modules/verification.js'], 
             ['Auto Bump Engine', './modules/bumpEngine.js'], ['Network Telemetry Engine', './modules/telemetryEngine.js'],
             ['Social Actions Engine', './modules/socialActions.js']
         ];
+        
         mods.forEach(([name, path]) => loadModule(name, path));
 
         if (fs.existsSync('./modules/modApply.js')) loadModule('Mod Apply', './modules/modApply.js'); 
