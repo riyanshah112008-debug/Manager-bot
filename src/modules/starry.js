@@ -171,30 +171,6 @@ module.exports = (client) => {
             }
         }
     });
-    // ==========================================
-    // 🔄 FORCE COMMAND REGISTRATION WITH DISCORD
-    // ==========================================
-    client.on('ready', async () => {
-        try {
-            console.log('🔄 Forcing Slash Command Sync with Discord API...');
-
-            await client.application.commands.create({
-                name: 'setup-starry',
-                description: '🧠 MASTER COMMAND: Scans your server and links EVERY feature to the correct channels.',
-                default_member_permissions: '8' // Administrator
-            });
-
-            await client.application.commands.create({
-                name: 'ahelp',
-                description: 'Displays the complete Admin & Moderation Command Menu',
-                default_member_permissions: '8192' 
-            });
-
-            console.log('✅ Master commands successfully registered with Discord API!');
-        } catch (err) {
-            console.error('❌ Failed to register commands:', err);
-        }
-    });
 
     // ==========================================
     // 👑 MULTI-OWNER VERIFICATION HELPER
@@ -270,102 +246,7 @@ module.exports = (client) => {
 
         return Buffer.from(dump, 'utf-8');
     };
-    // ==========================================
-    // 🧠 MASTER COMMAND: /setup-starry
-    // ==========================================
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'setup-starry') return;
 
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Only Administrators can run `/setup-starry`.', ephemeral: true });
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor('#9b59b6')
-            .setTitle('🧠 Starry Master Configuration Engine')
-            .setDescription(
-                '**Initiate Global Server Sync?**\n\n' +
-                'My brain will scan your channels and automatically configure:\n' +
-                '🛡️ **Security:** Verification & Logs\n' +
-                '👋 **Community:** Welcomes, Starboard & Suggestions\n' +
-                '🎫 **Support:** Tickets, Appeals & Applications\n' +
-                '🎁 **Economy:** Loot Chests & Boosts\n\n' +
-                '*This will wire my internal systems directly into your server layout.*'
-            );
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('master_confirm').setLabel('SYNC SERVER').setStyle(ButtonStyle.Success).setEmoji('🧠'),
-            new ButtonBuilder().setCustomId('master_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
-        );
-
-        const response = await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-        const filter = i => i.user.id === interaction.user.id;
-
-        try {
-            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-            if (confirmation.customId === 'master_cancel') {
-                return confirmation.update({ content: '🚫 Master sync aborted.', embeds: [], components: [] });
-            }
-
-            await confirmation.update({ content: '🧠 **SCANNING NEURAL NETWORK (CHANNELS)...**', embeds: [], components: [] });
-
-            const guild = interaction.guild;
-            const channels = guild.channels.cache;
-            let report = [];
-
-            try {
-                if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
-                await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { triggerWord: 'Starry' }, { upsert: true });
-                report.push(`⚙️ **Identity:** Trigger word set to \`Starry\``);
-            } catch (err) {}
-
-            const welcome = channels.find(c => c.name.includes('welcome'));
-            if (welcome) report.push(`👋 **Welcomes:** Linked to <#${welcome.id}>`);
-
-            const starboard = channels.find(c => c.name.includes('starboard'));
-            if (starboard) report.push(`⭐ **Starboard:** Linked to <#${starboard.id}>`);
-
-            const suggestions = channels.find(c => c.name.includes('suggestions') || c.name.includes('ideas'));
-            if (suggestions) report.push(`💡 **Suggestions:** Linked to <#${suggestions.id}>`);
-
-            const verification = channels.find(c => c.name.includes('verification') || c.name.includes('verify'));
-            if (verification) report.push(`🛡️ **Verification:** System mapped to <#${verification.id}>`);
-
-            const logChannels = channels.filter(c => c.name.includes('logs-') || c.name.includes('-logs'));
-            if (logChannels.size > 0) {
-                report.push(`🗂️ **Smart Logging:** Successfully mapped **${logChannels.size}** log channels.`);
-            } else {
-                report.push(`🗂️ **Smart Logging:** Mapped to single fallback channel.`);
-            }
-
-            const openTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('opened tickets'));
-            const closedTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('closed tickets'));
-            if (openTicketsCat && closedTicketsCat) {
-                report.push(`🎫 **Tickets:** Bound to \`${openTicketsCat.name}\` & \`${closedTicketsCat.name}\``);
-            }
-
-            const booster = channels.find(c => c.name.includes('boosters') || c.name.includes('boost'));
-            if (booster) {
-                try {
-                    if (!BoostChannel) BoostChannel = require('../models/BoostChannel');
-                    await BoostChannel.findOneAndUpdate({ guildId: guild.id }, { channelId: booster.id }, { upsert: true });
-                    report.push(`🚀 **Boost Tracker:** Linked to <#${booster.id}>`);
-                } catch (err) {}
-            }
-
-            const successEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setTitle('✅ Neural Sync Complete')
-                .setDescription(`I have successfully scanned the server, identified the purpose of each channel, and linked my systems!\n\n${report.join('\n')}`)
-                .setFooter({ text: 'Starry Master Brain', iconURL: client.user.displayAvatarURL() });
-
-            await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
-
-        } catch (e) {
-            console.error('Master Sync Error:', e);
-            await interaction.editReply({ content: '⚠️ Command timed out or encountered an error. Setup aborted.', embeds: [], components: [] }).catch(() => {});
-        }
-    });
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE
     // ==========================================
@@ -436,6 +317,7 @@ module.exports = (client) => {
             return false; 
         }
     };
+
     // ==========================================
     // 📡 DEVELOPER CLI TEXT COMMANDS
     // ==========================================
@@ -474,6 +356,7 @@ module.exports = (client) => {
             } catch (err) { return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
         }
     });
+
     // ==========================================
     // 🎛️ INTERACTIVE DEV PANEL (UI)
     // ==========================================
@@ -551,6 +434,7 @@ module.exports = (client) => {
             }
         }
     });
+
     // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE
     // ==========================================
