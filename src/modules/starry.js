@@ -21,7 +21,7 @@ try {
     ChestChannel = require('../models/ChestChannel');
     BoostChannel = require('../models/BoostChannel');
 } catch (e) {
-    // Models will be loaded dynamically if needed
+    // Models loaded dynamically if needed
 }
 
 // Multi-API Key Support (Comma-separated in process.env.GEMINI_API_KEY)
@@ -47,7 +47,6 @@ const AI_MODELS = [
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fail-Safe Generator with Retries & Exponential Backoff
 async function generateAIResponseWithRetry(prompt) {
     if (apiKeys.length === 0) {
         throw new Error('Missing GEMINI_API_KEY environment variable.');
@@ -73,10 +72,10 @@ async function generateAIResponseWithRetry(prompt) {
                 const isRateLimit = errStatus === 429 || errStatus === 503 || (err.message && err.message.includes('high demand'));
 
                 if (isRateLimit && attempt < 3) {
-                    await sleep(attempt * 1000); // Backoff delay (1s, 2s)
+                    await sleep(attempt * 1000);
                     continue;
                 }
-                break; // Switch to next model if not rate limit or retries exhausted
+                break;
             }
         }
     }
@@ -85,6 +84,7 @@ async function generateAIResponseWithRetry(prompt) {
 }
 
 const blacklistedUsers = new Set();
+
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
@@ -97,23 +97,19 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || !message.member) return;
 
-        // Bypass checks: Server Owner, Admins, or Users with Moderate Members permission
-        if (
-            message.author.id === message.guild.ownerId ||
-            message.member.permissions.has(PermissionFlagsBits.Administrator) ||
-            message.member.permissions.has(PermissionFlagsBits.ModerateMembers) ||
-            client.isOwner(message.author.id)
-        ) {
-            return;
-        }
-
-        // Count total user pings, role pings, and @everyone / @here
+        // Count raw text pings using regex to prevent workaround via role/user formatting
+        const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
         const userMentionCount = message.mentions.users.size;
         const roleMentionCount = message.mentions.roles.size;
         const everyoneMention = message.mentions.everyone ? 1 : 0;
-        const totalPings = userMentionCount + roleMentionCount + everyoneMention;
+        
+        // Use highest count calculated between API parsing and raw text parsing
+        const totalPings = Math.max(
+            userMentionCount + roleMentionCount + everyoneMention,
+            rawPingMatches.length
+        );
 
-        // Threshold: 5 or more mentions in a single message triggers AutoMod
+        // Trigger AutoMod if mentions are 5 or more
         const PING_LIMIT = 5;
 
         if (totalPings >= PING_LIMIT) {
@@ -131,7 +127,8 @@ module.exports = (client) => {
 
             if (
                 botMember.permissions.has(PermissionFlagsBits.ModerateMembers) &&
-                message.member.roles.highest.position < botMember.roles.highest.position
+                message.member.roles.highest.position < botMember.roles.highest.position &&
+                message.author.id !== message.guild.ownerId
             ) {
                 // Send DM Notice
                 const dmSent = await client.sendPremiumModDM(
@@ -250,31 +247,6 @@ module.exports = (client) => {
     };
 
     // ==========================================
-    // 🛠️ UTILITIES: SERVER DUMP GENERATOR
-    // ==========================================
-    const generateServerDump = async (guild) => {
-        await guild.members.fetch();
-        let dump = `=================================================\n             SERVER DUMP: ${guild.name.toUpperCase()} \n=================================================\n\n[SERVER INFO]\n- Server ID     : ${guild.id}\n- Total Members : ${guild.memberCount}\n- Owner ID      : ${guild.ownerId}\n- Generated At  : ${new Date().toUTCString()}\n\n=================================================\n                 CHANNELS \n=================================================\n\n`;
-
-        const getTypeName = (type) => [0, 2, 4, 5, 15].includes(type) ? ['📝 TEXT ', '🔊 VOICE', '📁 CAT  ', '📢 ANN  ', '💬 FORUM'][[0, 2, 4, 5, 15].indexOf(type)] : '📄 MISC ';
-        const categories = guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
-        const textAndVoice = guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-
-        categories.forEach(cat => {
-            dump += `[📁 ${cat.name.toUpperCase()}] (ID: ${cat.id})\n`;
-            textAndVoice.filter(c => c.parentId === cat.id).forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
-            dump += `\n`;
-        });
-
-        const orphaned = textAndVoice.filter(c => !c.parentId);
-        if (orphaned.size > 0) {
-            dump += `[📁 UNCATEGORIZED]\n`;
-            orphaned.forEach(c => dump += `   ├─ [${getTypeName(c.type)}] ${c.name} (ID: ${c.id})\n`);
-        }
-
-        return Buffer.from(dump, 'utf-8');
-    };
-    // ==========================================
     // 🧠 MASTER COMMAND: /setup-starry
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
@@ -332,29 +304,9 @@ module.exports = (client) => {
             const suggestions = channels.find(c => c.name.includes('suggestions') || c.name.includes('ideas'));
             if (suggestions) report.push(`💡 **Suggestions:** Linked to <#${suggestions.id}>`);
 
-            const verification = channels.find(c => c.name.includes('verification') || c.name.includes('verify'));
-            if (verification) report.push(`🛡️ **Verification:** System mapped to <#${verification.id}>`);
-
             const logChannels = channels.filter(c => c.name.includes('logs-') || c.name.includes('-logs'));
             if (logChannels.size > 0) {
                 report.push(`🗂️ **Smart Logging:** Successfully mapped **${logChannels.size}** log channels.`);
-            } else {
-                report.push(`🗂️ **Smart Logging:** Mapped to single fallback channel.`);
-            }
-
-            const openTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('opened tickets'));
-            const closedTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('closed tickets'));
-            if (openTicketsCat && closedTicketsCat) {
-                report.push(`🎫 **Tickets:** Bound to \`${openTicketsCat.name}\` & \`${closedTicketsCat.name}\``);
-            }
-
-            const booster = channels.find(c => c.name.includes('boosters') || c.name.includes('boost'));
-            if (booster) {
-                try {
-                    if (!BoostChannel) BoostChannel = require('../models/BoostChannel');
-                    await BoostChannel.findOneAndUpdate({ guildId: guild.id }, { channelId: booster.id }, { upsert: true });
-                    report.push(`🚀 **Boost Tracker:** Linked to <#${booster.id}>`);
-                } catch (err) {}
             }
 
             const successEmbed = new EmbedBuilder()
@@ -469,92 +421,6 @@ module.exports = (client) => {
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
             return message.reply(`📊 **Starry System Info:**\n- **RAM Usage:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms\n- **Servers:** ${client.guilds.cache.size}`).catch(()=>{});
         }
-
-        if (text.startsWith('.eval ')) {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
-            try {
-                let evaled = eval(message.content.slice(6));
-                if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                return message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
-            } catch (err) { return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
-        }
-    });
-    // ==========================================
-    // 🎛️ INTERACTIVE DEV PANEL (UI)
-    // ==========================================
-    client.on('interactionCreate', async (interaction) => {
-        if (interaction.isButton() && ['social_hug_back', 'social_kiss_back', 'social_pat_back'].includes(interaction.customId)) {
-            return; 
-        }
-
-        const isDevCommand = interaction.isChatInputCommand() && interaction.commandName === 'devpanel';
-        const isDevButton = interaction.isButton() && interaction.customId.startsWith('dev_');
-        const isDevModal = interaction.isModalSubmit() && interaction.customId.startsWith('modal_');
-
-        if (isDevCommand || isDevButton || isDevModal) {
-            if (!client.isOwner(interaction.user.id)) {
-                if (interaction.isRepliable()) return interaction.reply({ content: '❌ **Access Denied:** You are not recognized as a bot owner!', ephemeral: true });
-                return;
-            }
-        }
-
-        if (isDevCommand) {
-            const embed = new EmbedBuilder()
-                .setTitle('💻 Starry Developer Control Panel')
-                .setDescription('Select an operation below.')
-                .setColor('#5865F2')
-                .setFooter({ text: 'Powered by Starry Protocol • Authorized Personnel Only' });
-
-            const row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_sysinfo').setLabel('System Info').setStyle(ButtonStyle.Primary).setEmoji('📊'),
-                new ButtonBuilder().setCustomId('dev_servers').setLabel('Server List').setStyle(ButtonStyle.Primary).setEmoji('🌐')
-            );
-            const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dev_eval_btn').setLabel('Eval JS').setStyle(ButtonStyle.Secondary).setEmoji('📝'),
-                new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('Broadcast').setStyle(ButtonStyle.Success).setEmoji('📢')
-            );
-
-            return interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
-        }
-
-        if (interaction.isButton() && interaction.customId.startsWith('dev_')) {
-            const id = interaction.customId;
-            if (id === 'dev_sysinfo') {
-                const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-                return interaction.reply({ content: `📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`, ephemeral: true });
-            }
-            if (id === 'dev_servers') {
-                let serverList = `🌐 **Starry is in ${client.guilds.cache.size} servers:**\n\n`;                
-                client.guilds.cache.sort((a, b) => b.memberCount - a.memberCount).forEach(g => { serverList += `🔹 **${g.name}** (${g.memberCount} members)\n`; });
-                return interaction.reply({ content: serverList.slice(0, 1999), ephemeral: true });
-            }
-            if (id === 'dev_eval_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_eval').setTitle('Execute JavaScript').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('eval_code').setLabel('Code to evaluate').setStyle(TextInputStyle.Paragraph).setRequired(true))));
-            if (id === 'dev_broadcast_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_broadcast').setTitle('Global Server Broadcast').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('broadcast_msg').setLabel('Announcement Message').setStyle(TextInputStyle.Paragraph).setRequired(true))));
-        }
-
-        if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_')) {
-            const id = interaction.customId;
-            if (id === 'modal_eval') { 
-                await interaction.deferReply({ ephemeral: true }); 
-                try { 
-                    let evaled = eval(interaction.fields.getTextInputValue('eval_code')); 
-                    if (typeof evaled !== "string") evaled = require("util").inspect(evaled); 
-                    return interaction.editReply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``); 
-                } catch (err) { 
-                    return interaction.editReply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``); 
-                } 
-            }
-            if (id === 'modal_broadcast') { 
-                await interaction.deferReply({ ephemeral: true }); 
-                const msg = interaction.fields.getTextInputValue('broadcast_msg'); 
-                let count = 0; 
-                client.guilds.cache.forEach(guild => { 
-                    const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages')); 
-                    if (channel) { channel.send(`📢 **System Announcement:**\n\n>>> ${msg}`).catch(()=>{}); count++; } 
-                }); 
-                return interaction.editReply(`✅ Broadcast sent to ${count} servers!`); 
-            }
-        }
     });
     // ==========================================
     // 🤖 AI & NLP MODERATION ENGINE
@@ -577,9 +443,8 @@ module.exports = (client) => {
         }
 
         const text = message.content.toLowerCase().trim();
-        const isImagine = text.startsWith('.imagine ');
         const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes(triggerWord) || text.includes('jarvis');
+        const hasName = text.includes(triggerWord);
         const isOwner = client.isOwner(message.author.id);
         let isReplyToBot = false;
 
@@ -588,200 +453,311 @@ module.exports = (client) => {
             if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
         }
 
-        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
+        if (!mentionsBot && !hasName && !isReplyToBot) return;
 
         if (!isOwner && (!message.guild || (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id, message.author.id)))) {
             return message.reply('❌ **AI is a Premium feature!** Contact the bot owner to upgrade this server.').catch(() => {});
         }
 
-        // ==========================================
-        // ⚡ INSTANT LOCAL PRE-PARSERS (0ms DELAY)
-        // ==========================================
-        const botMember = message.guild ? message.guild.members.me : null;
-
-        // A. TIMEOUT PRE-PARSER
-        const timeoutRegex = /timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)\s*(m|min|mins|minute|minutes|h|hr|hours|d|day|days)?/i;
-        const timeoutMatch = message.content.match(timeoutRegex);
-
-        if (timeoutMatch && message.guild) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-                return message.reply("❌ You or I lack **Moderate Members** permission.");
-            }
-            const targetId = timeoutMatch[1];
-            const amount = parseInt(timeoutMatch[2]) || 1;
-            const unit = (timeoutMatch[3] || 'm').toLowerCase();
-            let durationMs = amount * 60 * 1000;
-            if (unit.startsWith('h')) durationMs = amount * 60 * 60 * 1000;
-            if (unit.startsWith('d')) durationMs = amount * 24 * 60 * 60 * 1000;
-
-            const tMember = await message.guild.members.fetch(targetId).catch(() => null);
-            if (!tMember) return message.reply("❌ Target member not found in server.");
-
-            if (tMember.id === message.guild.ownerId) return message.reply("❌ I cannot moderate the **Server Owner**!");
-            if (tMember.id === client.user.id) return message.reply("❌ I cannot moderate **myself**!");
-
-            if (tMember.roles.highest.position >= botMember.roles.highest.position) {
-                return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role is higher than or equal to mine!`);
-            }
-
-            const caseId = Math.floor(Math.random() * 90000) + 10000;
-            const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', 'Direct Staff Command', `${amount} ${unit}`, message.guild, caseId);
-
-            await tMember.timeout(durationMs, `Requested by ${message.author.tag}`).catch(() => {});
-            return message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-        }
-
-        // B. CREATE ROLE PRE-PARSER
-        const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
-        const roleMatch = message.content.match(createRoleRegex);
-
-        if (roleMatch && message.guild) {
-            const roleName = roleMatch[1].trim();
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                return message.reply('❌ Missing **Manage Roles** permission.');
-            }
-            try {
-                const newRole = await message.guild.roles.create({ name: roleName, reason: `Requested by ${message.author.tag}` });
-                return message.reply(`✅ Successfully created role **${newRole.name}**!`);
-            } catch (err) {
-                return message.reply(`❌ Failed to create role: \`${err.message}\``);
-            }
-        }
-
-        // C. CLEAR / PURGE PRE-PARSER
-        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?/i;
-        const clearMatch = message.content.match(clearRegex);
-
-        if (clearMatch && message.guild) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                return message.reply('❌ Missing **Manage Messages** permission.');
-            }
-            const count = parseInt(clearMatch[1]);
-            if (count <= 0) return message.reply('❌ Please specify a valid number of messages to clear.');
-            const deleteCount = Math.min(count, 99) + 1;
-            await message.channel.bulkDelete(deleteCount, true).catch(() => {});
-            return message.channel.send(`🧹 Successfully cleared ${count} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
-        }
-
-        // --- IMAGE GENERATION (POLLINATIONS) ---
-        const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
-        let isImageRequest = isImagine;
-        let imagePrompt = "";
-
-        if (isImagine) {
-            imagePrompt = message.content.slice(9).trim();
-        } else if (hasName || mentionsBot) {
-            const match = message.content.match(imageRegex);
-            if (match) { isImageRequest = true; imagePrompt = match[1].trim(); }
-        }
-
-        if (isImageRequest) {
-            if (!imagePrompt) return message.reply('❌ Please tell me what to draw!').catch(() => {});
-            const replyMsg = await message.reply('🎨 Painting your picture... Please wait.').catch(() => null);
-            if (!replyMsg) return;
-            try {
-                const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
-                const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true`;
-                await message.reply({ 
-                    content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, 
-                    files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] 
-                }).catch(() => {});
-                return await replyMsg.delete().catch(() => {});
-            } catch (error) { 
-                return replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
-            }
-        }
-
-        // ==========================================
-        // 🧠 FAIL-SAFE RETRY AI EXECUTION ENGINE
-        // ==========================================
         await message.channel.sendTyping().catch(() => {});
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord AI companion. \nRULE 1: To moderate: [CMD:KICK|ID:123|REASON:spam] (Supported: KICK, BAN, UNBAN, CLEAR, TIMEOUT, UNTIMEOUT).\nRULE 2: To manage roles: [CMD:CREATEROLE|NAME:role_name] or [CMD:GIVEROLE|USER_ID:123|ROLE_ID:456].\nRULE 3: Keep responses concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
-
+            const prompt = `[SYSTEM INSTRUCTION]\nYou are ${displayName}, a helpful Discord AI companion.\nKeep responses concise and direct.\n\n[USER MESSAGE]\n${message.author.username} says: ${message.content}`;
             let replyText = await generateAIResponseWithRetry(prompt);
 
-            let functionName = null; 
-            let args = {};
-
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE)(?:\|(.*?))?\]/i);
-            if (cmdMatch) {
-                const action = cmdMatch[1].toUpperCase(); 
-                const params = (cmdMatch[2] || '').split('|');
-                const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
-
-                if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME') || getParam('ROLE'); }
-                else if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 10; }
-                else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 2; args.reason = getParam('REASON') || "AI Moderation"; }
-                else if (action === 'UNTIMEOUT') { functionName = 'untimeout_member'; args.userId = getParam('ID'); }
-                else if (action === 'UNBAN') { functionName = 'unban_member'; args.userId = getParam('ID'); }
-                else if (action === 'KICK' || action === 'BAN') { functionName = action.toLowerCase() + '_member'; args.userId = getParam('ID'); args.reason = getParam('REASON') || "AI Moderation"; }
-                else if (action === 'GIVEROLE' || action === 'REMOVEROLE') { functionName = action === 'GIVEROLE' ? 'give_role' : 'remove_role'; args.userId = getParam('USER_ID'); args.roleId = getParam('ROLE_ID'); }
-
-                replyText = replyText.replace(cmdMatch[0], '').trim();
-            }
-
-            // Execute Moderation Actions Generated by AI
-            if (functionName) {
-                const botMember = message.guild ? message.guild.members.me : null;
-                const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
-
-                if (functionName === "create_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
-                    const newRole = await message.guild.roles.create({ name: args.roleName || 'new-role' }).catch(() => null);
-                    if (newRole) await message.reply(`✅ Created role **${newRole.name}**!`);
-                }
-
-                if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
-                    const deleteCount = Math.min(args.amount, 99) + 1;
-                    await message.channel.bulkDelete(deleteCount, true).catch(() => {});
-                    await message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
-                }
-
-                const tId = (args.userId || '').replace(/\D/g, '');
-                if (tId && message.guild) {
-                    const tMember = await message.guild.members.fetch(tId).catch(() => null);
-
-                    if (tMember && tMember.id !== message.guild.ownerId && tMember.id !== client.user.id) {
-                        const isHigher = tMember.roles.highest.position >= botMember.roles.highest.position;
-
-                        if (!isHigher) {
-                            if (functionName === "timeout_member" && hasPerm(PermissionFlagsBits.ModerateMembers)) {
-                                const caseId = Math.floor(Math.random() * 90000) + 10000;
-                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', args.reason, `${args.minutes} minutes`, message.guild, caseId);
-                                await tMember.timeout(args.minutes * 60 * 1000, args.reason).catch(() => {}); 
-                                await message.reply(`⏰ Timed out <@${tId}> for ${args.minutes}m. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                            }
-
-                            if (functionName === "kick_member" && hasPerm(PermissionFlagsBits.KickMembers)) {
-                                const caseId = Math.floor(Math.random() * 90000) + 10000;
-                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'kick', args.reason, null, message.guild, caseId);
-                                await tMember.kick(args.reason).catch(() => {});
-                                await message.reply(`👢 Kicked <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                            }
-
-                            if (functionName === "ban_member" && hasPerm(PermissionFlagsBits.BanMembers)) {
-                                const caseId = Math.floor(Math.random() * 90000) + 10000;
-                                const dmSent = await client.sendPremiumModDM(tMember, message.member, 'ban', args.reason, 'Permanent', message.guild, caseId, 'https://discord.com');
-                                await tMember.ban({ reason: args.reason }).catch(() => {});
-                                await message.reply(`🔨 Banned <@${tId}>. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Deliver AI Response
             if (replyText && replyText.trim().length > 0) {
                 const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
                 for (const chunk of textChunks) {
                     await message.reply(chunk).catch(() => {});
                 }
             }
-
         } catch (error) {
             console.error("Gemini AI error:", error.message || error);
             return message.reply(`⏳ **High Demand Notice:** Google AI servers are currently experiencing a temporary traffic spike. Please try again in a few seconds!`).catch(() => {});
         }
     }); 
 };
+// ==========================================
+// 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
+// ==========================================
+process.env.FFMPEG_PATH = require('ffmpeg-static');
+
+const { 
+    Client, 
+    GatewayIntentBits, 
+    Partials, 
+    Collection, 
+    Events, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    StringSelectMenuBuilder, 
+    PermissionFlagsBits 
+} = require('discord.js');
+const express = require('express');
+const cors = require('cors'); 
+const https = require('https'); 
+const mongoose = require('mongoose'); 
+const { Connectors } = require('shoukaku');
+const { Kazagumo } = require('kazagumo');
+const fs = require('fs');
+const path = require('path');
+const KazagumoSpotify = require('kazagumo-spotify');
+
+// Import ServerListing model safely from bumpEngine
+const bumpEngine = require('./modules/bumpEngine');
+const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
+
+// ==========================================
+// 1. WEB SERVER & DASHBOARD HOSTING
+// ==========================================
+const app = express();
+const port = process.env.PORT || 10000;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); 
+
+app.get('/api/servers', async (req, res) => {
+    try {
+        if (!ServerListing) return res.json([]);
+        const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
+        res.json(servers);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch servers' });
+    }
+});
+
+app.get('/health', (req, res) => res.status(200).send('awake'));
+
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
+});
+
+// ==========================================
+// 2. DISCORD CLIENT INITIALIZATION
+// ==========================================
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
+}); 
+
+client.setMaxListeners(50);
+client.commands = new Collection(); 
+client.prefixCommands = new Collection();
+client.verifyMap = new Map(); 
+client.voiceCalls = new Map();
+
+// Global Anti-Mass Mention Gatekeeper
+client.on('messageCreate', async (message) => {
+    if (!message.guild || message.author.bot || !message.member) return;
+
+    const rawPings = (message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || []).length;
+    const parsedPings = message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0);
+    const totalPings = Math.max(rawPings, parsedPings);
+
+    if (totalPings >= 5) {
+        const botMember = message.guild.members.me;
+
+        if (message.author.id === message.guild.ownerId) return;
+        if (message.member.roles.highest.position >= botMember.roles.highest.position) return;
+
+        if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            await message.delete().catch(() => {});
+        }
+
+        if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+            await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} mentions)`).catch(() => {});
+            
+            const warn = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for 10 minutes for mass mentioning (${totalPings} pings)!`).catch(() => null);
+            if (warn) setTimeout(() => warn.delete().catch(() => {}), 5000);
+        }
+    }
+});
+// ==========================================
+// 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
+// ==========================================
+const Nodes = [
+    {
+        name: 'Jirayu-Node-v4',
+        url: 'lavalink.jirayu.net:13592',
+        auth: 'youshallnotpass',
+        secure: false,
+        retryAmount: 5,
+        retryDelay: 5000
+    },
+    {
+        name: 'Lavalink-v4-Primary',
+        url: 'lava-v4.ajiehospitality.com:443',
+        auth: 'https://discord.gg/vM3e3U389y',
+        secure: true,
+        retryAmount: 3,
+        retryDelay: 5000
+    }
+];
+
+client.manager = new Kazagumo({
+    defaultSearchEngine: "youtube",
+    searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
+    plugins: [
+        new KazagumoSpotify({ 
+            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
+            playlistPageLimit: 2, 
+            searchMarket: 'IN', 
+            searchPrefix: 'ytsearch:' 
+        })
+    ],
+    send: (guildId, payload) => {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) guild.shard.send(payload);
+    }
+}, new Connectors.DiscordJS(client), Nodes, {
+    voiceConnectionTimeout: 30000,
+    linkInitializers: true,
+    reconnectTries: 5,
+    restTimeout: 10000
+});
+
+client.manager.shoukaku.on('ready', (name) => console.log(`[Lavalink] Connected to node: ${name}`));
+client.manager.shoukaku.on('error', () => {}); 
+client.manager.shoukaku.on('disconnect', () => {});
+
+// ==========================================
+// 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
+// ==========================================
+client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
+client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
+client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
+process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
+process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
+
+client.once(Events.ClientReady, async () => {
+    console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+});
+
+// ==========================================
+// 5. INTERACTION ENGINE
+// ==========================================
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.guild && !interaction.isChatInputCommand()) return;
+
+    const moduleCommands = [
+        'premiumcheck', 'activatepremium', 'deactivatepremium', 'removepremium', 
+        'setlogs', 'tracker', 'set-listing', 'bump-setup', 'bump', 'autobump',
+        'setup-starry', 'ahelp', 'setupwelcome', 'modpanel',
+        'rep', 'checkrep', 'leaderboard', 'social'
+    ];
+    if (interaction.isChatInputCommand() && moduleCommands.includes(interaction.commandName)) {
+        return; 
+    }
+
+    const command = client.commands.get(interaction.commandName);
+    if (command) {
+        try {
+            await command.execute(interaction, client);
+        } catch (err) {
+            console.error(`❌ Error in /${interaction.commandName}:`, err);
+        }
+    }
+});
+// ==========================================
+// 6. RESILIENT MASTER MODULE LOADER
+// ==========================================
+const loadModule = (name, filePath) => {
+    try { 
+        // Resolve absolute path to prevent 'Cannot find module' crashes
+        const absolutePath = path.resolve(__dirname, filePath);
+        
+        if (!fs.existsSync(absolutePath)) {
+            console.log(`⚠️ Optional module skipped: ${name} (File not present at ${filePath})`);
+            return;
+        }
+
+        const mod = require(absolutePath);
+        if (typeof mod === 'function') {
+            mod(client, app);
+            console.log(`✅ ${name} Module Loaded`); 
+        } else {
+            console.log(`✅ ${name} Module Loaded (Object Export)`);
+        }
+    } catch (err) { 
+        console.error(`❌ Failed to load ${name}:`, err.message); 
+    }
+};
+
+async function startBot() {
+    if (!process.env.MONGO_URI || !process.env.TOKEN) {
+        console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
+        process.exit(1);
+    }
+    try {
+        await mongoose.connect(process.env.MONGO_URI);
+        console.log('🍃 Successfully connected to MongoDB Cloud!');
+
+        const mods = [
+            ['Moderation', './modules/moderation.js'], 
+            ['Automod', './modules/automod.js'], 
+            ['Media Only', './modules/mediaOnly.js'],
+            ['Premium', './modules/premium.js'], 
+            ['Translator', './modules/translator.js'], 
+            ['Reaction Roles', './modules/reactionRoles.js'],
+            ['Help', './modules/help.js'], 
+            ['Leveling', './modules/leveling.js'], 
+            ['Starry Protocol', './modules/starry.js'],
+            ['Boost Tracker', './modules/boostTracker.js'], 
+            ['Truth or Dare', './modules/truthOrDare.js'], 
+            ['Support Tickets', './modules/tickets.js'],
+            ['Admin Help Text Trigger', './modules/ahelpText.js'], 
+            ['Warnings DB', './modules/warnings.js'], 
+            ['Tracker', './modules/tracker.js'],
+            ['Sus Account Detector', './modules/susAccount.js'], 
+            ['Whois Lookup', './modules/whois.js'], 
+            ['Emoji Blocker', './modules/emojiBlocker.js'],
+            ['Message Purger', './modules/clear.js'], 
+            ['Master Setup Engine', './modules/masterSetupText.js'], 
+            ['Server Stats', './modules/serverStats.js'], 
+            ['AFK System', './modules/afk.js'], 
+            ['Server Logs', './modules/logs.js'], 
+            ['Giveaway', './modules/giveaway.js'], 
+            ['Counting Game', './modules/count.js'], 
+            ['Advanced Mod & Security', './modules/advancedMod.js'], 
+            ['Interactive Mod Panel', './modules/modPanel.js'], 
+            ['Reputation System', './modules/rep.js'], 
+            ['Voice Channel Manager', './modules/voiceManager.js'], 
+            ['Emoji Stealer', './modules/steal.js'], 
+            ['Welcome System', './modules/welcome.js'], 
+            ['User Protection', './modules/protect.js'], 
+            ['Goodbye System', './modules/goodbye.js'], 
+            ['Server Backup Engine', './modules/backupEngine.js'], 
+            ['Role Manager', './modules/roleManager.js'], 
+            ['Anti-Abuse', './modules/antiAbuse.js'], 
+            ['Random Chest Drops', './modules/chestDrop.js'], 
+            ['Autorole & Sticky Roles', './modules/autorole.js'], 
+            ['Verification System', './modules/verification.js'], 
+            ['Auto Bump Engine', './modules/bumpEngine.js'], 
+            ['Network Telemetry Engine', './modules/telemetryEngine.js'],
+            ['Social Actions Engine', './modules/socialActions.js']
+        ];
+        
+        // Dynamically load every module safely without breaking start sequence
+        mods.forEach(([name, filePath]) => loadModule(name, filePath));
+
+        await client.login(process.env.TOKEN);
+    } catch (error) {
+        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
+        process.exit(1);
+    }
+}
+
+startBot();
