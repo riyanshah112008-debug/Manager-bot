@@ -12,10 +12,9 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 
-// Permanent Netlify Web URL
 const STARRY_WEB_URL = 'https://stately-fox-454bb4.netlify.app';
 
-// --- SERVER LISTING SCHEMA (For Web Directory & Bumps) ---
+// --- SERVER LISTING SCHEMA (Directory DB) ---
 const serverListingSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     name: { type: String, required: true },
@@ -33,7 +32,7 @@ const serverListingSchema = new mongoose.Schema({
 
 const ServerListing = mongoose.models.ServerListing || mongoose.model('ServerListing', serverListingSchema);
 
-// --- BUMP SYSTEM CONFIG SCHEMA ---
+// --- BUMP CONFIG SCHEMA ---
 const bumpSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     reminderChannelId: { type: String, default: null }, 
@@ -44,15 +43,16 @@ const bumpSchema = new mongoose.Schema({
 });
 
 const BumpSystem = mongoose.models.BumpSystem || mongoose.model('BumpSystem', bumpSchema);
+
 // ==========================================
 // 2. SLASH COMMAND DEFINITIONS
 // ==========================================
 const setListingCommand = new SlashCommandBuilder()
     .setName('set-listing')
-    .setDescription('Configure how your server appears on the Starryboard Web Directory!')
+    .setDescription('Configure how your server appears on Starryboard Web Directory!')
     .addStringOption(option => 
         option.setName('description')
-            .setDescription('A short description of your server (Max 150 chars)')
+            .setDescription('Short description of your server (Max 150 chars)')
             .setRequired(true)
             .setMaxLength(150))
     .addStringOption(option => 
@@ -63,28 +63,28 @@ const setListingCommand = new SlashCommandBuilder()
 
 const bumpSetupCommand = new SlashCommandBuilder()
     .setName('bump-setup')
-    .setDescription('Configure the auto-bump reminder system & Premium Auto-Bumper.')
+    .setDescription('Configure auto-bump reminders & Premium Auto-Bumper.')
     .addRoleOption(option => 
         option.setName('ping_role')
-            .setDescription('The role to ping when the 2-hour cooldown is over.')
+            .setDescription('Role to ping when 2-hour cooldown ends.')
             .setRequired(false))
     .addChannelOption(option =>
         option.setName('channel')
-            .setDescription('The channel to send reminders and auto-bump logs in.')
+            .setDescription('Channel for reminders & bump logs.')
             .setRequired(false))
     .addBooleanOption(option =>
         option.setName('auto_bump')
-            .setDescription('💎 Premium Only: Enable 24/7 Automatic Bumping every 2 hours.')
+            .setDescription('💎 Premium: Enable 24/7 Automatic Bumping.')
             .setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 const bumpCommand = new SlashCommandBuilder()
     .setName('bump')
-    .setDescription('Bump this server to the top of the Starryboard Directory!');
+    .setDescription('Bump this server to the top of Starryboard Directory!');
 
 const autoBumpCommand = new SlashCommandBuilder()
     .setName('autobump')
-    .setDescription('💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!')
+    .setDescription('💎 Premium: Enable or disable 24/7 automatic bumping!')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 // ==========================================
@@ -120,7 +120,7 @@ function setupWebDirectoryAPI(app) {
         }
     });
 
-    // GET /api/v1/servers - Full search and directory listing endpoint
+    // GET /api/v1/servers - Search, filter & pagination endpoint
     app.get('/api/v1/servers', async (req, res) => {
         try {
             const { q, sort = 'bumped', page = 1, limit = 12, nsfw = 0 } = req.query;
@@ -162,7 +162,7 @@ function setupWebDirectoryAPI(app) {
         }
     });
 
-    // Keep legacy fallback route so old links don't break
+    // GET /api/servers - Legacy Endpoint Fallback
     app.get('/api/servers', async (req, res) => {
         try {
             const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
@@ -181,7 +181,9 @@ function getTimeAgo(date) {
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
-}// ==========================================
+}
+
+// ==========================================
 // 4. MAIN ENGINE MODULE FUNCTION
 // ==========================================
 const bumpEngineModule = (client, expressApp) => {
@@ -195,7 +197,6 @@ const bumpEngineModule = (client, expressApp) => {
         client.commands.set('autobump', { data: autoBumpCommand, execute: handleAutoBump });
     }
 
-    // --- AUTOMATIC SERVER SYNC ---
     async function syncGuildData(guild) {
         try {
             if (!guild) return;
@@ -205,7 +206,7 @@ const bumpEngineModule = (client, expressApp) => {
             if (guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
                 const defaultChannel = guild.systemChannel || guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreateInstantInvite));
                 if (defaultChannel) {
-                    const invite = await defaultChannel.createInvite({ maxAge: 0, maxUses: 0, reason: 'Starryboard Directory Auto-Sync' }).catch(() => null);
+                    const invite = await defaultChannel.createInvite({ maxAge: 0, maxUses: 0, reason: 'Starryboard Directory Sync' }).catch(() => null);
                     if (invite) inviteUrl = invite.url;
                 }
             }
@@ -221,7 +222,7 @@ const bumpEngineModule = (client, expressApp) => {
                     $setOnInsert: {
                         inviteLink: inviteUrl,
                         description: "A vibrant community on Starryboard!",
-                        tags: ['discord', 'community']
+                        tags: ['community', 'discord']
                     }
                 },
                 { upsert: true, new: true }
@@ -232,220 +233,13 @@ const bumpEngineModule = (client, expressApp) => {
     }
 
     client.once('ready', async () => {
-        console.log('🌐 Synchronizing server metadata for Starryboard...');
         for (const [id, guild] of client.guilds.cache) {
             await syncGuildData(guild);
         }
-        console.log('✅ Starryboard Auto-Sync Completed.');
     });
 
     client.on('guildCreate', async (guild) => await syncGuildData(guild));
     client.on('guildUpdate', async (oldG, newG) => await syncGuildData(newG));
-    client.on('guildMemberAdd', async (m) => await syncGuildData(m.guild));
-    client.on('guildMemberRemove', async (m) => await syncGuildData(m.guild));
-
-    // --- 💎 1. PREMIUM 24/7 AUTO-BUMP WORKER ---
-    setInterval(async () => {
-        try {
-            const now = new Date();
-            const twoHours = 2 * 60 * 60 * 1000;
-
-            const autoBumpConfigs = await BumpSystem.find({ autoBumpEnabled: true });
-
-            for (const config of autoBumpConfigs) {
-                const guild = client.guilds.cache.get(config.guildId);
-                if (!guild) continue;
-
-                const isPremium = typeof client.isPremium === 'function' ? client.isPremium(guild.id) : false;
-                if (!isPremium) {
-                    config.autoBumpEnabled = false;
-                    await config.save();
-                    continue;
-                }
-
-                let listing = await ServerListing.findOne({ guildId: guild.id });
-                if (!listing) listing = new ServerListing({ guildId: guild.id, name: guild.name });
-
-                if (!listing.lastBump || (now.getTime() - listing.lastBump.getTime() >= twoHours)) {
-                    
-                    let inviteUrl = listing.inviteLink;
-                    if (guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
-                        const channel = guild.systemChannel || guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreateInstantInvite));
-                        if (channel) {
-                            const inv = await channel.createInvite({ maxAge: 0, maxUses: 0, reason: 'Starryboard Auto-Bump' }).catch(() => null);
-                            if (inv) inviteUrl = inv.url;
-                        }
-                    }
-
-                    listing.name = guild.name;
-                    listing.iconUrl = guild.iconURL({ extension: 'png', size: 256 }) || null;
-                    listing.memberCount = guild.memberCount;
-                    listing.inviteLink = inviteUrl;
-                    listing.bumps = (listing.bumps || 0) + 1;
-                    listing.lastBump = now;
-                    await listing.save();
-
-                    config.nextBump = new Date(now.getTime() + twoHours);
-                    config.isReady = false;
-                    await config.save();
-
-                    const logChannel = guild.channels.cache.get(config.reminderChannelId) || guild.systemChannel;
-                    if (logChannel) {
-                        const embed = new EmbedBuilder()
-                            .setColor('#00F2FE')
-                            .setTitle('💎 Premium Auto-Bump Executed!')
-                            .setDescription(`**${guild.name}** was automatically bumped to the top of **[Starryboard](${STARRY_WEB_URL})**!\n\n📈 Total Bumps: \`${listing.bumps}\`\n⏳ Next Auto-Bump: <t:${Math.floor((now.getTime() + twoHours) / 1000)}:R>`)
-                            .setThumbnail(listing.iconUrl)
-                            .setFooter({ text: 'Starryboard Premium Engine' });
-
-                        const row = new ActionRowBuilder().addComponents(
-                            new ButtonBuilder()
-                                .setLabel('View on Starryboard')
-                                .setStyle(ButtonStyle.Link)
-                                .setURL(STARRY_WEB_URL)
-                        );
-
-                        await logChannel.send({ embeds: [embed], components: [row] }).catch(() => {});
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Premium Auto-Bump Worker Error:', error);
-        }
-    }, 2 * 60 * 1000);
-
-    // --- ⏰ 2. COOLDOWN REMINDER TIMER ---
-    setInterval(async () => {
-        try {
-            const dueBumps = await BumpSystem.find({ nextBump: { $lte: new Date() }, isReady: false, autoBumpEnabled: false });
-
-            for (const data of dueBumps) {
-                data.isReady = true;
-                await data.save();
-
-                const guild = client.guilds.cache.get(data.guildId);
-                if (!guild) continue;
-
-                const channel = guild.channels.cache.get(data.reminderChannelId) || guild.systemChannel;
-                if (!channel) continue;
-
-                const pingText = data.pingRoleId ? `<@&${data.pingRoleId}>` : '';
-
-                const embed = new EmbedBuilder()
-                    .setColor('#2ecc71')
-                    .setTitle('🚀 It is time to Bump!')
-                    .setDescription(`The 2-hour cooldown is over! Run \`/bump\` to push your server to the top of **[Starryboard](${STARRY_WEB_URL})**!`)
-                    .setThumbnail(guild.iconURL({ extension: 'png' }) || 'https://cdn-icons-png.flaticon.com/512/2852/2852825.png') 
-                    .setFooter({ text: 'Starryboard Global Bumper' });
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setLabel('View Starryboard')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(STARRY_WEB_URL)
-                );
-
-                await channel.send({ content: pingText, embeds: [embed], components: [row] }).catch(() => {});
-            }
-        } catch (error) {
-            console.error('Bump Engine Timer Error:', error);
-        }
-    }, 60000);
-    // --- ⚙️ COMMAND HANDLERS ---
-    async function handleSetListing(interaction) {
-        try {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
-        } catch (e) { return; }
-
-        const description = interaction.options.getString('description');
-        const tagsInput = interaction.options.getString('tags') || '';
-        const tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase().substring(0, 15)).filter(t => t.length > 0).slice(0, 5);
-
-        let listing = await ServerListing.findOne({ guildId: interaction.guild.id });
-
-        if (!listing) {
-            const owner = await interaction.guild.fetchOwner().catch(() => null);
-            listing = new ServerListing({
-                guildId: interaction.guild.id,
-                name: interaction.guild.name,
-                ownerId: owner ? owner.id : null,
-                inviteLink: 'Not generated yet (Run /bump)'
-            });
-        }
-
-        listing.description = description;
-        listing.tags = tags.length > 0 ? tags : ['community'];
-        listing.iconUrl = interaction.guild.iconURL({ extension: 'png', size: 256 }) || null;
-        listing.memberCount = interaction.guild.memberCount;
-        await listing.save();
-
-        const embed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setTitle('🌐 Server Profile Synced!')
-            .setDescription(`Your server card has been updated on **[Starryboard](${STARRY_WEB_URL})**!`)
-            .addFields(
-                { name: 'Description', value: description },
-                { name: 'Tags', value: listing.tags.map(t => `\`${t}\``).join(' ') }
-            )
-            .setThumbnail(listing.iconUrl)
-            .setFooter({ text: 'Starryboard Directory Engine' });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setLabel('View on Starryboard')
-                .setStyle(ButtonStyle.Link)
-                .setURL(STARRY_WEB_URL)
-        );
-
-        return interaction.editReply({ embeds: [embed], components: [row] });
-    }
-
-    async function handleBumpSetup(interaction) {
-        try {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
-        } catch (e) { return; }
-
-        const pingRole = interaction.options.getRole('ping_role');
-        const channel = interaction.options.getChannel('channel');
-        const autoBumpOpt = interaction.options.getBoolean('auto_bump');
-
-        let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
-        if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
-
-        if (pingRole) bumpData.pingRoleId = pingRole.id;
-        if (channel) bumpData.reminderChannelId = channel.id;
-
-        let autoBumpMsg = '`Disabled`';
-
-        if (autoBumpOpt !== null) {
-            const isPremium = typeof client.isPremium === 'function' ? client.isPremium(interaction.guildId, interaction.user.id) : false;
-
-            if (autoBumpOpt && !isPremium) {
-                return interaction.editReply({ 
-                    content: '💎 **Premium Feature!** Auto-Bump is exclusive to Premium servers. Contact the bot owner to upgrade!' 
-                });
-            }
-
-            bumpData.autoBumpEnabled = autoBumpOpt;
-            autoBumpMsg = autoBumpOpt ? '💎 `Enabled (24/7 Bumping)`' : '`Disabled`';
-        } else {
-            autoBumpMsg = bumpData.autoBumpEnabled ? '💎 `Enabled (24/7 Bumping)`' : '`Disabled`';
-        }
-
-        await bumpData.save();
-
-        const embed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setTitle('⚙️ Bump Preferences Saved')
-            .setDescription('Your auto-bump notification preferences are ready!')
-            .addFields(
-                { name: 'Reminder Channel', value: bumpData.reminderChannelId ? `<#${bumpData.reminderChannelId}>` : '`Current Channel`', inline: true },
-                { name: 'Ping Role', value: bumpData.pingRoleId ? `<@&${bumpData.pingRoleId}>` : '`None`', inline: true },
-                { name: '24/7 Auto-Bump', value: autoBumpMsg, inline: false }
-            );
-
-        return interaction.editReply({ embeds: [embed] });
-    }
 
     // --- 🚀 /bump HANDLER ---
     async function handleBump(interaction) {
@@ -476,9 +270,7 @@ const bumpEngineModule = (client, expressApp) => {
 
         const owner = await guild.fetchOwner().catch(() => null);
 
-        if (!listing) {
-            listing = new ServerListing({ guildId: guild.id });
-        }
+        if (!listing) listing = new ServerListing({ guildId: guild.id });
 
         listing.name = guild.name;
         listing.iconUrl = guild.iconURL({ extension: 'png', size: 256 }) || null;
@@ -519,18 +311,59 @@ const bumpEngineModule = (client, expressApp) => {
         return interaction.editReply({ embeds: [embed], components: [row] });
     }
 
+    async function handleSetListing(interaction) {
+        try {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        } catch (e) { return; }
+
+        const description = interaction.options.getString('description');
+        const tagsInput = interaction.options.getString('tags') || '';
+        const tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase().substring(0, 15)).filter(t => t.length > 0).slice(0, 5);
+
+        let listing = await ServerListing.findOne({ guildId: interaction.guild.id });
+        if (!listing) listing = new ServerListing({ guildId: interaction.guild.id, name: interaction.guild.name });
+
+        listing.description = description;
+        listing.tags = tags.length > 0 ? tags : ['community'];
+        listing.iconUrl = interaction.guild.iconURL({ extension: 'png', size: 256 }) || null;
+        listing.memberCount = interaction.guild.memberCount;
+        await listing.save();
+
+        const embed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setTitle('🌐 Server Profile Synced!')
+            .setDescription(`Your server card has been updated on **[Starryboard](${STARRY_WEB_URL})**!`)
+            .addFields(
+                { name: 'Description', value: description },
+                { name: 'Tags', value: listing.tags.map(t => `\`${t}\``).join(' ') }
+            )
+            .setThumbnail(listing.iconUrl);
+
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    async function handleBumpSetup(interaction) {
+        try {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+        } catch (e) { return; }
+
+        const pingRole = interaction.options.getRole('ping_role');
+        const channel = interaction.options.getChannel('channel');
+
+        let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
+        if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
+
+        if (pingRole) bumpData.pingRoleId = pingRole.id;
+        if (channel) bumpData.reminderChannelId = channel.id;
+
+        await bumpData.save();
+        return interaction.editReply({ content: '⚙️ **Auto-Bump preferences saved successfully!**' });
+    }
+
     async function handleAutoBump(interaction) {
         try {
             if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
         } catch (e) { return; }
-
-        const isPremium = typeof client.isPremium === 'function' ? client.isPremium(interaction.guildId, interaction.user.id) : false;
-
-        if (!isPremium) {
-            return interaction.editReply({ 
-                content: '💎 **Premium Feature!** Auto-Bump is exclusive to Premium servers. Contact the bot owner to upgrade!' 
-            });
-        }
 
         let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
         if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
@@ -538,18 +371,9 @@ const bumpEngineModule = (client, expressApp) => {
         bumpData.autoBumpEnabled = !bumpData.autoBumpEnabled;
         await bumpData.save();
 
-        const statusText = bumpData.autoBumpEnabled ? 'ENABLED (24/7 Auto-Bumping Active 🚀)' : 'DISABLED';
-
-        const embed = new EmbedBuilder()
-            .setColor(bumpData.autoBumpEnabled ? '#00F2FE' : '#ED4245')
-            .setTitle('💎 Auto-Bump Status Updated')
-            .setDescription(`24/7 Auto-Bump is now **${statusText}** for **${interaction.guild.name}**!`)
-            .setFooter({ text: 'Starryboard Premium Engine' });
-
-        return interaction.editReply({ embeds: [embed] });
+        return interaction.editReply({ content: `💎 Auto-Bump status updated to **${bumpData.autoBumpEnabled ? 'ENABLED' : 'DISABLED'}**!` });
     }
 
-    // Interaction Router
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'set-listing') await handleSetListing(interaction);
@@ -559,17 +383,6 @@ const bumpEngineModule = (client, expressApp) => {
     });
 };
 
-// ==========================================
-// 5. HYBRID MODULE EXPORTS
-// ==========================================
 bumpEngineModule.ServerListing = ServerListing;
 bumpEngineModule.BumpSystem = BumpSystem;
-
-bumpEngineModule.setListingData = setListingCommand;
-bumpEngineModule.bumpSetupData = bumpSetupCommand;
-bumpEngineModule.bumpData = bumpCommand;
-bumpEngineModule.autoBumpData = autoBumpCommand;
-
-bumpEngineModule.commands = [setListingCommand, bumpSetupCommand, bumpCommand, autoBumpCommand];
-
 module.exports = bumpEngineModule;
