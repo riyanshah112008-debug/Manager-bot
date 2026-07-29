@@ -69,6 +69,7 @@ try {
 } catch (err) {
     console.warn('⚠️ Could not load master moderation payloads:', err.message);
 }
+
 // ==========================================
 // GIVEAWAY SLASH COMMAND BUILDERS
 // ==========================================
@@ -140,6 +141,7 @@ commands.push(
     { name: 'devpanel', description: '💻 Open the interactive developer control panel with clickable buttons' },
     autoroleCommandDef
 );
+
 // ==========================================
 // ROLES, SETUP & UTILITIES
 // ==========================================
@@ -213,6 +215,7 @@ commands.push(
     { name: 'autobump', description: '💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!', default_member_permissions: ADMIN },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
 );
+
 // ==========================================
 // DEDUPLICATION & DEPLOYMENT ENGINE
 // ==========================================
@@ -242,31 +245,40 @@ async function deployCommands() {
             throw new Error('🛑 Could not parse CLIENT_ID from TOKEN. Please set CLIENT_ID explicitly.');
         }
     }
+    
     const rest = new REST({ version: '10' }).setToken(token);
 
-    const isGlobal = process.argv.includes('--global') || (!guildId && process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true');
+    // Auto-detect instant guild registration if GUILD_ID is provided
+    const isGlobal = process.argv.includes('--global');
     const isLocal = guildId && guildId !== 'PASTE_YOUR_SERVER_ID_HERE' && !isGlobal;
 
     const route = isLocal 
         ? Routes.applicationGuildCommands(clientId, guildId)
         : Routes.applicationCommands(clientId);
 
-    if (isGlobal) {
-        console.log(`🌍 Registering ${finalPayload.length} application commands GLOBALLY across all servers & DMs...`);
-    } else if (isLocal) {
-        console.log(`⚡ Registering ${finalPayload.length} application commands INSTANTLY to Guild ID: ${guildId}`);
+    if (isLocal) {
+        console.log(`⚡ [INSTANT SYNC] Registering ${finalPayload.length} application commands directly to Test Guild ID: ${guildId}`);
     } else {
-        console.log(`🌍 Registering ${finalPayload.length} application commands globally...`);
+        console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally (may take up to 1 hour to propagate)...`);
     }
 
-    const result = await rest.put(route, { body: finalPayload });
-    console.log(`✅ Successfully registered ${result.length} commands with Discord API.`);
-    return result;
+    try {
+        const result = await rest.put(route, { body: finalPayload });
+        console.log(`✅ Successfully registered ${result.length} commands with Discord API!`);
+        return result;
+    } catch (error) {
+        console.error('❌ Discord API Rejected Command Payload:');
+        if (error.rawError && error.rawError.errors) {
+            console.error(JSON.stringify(error.rawError.errors, null, 2));
+        } else {
+            console.error(error);
+        }
+        throw error;
+    }
 }
 
 if (require.main === module) {
     deployCommands().catch((error) => {
-        console.error('❌ Discord rejected the command payload:', error);
         process.exitCode = 1;
     });
 }
