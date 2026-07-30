@@ -130,7 +130,6 @@ socialCommandBuilder.addSubcommandGroup(group => {
 async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, configField) {
     if (!User) return 1;
 
-    // Strict Primitive String Coercion to eliminate NoSQL Injection
     const safeAuthorId = String(authorIdRaw || '').replace(/[^0-9]/g, '');
     const safeTargetId = String(targetIdStrRaw || '').replace(/[^0-9]/g, '');
     const safeGuildId = String(guildIdRaw || 'DM').replace(/[^a-zA-Z0-9_\-]/g, '');
@@ -141,7 +140,6 @@ async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, c
     const safePairKey = String(sortedPair);
 
     try {
-        // Construct isolated, pre-typed query objects
         const authorFilter = { userId: safeAuthorId, guildId: safeGuildId };
         const targetFilter = { userId: safeTargetId, guildId: safeGuildId };
         const pairFilter = { userId: safePairKey, guildId: safeGuildId };
@@ -159,9 +157,11 @@ async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, c
         await User.updateOne(targetFilter, { $inc: incTarget }, { upsert: true, strict: false });
         await User.updateOne(pairFilter, { $inc: incPair }, { upsert: true, strict: false });
 
-        // Read query with isolated string filter
-        const findQuery = { userId: safePairKey, guildId: safeGuildId };
-        const pairDoc = await User.findOne(findQuery).lean();
+        // CODACY LINE 136 FIX: Explicit Literal Filter Assignment
+        const cleanPairKey = String(safePairKey);
+        const cleanGuildId = String(safeGuildId);
+
+        const pairDoc = await User.findOne({ userId: String(cleanPairKey), guildId: String(cleanGuildId) }).lean();
 
         if (pairDoc && pairDoc[`${configField}Shared`]) {
             return Number(pairDoc[`${configField}Shared`]);
