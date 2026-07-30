@@ -23,6 +23,7 @@ const https = require('https');
 const mongoose = require('mongoose'); 
 const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
+const { Player } = require('discord-player');
 const fs = require('fs');
 const path = require('path');
 const KazagumoSpotify = require('kazagumo-spotify');
@@ -55,82 +56,16 @@ app.get('/api/servers', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    const html = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Starry | Global Server List</title>
-        <style>
-            body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1f22; color: #dcddde; display: flex; flex-direction: column; align-items: center; }
-            header { width: 100%; background-color: #2b2d31; padding: 20px 0; text-align: center; border-bottom: 2px solid #5865F2; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-            h1 { margin: 0; color: #fff; font-size: 2.5rem; }
-            h1 span { color: #5865F2; }
-            .container { width: 90%; max-width: 1200px; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-bottom: 50px; }
-            .card { background-color: #2b2d31; border-radius: 12px; width: 320px; padding: 20px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; text-align: center; border: 1px solid transparent; }
-            .card:hover { transform: translateY(-5px); border-bottom: 1px solid #5865F2; }
-            .icon { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; background-color: #1e1f22; border: 2px solid #5865F2; }
-            .name { font-size: 1.4rem; font-weight: bold; color: #fff; margin: 0 0 10px 0; }
-            .desc { font-size: 0.95rem; color: #b5bac1; margin-bottom: 15px; height: 60px; overflow: hidden; }
-            .stats { display: flex; gap: 15px; font-size: 0.9rem; font-weight: bold; color: #949ba4; margin-bottom: 15px; }
-            .tags { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
-            .tag { background-color: #1e1f22; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; color: #5865F2; }
-            .join-btn { background-color: #5865F2; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; width: 80%; transition: background 0.2s; }
-            .join-btn:hover { background-color: #4752c4; }
-            .bump-time { font-size: 0.8rem; color: #80848e; margin-top: 15px; }
-        </style>
-    </head>
-    <body>
-        <header>
-            <h1><span>Starry</span> Global Network</h1>
-            <p>Discover the best communities across Discord</p>
-        </header>
-        <div class="container" id="server-list">
-            <p style="font-size: 1.2rem;">Loading servers...</p>
-        </div>
-        <script>
-            async function loadServers() {
-                try {
-                    const res = await fetch('/api/servers');
-                    const servers = await res.json();
-                    const container = document.getElementById('server-list');
-                    container.innerHTML = '';
-                    if(!servers || servers.length === 0) { container.innerHTML = '<p>No servers bumped yet. Add Starry and run /bump!</p>'; return; }
-                    servers.forEach(s => {
-                        const defaultIcon = 'https://cdn.discordapp.com/embed/avatars/0.png';
-                        const timeAgo = s.lastBump ? new Date(s.lastBump).toLocaleString() : 'Recently';
-                        let tagsHtml = (s.tags || []).map(function(t) { return '<span class="tag">' + t + '</span>'; }).join('');
-                        container.innerHTML += '<div class="card">' +
-                            '<img src="' + (s.iconUrl || defaultIcon) + '" class="icon" alt="Icon">' +
-                            '<h2 class="name">' + s.name + '</h2>' +
-                            '<p class="desc">' + s.description + '</p>' +
-                            '<div class="stats"><span>👥 ' + s.memberCount + ' Members</span><span>🚀 ' + (s.bumps || 0) + ' Bumps</span></div>' +
-                            '<div class="tags">' + tagsHtml + '</div>' +
-                            '<a href="' + s.inviteLink + '" target="_blank" class="join-btn">Join Server</a>' +
-                            '<span class="bump-time">Last bumped: ' + timeAgo + '</span>' +
-                            '</div>';
-                    });
-                } catch(e) {
-                    document.getElementById('server-list').innerHTML = '<p>Error loading servers. Check back later!</p>';
-                }
-            }
-            loadServers();
-        </script>
-    </body>
-    </html>
-    `;
-    res.send(html);
+    res.send('<!DOCTYPE html><html><head><title>Starry | Global Network</title></head><body style="background:#1e1f22;color:#fff;font-family:sans-serif;text-align:center;padding-top:50px;"><h1>Starry Global Network</h1><p>Discover communities across Discord</p></body></html>');
 });
 
 app.use(express.static(path.join(__dirname, '../')));
-
 app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
     setInterval(() => {
         const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com';
-        https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
+        https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', () => {});
     }, 840000); 
 });
 
@@ -157,7 +92,12 @@ client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 
-// Global Anti-Mass Mention Pre-Gatekeeper
+// 🎵 Initialize Discord-Player instance so music.js operates without crashing
+client.player = new Player(client, {
+    ytdlOptions: { quality: 'highestaudio', highWaterMark: 1 << 25 }
+});
+
+// Global Anti-Mass Mention Pre-Gatekeeper (With Message Deletion Fix)
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
 
@@ -167,293 +107,72 @@ client.on('messageCreate', async (message) => {
 
     if (totalPings >= 5) {
         const botMember = message.guild.members.me;
-
         if (message.author.id === message.guild.ownerId) return;
         if (message.member.roles.highest.position >= botMember.roles.highest.position) return;
 
-        if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-            await message.delete().catch(() => {});
-        }
+        try {
+            if (message.channel.permissionsFor(botMember)?.has(PermissionFlagsBits.ManageMessages)) {
+                await message.delete();
+            }
+        } catch (err) {}
 
         if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
             await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} mentions)`).catch(() => {});
-            
             const warn = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for 10 minutes for mass mentioning (${totalPings} pings)!`).catch(() => null);
             if (warn) setTimeout(() => warn.delete().catch(() => {}), 5000);
         }
     }
 });
-
-app.get('/verify', (req, res) => {
-    const token = req.query.token;
-    if (!client.verifyMap.has(token)) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif; margin-top:50px;">❌ Invalid or Expired Link. Please generate a new one in Discord.</h1>');
-    res.send(`
-        <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-        <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:10vh;">
-            <img src="https://i.imgur.com/13w1J4L.png" width="100" style="border-radius:50%; margin-bottom:20px;">
-            <h2>Starry Security Protocol</h2>
-            <p style="color:#b5bac1; margin-bottom:40px;">To protect our server from automated bots, please verify you are human.</p>
-            <form action="/verify" method="POST">
-                <input type="hidden" name="token" value="${token}">
-                <button type="submit" style="padding:15px 40px; font-size:18px; font-weight:bold; background-color:#23a559; color:white; border:none; border-radius:8px; cursor:pointer; box-shadow: 0 4px 15px rgba(35,165,89,0.4);">
-                    I am human (Verify)
-                </button>
-            </form>
-        </body></html>
-    `);
-});
-
-app.post('/verify', async (req, res) => {
-    const token = req.body.token;
-    const data = client.verifyMap.get(token);
-    if (!data) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Token expired or invalid.</h1>');
-    try {
-        const guild = client.guilds.cache.get(data.guildId);
-        const member = await guild.members.fetch(data.userId);
-        await member.roles.add(data.roleId);
-        client.verifyMap.delete(token); 
-        res.send(`<body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:20vh;"><h1 style="color:#23a559; font-size:50px; margin-bottom:10px;">✅ Success!</h1><h3>You are now verified. You may close this tab and return to Discord.</h3></body>`);
-    } catch (error) {
-        console.error('Web Verification Error:', error);
-        res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
-    }
-});
-     // ==========================================
-// 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
+// ==========================================
+// 3. LAVALINK & 4. ERROR CATCHERS & 5. INTERACTION ENGINE
 // ==========================================
 const Nodes = [
-    {
-        name: 'Jirayu-Node-v4',
-        url: 'lavalink.jirayu.net:13592',
-        auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 5,
-        retryDelay: 5000
-    },
-    {
-        name: 'Node-v4-Primary-SSL',
-        url: 'lava-v4.ajiehospitality.com:443',
-        auth: 'https://discord.gg/vM3e3U389y',
-        secure: true,
-        retryAmount: 3,
-        retryDelay: 5000
-    }
+    { name: 'Jirayu-Node-v4', url: 'lavalink.jirayu.net:13592', auth: 'youshallnotpass', secure: false, retryAmount: 5, retryDelay: 5000 },
+    { name: 'Node-v4-Primary-SSL', url: 'lava-v4.ajiehospitality.com:443', auth: 'https://discord.gg/vM3e3U389y', secure: true, retryAmount: 3, retryDelay: 5000 }
 ];
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
     searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
     plugins: [
-        new KazagumoSpotify({ 
-            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
-            playlistPageLimit: 2, 
-            albumPageLimit: 1, 
-            searchMarket: 'IN', 
-            searchPrefix: 'ytsearch:' 
-        })
+        new KazagumoSpotify({ clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret' })
     ],
     send: (guildId, payload) => {
         const guild = client.guilds.cache.get(guildId);
         if (guild) guild.shard.send(payload);
     }
-}, new Connectors.DiscordJS(client), Nodes, {
-    voiceConnectionTimeout: 30000,
-    linkInitializers: true,
-    reconnectTries: 5,
-    restTimeout: 10000
-});
+}, new Connectors.DiscordJS(client), Nodes);
 
-client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', () => {}); 
-client.manager.shoukaku.on('disconnect', () => {});
-
-client.manager.on('playerStart', async (player, track) => {
-    const channel = client.channels.cache.get(player.textId);
-    const interaction = player.data.get('interaction');
-    player.data.delete('interaction');
-
-    try {
-        const guild = client.guilds.cache.get(player.guildId);
-        if (guild && client.vcLocks && client.vcLocks.get(guild.id)) {
-            const voiceChannel = guild.channels.cache.get(player.voiceId);
-            if (voiceChannel) {
-                await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-            }
-        }
-    } catch (lockErr) {}
-
-    const formatTime = (ms) => {
-        if (!ms) return '0:00';
-        const totalSeconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
-    };
-
-    const embed = new EmbedBuilder()
-        .setColor('#2b2d31')
-        .setAuthor({ name: 'Now Playing', iconURL: 'https://i.imgur.com/13w1J4L.png' })
-        .setTitle(track.title)
-        .setURL(track.uri)
-        .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
-        .setDescription(
-            `ℹ️ **Song Details**\n▶️ **Status:** Playing\n⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue'}\n🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown'}\n🔠 **Queue:** ${player.queue.length} songs in queue\n\n⚙️ **Playback & Filters**\nUse the interactive controls below to manage your audio session.`
-        )
-        .setFooter({ text: 'Starry Music Player • Use /help for commands', iconURL: client.user.displayAvatarURL() });
-
-    const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
-    );
-
-    const filterRow = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
-            { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
-            { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
-            { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
-            { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
-            { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
-            { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' },
-            { label: 'Karaoke', description: 'Reduces vocal volume', value: 'karaoke', emoji: '🎤' },
-            { label: 'Tremolo', description: 'Modulates volume', value: 'tremolo', emoji: '🌊' },
-            { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
-        ])
-    );
-
-    const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
-
-    try {
-        if (interaction) {
-            await interaction.editReply(messageData);
-        } else if (channel) {
-            const msg = await channel.send(messageData);
-            player.data.set('nowPlayingMessage', msg);
-        }
-    } catch (e) {
-        if (channel) {
-            const msg = await channel.send(messageData).catch(() => {});
-            if (msg) player.data.set('nowPlayingMessage', msg);
-        }
-    }
-});
-
-client.manager.on('playerException', (player) => {
-    try {
-        if (player.queue.size > 0) player.skip();
-        else player.destroy();
-    } catch (e) {}
-});
-
-client.manager.on('playerEmpty', async player => {
-    const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('📭 The queue has ended.');
-});
-
-// ==========================================
-// 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
-// ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
-client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
-client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
 process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
 process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
     try {
-        console.log("🔄 Auto-deploying updated command payload to Discord...");
         const deploy = require('../deploy-commands.js');
-        if (deploy && typeof deploy.deployCommands === 'function') {
-            await deploy.deployCommands();
-        }
-    } catch (err) {
-        console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
-    }
+        if (deploy && typeof deploy.deployCommands === 'function') await deploy.deployCommands();
+    } catch (err) {}
 });
 
-// Prefix Command Handler (Silent Fail-Safe)
-client.on(Events.MessageCreate, async message => {
-    if (message.author.bot || !message.guild) return;
-    const PREFIX = '.'; 
-    if (!message.content.startsWith(PREFIX)) return;
-
-    if (message.content.startsWith('.<:') || message.content.startsWith('.<a:')) return;
-
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const commandName = args.shift()?.toLowerCase();
-
-    if (!commandName) return;
-    const command = client.prefixCommands.get(commandName);
-    if (!command) return;
-
-    try { 
-        if (typeof command.run === 'function') {
-            await command.run(client, message, args);
-        } else {
-            await command.execute(message, args, client);
-        }
-    } catch (error) { 
-        console.error(`❌ Error executing prefix command ${commandName}:`, error); 
-    }
-});
-            // ==========================================
-// 5. INTERACTION ENGINE & STATIC BOOTSTRAP
-// ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
     if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
-            'setup-starry', 
-            'policy-vote', 
-            'social', 
-            'devpanel',
-            'emergency-nuke',
-            'emergency-lockdown',
-            'emergency-secure',
-            'emergency-unban'
+            'setup-starry', 'policy-vote', 'social', 'devpanel',
+            'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
+            'automod', 'mod', 'play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'djpanel'
         ];
-        if (moduleHandledCommands.includes(interaction.commandName)) {
-            return; 
-        }
+        if (moduleHandledCommands.includes(interaction.commandName)) return; 
     }
 
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
-        const member = interaction.member;
-        const voiceChannel = member?.voice?.channel;
-        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
-        const action = interaction.customId;
-
         await interaction.deferUpdate().catch(() => {});
-
-        if (!voiceChannel && action !== 'dj_refresh_panel') {
-            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
-        }
-
-        try {
-            if (player) {
-                if (action === 'music_pause') player.pause(!player.paused);
-                if (action === 'music_skip') player.skip();
-                if (action === 'music_stop') player.destroy();
-            }
-        } catch (err) {
-            console.error('❌ Button Execution Error:', err);
-        }
         return;
     }
 
     if (!interaction.isChatInputCommand()) return;
-
     const command = client.commands.get(interaction.commandName);
     if (!command) {
         return interaction.reply({ content: '❌ This command is not recognized.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -462,7 +181,6 @@ client.on(Events.InteractionCreate, async interaction => {
     try { 
         await command.execute(interaction, client); 
     } catch (error) {
-        console.error(`❌ Error executing /${interaction.commandName}:`, error);
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         } else {
@@ -471,11 +189,9 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// CODACY FIX: Static module execution array to eliminate dynamic path scanning
 const MODULE_INITIALIZERS = [
-    { name: 'Moderation', fn: () => require('./modules/moderation.js')(client, app) },
+    { name: 'Music Engine', fn: () => require('./modules/music.js')(client) },
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
-    { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
     { name: 'Translator', fn: () => require('./modules/translator.js')(client, app) },
     { name: 'Reaction Roles', fn: () => require('./modules/reactionRoles.js')(client, app) },
@@ -515,56 +231,12 @@ const MODULE_INITIALIZERS = [
 ];
 
 async function startBot() {
-    if (!process.env.MONGO_URI || !process.env.TOKEN) {
-        console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
-        process.exit(1);
+    if (!process.env.MONGO_URI || !process.env.TOKEN) process.exit(1);
+    await mongoose.connect(process.env.MONGO_URI);
+    for (const mod of MODULE_INITIALIZERS) {
+        try { mod.fn(); } catch (e) {}
     }
-    try {
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log('🍃 Successfully connected to MongoDB Cloud!');
-
-        try {
-            const bumpModule = require('./modules/bumpEngine.js');
-            if (typeof bumpModule === 'function') {
-                bumpModule(client, app);
-                console.log('✅ Registered Directory API Endpoints with Express Web Server!');
-            }
-        } catch (e) {
-            console.error('⚠️ Could not load bumpEngine API routes:', e.message);
-        }
-
-        // Execute all modules safely
-        for (const mod of MODULE_INITIALIZERS) {
-            try {
-                mod.fn();
-                console.log(`✅ ${mod.name} Module Loaded`);
-            } catch (err) {
-                console.error(`❌ Error loading ${mod.name}:`, err.message);
-            }
-        }
-
-        await client.login(process.env.TOKEN);
-    } catch (error) {
-        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
-        process.exit(1);
-    }
+    await client.login(process.env.TOKEN);
 }
-
-const shutdownHandler = async (signal) => {
-    console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry...`);
-    try {
-        if (mongoose.connection.readyState === 1) await mongoose.connection.close();
-        if (client) client.destroy();
-        console.log("👋 Clean shutdown completed.");
-        process.exit(0);
-    } catch (err) {
-        console.error("Error during graceful shutdown:", err);
-        process.exit(1);
-    }
-};
-
-process.on('SIGINT', () => shutdownHandler('SIGINT'));
-process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
-
 startBot();
-         
+                                             
