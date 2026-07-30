@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER & MODERATION ENGINE
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 6)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -26,7 +26,7 @@ const { GoogleGenAI } = require('@google/genai');
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
 
-// --- Database Schemas ---
+// --- Mongoose Database Schemas ---
 const PolicyVoteSchema = new mongoose.Schema({
     guildId: String,
     messageId: String,
@@ -56,9 +56,24 @@ const warningSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
 });
 
+const masterSecuritySchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    autoKick: { type: Boolean, default: false },
+    autoBan: { type: Boolean, default: false },
+    ownerBypass: { type: Boolean, default: true },
+    modules: {
+        wick: { type: Boolean, default: true },          // Anti-Nuke & Admin Limits
+        beemo: { type: Boolean, default: true },         // Anti-Raid Mass Join Defense
+        altdentifier: { type: Boolean, default: false },  // Alt Account Verification Gatekeeper
+        dyno_carl: { type: Boolean, default: true }      // Chat Filters & AutoMod
+    },
+    userInfractions: { type: Map, of: Number, default: {} }
+});
+
 const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuild', automodGuildSchema);
 const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', automodChannelSchema);
 const Warning = mongoose.models.Warning || mongoose.model('Warning', warningSchema);
+const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
 
 let Transcript;
 try { Transcript = require('../models/Transcript'); } catch (e) { Transcript = mongoose.models.Transcript; }
@@ -70,6 +85,7 @@ const addProtect = protectDb.prepare('INSERT OR IGNORE INTO protected_users (gui
 const removeProtect = protectDb.prepare('DELETE FROM protected_users WHERE guild_id = ? AND user_id = ?');
 const getProtect = protectDb.prepare('SELECT 1 FROM protected_users WHERE guild_id = ? AND user_id = ?');
 
+// --- Media Channels Data Store ---
 const mediaDbPath = path.join(__dirname, '../mediaChannels.json');
 function getMediaData() {
     if (!fs.existsSync(mediaDbPath)) fs.writeFileSync(mediaDbPath, JSON.stringify([]));
@@ -77,7 +93,40 @@ function getMediaData() {
 }
 function saveMediaData(data) { fs.writeFileSync(mediaDbPath, JSON.stringify(data, null, 2)); }
 
-const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free'];
+const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free', 'discord.gg/'];
+
+// --- Security RAM Cache & In-Memory Velocity Trackers ---
+const securityCache = new Map();
+const joinTracker = new Map();  // GuildID -> Array of join timestamps
+const nukeTracker = new Map();  // AdminID -> Array of deletion timestamps
+
+async function getSecurityConfig(guildId) {
+    if (securityCache.has(guildId)) return securityCache.get(guildId);
+    let config = await MasterSecurity.findOne({ guildId }).lean();
+    if (!config) {
+        config = {
+            guildId,
+            autoKick: false,
+            autoBan: false,
+            ownerBypass: true,
+            modules: { wick: true, beemo: true, altdentifier: false, dyno_carl: true },
+            userInfractions: new Map()
+        };
+        await MasterSecurity.create(config).catch(() => {});
+    }
+    securityCache.set(guildId, config);
+    return config;
+}
+
+async function updateSecurityConfig(guildId, updateData) {
+    const updated = await MasterSecurity.findOneAndUpdate(
+        { guildId },
+        { $set: updateData },
+        { upsert: true, new: true }
+    ).lean();
+    securityCache.set(guildId, updated);
+    return updated;
+}
 
 // --- AI Setup Helpers with Retry & Fallbacks ---
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
@@ -104,7 +153,9 @@ async function generateAIResponseWithRetry(prompt) {
     }
     return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
 }
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
+// ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
@@ -168,7 +219,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 
-// --- Slash Command Payloads using strict builders ---
+// --- Slash Command Payloads ---
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)))
@@ -187,15 +238,46 @@ const autoModMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('unignore').setDescription('Unignore channel').addStringOption(o => o.setName('type').setDescription('Type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel').setDescription('Channel')))
     .addSubcommand(sub => sub.setName('mediaonly').setDescription('Media only').addStringOption(o => o.setName('action').setDescription('Action').setRequired(true).addChoices({ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' })).addChannelOption(o => o.setName('channel').setDescription('Channel')));
 
+const moderateMasterCommand = new SlashCommandBuilder()
+    .setName('moderate')
+    .setDescription('⚙️ Toggle advanced security modules & AutoMod settings')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+        sub.setName('toggle')
+            .setDescription('Toggle security modules')
+            .addStringOption(o =>
+                o.setName('module')
+                    .setDescription('Security module to configure')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
+                        { name: 'Beemo (Anti-Raid Mass Join Defense)', value: 'beemo' },
+                        { name: 'AltDentifier (Verification Gatekeeper)', value: 'altdentifier' },
+                        { name: 'Dyno/Carl (Chat Filters & AutoMod)', value: 'dyno_carl' }
+                    )
+            )
+            .addBooleanOption(o => o.setName('status').setDescription('Enable or disable module').setRequired(true))
+    )
+    .addSubcommand(sub => sub.setName('autokick').setDescription('Toggle AutoKick enforcement').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoKick').setRequired(true)))
+    .addSubcommand(sub => sub.setName('autoban').setDescription('Toggle AutoBan enforcement').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
+    .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Toggle Owner AutoMod Bypass').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)));
+
+const verifySetupCommand = new SlashCommandBuilder()
+    .setName('verify-setup')
+    .setDescription('Set up the server verification panel (Admins Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption(o => o.setName('channel').setDescription('Channel to send verification panel').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addRoleOption(o => o.setName('role').setDescription('Role given upon verification').setRequired(true));
+
 const policyVotePayload = {
     name: 'policy-vote', description: '🏛️ Governance vote (Admins Only)', default_member_permissions: '8',
     options: [{ name: 'title', type: 3, required: true, description: 'Title' }, { name: 'description', type: 3, required: true, description: 'Desc' }]
 };
-
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
+// ==========================================
 async function handleModCommands(interaction) {
-    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
     const sub = interaction.options.getSubcommand();
     const guild = interaction.guild;
 
@@ -237,7 +319,7 @@ async function handleModCommands(interaction) {
 }
 
 async function handleAutoModCommands(interaction) {
-    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
     const sub = interaction.options.getSubcommand();
     if (sub === 'status') return interaction.editReply(`📢 Automod status: Enabled`);
     if (sub === 'toggle') {
@@ -256,57 +338,312 @@ async function handleAutoModCommands(interaction) {
     return interaction.editReply(`⚙️ Automod command executed.`);
 }
 
+async function handleModerateCommands(interaction) {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    const subcommand = interaction.options.getSubcommand();
+    const guildId = interaction.guild.id;
+
+    if (subcommand === 'toggle') {
+        const moduleChoice = interaction.options.getString('module', true);
+        const status = interaction.options.getBoolean('status', true);
+        const moduleNames = {
+            wick: 'Wick (Anti-Nuke & Admin Limits)',
+            beemo: 'Beemo (Anti-Raid Mass Join Defense)',
+            altdentifier: 'AltDentifier (Verification Gatekeeper)',
+            dyno_carl: 'Dyno/Carl (Chat Filters & AutoMod)'
+        };
+        await updateSecurityConfig(guildId, { [`modules.${moduleChoice}`]: status });
+        const embed = new EmbedBuilder()
+            .setColor(status ? '#3BA55C' : '#ED4245')
+            .setTitle('🛡️ Security Protection Module Updated')
+            .setDescription(`Module **${moduleNames[moduleChoice] || moduleChoice}** is now **${status ? 'ENABLED 🟢' : 'DISABLED 🔴'}**.`);
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (subcommand === 'autokick') {
+        const status = interaction.options.getBoolean('status', true);
+        await updateSecurityConfig(guildId, { autoKick: status });
+        const embed = new EmbedBuilder().setColor(status ? '#3BA55C' : '#ED4245').setTitle('⚙️ AutoKick Enforcement').setDescription(`Automated Member Kicking is now **${status ? 'ENABLED 🟢' : 'DISABLED 🔴'}**.`);
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (subcommand === 'autoban') {
+        const status = interaction.options.getBoolean('status', true);
+        await updateSecurityConfig(guildId, { autoBan: status });
+        const embed = new EmbedBuilder().setColor(status ? '#3BA55C' : '#ED4245').setTitle('⚙️ AutoBan Enforcement').setDescription(`Automated Member Banning is now **${status ? 'ENABLED 🟢' : 'DISABLED 🔴'}**.`);
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (subcommand === 'ownerbypass') {
+        const status = interaction.options.getBoolean('status', true);
+        await updateSecurityConfig(guildId, { ownerBypass: status });
+        const embed = new EmbedBuilder().setColor('#5865F2').setTitle('👑 Owner Bypass Setting').setDescription(`Server Owner AutoMod Bypass is now **${status ? 'ENABLED (Owner Bypassed) 🛡️' : 'DISABLED (Owner Filtered) ⚠️'}**.`);
+        return interaction.editReply({ embeds: [embed] });
+    }
+}
+
+async function handleVerifySetupCommand(interaction, client) {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    const channel = interaction.options.getChannel('channel', true);
+    const role = interaction.options.getRole('role', true);
+    const botMember = interaction.guild.members.me;
+
+    if (!channel.permissionsFor(botMember)?.has(PermissionFlagsBits.SendMessages)) {
+        return interaction.editReply(`❌ I cannot send messages in ${channel}!`);
+    }
+
+    if (role.position >= botMember.roles.highest.position) {
+        return interaction.editReply(`⚠️ Role ${role} is higher than or equal to my highest role! Please position my bot role higher.`);
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor('#2b2d31')
+        .setTitle('✅ Server Verification')
+        .setDescription('Welcome! To protect this server from automated accounts, we require web verification.\n\nClick the button below to generate your secure verification link.')
+        .setFooter({ text: 'Starry Security Protocol', iconURL: client.user.displayAvatarURL() });
+
+    const button = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`verify_role_${role.id}`).setLabel('Get Verification Link').setEmoji('🛡️').setStyle(ButtonStyle.Primary)
+    );
+
+    await channel.send({ embeds: [embed], components: [button] });
+    return interaction.editReply(`✅ Verification panel set up in ${channel} for role ${role}!`);
+}
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
+// ==========================================
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
 
+    // --- Slash Command & Component Listener ---
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
+            
             if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) {
                 await interaction.reply({ content: `⚡ Emergency protocol executed.`, flags: [EPHEMERAL_FLAG] });
             }
             if (cmd === 'mod') await handleModCommands(interaction);
             if (cmd === 'automod') await handleAutoModCommands(interaction);
-        } else if (interaction.isButton()) {
+            if (cmd === 'moderate') await handleModerateCommands(interaction);
+            if (cmd === 'verify-setup') await handleVerifySetupCommand(interaction, client);
+
+            if (cmd === 'policy-vote') {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
+                const title = interaction.options.getString('title', true);
+                const desc = interaction.options.getString('description', true);
+                
+                const embed = new EmbedBuilder().setColor('#5865F2').setTitle(`🏛️ Governance Vote: ${title}`).setDescription(desc).setFooter({ text: 'Starry Policy Vote Engine' });
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('vote_yes').setLabel('Vote YES').setStyle(ButtonStyle.Success).setEmoji('👍'),
+                    new ButtonBuilder().setCustomId('vote_no').setLabel('Vote NO').setStyle(ButtonStyle.Danger).setEmoji('👎')
+                );
+                const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
+                await PolicyVote.create({ guildId: interaction.guild.id, messageId: msg.id, title, description: desc });
+                return interaction.editReply({ content: '✅ Governance vote initiated!' });
+            }
+        } 
+        
+        // --- Button Component Listeners ---
+        else if (interaction.isButton()) {
             const id = interaction.customId;
+
             if (id.startsWith('sys_verify_')) {
                 await interaction.member.roles.add(id.split('_')[2]).catch(() => {});
-                return interaction.reply({ content: '✅ Verified!', flags: [EPHEMERAL_FLAG] });
+                return interaction.reply({ content: '✅ Verified successfully!', flags: [EPHEMERAL_FLAG] });
             }
+
+            if (id.startsWith('verify_role_')) {
+                const roleId = id.replace('verify_role_', '');
+                const token = Math.random().toString(36).substring(2, 15);
+                client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId });
+                const hostUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com';
+                return interaction.reply({ content: `🔗 **Verification Link:** ${hostUrl}/verify?token=${token}\n*Link expires in 10 minutes.*`, flags: [EPHEMERAL_FLAG] });
+            }
+
             if (id === 'sys_create_ticket') {
                 const ch = await interaction.guild.channels.create({ name: `ticket-${interaction.user.username}`, type: ChannelType.GuildText });
                 return interaction.reply({ content: `✅ Ticket created: ${ch}`, flags: [EPHEMERAL_FLAG] });
             }
+
             if (id === 'sys_apply_staff') {
                 const modal = new ModalBuilder().setCustomId('sys_modal_staff_app').setTitle('Staff Application')
                     .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('exp').setLabel('Experience').setStyle(TextInputStyle.Paragraph).setRequired(true)));
                 return interaction.showModal(modal);
             }
+
+            if (id === 'vote_yes' || id === 'vote_no') {
+                const vote = await PolicyVote.findOne({ messageId: interaction.message.id });
+                if (!vote) return interaction.reply({ content: '❌ Vote session expired.', flags: [EPHEMERAL_FLAG] });
+
+                const userId = interaction.user.id;
+                vote.yesVotes = vote.yesVotes.filter(id => id !== userId);
+                vote.noVotes = vote.noVotes.filter(id => id !== userId);
+
+                if (id === 'vote_yes') vote.yesVotes.push(userId);
+                else vote.noVotes.push(userId);
+
+                await vote.save();
+                return interaction.reply({ content: `✅ Vote recorded! Current status — YES: ${vote.yesVotes.length} | NO: ${vote.noVotes.length}`, flags: [EPHEMERAL_FLAG] });
+            }
         }
     });
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 6)
+// ==========================================
+    // --- Message Event Handler (Dyno/Carl Chat Filter & Media-Only Enforcer) ---
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
-        const isStaff = message.member?.permissions.has(PermissionsBitField.Flags.Administrator);
-        if (isStaff || message.author.id === message.guild.ownerId) return;
 
-        if (badWordsList.some(w => message.content.toLowerCase().includes(w))) {
-            await message.delete().catch(() => {});
-            return;
+        const isStaff = message.member?.permissions.has(PermissionsBitField.Flags.Administrator);
+        const isOwner = message.author.id === message.guild.ownerId;
+        const config = await getSecurityConfig(message.guild.id);
+
+        // --- DYNO/CARL CHAT FILTER & AUTOMOD ENGINE ---
+        if (config.modules?.dyno_carl) {
+            const bypassedByOwner = config.ownerBypass && isOwner;
+            if (!isStaff && !bypassedByOwner) {
+                const botMember = message.guild.members.me;
+
+                // Check Bad Words, Invite Links, and Scam Patterns
+                const hasBadWord = badWordsList.some(w => message.content.toLowerCase().includes(w));
+                const hasInviteLink = /(https?:\/\/)?(www\.)?(discord\.gg|discordapp\.com\/invite|bit\.ly|tinyurl\.com)\/[^\s]+/i.test(message.content);
+
+                if (hasBadWord || hasInviteLink) {
+                    try {
+                        if (message.channel.permissionsFor(botMember)?.has(PermissionsBitField.Flags.ManageMessages)) {
+                            await message.delete().catch(() => {});
+                        }
+                    } catch (err) {}
+
+                    const userId = message.author.id;
+                    const currentInfractions = (config.userInfractions?.[userId] || 0) + 1;
+
+                    await MasterSecurity.updateOne(
+                        { guildId: message.guild.id },
+                        { $set: { [`userInfractions.${userId}`]: currentInfractions } }
+                    ).catch(() => {});
+
+                    // AutoBan Trigger (5+ infractions)
+                    if (config.autoBan && currentInfractions >= 5) {
+                        if (botMember.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+                            await message.member.ban({ reason: 'Dyno/Carl Engine: Exceeded maximum infraction limit (5+ violations)' }).catch(() => {});
+                            return message.channel.send(`🔨 **AutoBan:** <@${userId}> was banned for repeated violations.`).catch(() => {});
+                        }
+                    }
+
+                    // AutoKick Trigger (3+ infractions)
+                    if (config.autoKick && currentInfractions >= 3) {
+                        if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+                            await message.member.kick('Dyno/Carl Engine: Exceeded infraction limit (3+ violations)').catch(() => {});
+                            return message.channel.send(`🥾 **AutoKick:** <@${userId}> was kicked for repeated violations.`).catch(() => {});
+                        }
+                    }
+
+                    const warnMsg = await message.channel.send(`⚠️ <@${userId}>, message blocked by AutoMod! (Warning #${currentInfractions})`).catch(() => null);
+                    if (warnMsg) setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
+                    return;
+                }
+            }
         }
-        const mediaChannels = getMediaData();
-        if (mediaChannels.includes(message.channel.id)) {
-            const hasMedia = message.attachments.size > 0 || /https?:\/\/\S+/i.test(message.content);
-            if (!hasMedia) await message.delete().catch(() => {});
+
+        // --- MEDIA ONLY CHANNEL ENFORCEMENT ---
+        if (!isStaff && !isOwner) {
+            const mediaChannels = getMediaData();
+            if (mediaChannels.includes(message.channel.id)) {
+                const hasMedia = message.attachments.size > 0 || /https?:\/\/\S+/i.test(message.content);
+                if (!hasMedia) await message.delete().catch(() => {});
+            }
         }
     });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6 OF 6)
+// ==========================================
+    // --- Member Join Security Handler (Beemo & AltDentifier Engines) ---
+    client.on('guildMemberAdd', async (member) => {
+        if (!member.guild) return;
+
+        const config = await getSecurityConfig(member.guild.id);
+        const botMember = member.guild.members.me;
+
+        // --- ALTDENTIFIER (VERIFICATION GATEKEEPER) ---
+        if (config.modules?.altdentifier) {
+            const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
+            if (accountAgeDays < 7) { // Accounts younger than 7 days
+                if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+                    await member.send(`⚠️ You were removed from **${member.guild.name}** because your account is younger than 7 days (AltDentifier Defense).`).catch(() => {});
+                    await member.kick('AltDentifier: Account younger than minimum requirement (7 days)').catch(() => {});
+                    return;
+                }
+            }
+        }
+
+        // --- BEEMO (ANTI-RAID MASS JOIN DEFENSE) ---
+        if (config.modules?.beemo) {
+            const now = Date.now();
+            const guildJoins = joinTracker.get(member.guild.id) || [];
+            
+            const recentJoins = guildJoins.filter(time => now - time < 10000);
+            recentJoins.push(now);
+            joinTracker.set(member.guild.id, recentJoins);
+
+            // Trigger raid kick if >5 joins in 10 seconds
+            if (recentJoins.length >= 5) {
+                if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+                    await member.kick('Beemo Defense: Mass raid join detected').catch(() => {});
+                }
+            }
+        }
+    });
+
+    // --- Audit Log Security Handler (Wick Anti-Nuke & Admin Limits Engine) ---
+    const handleAntiNuke = async (guild, actionType) => {
+        const config = await getSecurityConfig(guild.id);
+        if (!config.modules?.wick) return;
+
+        const botMember = guild.members.me;
+        if (!botMember.permissions.has(PermissionsBitField.Flags.ViewAuditLog)) return;
+
+        try {
+            const auditLogs = await guild.fetchAuditLogs({ limit: 1, type: actionType }).catch(() => null);
+            const entry = auditLogs?.entries?.first();
+            if (!entry || !entry.executor || entry.executor.bot) return;
+
+            const executorId = entry.executor.id;
+
+            if (config.ownerBypass && executorId === guild.ownerId) return;
+
+            const now = Date.now();
+            const adminActions = nukeTracker.get(executorId) || [];
+            const recentActions = adminActions.filter(time => now - time < 10000);
+            recentActions.push(now);
+            nukeTracker.set(executorId, recentActions);
+
+            // Timeout admin if >3 deletions in 10 seconds
+            if (recentActions.length >= 3) {
+                const targetAdmin = await guild.members.fetch(executorId).catch(() => null);
+                if (targetAdmin && targetAdmin.manageable) {
+                    await targetAdmin.timeout(24 * 60 * 60 * 1000, 'Wick Engine: Anti-Nuke threshold exceeded (Mass Channel/Role Deletion)').catch(() => {});
+                }
+            }
+        } catch (err) {
+            console.error('Wick Anti-Nuke Listener Error:', err);
+        }
+    };
+
+    client.on('channelDelete', channel => channel.guild && handleAntiNuke(channel.guild, AuditLogEvent.ChannelDelete));
+    client.on('roleDelete', role => role.guild && handleAntiNuke(role.guild, AuditLogEvent.RoleDelete));
+
+    console.log('✅ Master Channel Systems & Security Protocol Engines Loaded');
 }
 
 module.exports = initModule;
 module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
+module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.policyVotePayload = policyVotePayload;
 module.exports.modMasterPayload = modMasterCommand.toJSON();
 module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
-                                                      
+module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
+module.exports.verifySetupPayload = verifySetupCommand.toJSON();
