@@ -1,3 +1,6 @@
+// ==========================================
+// 🎵 STARRY SUPREME MUSIC ENGINE MODULE
+// ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
@@ -8,10 +11,9 @@ module.exports = (client) => {
     let extractorLoadPromise = null;
 
     const ensureExtractors = async () => {
-        if (!extractorLoadPromise) {
+        if (!extractorLoadPromise && player) {
             extractorLoadPromise = (async () => {
                 try {
-                    // Load all default extractors
                     await player.extractors.loadMulti(DefaultExtractors);
                     console.log('✅ All Cloud-Friendly Audio Extractors loaded successfully.');
                 } catch (error) {
@@ -32,79 +34,53 @@ module.exports = (client) => {
         });
     });
 
-    // =====================================================================
-    // 🔊 PLAYER EVENT LISTENERS (With Enhanced Debugging)
-    // =====================================================================
-    player.events.on('error', (queue, error) => {
-        console.error('🔴 [Player Error]:', error.message || error);
-    });
+    if (player) {
+        player.events.on('error', (queue, error) => {
+            console.error('🔴 [Player Error]:', error.message || error);
+        });
 
-    player.events.on('playerError', (queue, error) => {
-        console.error('🔴 [Audio Stream Error]:', error.message || error);
-    });
+        player.events.on('playerError', (queue, error) => {
+            console.error('🔴 [Audio Stream Error]:', error.message || error);
+        });
 
-    player.events.on('debug', (queue, message) => {
-        console.log(`🪲 [Player Debug]: ${message}`);
-    });
+        player.events.on('playerStart', (queue, track) => {
+            const metadata = queue.metadata || {};
+            const textChannel = metadata.channel;
+            if (!textChannel?.send) return;
 
-    player.events.on('playerStart', (queue, track) => {
-        console.log('🎵 [playerStart Event] Track started:', track.title);
-        const metadata = queue.metadata || {};
-        const textChannel = metadata.channel;
-        if (!textChannel?.send) {
-            console.warn('⚠️ No text channel found in metadata');
-            return;
-        }
+            const requesterId = track.requestedBy?.id || metadata.requestedBy?.id;
+            const embed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setAuthor({ name: '🎵 Now Playing' })
+                .setTitle(track.title || 'Unknown track')
+                .setDescription([
+                    `**Duration:** \`${track.duration || 'Unknown'}\``,
+                    requesterId ? `**Requested by:** <@${requesterId}>` : null
+                ].filter(Boolean).join(' | '))
+                .setFooter({ text: 'Starry Music Player' })
+                .setTimestamp();
 
-        const requesterId = track.requestedBy?.id || metadata.requestedBy?.id;
-        const embed = new EmbedBuilder()
-            .setColor('#FFD700')
-            .setAuthor({ name: '🎵 Now Playing' })
-            .setTitle(track.title || 'Unknown track')
-            .setDescription([
-                `**Duration:** \`${track.duration || 'Unknown'}\``,
-                requesterId ? `**Requested by:** <@${requesterId}>` : null
-            ].filter(Boolean).join(' | '))
-            .setFooter({ text: 'Starry Music Player' })
-            .setTimestamp();
+            if (track.url) embed.setURL(track.url);
+            if (track.thumbnail) embed.setThumbnail(track.thumbnail);
 
-        if (track.url) embed.setURL(track.url);
-        if (track.thumbnail) embed.setThumbnail(track.thumbnail);
-
-        textChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    player.events.on('queueCreate', (queue) => {
-        console.log('📊 [queueCreate Event] New queue created for:', queue.guild.name);
-    });
+            textChannel.send({ embeds: [embed] }).catch(() => {});
+        });
+    }
 
     const checkPermissions = (channel, botMember) => {
         const permissions = channel.permissionsFor(botMember);
-        const hasConnect = permissions?.has(PermissionsBitField.Flags.Connect);
-        const hasSpeak = permissions?.has(PermissionsBitField.Flags.Speak);
-        return hasConnect && hasSpeak;
+        return permissions?.has(PermissionsBitField.Flags.Connect) && permissions?.has(PermissionsBitField.Flags.Speak);
     };
 
     const isYouTubeUrl = (query) => /(?:youtube\.com|youtu\.be)/i.test(query);
     const isUrl = (query) => /^https?:\/\//i.test(query);
 
-    // =====================================================================
-    // 🎮 SLASH COMMAND HANDLING
-    // =====================================================================
     client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
+        if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
 
         const command = interaction.commandName;
         const musicCommands = new Set(['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume']);
         if (!musicCommands.has(command)) return;
-
-        if (!interaction.inGuild()) {
-            return interaction.reply({ content: '❌ Music commands can only be used in a server.', ephemeral: true }).catch(() => {});
-        }
-
-        if (client.isPremium && !client.isPremium(interaction.guildId)) {
-            return interaction.reply({ content: '❌ **Music is a Premium feature!** Ask the owner to upgrade the server.', ephemeral: true }).catch(() => {});
-        }
 
         const voiceChannel = interaction.member?.voice?.channel;
         if (!voiceChannel) {
@@ -115,7 +91,7 @@ module.exports = (client) => {
             return interaction.reply({ content: '❌ I need **Connect** and **Speak** permissions in your voice channel.', ephemeral: true }).catch(() => {});
         }
 
-        const queue = player.nodes.get(interaction.guildId);
+        const queue = player ? player.nodes.get(interaction.guildId) : null;
         if (queue?.channel && queue.channel.id !== voiceChannel.id) {
             return interaction.reply({ content: `❌ Join <#${queue.channel.id}> to control the active music queue.`, ephemeral: true }).catch(() => {});
         }
@@ -123,68 +99,36 @@ module.exports = (client) => {
         try {
             if (command === 'play') {
                 const query = interaction.options.getString('song', true).trim();
-                console.log(`🎵 [PLAY] User query: "${query}"`);
-
                 if (isYouTubeUrl(query)) {
                     return interaction.reply({ content: '❌ YouTube playback is not supported. Use a song name, SoundCloud URL, or Spotify URL instead.', ephemeral: true });
                 }
 
                 await interaction.deferReply();
+                await ensureExtractors();
 
-                try {
-                    await ensureExtractors();
-                } catch (error) {
-                    console.error('❌ Extractor loading failed:', error);
-                    return interaction.editReply({ content: '❌ Music system failed to initialize. Please try again later.' });
-                }
-
-                const botVoiceState = interaction.guild.members.me?.voice;
-                if (botVoiceState?.serverMute) {
-                    return interaction.editReply({ content: '❌ The bot is server-muted. Ask a server administrator to unmute the bot in the voice channel.' });
-                }
-
-                console.log(`🔍 [PLAY] Executing instant play for: "${query}"`);
-
-                try {
-                    const result = await player.play(voiceChannel, query, {
-                        requestedBy: interaction.user,
-                        // 🔧 CRITICAL FIX: Use SoundCloud for text searches to bypass Render IP blocks
-                        searchEngine: isUrl(query) ? 'auto' : 'soundcloudSearch', 
-                        nodeOptions: {
-                            metadata: { 
-                                channel: interaction.channel, 
-                                requestedBy: interaction.user,
-                                guildId: interaction.guildId
-                            },
-                            volume: 80,
-                            selfDeaf: true,
-                            bufferingTimeout: 15000,
-                            leaveOnEmpty: true,
-                            leaveOnEmptyCooldown: 300000,
-                            leaveOnEnd: true,
-                            leaveOnEndCooldown: 15000,
-                            leaveOnStop: true,
-                            leaveOnStopCooldown: 5000
-                        }
-                    });
-
-                    const track = result.track;
-                    if (!track) {
-                        return interaction.editReply({ content: '❌ Could not find or stream any track matching your search.' });
+                const result = await player.play(voiceChannel, query, {
+                    requestedBy: interaction.user,
+                    searchEngine: isUrl(query) ? 'auto' : 'soundcloudSearch', 
+                    nodeOptions: {
+                        metadata: { channel: interaction.channel, requestedBy: interaction.user, guildId: interaction.guildId },
+                        volume: 80,
+                        selfDeaf: true,
+                        bufferingTimeout: 15000,
+                        leaveOnEmpty: true,
+                        leaveOnEmptyCooldown: 300000,
+                        leaveOnEnd: true,
+                        leaveOnEndCooldown: 15000,
+                        leaveOnStop: true,
+                        leaveOnStopCooldown: 5000
                     }
+                });
 
-                    console.log('✅ Track queued successfully:', track.title);
+                const track = result.track;
+                if (!track) return interaction.editReply({ content: '❌ Could not find or stream any track matching your search.' });
 
-                    return interaction.editReply({
-                        embeds: [new EmbedBuilder()
-                            .setColor('#3BA55C')
-                            .setDescription(`✅ Added **${track.title}** to the queue.`)]
-                    });
-
-                } catch (playError) {
-                    console.error('🔴 Play error:', playError);
-                    return interaction.editReply({ content: `❌ Failed to play track: \`${playError.message?.slice(0, 200) || 'Stream extraction failed'}\`` });
-                }
+                return interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor('#3BA55C').setDescription(`✅ Added **${track.title}** to the queue.`)]
+                });
             }
 
             if (!queue || !queue.currentTrack) {
@@ -233,17 +177,14 @@ module.exports = (client) => {
                 return interaction.reply({ embeds: [new EmbedBuilder().setColor('#5865F2').setTitle(`📜 Music Queue for ${interaction.guild.name}`).setDescription(queueText)] });
             }
         } catch (error) {
-            console.error('🔴 Music Command Error:', error);
             const message = error?.message || 'Unknown music-player error';
             const content = `❌ I could not process that command. \`${message.slice(0, 300)}\``;
-
             if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content, embeds: [] }).catch(async () => {
-                    await interaction.followUp({ content, ephemeral: true }).catch(() => {});
-                });
+                await interaction.editReply({ content, embeds: [] }).catch(() => {});
             } else {
                 await interaction.reply({ content, ephemeral: true }).catch(() => {});
             }
         }
     });
 };
+            
