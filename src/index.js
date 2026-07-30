@@ -118,7 +118,6 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// Serve static frontend files directly from repository root
 app.use(express.static(path.join(__dirname, '../')));
 
 app.get('/health', (req, res) => res.status(200).send('awake'));
@@ -237,10 +236,7 @@ const Nodes = [
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
-    searchFallbacks: {
-        soundcloud: "scsearch",
-        youtube: "ytsearch"
-    },
+    searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
     plugins: [
         new KazagumoSpotify({ 
             clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
@@ -367,8 +363,6 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
-    
-    // Automatically deploy updated slash commands on ready
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
         const deployPath = path.resolve(__dirname, '../deploy-commands.js');
@@ -381,7 +375,7 @@ client.once(Events.ClientReady, async () => {
     }
 });
 
-// Codacy Compliant Static Register Command Helper
+// Codacy Compliant Static Register Helper
 const registerCommandFile = (fileRelPath) => {
     try {
         const command = require(fileRelPath);
@@ -401,7 +395,6 @@ const registerCommandFile = (fileRelPath) => {
     }
 };
 
-// Safe Static Command Directory Scan (Eliminates Codacy path.join taint)
 const baseCmdDir = path.resolve(__dirname, 'commands');
 if (fs.existsSync(baseCmdDir)) {
     const scanAndRegister = (dir) => {
@@ -419,16 +412,21 @@ if (fs.existsSync(baseCmdDir)) {
     scanAndRegister(baseCmdDir);
 }
 
-// Prefix Command Execution Handler
+// Prefix Command Handler (Silent Fail-Safe: Ignores Non-Commands and Custom Emojis)
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
-    const command = client.prefixCommands.get(commandName);
+    // Ignore custom emoji strings that start with .<: or similar
+    if (message.content.startsWith('.<:') || message.content.startsWith('.<a:')) return;
 
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const commandName = args.shift()?.toLowerCase();
+
+    // Silently ignore if no command name or if command is not registered
+    if (!commandName) return;
+    const command = client.prefixCommands.get(commandName);
     if (!command) return;
 
     try { 
@@ -584,7 +582,6 @@ async function startBot() {
             console.error('⚠️ Could not load bumpEngine API routes:', e.message);
         }
 
-        // Execute all modules safely via static lookup map
         Object.keys(MODULE_MAP).forEach(name => executeStaticModule(name));
 
         if (fs.existsSync(path.resolve(__dirname, 'modules/modApply.js'))) {
@@ -602,7 +599,6 @@ async function startBot() {
     }
 }
 
-// Graceful shutdown handling for Render deployments
 const shutdownHandler = async (signal) => {
     console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry...`);
     try {
