@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 6)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -108,7 +108,7 @@ async function updateSecurityConfig(guildId, updateData) {
     return updated;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
 // ==========================================
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -143,74 +143,82 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
     return cat;
 }
 
-// Pure data status embed without buttons
-async function deployWorkingDataEmbed(channel, moduleType) {
+async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-    const hasDataEmbed = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && m.embeds.length > 0) : false;
+    const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && (m.components.length > 0 || m.embeds.length > 0)) : false;
 
-    if (!hasDataEmbed) {
-        let embed = new EmbedBuilder().setColor('#2b2d31');
+    if (!hasPanel) {
+        let embed = new EmbedBuilder();
+        let components = [];
 
-        if (moduleType === 'log_access') {
-            embed.setTitle('🟢 Access & Join Audit Stream').setDescription('**Status:** Running Live Listener\n**Active Tracking:** Member Joins, Leaves, Invites\n*All events stream automatically in real-time.*');
-        } else if (moduleType === 'log_moderate') {
-            embed.setTitle('🛡️ Moderation Action Audit Log').setDescription('**Status:** Operational\n**Active Tracking:** AutoMod triggers, Timeouts, Kicks, Bans\n*Enforced by Starry Master Protection.*');
-        } else if (moduleType === 'log_messages') {
-            embed.setTitle('💬 Message Surveillance Ledger').setDescription('**Status:** Active\n**Active Tracking:** Message Deletions & Edits\n*Cached securely for audit history.*');
-        } else if (moduleType === 'log_voice') {
-            embed.setTitle('🎙️ Voice Telemetry Monitor').setDescription('**Status:** Connected\n**Active Tracking:** Voice channel joins, leaves, and streaming activity.');
-        } else if (moduleType === 'log_channels') {
-            embed.setTitle('📁 Structure & Permission Audit Trail').setDescription('**Status:** Active\n**Active Tracking:** Channel creations, deletions, and overwrite modifications.');
-        } else if (moduleType === 'log_members') {
-            embed.setTitle('👤 Member Profile & Role Ledger').setDescription('**Status:** Active\n**Active Tracking:** Nickname changes, role assignments, and profile updates.');
-        } else if (moduleType === 'sus_tracker') {
-            embed.setTitle('🚨 AltDentifier Young Account Scanner').setDescription('**Status:** Armed\n**Active Rule:** Flags and isolates alt accounts younger than 7 days automatically.');
-        } else if (moduleType === 'inactivity_tracker') {
-            embed.setTitle('💤 Inactivity & Member Engagement Scanner').setDescription('**Status:** Scanning\n**Active Rule:** Audits server engagement metrics and flags inactive user tiers.');
-        } else if (moduleType === 'verification') {
-            embed.setTitle('🌐 Web Verification Gateway').setDescription('**Status:** Active Gatekeeper\n*Unverified users are restricted here until human verification tokens are validated.*');
+        if (moduleType === 'verification') {
+            embed.setColor('#2ecc71').setTitle('🛡️ Server Web Verification Portal').setDescription('To access this server, click the button below to generate your secure, one-time web verification link.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole?.id || 'active'}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'))];
         } else if (moduleType === 'tickets') {
-            embed.setTitle('🎫 Support Ticket & Staff Application Terminal').setDescription('**Status:** Operational\n*Use interactive buttons in panel or run ticket commands to open private channels.*');
+            embed.setColor('#00F2FE').setTitle('🎫 Support & Application Portal').setDescription('Click below to open a support ticket or apply for moderator staff positions.');
+            components = [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
+                new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
+            )];
+        } else if (moduleType === 'log_access') {
+            embed.setColor('#3BA55C').setTitle('🟢 Access & Join Audit Stream').setDescription('**Status:** Running Live Listener\n**Active Tracking:** Member Joins, Leaves, Invites\n*All events stream automatically in real-time.*');
+        } else if (moduleType === 'log_moderate') {
+            embed.setColor('#ED4245').setTitle('🛡️ Moderation Action Audit Log').setDescription('**Status:** Operational\n**Active Tracking:** AutoMod triggers, Timeouts, Kicks, Bans\n*Enforced by Starry Master Protection.*');
+        } else if (moduleType === 'log_messages') {
+            embed.setColor('#5865F2').setTitle('💬 Message Surveillance Hub').setDescription('**Status:** Active\n**Active Tracking:** Message Deletions & Edits\n*Cached securely for audit history.*');
+        } else if (moduleType === 'log_voice') {
+            embed.setColor('#9b59b6').setTitle('🎙️ Voice Telemetry Monitor').setDescription('**Status:** Connected\n**Active Tracking:** Voice channel joins, leaves, and streaming activity.');
+        } else if (moduleType === 'log_channels') {
+            embed.setColor('#FEE75C').setTitle('📁 Structure & Permission Audit Trail').setDescription('**Status:** Active\n**Active Tracking:** Channel creations, deletions, and overwrite modifications.');
+        } else if (moduleType === 'log_members') {
+            embed.setColor('#EB459E').setTitle('👤 Member Profile & Role Ledger').setDescription('**Status:** Active\n**Active Tracking:** Nickname changes, role assignments, and profile updates.');
+        } else if (moduleType === 'sus_tracker') {
+            embed.setColor('#ED4245').setTitle('🚨 AltDentifier Young Account Scanner (`tracker.js`)').setDescription('**Status:** Armed\n**Active Rule:** Flags and isolates alt accounts younger than 7 days automatically.');
+        } else if (moduleType === 'inactivity_tracker') {
+            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Scanner (`tracker.js`)').setDescription('**Status:** Scanning\n**Active Rule:** Audits server engagement metrics and flags inactive user tiers.');
         } else if (moduleType === 'intel_exchange') {
-            embed.setTitle('🔐 Staff Security Intelligence War-Room').setDescription('**Status:** Secured\n*Private administrative coordination channel for security updates.*');
+            embed.setColor('#ED4245').setTitle('🔐 Staff Security Intelligence War-Room').setDescription('**Status:** Secured\n*Private administrative coordination channel for security updates.*');
         } else if (moduleType === 'incident_prep') {
-            embed.setTitle('⚡ Incident Response & Anti-Raid Protocol').setDescription('**Status:** Standby\n*Pre-planned emergency defense directives for server breaches.*');
+            embed.setColor('#FEE75C').setTitle('⚡ Incident Response & Anti-Raid Protocol').setDescription('**Status:** Standby\n*Pre-planned emergency defense directives for server breaches.*');
         } else if (moduleType === 'encrypted_chat') {
-            embed.setTitle('💬 Secure Administrative Comms Terminal').setDescription('**Status:** Active\n*Private encrypted channel for staff coordination.*');
+            embed.setColor('#5865F2').setTitle('💬 Secure Administrative Comms Terminal').setDescription('**Status:** Active\n*Private encrypted channel for staff coordination.*');
         } else if (moduleType === 'resource_hub') {
-            embed.setTitle('📚 Vetted Resource & Guidelines Repository').setDescription('**Status:** Up to Date\n*Official moderation rulebooks and safety policies.*');
+            embed.setColor('#3498db').setTitle('📚 Vetted Resource & Guidelines Repository').setDescription('**Status:** Up to Date\n*Official moderation rulebooks and safety policies.*');
         } else if (moduleType === 'status_monitor') {
-            embed.setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').setDescription('**Status:** Live\n*Updates server metrics and health data every 60 seconds.*');
+            embed.setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').setDescription('**Status:** Live\n*Updates server metrics, RAM usage, ping latency, and health data every 60 seconds.*');
         } else if (moduleType === 'support_desk') {
-            embed.setTitle('deskSupport Coordination Desk').setDescription('**Status:** Active\n*Staff dispatch and ticket management queue.*');
+            embed.setColor('#9b59b6').setTitle('deskSupport Coordination Desk').setDescription('**Status:** Active\n*Staff dispatch and ticket management queue.*');
         } else if (moduleType === 'admin_requests') {
-            embed.setTitle('👑 Admin Action Authorization Queue').setDescription('**Status:** Monitoring\n*Queue for pending administrative approval requests.*');
+            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('**Status:** Monitoring\n*Queue for pending administrative approval requests.*');
         } else if (moduleType === 'threat_reporting') {
-            embed.setTitle('⚠️ Real-Time Threat Detection Center').setDescription('**Status:** Armed\n*Automated logging of security exploits and raid spikes.*');
+            embed.setColor('#ED4245').setTitle('⚠️ Real-Time Threat Detection Center').setDescription('**Status:** Armed\n*Automated logging of security exploits and raid spikes.*');
         } else if (moduleType === 'policy_vote') {
-            embed.setTitle('🏛️ Governance & Policy Voting Ledger').setDescription('**Status:** Online\n*Active governance proposals executed via `/policy-vote`.*');
+            embed.setColor('#5865F2').setTitle('🏛️ Governance & Policy Voting Ledger').setDescription('**Status:** Online\n*Active governance proposals executed via `/policy-vote`.*');
         } else if (moduleType === 'trust_level') {
-            embed.setTitle('📊 Trust Level & Permission Matrix').setDescription('**Status:** Audited\n*Documentation of member trust levels and role hierarchies.*');
+            embed.setColor('#3498db').setTitle('📊 Trust Level & Permission Matrix').setDescription('**Status:** Audited\n*Documentation of member trust levels and role hierarchies.*');
         } else if (moduleType === 'knowledge_base') {
-            embed.setTitle('📖 Security Knowledge Base & Filters').setDescription('**Status:** Ready\n*Documentation on AutoMod filter strings and protection rules.*');
+            embed.setColor('#2ecc71').setTitle('📖 Security Knowledge Base & Filters').setDescription('**Status:** Ready\n*Documentation on AutoMod filter strings and protection rules.*');
         } else if (moduleType === 'transparency_logs') {
-            embed.setTitle('⚖️ Public Transparency & Audit Trail').setDescription('**Status:** Public\n*Public ledger of server governance decisions and policy updates.*');
+            embed.setColor('#9b59b6').setTitle('⚖️ Public Transparency & Audit Trail').setDescription('**Status:** Public\n*Public ledger of server governance decisions and policy updates.*');
         } else if (moduleType === 'verification_chamber') {
-            embed.setTitle('🔻 Arrival Chamber & Isolation Gateway').setDescription('**Status:** Active\n*Initial containment point for unverified visitors.*');
+            embed.setColor('#FEE75C').setTitle('🔻 Arrival Chamber & Isolation Gateway').setDescription('**Status:** Active\n*Initial containment point for unverified visitors.*');
         } else if (moduleType === 'critical_alerts') {
-            embed.setTitle('🚨 Critical Security Dispatch Center').setDescription('**Status:** Active\n*Emergency system broadcast channel.*');
+            embed.setColor('#ED4245').setTitle('🚨 Critical Security Dispatch Center').setDescription('**Status:** Active\n*Emergency system broadcast channel.*');
         } else if (moduleType === 'security_briefing') {
-            embed.setTitle('🛡️ Onboarding Security Protocol Briefing').setDescription('**Status:** Active\n*Core server security rules and safety expectations.*');
+            embed.setColor('#3498db').setTitle('🛡️ Onboarding Security Protocol Briefing').setDescription('**Status:** Active\n*Core server security rules and safety expectations.*');
         } else if (moduleType === 'access_request') {
-            embed.setTitle('🔑 Elevated Access Permission Gatekeeper').setDescription('**Status:** Active\n*Authorization queue for elevated permissions.*');
+            embed.setColor('#5865F2').setTitle('🔑 Elevated Access Permission Gatekeeper').setDescription('**Status:** Active\n*Authorization queue for elevated permissions.*');
         }
 
-        const msg = await channel.send({ embeds: [embed] }).catch(() => null);
+        const msg = components.length > 0 
+            ? await channel.send({ embeds: [embed], components }).catch(() => null)
+            : await channel.send({ embeds: [embed] }).catch(() => null);
+
         if (msg) await msg.pin().catch(() => {});
     }
 }
 
-async function createNonDuplicatingActiveChannel(guild, options) {
+async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     let channel = guild.channels.cache.find(c => c.name.toLowerCase() === options.name.toLowerCase() && c.parentId === options.parent);
     if (!channel) {
         channel = await guild.channels.create({
@@ -221,11 +229,11 @@ async function createNonDuplicatingActiveChannel(guild, options) {
             permissionOverwrites: options.permissionOverwrites || []
         });
     }
-    await deployWorkingDataEmbed(channel, options.moduleType);
+    await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
     return channel;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -258,7 +266,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'inactivity-tracker', moduleType: 'inactivity_tracker' }
     ];
     for (const item of sysChannels) {
-        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     }
 
     // --- CATEGORY 2: 🎫 SUPPORT & APPLICATIONS ---
@@ -267,9 +275,9 @@ async function provisionMasterServerStructure(interaction) {
     await createNonDuplicatingActiveChannel(guild, {
         name: 'verify-here', parent: supportCat.id, moduleType: 'verification',
         permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl]
-    });
+    }, verifiedRole);
 
-    await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+    await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
 
     // --- CATEGORY 3: 💬 SECURE COMMS & DISCUSSIONS ---
     const commsCat = await getOrCreateCategory(guild, '💬 SECURE COMMS & DISCUSSIONS', [hideEveryone, staffFullControl, botFullControl]);
@@ -280,7 +288,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'vetted-resource-hub', moduleType: 'resource_hub' }
     ];
     for (const item of commsChannels) {
-        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: commsCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: commsCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     }
 
     // --- CATEGORY 4: 🚨 SUPPORT & INCIDENT MANAGEMENT ---
@@ -292,7 +300,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'threat-reporting', moduleType: 'threat_reporting' }
     ];
     for (const item of incidentChannels) {
-        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: incidentCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: incidentCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     }
 
     // --- CATEGORY 5: 🏛️ GOVERNANCE & ARCHIVES ---
@@ -304,7 +312,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'transparency-logs', moduleType: 'transparency_logs' }
     ];
     for (const item of govChannels) {
-        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: govCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: govCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     }
 
     // --- CATEGORY 6: 🔻 ENTRY POINT & PROTOCOL ---
@@ -316,7 +324,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'access-request-form', moduleType: 'access_request' }
     ];
     for (const item of entryChannels) {
-        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: entryCat.id, moduleType: item.moduleType, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: entryCat.id, moduleType: item.moduleType, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
     }
 
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
@@ -330,11 +338,14 @@ function start60sChannelTelemetryLoop(client) {
             try {
                 const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
                 if (statusCh) {
+                    const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
                     const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields(
-                        { name: 'Members Count', value: `\`${guild.memberCount}\``, inline: true },
-                        { name: 'Uptime Status', value: '`ONLINE 🟢`', inline: true },
-                        { name: 'Active Modules', value: '`24 Security Hubs Active`', inline: true },
-                        { name: 'Last Loop Check', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
+                        { name: '📊 Total Members', value: `\`${guild.memberCount}\``, inline: true },
+                        { name: '🟢 System Uptime', value: `\`${(process.uptime() / 60).toFixed(1)} mins\``, inline: true },
+                        { name: '🧠 RAM Usage (Heap)', value: `\`${memUsage} MB\``, inline: true },
+                        { name: '📡 Bot Latency (Ping)', value: `\`${client.ws.ping}ms\``, inline: true },
+                        { name: '🛡️ Active Security Modules', value: '`Wick • Beemo • AltDentifier • Dyno/Carl`', inline: false },
+                        { name: '🕒 Last Telemetry Sync', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
                     );
                     const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
                     const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id && m.embeds.length > 0) : null;
@@ -346,7 +357,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
 // ==========================================
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -425,7 +436,9 @@ const policyVotePayload = {
     name: 'policy-vote', description: '🏛️ Governance vote (Admins Only)', default_member_permissions: '8',
     options: [{ name: 'title', type: 3, required: true, description: 'Title' }, { name: 'description', type: 3, required: true, description: 'Desc' }]
 };
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 6)
+// ==========================================
 async function handleModCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
     const sub = interaction.options.getSubcommand();
@@ -631,7 +644,7 @@ async function handleEmergencyCommands(interaction) {
     }
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6 OF 6)
 // ==========================================
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
@@ -647,10 +660,10 @@ function initModule(client) {
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with non-duplicating working security embeds deployed in every channel!`)
+                    .setDescription(`Server successfully configured with interactive verification, tickets, tracker engines, and telemetry!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
-                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with status cards!`, inline: false }
+                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with full functionality!`, inline: false }
                     )
                     .setFooter({ text: 'Starry Master Protocol • High-Security Architecture' });
                 return interaction.editReply({ embeds: [embed] });
@@ -806,15 +819,19 @@ function initModule(client) {
             accessLogCh.send(`🟢 **Member Joined:** <@${member.id}> joined the server. Account created <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>.`).catch(() => {});
         }
 
+        const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
+        if (accountAgeDays < 7) {
+            const susCh = member.guild.channels.cache.find(c => c.name === 'sus-account-tracker');
+            if (susCh) {
+                susCh.send(`🚨 **Tracker Engine (` + `tracker.js` + `):** Flagged <@${member.id}> — Account age is only **${Math.floor(accountAgeDays)} days** old!`).catch(() => {});
+            }
+        }
+
         const config = await getSecurityConfig(member.guild.id);
         const botMember = member.guild.members.me;
 
         if (config.modules?.altdentifier) {
-            const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
             if (accountAgeDays < 7) {
-                const susCh = member.guild.channels.cache.find(c => c.name === 'sus-account-tracker');
-                if (susCh) susCh.send(`🚨 **AltDentifier Flag:** <@${member.id}> flagged for young account age (${Math.floor(accountAgeDays)} days).`).catch(() => {});
-
                 if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
                     await member.send(`⚠️ Removed from **${member.guild.name}**: Account younger than 7 days (AltDentifier).`).catch(() => {});
                     await member.kick('AltDentifier: Account younger than 7 days').catch(() => {});
