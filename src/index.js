@@ -14,7 +14,8 @@ const {
     ButtonBuilder, 
     ButtonStyle, 
     StringSelectMenuBuilder, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    MessageFlags
 } = require('discord.js');
 const express = require('express');
 const cors = require('cors'); 
@@ -25,6 +26,9 @@ const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
 const KazagumoSpotify = require('kazagumo-spotify');
+
+// EPHEMERAL RESPONSE FLAG (BITFIELD 6)
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 // Import ServerListing model safely from bumpEngine
 const bumpEngine = require('./modules/bumpEngine');
@@ -359,8 +363,7 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
-// ==========================================
+    // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
@@ -446,7 +449,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.deferUpdate().catch(() => {});
 
         if (!voiceChannel && action !== 'dj_refresh_panel') {
-            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', ephemeral: true }).catch(() => {});
+            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         try {
@@ -463,10 +466,16 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
 
-    // Unified Command Router (Loads directly from client.commands collection)
+    // Direct module-handled commands (bypasses strict collection check so module listeners run!)
+    const moduleHandledCommands = ['setup-starry', 'social'];
+    if (moduleHandledCommands.includes(interaction.commandName)) {
+        return; 
+    }
+
+    // Unified Command Router
     const command = client.commands.get(interaction.commandName);
     if (!command) {
-        return interaction.reply({ content: '❌ This command is not recognized.', ephemeral: true }).catch(() => {});
+        return interaction.reply({ content: '❌ This command is not recognized.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
     }
 
     try { 
@@ -474,9 +483,9 @@ client.on(Events.InteractionCreate, async interaction => {
     } catch (error) {
         console.error(`❌ Error executing /${interaction.commandName}:`, error);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         } else {
-            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', ephemeral: true }).catch(() => {});
+            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
     }
 });
@@ -513,7 +522,6 @@ async function startBot() {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-        // Explicitly initialize bumpEngine with express app and register commands
         try {
             const bumpModule = require('./modules/bumpEngine');
             if (typeof bumpModule === 'function') {
@@ -575,3 +583,4 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
+            
