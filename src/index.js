@@ -468,6 +468,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 // CODACY FIX: Static module execution array to eliminate dynamic path scanning
 const MODULE_INITIALIZERS = [
+    { name: 'Music Engine', fn: () => require('./modules/music.js')(client) }, // <--- ADD THIS LINE
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
@@ -507,6 +508,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
     { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
 ];
+
 
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
