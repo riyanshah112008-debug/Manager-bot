@@ -1,4 +1,4 @@
-// ==========================================
+ // ==========================================
 // 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
@@ -14,7 +14,8 @@ const {
     ButtonBuilder, 
     ButtonStyle, 
     StringSelectMenuBuilder, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    MessageFlags
 } = require('discord.js');
 const express = require('express');
 const cors = require('cors'); 
@@ -25,6 +26,9 @@ const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
 const KazagumoSpotify = require('kazagumo-spotify');
+
+// EPHEMERAL RESPONSE FLAG (BITFIELD 6)
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 // Import ServerListing model safely from bumpEngine
 const bumpEngine = require('./modules/bumpEngine');
@@ -354,8 +358,7 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
-// ==========================================
+    // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
@@ -426,6 +429,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (!voiceChannel && action !== 'dj_refresh_panel') {
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [6] }).catch(() => {});
+            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         try {
@@ -445,6 +449,16 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = client.commands.get(interaction.commandName);
     if (!command) {
         return interaction.reply({ content: '❌ This command is not recognized.', flags: [6] }).catch(() => {});
+    // Direct module-handled commands (bypasses strict collection check so module listeners run!)
+    const moduleHandledCommands = ['setup-starry', 'social'];
+    if (moduleHandledCommands.includes(interaction.commandName)) {
+        return; 
+    }
+
+    // Unified Command Router
+    const command = client.commands.get(interaction.commandName);
+    if (!command) {
+        return interaction.reply({ content: '❌ This command is not recognized.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
     }
 
     try { 
@@ -455,6 +469,9 @@ client.on(Events.InteractionCreate, async interaction => {
             await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
         } else {
             await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
+            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        } else {
+            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
     }
 });
@@ -555,3 +572,4 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
+            
