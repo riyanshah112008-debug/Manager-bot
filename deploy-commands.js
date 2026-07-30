@@ -53,6 +53,14 @@ const commands = [
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
 
+// Safely Load Master Channel Systems Payload (Policy Votes & Governance)
+try {
+    const { policyVotePayload } = require('./src/modules/masterChannelSystems');
+    if (policyVotePayload) commands.push(policyVotePayload);
+} catch (err) {
+    console.warn('⚠️ Could not load policyVotePayload:', err.message);
+}
+
 // Safely Load Combined /social Master Command Payload
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
@@ -69,7 +77,6 @@ try {
 } catch (err) {
     console.warn('⚠️ Could not load master moderation payloads:', err.message);
 }
-
 // ==========================================
 // GIVEAWAY SLASH COMMAND BUILDERS
 // ==========================================
@@ -129,7 +136,7 @@ commands.push(
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add a role to the shop', type: 1, options: [{ name: 'role', description: 'The role to sell', type: 8, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Item description', type: 3, required: true }] }, { name: 'add-pet', description: 'Add a pet to the shop', type: 1, options: [{ name: 'name', description: 'Name of the pet', type: 3, required: true }, { name: 'price', description: 'Price in credits', type: 10, required: true }, { name: 'description', description: 'Pet description', type: 3, required: true }, { name: 'emoji', description: 'Emoji for the pet', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops in a channel (Admins Only)', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }, { name: 'disable', description: 'Disable chest drops in a specific channel', type: 1, options: [{ name: 'channel', description: 'Select the channel', type: 7, required: true }] }] },
     
-    // Updated /setup-starry with prompt parameter
+    // AI Master Command for Full Infrastructure Setup
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
@@ -156,8 +163,7 @@ commands.push(
     { name: 'devpanel', description: '💻 Open the interactive developer control panel with clickable buttons' },
     autoroleCommandDef
 );
-
-// ==========================================
+                                          // ==========================================
 // ROLES, SETUP & UTILITIES
 // ==========================================
 commands.push(
@@ -230,8 +236,7 @@ commands.push(
     { name: 'autobump', description: '💎 Premium: Enable or disable 24/7 automatic bumping every 2 hours!', default_member_permissions: ADMIN },
     { name: 'bump-setup', description: 'Configure the auto-bump reminder system.', default_member_permissions: ADMIN, options: [{ name: 'ping_role', type: 8, required: false, description: 'The role to ping when the 2-hour cooldown is over' }, { name: 'channel', type: 7, required: false, description: 'The channel to send the reminder in' }] }
 );
-
-// ==========================================
+                // ==========================================
 // DEDUPLICATION & DEPLOYMENT ENGINE
 // ==========================================
 const commandMap = new Map();
