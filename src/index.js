@@ -49,6 +49,7 @@ app.get('/api/servers', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch servers' });
     }
 });
+
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -128,6 +129,7 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
+
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -352,6 +354,7 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
+
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
@@ -365,66 +368,27 @@ client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        const deployPath = path.resolve(__dirname, '../deploy-commands.js');
-        if (fs.existsSync(deployPath)) {
-            const { deployCommands } = require('../deploy-commands.js');
-            await deployCommands();
+        // CODACY FIX: Static module import
+        const deploy = require('../deploy-commands.js');
+        if (deploy && typeof deploy.deployCommands === 'function') {
+            await deploy.deployCommands();
         }
     } catch (err) {
         console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
     }
 });
 
-// Codacy Compliant Static Register Helper
-const registerCommandFile = (fileRelPath) => {
-    try {
-        const command = require(fileRelPath);
-        if (command.data && command.data.name && typeof command.execute === 'function') {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-        }
-        if (command.name && typeof command.name === 'string' && (typeof command.run === 'function' || typeof command.execute === 'function')) {
-            client.prefixCommands.set(command.name, command);
-            console.log(`✅ Loaded Prefix Command: .${command.name}`);
-            if (command.aliases && Array.isArray(command.aliases)) {
-                command.aliases.forEach(alias => client.prefixCommands.set(alias, command));
-            }
-        }
-    } catch (err) {
-        console.error(`❌ Failed to load command at ${fileRelPath}:`, err.message);
-    }
-};
-
-const baseCmdDir = path.resolve(__dirname, 'commands');
-if (fs.existsSync(baseCmdDir)) {
-    const scanAndRegister = (dir) => {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-            const fullPath = path.resolve(dir, entry.name);
-            if (entry.isDirectory()) {
-                scanAndRegister(fullPath);
-            } else if (entry.isFile() && entry.name.endsWith('.js')) {
-                const relPath = './' + path.relative(__dirname, fullPath).replace(/\\/g, '/');
-                registerCommandFile(relPath);
-            }
-        }
-    };
-    scanAndRegister(baseCmdDir);
-}
-
-// Prefix Command Handler (Silent Fail-Safe: Ignores Non-Commands and Custom Emojis)
+// Prefix Command Handler (Silent Fail-Safe)
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
 
-    // Ignore custom emoji strings that start with .<: or similar
     if (message.content.startsWith('.<:') || message.content.startsWith('.<a:')) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const commandName = args.shift()?.toLowerCase();
 
-    // Silently ignore if no command name or if command is not registered
     if (!commandName) return;
     const command = client.prefixCommands.get(commandName);
     if (!command) return;
@@ -440,12 +404,11 @@ client.on(Events.MessageCreate, async message => {
     }
 });
 // ==========================================
-// 5. INTERACTION ENGINE (UNIFIED & CRASH-PROOF)
+// 5. INTERACTION ENGINE & STATIC BOOTSTRAP
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // Direct module-handled commands (bypasses collection checks)
     if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = ['setup-starry', 'policy-vote', 'social', 'devpanel'];
         if (moduleHandledCommands.includes(interaction.commandName)) {
@@ -453,7 +416,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    // Handle button controls for music
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
@@ -480,7 +442,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
 
-    // Unified Command Router
     const command = client.commands.get(interaction.commandName);
     if (!command) {
         return interaction.reply({ content: '❌ This command is not recognized.', flags: [6] }).catch(() => {});
@@ -497,71 +458,49 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-// ==========================================
-// 6. MASTER BOOTSTRAP SEQUENCE
-// ==========================================
 
-// Codacy-Compliant Static Module Map Table (Zero require(variable) vulnerabilities)
-const MODULE_MAP = {
-    'Moderation': () => require('./modules/moderation.js'),
-    'Automod': () => require('./modules/automod.js'),
-    'Media Only': () => require('./modules/mediaOnly.js'),
-    'Premium': () => require('./modules/premium.js'),
-    'Translator': () => require('./modules/translator.js'),
-    'Reaction Roles': () => require('./modules/reactionRoles.js'),
-    'Help': () => require('./modules/help.js'),
-    'Leveling': () => require('./modules/leveling.js'),
-    'Starry Protocol': () => require('./modules/starry.js'),
-    'Boost Tracker': () => require('./modules/boostTracker.js'),
-    'Truth or Dare': () => require('./modules/truthOrDare.js'),
-    'Support Tickets': () => require('./modules/tickets.js'),
-    'Admin Help Text Trigger': () => require('./modules/ahelpText.js'),
-    'Tracker': () => require('./modules/tracker.js'),
-    'Sus Account Detector': () => require('./modules/susAccount.js'),
-    'Whois Lookup': () => require('./modules/whois.js'),
-    'Emoji Blocker': () => require('./modules/emojiBlocker.js'),
-    'Master Setup Engine': () => require('./modules/masterSetupText.js'),
-    'Server Stats': () => require('./modules/serverStats.js'),
-    'AFK System': () => require('./modules/afk.js'),
-    'Server Logs': () => require('./modules/logs.js'),
-    'Giveaway': () => require('./modules/giveaway.js'),
-    'Counting Game': () => require('./modules/count.js'),
-    'Advanced Mod & Security': () => require('./modules/advancedMod.js'),
-    'Interactive Mod Panel': () => require('./modules/modPanel.js'),
-    'Reputation System': () => require('./modules/rep.js'),
-    'Voice Channel Manager': () => require('./modules/voiceManager.js'),
-    'Emoji Stealer': () => require('./modules/steal.js'),
-    'Welcome System': () => require('./modules/welcome.js'),
-    'Goodbye System': () => require('./modules/goodbye.js'),
-    'Server Backup Engine': () => require('./modules/backupEngine.js'),
-    'Role Manager': () => require('./modules/roleManager.js'),
-    'Anti-Abuse': () => require('./modules/antiAbuse.js'),
-    'Random Chest Drops': () => require('./modules/chestDrop.js'),
-    'Autorole & Sticky Roles': () => require('./modules/autorole.js'),
-    'Verification System': () => require('./modules/verification.js'),
-    'Network Telemetry Engine': () => require('./modules/telemetryEngine.js'),
-    'Social Actions Engine': () => require('./modules/socialActions.js'),
-    'Master Channel Systems': () => require('./modules/masterChannelSystems.js')
-};
-
-function executeStaticModule(name) {
-    try {
-        const loader = MODULE_MAP[name];
-        if (!loader) return;
-        const mod = loader();
-        if (typeof mod === 'function') {
-            mod(client, app);
-            console.log(`✅ ${name} Module Loaded`);
-        } else if (mod && typeof mod.init === 'function') {
-            mod.init(client, app);
-            console.log(`✅ ${name} Module Loaded (Object Init)`);
-        } else {
-            console.log(`✅ ${name} Module Loaded (Object Export)`);
-        }
-    } catch (err) {
-        console.error(`❌ Error loading ${name}:`, err.message);
-    }
-}
+// CODACY FIX: Static module execution array to eliminate dynamic path scanning
+const MODULE_INITIALIZERS = [
+    { name: 'Moderation', fn: () => require('./modules/moderation.js')(client, app) },
+    { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
+    { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
+    { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
+    { name: 'Translator', fn: () => require('./modules/translator.js')(client, app) },
+    { name: 'Reaction Roles', fn: () => require('./modules/reactionRoles.js')(client, app) },
+    { name: 'Help', fn: () => require('./modules/help.js')(client, app) },
+    { name: 'Leveling', fn: () => require('./modules/leveling.js')(client, app) },
+    { name: 'Starry Protocol', fn: () => require('./modules/starry.js')(client, app) },
+    { name: 'Boost Tracker', fn: () => require('./modules/boostTracker.js')(client, app) },
+    { name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
+    { name: 'Support Tickets', fn: () => require('./modules/tickets.js')(client, app) },
+    { name: 'Admin Help Text Trigger', fn: () => require('./modules/ahelpText.js')(client, app) },
+    { name: 'Tracker', fn: () => require('./modules/tracker.js')(client, app) },
+    { name: 'Sus Account Detector', fn: () => require('./modules/susAccount.js')(client, app) },
+    { name: 'Whois Lookup', fn: () => require('./modules/whois.js')(client, app) },
+    { name: 'Emoji Blocker', fn: () => require('./modules/emojiBlocker.js')(client, app) },
+    { name: 'Master Setup Engine', fn: () => require('./modules/masterSetupText.js')(client, app) },
+    { name: 'Server Stats', fn: () => require('./modules/serverStats.js')(client, app) },
+    { name: 'AFK System', fn: () => require('./modules/afk.js')(client, app) },
+    { name: 'Server Logs', fn: () => require('./modules/logs.js')(client, app) },
+    { name: 'Giveaway', fn: () => require('./modules/giveaway.js')(client, app) },
+    { name: 'Counting Game', fn: () => require('./modules/count.js')(client, app) },
+    { name: 'Advanced Mod & Security', fn: () => require('./modules/advancedMod.js')(client, app) },
+    { name: 'Interactive Mod Panel', fn: () => require('./modules/modPanel.js')(client, app) },
+    { name: 'Reputation System', fn: () => require('./modules/rep.js')(client, app) },
+    { name: 'Voice Channel Manager', fn: () => require('./modules/voiceManager.js')(client, app) },
+    { name: 'Emoji Stealer', fn: () => require('./modules/steal.js')(client, app) },
+    { name: 'Welcome System', fn: () => require('./modules/welcome.js')(client, app) },
+    { name: 'Goodbye System', fn: () => require('./modules/goodbye.js')(client, app) },
+    { name: 'Server Backup Engine', fn: () => require('./modules/backupEngine.js')(client, app) },
+    { name: 'Role Manager', fn: () => require('./modules/roleManager.js')(client, app) },
+    { name: 'Anti-Abuse', fn: () => require('./modules/antiAbuse.js')(client, app) },
+    { name: 'Random Chest Drops', fn: () => require('./modules/chestDrop.js')(client, app) },
+    { name: 'Autorole & Sticky Roles', fn: () => require('./modules/autorole.js')(client, app) },
+    { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
+    { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
+    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
+    { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
+];
 
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
@@ -582,14 +521,14 @@ async function startBot() {
             console.error('⚠️ Could not load bumpEngine API routes:', e.message);
         }
 
-        Object.keys(MODULE_MAP).forEach(name => executeStaticModule(name));
-
-        if (fs.existsSync(path.resolve(__dirname, 'modules/modApply.js'))) {
+        // Execute all modules safely
+        for (const mod of MODULE_INITIALIZERS) {
             try {
-                const modApply = require('./modules/modApply.js');
-                if (typeof modApply === 'function') modApply(client, app);
-                console.log('✅ Mod Apply Module Loaded');
-            } catch (err) {}
+                mod.fn();
+                console.log(`✅ ${mod.name} Module Loaded`);
+            } catch (err) {
+                console.error(`❌ Error loading ${mod.name}:`, err.message);
+            }
         }
 
         await client.login(process.env.TOKEN);
