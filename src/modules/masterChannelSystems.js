@@ -14,6 +14,7 @@ const {
     MessageFlags
 } = require('discord.js');
 const mongoose = require('mongoose');
+const { GoogleGenAI } = require('@google/genai');
 
 // EPHEMERAL RESPONSE FLAG (BITFIELD 6)
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
@@ -32,6 +33,33 @@ const PolicyVoteSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
+
+// AI Key Rotation Fallback Helper
+const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
+const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+let currentKeyIndex = 0;
+
+function getNextAIClient() {
+    if (apiKeys.length === 0) return null;
+    const key = apiKeys[currentKeyIndex];
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+    return new GoogleGenAI({ apiKey: key });
+}
+
+async function generateAIResponseWithRetry(prompt) {
+    if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY environment variable.');
+    const AI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    for (const modelName of AI_MODELS) {
+        try {
+            const ai = getNextAIClient();
+            const response = await ai.models.generateContent({ model: modelName, contents: prompt });
+            if (response && response.text) return response.text.trim();
+        } catch (err) {
+            continue;
+        }
+    }
+    throw new Error('All AI models are currently busy.');
+}
 
 // ==========================================
 // 🛠️ 1. AUTONOMOUS PROVISIONING ENGINE (/setup-starry)
@@ -59,14 +87,14 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
         });
     }
 
-    // Baseline Overwrites
+    // Baseline Permissions Overwrites
     const hideEveryone = { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] };
     const showVerified = { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] };
     const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
     const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
 
     // ==========================================
-    // A. CATEGORY: SECURITY & SYSTEM LOGS
+    // A. CATEGORY: SECURITY & SYSTEM LOGS (ALWAYS CREATED)
     // ==========================================
     const sysCat = await guild.channels.create({
         name: '🛡️ SECURITY & SYSTEM LOGS',
@@ -86,23 +114,17 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     ];
 
     for (const item of sysChannels) {
-        await guild.channels.create({
-            name: item.name,
-            type: ChannelType.GuildText,
-            parent: sysCat.id,
-            topic: item.topic
-        });
+        await guild.channels.create({ name: item.name, type: ChannelType.GuildText, parent: sysCat.id, topic: item.topic });
     }
 
     // ==========================================
-    // B. CATEGORY: SUPPORT & APPLICATIONS
+    // B. CATEGORY: SUPPORT & APPLICATIONS (ALWAYS CREATED)
     // ==========================================
     const supportCat = await guild.channels.create({
         name: '🎫 SUPPORT & APPLICATIONS',
         type: ChannelType.GuildCategory
     });
 
-    // #verify-here
     const verifyCh = await guild.channels.create({
         name: 'verify-here',
         type: ChannelType.GuildText,
@@ -126,7 +148,6 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     );
     await verifyCh.send({ embeds: [verifyEmbed], components: [verifyRow] });
 
-    // #open-a-ticket
     const ticketCh = await guild.channels.create({
         name: 'open-a-ticket',
         type: ChannelType.GuildText,
@@ -147,110 +168,123 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     await ticketCh.send({ embeds: [ticketEmbed], components: [ticketRow] });
 
     // ==========================================
-    // C. CATEGORY: ENTRY POINT & PROTOCOL
+    // C. CONDITIONAL SPLIT BASED ON PROMPT
     // ==========================================
-    const entryCat = await guild.channels.create({
-        name: '🔻 ENTRY POINT & PROTOCOL',
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
-    });
+    let totalCustomChannels = 0;
+    let categoryCount = 2;
 
-    // #security-briefing
-    const briefingCh = await guild.channels.create({ name: 'security-briefing', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Server security rules & guidelines.' });
-    const briefingEmbed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle('📜 Security Briefing & Guidelines')
-        .setDescription('1. Treat all members with respect.\n2. No spam or mass pings.\n3. Keep topics in relevant channels.\n4. Obey staff instructions.')
-        .setFooter({ text: `${guild.name} Governance` });
-    await briefingCh.send({ embeds: [briefingEmbed] });
+    if (!ownerPrompt) {
+        // --- DEFAULT BEHAVIOR (NO PROMPT): BUILD FULL SECURITY & PROTOCOL SUITE ---
 
-    // #verification-chamber
-    await guild.channels.create({ name: 'verification-chamber', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Live verification activity stream.' });
+        // 1. ENTRY POINT & PROTOCOL
+        const entryCat = await guild.channels.create({ name: '🔻 ENTRY POINT & PROTOCOL', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+        await guild.channels.create({ name: 'security-briefing', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Server security rules & guidelines.' });
+        await guild.channels.create({ name: 'verification-chamber', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Live verification activity stream.' });
+        
+        const reqCh = await guild.channels.create({ name: 'access-request-form', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Apply for special access roles.' });
+        const reqEmbed = new EmbedBuilder().setColor('#9b59b6').setTitle('📋 Special Access Request Desk').setDescription('Click below to submit a VIP or Special Access Request.');
+        const reqRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('sys_request_access').setLabel('Request Access').setStyle(ButtonStyle.Secondary).setEmoji('📝'));
+        await reqCh.send({ embeds: [reqEmbed], components: [reqRow] });
 
-    // #access-request-form
-    const requestCh = await guild.channels.create({ name: 'access-request-form', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Apply for special access roles.' });
-    const reqEmbed = new EmbedBuilder().setColor('#9b59b6').setTitle('📋 Special Access Request Desk').setDescription('Click below to submit a VIP or Special Access Request.');
-    const reqRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('sys_request_access').setLabel('Request Access').setStyle(ButtonStyle.Secondary).setEmoji('📝'));
-    await requestCh.send({ embeds: [reqEmbed], components: [reqRow] });
+        await guild.channels.create({ name: 'critical-alerts', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Emergency broadcasts & security alerts.' });
 
-    // #critical-alerts
-    await guild.channels.create({ name: 'critical-alerts', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Emergency broadcasts & security alerts.' });
+        // 2. SECURE COMMS & DISCUSSIONS
+        const commsCat = await guild.channels.create({ name: '💬 SECURE COMMS & DISCUSSIONS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+        await guild.channels.create({ name: 'general-encrypted-chat', type: ChannelType.GuildText, parent: commsCat.id });
+        await guild.channels.create({ name: 'security-intel-exchange', type: ChannelType.GuildText, parent: commsCat.id });
+        await guild.channels.create({ name: 'vetted-resource-hub', type: ChannelType.GuildText, parent: commsCat.id });
+        await guild.channels.create({ name: 'incident-response-prep', type: ChannelType.GuildText, parent: commsCat.id });
 
-    // ==========================================
-    // D. CATEGORY: SECURE COMMS & DISCUSSIONS
-    // ==========================================
-    const commsCat = await guild.channels.create({
-        name: '💬 SECURE COMMS & DISCUSSIONS',
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
-    });
+        // 3. SUPPORT & INCIDENT MANAGEMENT
+        const incidentCat = await guild.channels.create({ name: '🚨 SUPPORT & INCIDENT MANAGEMENT', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+        
+        const threatCh = await guild.channels.create({ name: 'threat-reporting', type: ChannelType.GuildText, parent: incidentCat.id });
+        const threatEmbed = new EmbedBuilder().setColor('#e74c3c').setTitle('🚨 Anonymous Threat Reporting').setDescription('Report suspicious activity, scammers, or rule violations confidentially.');
+        const threatRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('sys_report_threat').setLabel('Report Threat').setStyle(ButtonStyle.Danger).setEmoji('⚠️'));
+        await threatCh.send({ embeds: [threatEmbed], components: [threatRow] });
 
-    await guild.channels.create({ name: 'general-encrypted-chat', type: ChannelType.GuildText, parent: commsCat.id, topic: 'General community discussion.' });
-    await guild.channels.create({ name: 'security-intel-exchange', type: ChannelType.GuildText, parent: commsCat.id, topic: 'Share security tips and tech news.' });
-    await guild.channels.create({ name: 'vetted-resource-hub', type: ChannelType.GuildText, parent: commsCat.id, topic: 'Useful tools and community resources.' });
-    await guild.channels.create({ name: 'incident-response-prep', type: ChannelType.GuildText, parent: commsCat.id, topic: 'Incident response coordination.' });
+        await guild.channels.create({ name: 'support-desk-private', type: ChannelType.GuildText, parent: incidentCat.id });
+        
+        const statusCh = await guild.channels.create({ name: 'server-status-monitor', type: ChannelType.GuildText, parent: incidentCat.id });
+        const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Server Status Monitor').setDescription('All security systems operational.');
+        await statusCh.send({ embeds: [statusEmbed] });
 
-    // ==========================================
-    // E. CATEGORY: SUPPORT & INCIDENT MANAGEMENT
-    // ==========================================
-    const incidentCat = await guild.channels.create({
-        name: '🚨 SUPPORT & INCIDENT MANAGEMENT',
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
-    });
+        await guild.channels.create({ name: 'admin-action-requests', type: ChannelType.GuildText, parent: incidentCat.id });
 
-    // #threat-reporting
-    const threatCh = await guild.channels.create({ name: 'threat-reporting', type: ChannelType.GuildText, parent: incidentCat.id, topic: 'Report security threats directly to staff.' });
-    const threatEmbed = new EmbedBuilder().setColor('#e74c3c').setTitle('🚨 Anonymous Threat Reporting').setDescription('Report suspicious activity, scammers, or rule violations confidentially.');
-    const threatRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('sys_report_threat').setLabel('Report Threat').setStyle(ButtonStyle.Danger).setEmoji('⚠️'));
-    await threatCh.send({ embeds: [threatEmbed], components: [threatRow] });
+        // 4. GOVERNANCE & ARCHIVES
+        const govCat = await guild.channels.create({ name: '🏛️ GOVERNANCE & ARCHIVES', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+        
+        const voteCh = await guild.channels.create({ name: 'policy-amendment-vote', type: ChannelType.GuildText, parent: govCat.id });
+        const voteEmbed = new EmbedBuilder().setColor('#f1c40f').setTitle('🏛️ Community Governance Portal').setDescription('Admins can initiate votes using `/policy-vote`.');
+        await voteCh.send({ embeds: [voteEmbed] });
 
-    // #support-desk-private
-    await guild.channels.create({ name: 'support-desk-private', type: ChannelType.GuildText, parent: incidentCat.id, topic: 'Private support coordination.' });
+        await guild.channels.create({ name: 'transparency-logs', type: ChannelType.GuildText, parent: govCat.id });
+        await guild.channels.create({ name: 'trust-level-overview', type: ChannelType.GuildText, parent: govCat.id });
+        await guild.channels.create({ name: 'security-knowledge-base', type: ChannelType.GuildText, parent: govCat.id });
 
-    // #server-status-monitor
-    const statusCh = await guild.channels.create({ name: 'server-status-monitor', type: ChannelType.GuildText, parent: incidentCat.id, topic: 'Live server metrics.' });
-    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Server Status Monitor').setDescription('All security and bot systems are operational. Total Members: ' + guild.memberCount);
-    await statusCh.send({ embeds: [statusEmbed] });
+        categoryCount += 4;
+        totalCustomChannels = 16;
 
-    // #admin-action-requests
-    await guild.channels.create({ name: 'admin-action-requests', type: ChannelType.GuildText, parent: incidentCat.id, topic: 'Pending administrator action items.' });
+    } else {
+        // --- CUSTOM PROMPT PROVIDED: GENERATE THEMED CATEGORIES VIA GEMINI ---
+        let customLayout = { categories: [] };
+        try {
+            const aiPrompt = `Generate a comprehensive Discord server structure for the theme: "${ownerPrompt}".
+Return ONLY a valid JSON object matching this exact structure (no markdown formatting):
+{
+  "categories": [
+    { "name": "CATEGORY NAME 1", "channels": ["channel-1", "channel-2", "channel-3"] },
+    { "name": "CATEGORY NAME 2", "channels": ["channel-1", "channel-2", "channel-3"] }
+  ]
+}
+Ensure there are at least 3-4 categories tailored specifically to "${ownerPrompt}".`;
 
-    // ==========================================
-    // F. CATEGORY: GOVERNANCE & ARCHIVES
-    // ==========================================
-    const govCat = await guild.channels.create({
-        name: '🏛️ GOVERNANCE & ARCHIVES',
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
-    });
+            const aiRaw = await generateAIResponseWithRetry(aiPrompt);
+            const cleanedJson = aiRaw.replace(/```json/gi, '').replace(/```/g, '').trim();
+            customLayout = JSON.parse(cleanedJson);
+        } catch (err) {
+            console.warn('⚠️ AI Custom prompt layout failed, fallback applied:', err.message);
+        }
 
-    // #policy-amendment-vote
-    const voteCh = await guild.channels.create({ name: 'policy-amendment-vote', type: ChannelType.GuildText, parent: govCat.id, topic: 'Vote on community rules and policy updates.' });
-    const voteEmbed = new EmbedBuilder().setColor('#f1c40f').setTitle('🏛️ Community Governance Portal').setDescription('Admins can initiate policy amendment votes using `/policy-vote`. Click below to participate!');
-    await voteCh.send({ embeds: [voteEmbed] });
+        if (customLayout.categories && Array.isArray(customLayout.categories)) {
+            for (const catData of customLayout.categories) {
+                const createdCat = await guild.channels.create({
+                    name: catData.name.toUpperCase(),
+                    type: ChannelType.GuildCategory,
+                    permissionOverwrites: [hideEveryone, showVerified, botFullControl]
+                });
+                categoryCount++;
 
-    await guild.channels.create({ name: 'transparency-logs', type: ChannelType.GuildText, parent: govCat.id, topic: 'Public transparency log of moderation statistics.' });
-    await guild.channels.create({ name: 'trust-level-overview', type: ChannelType.GuildText, parent: govCat.id, topic: 'Member reputation and trust level system.' });
-    await guild.channels.create({ name: 'security-knowledge-base', type: ChannelType.GuildText, parent: govCat.id, topic: 'Security FAQs and account protection tips.' });
+                if (Array.isArray(catData.channels)) {
+                    for (const chName of catData.channels) {
+                        const isVoice = chName.toLowerCase().includes('vc') || chName.toLowerCase().includes('lounge');
+                        await guild.channels.create({
+                            name: chName.toLowerCase().replace(/[^a-z0-9\-_ ]/g, '-'),
+                            type: isVoice ? ChannelType.GuildVoice : ChannelType.GuildText,
+                            parent: createdCat.id
+                        });
+                        totalCustomChannels++;
+                    }
+                }
+            }
+        }
+    }
 
     // Save Setup State
     await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
 
     return {
         verifiedRole,
-        totalCategories: 6,
-        totalChannels: 24
+        totalCategories: categoryCount,
+        totalChannels: totalCustomChannels + 10
     };
 }
-// ==========================================
+    // ==========================================
 // 🧠 2. DEDICATED REAL-TIME INTERACTION & AUTOMATION ENGINE
 // ==========================================
-module.exports = (client) => {
 
-    client.on('clientReady', () => {
-        console.log('✅ Supreme Master Channel Systems & Automation Engine Active!');
-    });
+// Register event listeners for dynamic UI interactions
+function registerSystemListeners(client) {
 
     // ==========================================
     // 🛡️ A. VERIFICATION BUTTON HANDLER (#verify-here)
@@ -313,8 +347,7 @@ module.exports = (client) => {
         const target = interaction.fields.getTextInputValue('threat_subject');
         const details = interaction.fields.getTextInputValue('threat_details');
 
-        // Route threat report to #admin-action-requests
-        const adminReqCh = interaction.guild.channels.cache.find(c => c.name === 'admin-action-requests') || client.getLogChannel(interaction.guild, 'moderate');
+        const adminReqCh = interaction.guild.channels.cache.find(c => c.name === 'admin-action-requests') || interaction.guild.channels.cache.find(c => c.name === 'logs-moderate');
 
         if (adminReqCh) {
             const reportEmbed = new EmbedBuilder()
@@ -434,14 +467,16 @@ module.exports = (client) => {
         await interaction.reply({ content: '🔒 **Closing ticket channel in 5 seconds...**' });
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     });
-};
-            // ==========================================
-// 🏛️ 3. LIVE MONITOR & GOVERNANCE POLICY VOTING ENGINE
+                       }
+// ==========================================
+// 🏛️ 3. LIVE MONITOR & TELEMETRY UPDATER ENGINE
 // ==========================================
 
-// A. Real-Time Status Monitor Engine (#server-status-monitor)
+// Real-Time Status Monitor Engine (#server-status-monitor)
 function startServerStatusMonitor(client) {
     setInterval(async () => {
+        if (!client.guilds) return;
+        
         client.guilds.cache.forEach(async (guild) => {
             try {
                 const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
@@ -475,11 +510,12 @@ function startServerStatusMonitor(client) {
         });
     }, 60000); // Refreshes every 60 seconds
 }
-
-// B. Community Policy Voting System (#policy-amendment-vote)
+// ==========================================
+// 🏛️ 4. COMMUNITY POLICY VOTING SYSTEM (#policy-amendment-vote)
+// ==========================================
 const policyVotePayload = {
     name: 'policy-vote',
-    description: '🏛️ Create a official governance policy vote in #policy-amendment-vote (Admins Only)',
+    description: '🏛️ Create an official governance policy vote in #policy-amendment-vote (Admins Only)',
     default_member_permissions: '8',
     options: [
         {
@@ -583,8 +619,9 @@ async function handlePolicyVoteButtons(interaction) {
     await interaction.update({ embeds: [updatedEmbed] });
 }
 
-// Module Exporter & Event Binder
-module.exports.init = (client) => {
+// Module Initializer Functions
+function initModule(client) {
+    registerSystemListeners(client);
     startServerStatusMonitor(client);
 
     client.on('interactionCreate', async (interaction) => {
@@ -594,8 +631,11 @@ module.exports.init = (client) => {
             await handlePolicyVoteButtons(interaction);
         }
     });
-};
+}
 
+// Dual Export Support (Supports both functional loader `mod(client)` and object loader `mod.init(client)`)
+module.exports = initModule;
+module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.policyVotePayload = policyVotePayload;
-             
+        
