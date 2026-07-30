@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 5)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -108,7 +108,7 @@ async function updateSecurityConfig(guildId, updateData) {
     return updated;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 5)
 // ==========================================
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -143,7 +143,7 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
     return cat;
 }
 
-// Strictly pure data-driven working status embeds without intrusive buttons
+// Pure data status embed without buttons
 async function deployWorkingDataEmbed(channel, moduleType) {
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
     const hasDataEmbed = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && m.embeds.length > 0) : false;
@@ -225,7 +225,7 @@ async function createNonDuplicatingActiveChannel(guild, options) {
     return channel;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 5)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -346,7 +346,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 5)
 // ==========================================
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -425,9 +425,7 @@ const policyVotePayload = {
     name: 'policy-vote', description: '🏛️ Governance vote (Admins Only)', default_member_permissions: '8',
     options: [{ name: 'title', type: 3, required: true, description: 'Title' }, { name: 'description', type: 3, required: true, description: 'Desc' }]
 };
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 6)
-// ==========================================
+
 async function handleModCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
     const sub = interaction.options.getSubcommand();
@@ -633,7 +631,7 @@ async function handleEmergencyCommands(interaction) {
     }
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 5)
 // ==========================================
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
@@ -644,15 +642,15 @@ function initModule(client) {
             const cmd = interaction.commandName;
             
             if (cmd === 'setup-starry') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
                 const result = await provisionMasterServerStructure(interaction);
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with working data-driven security embeds deployed in every channel!`)
+                    .setDescription(`Server successfully configured with non-duplicating working security embeds deployed in every channel!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
-                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with working data status panels!`, inline: false }
+                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with status cards!`, inline: false }
                     )
                     .setFooter({ text: 'Starry Master Protocol • High-Security Architecture' });
                 return interaction.editReply({ embeds: [embed] });
@@ -667,7 +665,7 @@ function initModule(client) {
             if (cmd === 'verify-setup') await handleVerifySetupCommand(interaction, client);
 
             if (cmd === 'policy-vote') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
                 const title = interaction.options.getString('title', true);
                 const desc = interaction.options.getString('description', true);
                 
@@ -863,7 +861,7 @@ function initModule(client) {
         if (!newMessage.guild || newMessage.author?.bot || oldMessage.content === newMessage.content) return;
         const msgLogCh = newMessage.guild.channels.cache.find(c => c.name === 'logs-messages');
         if (msgLogCh) {
-            msgLogCh.send(`✏️ **Message Edited** in <#$newMessage.channel.id}> by <@${newMessage.author.id}>:\n**Before:** ${oldMessage.content}\n**After:** ${newMessage.content}`).catch(() => {});
+            msgLogCh.send(`✏️ **Message Edited** in <#${newMessage.channel.id}> by <@${newMessage.author.id}>:\n**Before:** ${oldMessage.content}\n**After:** ${newMessage.content}`).catch(() => {});
         }
     });
 
@@ -872,7 +870,7 @@ function initModule(client) {
         if (!config.modules?.wick) return;
 
         const botMember = guild.members.me;
-        if (!botMember.permissions.has(PermissionsBitField.Flags.ViewAuditLog)) return;
+        if (!botMember.permissions.has(PermissionFlagsBits.ViewAuditLog)) return;
 
         try {
             const auditLogs = await guild.fetchAuditLogs({ limit: 1, type: actionType }).catch(() => null);
@@ -912,7 +910,7 @@ function initModule(client) {
 
 module.exports = initModule;
 module.exports.init = initModule;
-module.exports.provisionMasterServerStructure = provisionMasterStructure;
+module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.policyVotePayload = policyVotePayload;
 module.exports.modMasterPayload = modMasterCommand.toJSON();
