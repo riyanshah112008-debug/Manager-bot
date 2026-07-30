@@ -571,7 +571,10 @@ async function handlePolicyVoteCommand(interaction, client) {
 async function handlePolicyVoteButtons(interaction) {
     if (!interaction.isButton() || !['vote_yes', 'vote_no'].includes(interaction.customId)) return;
 
-    const voteDoc = await PolicyVote.findOne({ messageId: interaction.message.id });
+    const safeMessageId = String(interaction.message?.id || '');
+    if (!safeMessageId) return;
+
+    const voteDoc = await PolicyVote.findOne({ messageId: safeMessageId });
     if (!voteDoc) return;
 
     const userId = interaction.user.id;
