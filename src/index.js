@@ -429,7 +429,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
-            'automod', 'mod', 'play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'djpanel'
+            'automod', 'mod'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
