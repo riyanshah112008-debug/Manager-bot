@@ -228,7 +228,7 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 const Nodes = [
     {
-        name: 'AjieHospitality-v4',
+        name: 'Node-v4-Primary-SSL',
         url: 'lava-v4.ajiehospitality.com:443',
         auth: 'https://discord.gg/vM3e3U389y',
         secure: true,
@@ -252,6 +252,7 @@ const Nodes = [
         retryDelay: 3000
     }
 ];
+
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
