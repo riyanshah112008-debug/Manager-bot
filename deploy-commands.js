@@ -53,12 +53,14 @@ const commands = [
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
 
-// Safely Load Module Payloads
+// Safely Load Module Payloads from MasterChannelSystems
 try {
-    const { policyVotePayload } = require('./src/modules/masterChannelSystems');
+    const { policyVotePayload, modMasterPayload, autoModMasterPayload } = require('./src/modules/masterChannelSystems');
     if (policyVotePayload) commands.push(policyVotePayload);
+    if (modMasterPayload) commands.push(modMasterPayload);
+    if (autoModMasterPayload) commands.push(autoModMasterPayload);
 } catch (err) {
-    console.warn('⚠️ Could not load policyVotePayload:', err.message);
+    console.warn('⚠️ Could not load policies or moderation payloads from masterChannelSystems:', err.message);
 }
 
 try {
@@ -66,14 +68,6 @@ try {
     if (socialCommandPayload) commands.push(socialCommandPayload);
 } catch (err) {
     console.warn('⚠️ Could not load socialCommandPayload:', err.message);
-}
-
-try {
-    const { modMasterPayload, autoModMasterPayload } = require('./src/modules/moderation');
-    if (modMasterPayload) commands.push(modMasterPayload);
-    if (autoModMasterPayload) commands.push(autoModMasterPayload);
-} catch (err) {
-    console.warn('⚠️ Could not load master moderation payloads:', err.message);
 }
 
 // GIVEAWAYS
@@ -185,4 +179,4 @@ if (require.main === module) {
 }
 
 module.exports = { commands: finalPayload, deployCommands };
-    
+                                                                                                                                                                                                                                                                                                                                              
