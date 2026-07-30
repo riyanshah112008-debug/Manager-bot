@@ -75,9 +75,6 @@ const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('Automod
 const Warning = mongoose.models.Warning || mongoose.model('Warning', warningSchema);
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
 
-let Transcript;
-try { Transcript = require('../models/Transcript'); } catch (e) { Transcript = mongoose.models.Transcript; }
-
 // --- SQLite Protection DB ---
 const protectDb = new Database('protect.db');
 protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
@@ -97,8 +94,8 @@ const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here 
 
 // --- Security RAM Cache & Velocity Trackers ---
 const securityCache = new Map();
-const joinTracker = new Map();  // GuildID -> Array of join timestamps
-const nukeTracker = new Map();  // AdminID -> Array of deletion timestamps
+const joinTracker = new Map();  
+const nukeTracker = new Map();  
 
 async function getSecurityConfig(guildId) {
     if (securityCache.has(guildId)) return securityCache.get(guildId);
@@ -130,54 +127,35 @@ async function updateSecurityConfig(guildId, updateData) {
 // ==========================================
 // 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
 // ==========================================
-// --- AI Setup Helpers with Retry & Fallbacks ---
-const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
-const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
-let currentKeyIndex = 0;
-
-function getNextAIClient() {
-    if (apiKeys.length === 0) return null;
-    const key = apiKeys[currentKeyIndex];
-    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-    return new GoogleGenAI({ apiKey: key });
-}
-
-async function generateAIResponseWithRetry(prompt) {
-    if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY environment variable.');
-    const AI_MODELS = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
-    for (const modelName of AI_MODELS) {
-        try {
-            const ai = getNextAIClient();
-            if (!ai) continue;
-            const response = await ai.models.generateContent({ model: modelName, contents: prompt });
-            if (response && response.text) return response.text.trim();
-        } catch (err) { continue; }
-    }
-    return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
-}
-
-// --- Helper function to create channel, send embed description, and pin it ---
+// --- Helper function to create channel strictly once, send description embed, and pin it ---
 async function createDescribedChannel(guild, options) {
-    const channel = await guild.channels.create({
-        name: options.name,
-        type: options.type || ChannelType.GuildText,
-        parent: options.parent,
-        topic: options.topic || '',
-        permissionOverwrites: options.permissionOverwrites || []
-    });
+    // Check if channel already exists to prevent any duplication
+    let channel = guild.channels.cache.find(c => c.name === options.name && c.parentId === options.parent);
+    if (!channel) {
+        channel = await guild.channels.create({
+            name: options.name,
+            type: options.type || ChannelType.GuildText,
+            parent: options.parent,
+            topic: options.topic || '',
+            permissionOverwrites: options.permissionOverwrites || []
+        });
+    }
 
     if (options.type !== ChannelType.GuildVoice && options.description) {
-        const embed = new EmbedBuilder()
-            .setColor('#2b2d31')
-            .setTitle(`📌 Channel Info: #${options.name}`)
-            .setDescription(options.description)
-            .setFooter({ text: 'Starry Master System • Active Security Module' });
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        const hasPin = messages ? messages.some(m => m.pinned && m.author.id === guild.client.user.id) : false;
 
-        if (options.components) {
-            const msg = await channel.send({ embeds: [embed], components: options.components }).catch(() => null);
-            if (msg) await msg.pin().catch(() => {});
-        } else {
-            const msg = await channel.send({ embeds: [embed] }).catch(() => null);
+        if (!hasPin) {
+            const embed = new EmbedBuilder()
+                .setColor('#2b2d31')
+                .setTitle(`📌 Active Module Overview: #${options.name}`)
+                .setDescription(options.description)
+                .setFooter({ text: 'Starry Master System • Fully Operational Background Engine' });
+
+            const msg = options.components 
+                ? await channel.send({ embeds: [embed], components: options.components }).catch(() => null)
+                : await channel.send({ embeds: [embed] }).catch(() => null);
+
             if (msg) await msg.pin().catch(() => {});
         }
     }
@@ -190,7 +168,6 @@ async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
 
-    // 1. Core Roles Setup
     let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
     if (!verifiedRole) verifiedRole = await guild.roles.create({ name: 'Verified', color: '#2ecc71', reason: 'Starry Master System' });
 
@@ -206,82 +183,90 @@ async function provisionMasterServerStructure(interaction) {
     let totalChannels = 24;
 
     // --- CATEGORY 1: 🛡️ SECURITY & SYSTEM LOGS ---
-    const sysCat = await guild.channels.create({ name: '🛡️ SECURITY & SYSTEM LOGS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    let sysCat = guild.channels.cache.find(c => c.name === '🛡️ SECURITY & SYSTEM LOGS' && c.type === ChannelType.GuildCategory);
+    if (!sysCat) sysCat = await guild.channels.create({ name: '🛡️ SECURITY & SYSTEM LOGS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    
     const sysChannels = [
-        { name: 'logs-access', desc: 'Active Module: Access Audit. Tracks member joins, leaves, and invite usage.' },
-        { name: 'logs-moderate', desc: 'Active Module: Moderation Audit. Records AutoMod triggers, timeouts, kicks, and bans.' },
-        { name: 'logs-messages', desc: 'Active Module: Message Audit. Logs deleted and edited chat messages across all channels.' },
-        { name: 'logs-voice', desc: 'Active Module: Telemetry Voice Audit. Logs member voice joins, disconnects, and stream activity.' },
-        { name: 'logs-channels', desc: 'Active Module: Structure Audit. Logs channel creations, deletions, and permission overrides.' },
-        { name: 'logs-members', desc: 'Active Module: Member Audit. Tracks role updates, nickname changes, and profile changes.' },
-        { name: 'sus-account-tracker', desc: 'Active Module: AltDentifier Detector. Flags new accounts younger than 7 days.' },
-        { name: 'inactivity-tracker', desc: 'Active Module: Inactivity Scanner. Audits server engagement and inactive member lists.' }
+        { name: 'logs-access', desc: '**Active Background Module: Access Audit.** Automatically logs every member join, leave, and invite tracking event.' },
+        { name: 'logs-moderate', desc: '**Active Background Module: Moderation Audit.** Automatically records AutoMod triggers, timeouts, kicks, and bans.' },
+        { name: 'logs-messages', desc: '**Active Background Module: Message Audit.** Automatically records deleted and edited chat messages across all channels.' },
+        { name: 'logs-voice', desc: '**Active Background Module: Telemetry Voice Audit.** Automatically records member voice joins, disconnects, and stream activity.' },
+        { name: 'logs-channels', desc: '**Active Background Module: Structure Audit.** Automatically logs channel creations, deletions, and permission overrides.' },
+        { name: 'logs-members', desc: '**Active Background Module: Member Audit.** Automatically tracks role updates, nickname changes, and profile changes.' },
+        { name: 'sus-account-tracker', desc: '**Active Background Module: AltDentifier Detector.** Automatically flags and logs new accounts younger than 7 days.' },
+        { name: 'inactivity-tracker', desc: '**Active Background Module: Inactivity Scanner.** Automatically audits server engagement and inactive member lists.' }
     ];
     for (const item of sysChannels) {
         await createDescribedChannel(guild, { name: item.name, parent: sysCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 2: 🎫 SUPPORT & APPLICATIONS ---
-    const supportCat = await guild.channels.create({ name: '🎫 SUPPORT & APPLICATIONS', type: ChannelType.GuildCategory });
+    let supportCat = guild.channels.cache.find(c => c.name === '🎫 SUPPORT & APPLICATIONS' && c.type === ChannelType.GuildCategory);
+    if (!supportCat) supportCat = await guild.channels.create({ name: '🎫 SUPPORT & APPLICATIONS', type: ChannelType.GuildCategory });
     
-    // #verify-here with Web Verification Portal
-    const verifyEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🛡️ Server Web Verification').setDescription('Click the button below to generate your secure, one-time web verification link.');
     const verifyRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole.id}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'));
     await createDescribedChannel(guild, {
-        name: 'verify-here', parent: supportCat.id, description: 'Active Module: Web Verification Portal. Click below to verify human identity.', components: [verifyRow],
+        name: 'verify-here', parent: supportCat.id, description: '**Active Background Module: Web Verification Portal.** Click below to generate your secure tokenized web verification link.', components: [verifyRow],
         permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl]
     });
 
-    // #open-a-ticket
     const ticketRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
         new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
     );
-    await createDescribedChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, description: 'Active Module: Ticket & Staff Application Manager. Open support tickets or apply for moderator.', components: [ticketRow], permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+    await createDescribedChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, description: '**Active Background Module: Ticket & Staff Application Manager.** Open support tickets or apply for moderator positions.', components: [ticketRow], permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
 
     // --- CATEGORY 3: 💬 SECURE COMMS & DISCUSSIONS ---
-    const commsCat = await guild.channels.create({ name: '💬 SECURE COMMS & DISCUSSIONS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    let commsCat = guild.channels.cache.find(c => c.name === '💬 SECURE COMMS & DISCUSSIONS' && c.type === ChannelType.GuildCategory);
+    if (!commsCat) commsCat = await guild.channels.create({ name: '💬 SECURE COMMS & DISCUSSIONS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    
     const commsChannels = [
-        { name: 'security-intel-exchange', desc: 'Active Module: Intel Exchange. Private staff coordination channel for security updates.' },
-        { name: 'incident-response-prep', desc: 'Active Module: Incident Prep. Pre-planned response protocols for server raids or nukes.' },
-        { name: 'general-encrypted-chat', desc: 'Active Module: High-Security Chat. Private encrypted staff chat channel.' },
-        { name: 'vetted-resource-hub', desc: 'Active Module: Resource Repository. Official moderation guidelines and rule documentation.' }
+        { name: 'security-intel-exchange', desc: '**Active Background Module: Intel Exchange.** Private staff coordination channel for real-time security updates.' },
+        { name: 'incident-response-prep', desc: '**Active Background Module: Incident Prep.** Pre-planned response protocols and anti-raid guidelines.' },
+        { name: 'general-encrypted-chat', desc: '**Active Background Module: High-Security Chat.** Private staff discussion channel.' },
+        { name: 'vetted-resource-hub', desc: '**Active Background Module: Resource Repository.** Official moderation guidelines and rule documentation.' }
     ];
     for (const item of commsChannels) {
         await createDescribedChannel(guild, { name: item.name, parent: commsCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 4: 🚨 SUPPORT & INCIDENT MANAGEMENT ---
-    const incidentCat = await guild.channels.create({ name: '🚨 SUPPORT & INCIDENT MANAGEMENT', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    let incidentCat = guild.channels.cache.find(c => c.name === '🚨 SUPPORT & INCIDENT MANAGEMENT' && c.type === ChannelType.GuildCategory);
+    if (!incidentCat) incidentCat = await guild.channels.create({ name: '🚨 SUPPORT & INCIDENT MANAGEMENT', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    
     const incidentChannels = [
-        { name: 'server-status-monitor', desc: 'Active Module: Live Telemetry. Automatically updates live server statistics every 60 seconds.' },
-        { name: 'support-desk-private', desc: 'Active Module: Private Support Desk. Staff coordination channel for active support tickets.' },
-        { name: 'admin-action-requests', desc: 'Active Module: Admin Approval Engine. Queue for pending administrative approval requests.' },
-        { name: 'threat-reporting', desc: 'Active Module: Threat Detection Engine. Real-time logging of suspicious user activity.' }
+        { name: 'server-status-monitor', desc: '**Active Background Module: Live Telemetry.** Automatically loops every 60 seconds to update live server statistics and uptime.' },
+        { name: 'support-desk-private', desc: '**Active Background Module: Private Support Desk.** Staff coordination channel for active support tickets.' },
+        { name: 'admin-action-requests', desc: '**Active Background Module: Admin Approval Engine.** Queue for pending administrative approval requests.' },
+        { name: 'threat-reporting', desc: '**Active Background Module: Threat Detection Engine.** Real-time logging of suspicious user activity.' }
     ];
     for (const item of incidentChannels) {
         await createDescribedChannel(guild, { name: item.name, parent: incidentCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 5: 🏛️ GOVERNANCE & ARCHIVES ---
-    const govCat = await guild.channels.create({ name: '🏛️ GOVERNANCE & ARCHIVES', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    let govCat = guild.channels.cache.find(c => c.name === '🏛️ GOVERNANCE & ARCHIVES' && c.type === ChannelType.GuildCategory);
+    if (!govCat) govCat = await guild.channels.create({ name: '🏛️ GOVERNANCE & ARCHIVES', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    
     const govChannels = [
-        { name: 'policy-amendment-vote', desc: 'Active Module: Policy Voting Engine. Admins launch governance votes with live interactive buttons.' },
-        { name: 'trust-level-overview', desc: 'Active Module: Trust & Permission Matrix. Documents member trust levels and role hierarchies.' },
-        { name: 'security-knowledge-base', desc: 'Active Module: Knowledge Base. Documentation on AutoMod filters and protection rules.' },
-        { name: 'transparency-logs', desc: 'Active Module: Public Audit Trail. Public logs of governance decisions and policy updates.' }
+        { name: 'policy-amendment-vote', desc: '**Active Background Module: Policy Voting Engine.** Admins launch governance votes via `/policy-vote` with live interactive buttons.' },
+        { name: 'trust-level-overview', desc: '**Active Background Module: Trust & Permission Matrix.** Documents member trust levels and role hierarchies.' },
+        { name: 'security-knowledge-base', desc: '**Active Background Module: Knowledge Base.** Documentation on AutoMod filters and protection rules.' },
+        { name: 'transparency-logs', desc: '**Active Background Module: Public Audit Trail.** Public logs of governance decisions and policy updates.' }
     ];
     for (const item of govChannels) {
         await createDescribedChannel(guild, { name: item.name, parent: govCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 6: 🔻 ENTRY POINT & PROTOCOL ---
-    const entryCat = await guild.channels.create({ name: '🔻 ENTRY POINT & PROTOCOL', type: ChannelType.GuildCategory });
+    let entryCat = guild.channels.cache.find(c => c.name === '🔻 ENTRY POINT & PROTOCOL' && c.type === ChannelType.GuildCategory);
+    if (!entryCat) entryCat = await guild.channels.create({ name: '🔻 ENTRY POINT & PROTOCOL', type: ChannelType.GuildCategory });
+    
     const entryChannels = [
-        { name: 'verification-chamber', desc: 'Active Module: Initial Arrival Chamber. First entry point for unverified users.' },
-        { name: 'critical-alerts', desc: 'Active Module: Emergency System Dispatch. Broadcasters critical security alerts.' },
-        { name: 'security-briefing', desc: 'Active Module: Onboarding Protocol. Overview of server security rules and expectations.' },
-        { name: 'access-request-form', desc: 'Active Module: Access Gatekeeper. Request elevated access permissions.' }
+        { name: 'verification-chamber', desc: '**Active Background Module: Initial Arrival Chamber.** First entry point for unverified users.' },
+        { name: 'critical-alerts', desc: '**Active Background Module: Emergency System Dispatch.** Broadcasters critical security alerts.' },
+        { name: 'security-briefing', desc: '**Active Background Module: Onboarding Protocol.** Overview of server security rules and expectations.' },
+        { name: 'access-request-form', desc: '**Active Background Module: Access Gatekeeper.** Request elevated access permissions.' }
     ];
     for (const item of entryChannels) {
         await createDescribedChannel(guild, { name: item.name, parent: entryCat.id, description: item.desc, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
@@ -613,7 +598,7 @@ function initModule(client) {
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with full high-security infrastructure & pinned channel guides!`)
+                    .setDescription(`Server successfully configured with full 6-category high-security infrastructure & pinned channel guides!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
                         { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with pinned descriptions!`, inline: false }
