@@ -1,4 +1,4 @@
- // ==========================================
+// ==========================================
 // 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
@@ -218,7 +218,7 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-// ==========================================
+     // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
 // ==========================================
 const Nodes = [
@@ -358,7 +358,8 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-    // ==========================================
+
+// ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
@@ -371,7 +372,6 @@ client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        // CODACY FIX: Static module import
         const deploy = require('../deploy-commands.js');
         if (deploy && typeof deploy.deployCommands === 'function') {
             await deploy.deployCommands();
@@ -406,14 +406,23 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-// ==========================================
+            // ==========================================
 // 5. INTERACTION ENGINE & STATIC BOOTSTRAP
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
     if (interaction.isChatInputCommand()) {
-        const moduleHandledCommands = ['setup-starry', 'policy-vote', 'social', 'devpanel'];
+        const moduleHandledCommands = [
+            'setup-starry', 
+            'policy-vote', 
+            'social', 
+            'devpanel',
+            'emergency-nuke',
+            'emergency-lockdown',
+            'emergency-secure',
+            'emergency-unban'
+        ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
         }
@@ -428,7 +437,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.deferUpdate().catch(() => {});
 
         if (!voiceChannel && action !== 'dj_refresh_panel') {
-            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [6] }).catch(() => {});
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
@@ -448,16 +456,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
     const command = client.commands.get(interaction.commandName);
     if (!command) {
-        return interaction.reply({ content: '❌ This command is not recognized.', flags: [6] }).catch(() => {});
-    // Direct module-handled commands (bypasses strict collection check so module listeners run!)
-    const moduleHandledCommands = ['setup-starry', 'social'];
-    if (moduleHandledCommands.includes(interaction.commandName)) {
-        return; 
-    }
-
-    // Unified Command Router
-    const command = client.commands.get(interaction.commandName);
-    if (!command) {
         return interaction.reply({ content: '❌ This command is not recognized.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
     }
 
@@ -466,9 +464,6 @@ client.on(Events.InteractionCreate, async interaction => {
     } catch (error) {
         console.error(`❌ Error executing /${interaction.commandName}:`, error);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
-        } else {
-            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
             await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         } else {
             await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -572,4 +567,4 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
-            
+         
