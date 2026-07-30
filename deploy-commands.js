@@ -75,19 +75,25 @@ const commands = [
         .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)))
         .toJSON(),
 
-    // ⚡ EMERGENCY NUKE ENGINE (/emergency-nuke)
+    // ⚡ SINGLE EMERGENCY NUKE COMMAND WITH OPTIONS
     new SlashCommandBuilder()
         .setName('emergency-nuke')
         .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addSubcommand(sub =>
-            sub.setName('channel')
-                .setDescription('Purge & recreate a specific channel')
-                .addChannelOption(o => o.setName('target').setDescription('Target channel (defaults to current channel)').addChannelTypes(ChannelType.GuildText))
+        .addStringOption(o =>
+            o.setName('target')
+                .setDescription('Select whether to nuke this channel or the entire server')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Channel (Purge & Recreate)', value: 'channel' },
+                    { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' }
+                )
         )
-        .addSubcommand(sub =>
-            sub.setName('server')
-                .setDescription('⚠️ SERVER NUKE: Delete all channels (except this one) & non-essential roles')
+        .addChannelOption(o =>
+            o.setName('channel')
+                .setDescription('Target channel (defaults to current channel if target is Channel)')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(false)
         )
         .toJSON(),
 
@@ -99,6 +105,7 @@ const commands = [
     // SECURITY & VERIFICATION
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
+
 // Safely Load Social Command Payload
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
@@ -175,7 +182,7 @@ commands.push(
     { name: 'bump', description: 'Bump server to global web list' }
 );
 
-// DeduplicateSafely
+// Deduplicate Safely by Base Command Name
 const commandMap = new Map();
 commands.forEach(cmd => { 
     if (cmd && cmd.name) {
