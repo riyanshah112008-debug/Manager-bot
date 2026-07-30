@@ -269,7 +269,20 @@ const verifySetupCommand = new SlashCommandBuilder()
     .addChannelOption(o => o.setName('channel').setDescription('Channel to send verification panel').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .addRoleOption(o => o.setName('role').setDescription('Role given upon verification').setRequired(true));
 
-const emergencyNukeCommand = new SlashCommandBuilder().setName('emergency-nuke').setDescription('⚡ Emergency Protocol: Purge & Recreate Channel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const emergencyNukeCommand = new SlashCommandBuilder()
+    .setName('emergency-nuke')
+    .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+        sub.setName('channel')
+            .setDescription('Purge & recreate a specific channel')
+            .addChannelOption(o => o.setName('target').setDescription('Target channel (defaults to current channel)').addChannelTypes(ChannelType.GuildText))
+    )
+    .addSubcommand(sub =>
+        sub.setName('server')
+            .setDescription('⚠️ SERVER NUKE: Delete all channels (except this one) & non-essential roles')
+    );
+
 const emergencyLockdownCommand = new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 const emergencySecureCommand = new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 const emergencyUnbanCommand = new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
@@ -421,12 +434,52 @@ async function handleEmergencyCommands(interaction) {
     const guild = interaction.guild;
 
     if (cmd === 'emergency-nuke') {
-        const channel = interaction.channel;
-        const position = channel.position;
-        const newChannel = await channel.clone();
-        await channel.delete();
-        await newChannel.setPosition(position);
-        return newChannel.send('⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.');
+        const sub = interaction.options.getSubcommand();
+
+        if (sub === 'channel') {
+            const channel = interaction.options.getChannel('target') || interaction.channel;
+            const position = channel.position;
+            const newChannel = await channel.clone();
+            await channel.delete().catch(() => {});
+            await newChannel.setPosition(position).catch(() => {});
+            return newChannel.send('⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.');
+        }
+
+        if (sub === 'server') {
+            if (interaction.user.id !== guild.ownerId) {
+                return interaction.editReply('❌ **Owner Only:** Only the Server Owner can execute a whole-server emergency nuke!');
+            }
+
+            const currentChannel = interaction.channel;
+            const botMember = guild.members.me;
+
+            let deletedChannels = 0;
+            let deletedRoles = 0;
+
+            // 1. Delete all channels EXCEPT current channel
+            const channelsToDelete = guild.channels.cache.filter(c => c.id !== currentChannel.id);
+            for (const [, ch] of channelsToDelete) {
+                try {
+                    await ch.delete();
+                    deletedChannels++;
+                } catch (e) {}
+            }
+
+            // 2. Delete non-managed, non-everyone, non-superior roles
+            const rolesToDelete = guild.roles.cache.filter(r => 
+                !r.managed && 
+                r.id !== guild.roles.everyone.id && 
+                r.position < botMember.roles.highest.position
+            );
+            for (const [, role] of rolesToDelete) {
+                try {
+                    await role.delete();
+                    deletedRoles++;
+                } catch (e) {}
+            }
+
+            return interaction.editReply(`⚡ **EMERGENCY SERVER NUKE COMPLETED:**\n• Purged **${deletedChannels}** channels (kept current channel).\n• Deleted **${deletedRoles}** non-essential roles.`);
+        }
     }
 
     if (cmd === 'emergency-lockdown') {
