@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 7)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -127,7 +127,9 @@ async function updateSecurityConfig(guildId, updateData) {
     securityCache.set(guildId, updated);
     return updated;
 }
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 7)
+// ==========================================
 // --- AI Setup Helpers with Retry & Fallbacks ---
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -153,13 +155,15 @@ async function generateAIResponseWithRetry(prompt) {
     }
     return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
 }
+
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
+// 🏛️ MASTER SERVER PROVISIONER & MANDATORY CORE
 // ==========================================
-async function provisionMasterServerStructure(interaction) {
+async function provisionMasterServerStructure(interaction, promptText) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
 
+    // 1. Core Roles Setup
     let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
     if (!verifiedRole) verifiedRole = await guild.roles.create({ name: 'Verified', color: '#2ecc71', reason: 'Starry Master System' });
 
@@ -171,22 +175,33 @@ async function provisionMasterServerStructure(interaction) {
     const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
     const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
 
+    // 2. MANDATORY SECURITY & SYSTEM CATEGORIES (BUILD ALL 5 MANDATORY CATEGORIES)
+    let totalCategories = 5;
+    let totalChannels = 20;
+
+    // Category A: 🛡️ SECURITY & SYSTEM LOGS
     const sysCat = await guild.channels.create({ name: '🛡️ SECURITY & SYSTEM LOGS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     const sysChannels = [
-        { name: 'logs-access', topic: 'User Joins, Leaves & Invites' }, { name: 'logs-moderate', topic: 'Automod, Timeouts, Bans' },
-        { name: 'logs-messages', topic: 'Deleted & Edited Audits' }, { name: 'logs-voice', topic: 'Voice Activity' },
-        { name: 'logs-channels', topic: 'Channel Updates' }, { name: 'logs-members', topic: 'Role Assignments' },
-        { name: 'sus-account-tracker', topic: 'Alt accounts' }, { name: 'inactivity-tracker', topic: 'Inactivity Audit' }
+        { name: 'logs-access', topic: 'User Joins, Leaves & Invites' },
+        { name: 'logs-moderate', topic: 'Automod, Timeouts, Bans' },
+        { name: 'logs-messages', topic: 'Deleted & Edited Audits' },
+        { name: 'logs-voice', topic: 'Voice Activity' },
+        { name: 'logs-channels', topic: 'Channel Updates' },
+        { name: 'logs-members', topic: 'Role Assignments' },
+        { name: 'sus-account-tracker', topic: 'Alt accounts' },
+        { name: 'inactivity-tracker', topic: 'Inactivity Audit' }
     ];
     for (const item of sysChannels) await guild.channels.create({ name: item.name, type: ChannelType.GuildText, parent: sysCat.id, topic: item.topic });
 
+    // Category B: 🎫 SUPPORT & APPLICATIONS (With Web Link Verification)
     const supportCat = await guild.channels.create({ name: '🎫 SUPPORT & APPLICATIONS', type: ChannelType.GuildCategory });
+    
     const verifyCh = await guild.channels.create({
         name: 'verify-here', type: ChannelType.GuildText, parent: supportCat.id, topic: 'Verification portal',
         permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl]
     });
-    const verifyEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🛡️ Server Verification').setDescription('Click below to verify.');
-    const verifyRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`sys_verify_${verifiedRole.id}`).setLabel('Verify Account').setStyle(ButtonStyle.Success).setEmoji('✅'));
+    const verifyEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🛡️ Server Web Verification').setDescription('To access this server, click the button below to generate your secure, one-time web verification link.');
+    const verifyRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole.id}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'));
     await verifyCh.send({ embeds: [verifyEmbed], components: [verifyRow] });
 
     const ticketCh = await guild.channels.create({ name: 'open-a-ticket', type: ChannelType.GuildText, parent: supportCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
@@ -197,8 +212,88 @@ async function provisionMasterServerStructure(interaction) {
     await ticketCh.send({ embeds: [ticketEmbed], components: [ticketRow] });
     await ticketCh.send({ embeds: [staffAppEmbed], components: [staffAppRow] });
 
+    // Category C: 💬 SECURE COMMS & DISCUSSIONS
+    const commsCat = await guild.channels.create({ name: '💬 SECURE COMMS & DISCUSSIONS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    for (const ch of ['security-intel-exchange', 'incident-response-prep', 'general-encrypted-chat', 'vetted-resource-hub']) {
+        await guild.channels.create({ name: ch, type: ChannelType.GuildText, parent: commsCat.id });
+    }
+
+    // Category D: 🚨 SUPPORT & INCIDENT MANAGEMENT
+    const incidentCat = await guild.channels.create({ name: '🚨 SUPPORT & INCIDENT MANAGEMENT', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    for (const ch of ['server-status-monitor', 'support-desk-private', 'admin-action-requests', 'threat-reporting']) {
+        await guild.channels.create({ name: ch, type: ChannelType.GuildText, parent: incidentCat.id });
+    }
+
+    // Category E: 🏛️ GOVERNANCE & ARCHIVES
+    const govCat = await guild.channels.create({ name: '🏛️ GOVERNANCE & ARCHIVES', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+    for (const ch of ['policy-amendment-vote', 'trust-level-overview', 'security-knowledge-base', 'transparency-logs']) {
+        await guild.channels.create({ name: ch, type: ChannelType.GuildText, parent: govCat.id });
+    }
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 7)
+// ==========================================
+    // 3. DYNAMIC GEMINI AI PROMPT / NICHE BUILDER
+    const userPrompt = promptText || 'Community Lounge & Gaming';
+    try {
+        const aiPrompt = `Generate a Discord server channel layout for theme/niche: "${userPrompt}".
+Return ONLY a raw JSON array of objects representing categories and text/voice channels. Do NOT include markdown blocks or extra prose.
+Format:
+[
+  {
+    "category": "🌸 ANIME LOUNGE",
+    "channels": [
+      {"name": "general-anime-chat", "type": "text"},
+      {"name": "manga-discussion", "type": "text"},
+      {"name": "anime-media", "type": "text"},
+      {"name": "🔊 Anime VC", "type": "voice"}
+    ]
+  }
+]
+Generate 3 to 4 categories specifically customized for the theme "${userPrompt}" with 3 to 5 relevant channels each. Add appropriate emojis.`;
+
+        const aiResult = await generateAIResponseWithRetry(aiPrompt);
+        const cleanJson = aiResult.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsedLayout = JSON.parse(cleanJson);
+
+        if (Array.isArray(parsedLayout)) {
+            for (const catObj of parsedLayout) {
+                if (!catObj.category || !Array.isArray(catObj.channels)) continue;
+                const nicheCat = await guild.channels.create({
+                    name: catObj.category,
+                    type: ChannelType.GuildCategory,
+                    permissionOverwrites: [hideEveryone, showVerified, botFullControl]
+                });
+                totalCategories++;
+
+                for (const chObj of catObj.channels) {
+                    const isVoice = chObj.type === 'voice';
+                    await guild.channels.create({
+                        name: chObj.name,
+                        type: isVoice ? ChannelType.GuildVoice : ChannelType.GuildText,
+                        parent: nicheCat.id,
+                        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
+                    });
+                    totalChannels++;
+                }
+            }
+        }
+    } catch (aiErr) {
+        console.warn('AI Layout Generation fallback triggered:', aiErr.message);
+        const nicheCat = await guild.channels.create({
+            name: `🎉 ${userPrompt.toUpperCase().slice(0, 18)} HUB`,
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: [hideEveryone, showVerified, botFullControl]
+        });
+        totalCategories++;
+
+        for (const ch of [{ name: 'general-lounge', type: ChannelType.GuildText }, { name: 'media-share', type: ChannelType.GuildText }, { name: 'bot-commands', type: ChannelType.GuildText }, { name: '🔊 Hangout VC', type: ChannelType.GuildVoice }]) {
+            await guild.channels.create({ name: ch.name, type: ch.type, parent: nicheCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+            totalChannels++;
+        }
+    }
+
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
-    return { verifiedRole, totalCategories: 2, totalChannels: 12 };
+    return { verifiedRole, totalCategories, totalChannels };
 }
 
 function start60sChannelTelemetryLoop(client) {
@@ -218,12 +313,9 @@ function start60sChannelTelemetryLoop(client) {
         });
     }, 60000);
 }
-
 // ==========================================
-// 🛡️ ALL 8 COMMAND BUILDERS FOR DISCORD API
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 7)
 // ==========================================
-
-// 1. /mod
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)))
@@ -234,7 +326,6 @@ const modMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('protect').setDescription('Protect user').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)))
     .addSubcommand(sub => sub.setName('unprotect').setDescription('Unprotect user').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)));
 
-// 2. /automod
 const autoModMasterCommand = new SlashCommandBuilder()
     .setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub => sub.setName('status').setDescription('Status'))
@@ -243,17 +334,16 @@ const autoModMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('unignore').setDescription('Unignore channel').addStringOption(o => o.setName('type').setDescription('Type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel').setDescription('Channel')))
     .addSubcommand(sub => sub.setName('mediaonly').setDescription('Media only').addStringOption(o => o.setName('action').setDescription('Action').setRequired(true).addChoices({ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' })).addChannelOption(o => o.setName('channel').setDescription('Channel')));
 
-// 3. /moderate (With 4 Choices: Wick, Beemo, AltDentifier, Dyno/Carl)
 const moderateMasterCommand = new SlashCommandBuilder()
     .setName('moderate')
     .setDescription('⚙️ Toggle advanced security modules & AutoMod settings')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
         sub.setName('toggle')
-            .setDescription('Select the security protection module')
+            .setDescription('Toggle advanced security protection modules')
             .addStringOption(o =>
                 o.setName('module')
-                    .setDescription('Select module to configure')
+                    .setDescription('Select the security protection module')
                     .setRequired(true)
                     .addChoices(
                         { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
@@ -268,7 +358,6 @@ const moderateMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('autoban').setDescription('Configure native automated banning filters').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
     .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)));
 
-// 4. /verify-setup
 const verifySetupCommand = new SlashCommandBuilder()
     .setName('verify-setup')
     .setDescription('Set up the server verification panel (Admins Only)')
@@ -276,28 +365,28 @@ const verifySetupCommand = new SlashCommandBuilder()
     .addChannelOption(o => o.setName('channel').setDescription('Channel to send verification panel').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .addRoleOption(o => o.setName('role').setDescription('Role given upon verification').setRequired(true));
 
-// 5. /emergency-nuke (Subcommands: channel, server)
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addSubcommand(sub =>
-        sub.setName('channel')
-            .setDescription('Purge & recreate a specific channel')
-            .addChannelOption(o => o.setName('target').setDescription('Target channel (defaults to current channel)').addChannelTypes(ChannelType.GuildText))
+    .addStringOption(o =>
+        o.setName('target')
+            .setDescription('Select whether to nuke this channel or the entire server')
+            .setRequired(true)
+            .addChoices(
+                { name: 'Channel (Purge & Recreate)', value: 'channel' },
+                { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' }
+            )
     )
-    .addSubcommand(sub =>
-        sub.setName('server')
-            .setDescription('⚠️ SERVER NUKE: Delete all channels (except this one) & non-essential roles')
+    .addChannelOption(o =>
+        o.setName('channel')
+            .setDescription('Target channel (defaults to current channel if target is Channel)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
     );
 
-// 6. /emergency-lockdown
 const emergencyLockdownCommand = new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-// 7. /emergency-secure
 const emergencySecureCommand = new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-// 8. /emergency-unban
 const emergencyUnbanCommand = new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 const policyVotePayload = {
@@ -305,7 +394,7 @@ const policyVotePayload = {
     options: [{ name: 'title', type: 3, required: true, description: 'Title' }, { name: 'description', type: 3, required: true, description: 'Desc' }]
 };
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 7)
 // ==========================================
 async function handleModCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -434,23 +523,25 @@ async function handleVerifySetupCommand(interaction, client) {
         .setFooter({ text: 'Starry Security Protocol', iconURL: client.user.displayAvatarURL() });
 
     const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`verify_role_${role.id}`).setLabel('Get Verification Link').setEmoji('🛡️').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId(`verify_role_${role.id}`).setLabel('Get Verification Link').setEmoji('🌐').setStyle(ButtonStyle.Primary)
     );
 
     await channel.send({ embeds: [embed], components: [button] });
     return interaction.editReply(`✅ Verification panel set up in ${channel} for role ${role}!`);
 }
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6 OF 7)
+// ==========================================
 async function handleEmergencyCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
     const cmd = interaction.commandName;
     const guild = interaction.guild;
 
     if (cmd === 'emergency-nuke') {
-        const sub = interaction.options.getSubcommand();
+        const targetScope = interaction.options.getString('target', true);
 
-        if (sub === 'channel') {
-            const channel = interaction.options.getChannel('target') || interaction.channel;
+        if (targetScope === 'channel') {
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
             const position = channel.position;
             const newChannel = await channel.clone();
             await channel.delete().catch(() => {});
@@ -458,7 +549,7 @@ async function handleEmergencyCommands(interaction) {
             return newChannel.send('⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.');
         }
 
-        if (sub === 'server') {
+        if (targetScope === 'server') {
             if (interaction.user.id !== guild.ownerId) {
                 return interaction.editReply('❌ **Owner Only:** Only the Server Owner can execute a whole-server emergency nuke!');
             }
@@ -469,7 +560,6 @@ async function handleEmergencyCommands(interaction) {
             let deletedChannels = 0;
             let deletedRoles = 0;
 
-            // 1. Delete all channels EXCEPT current channel
             const channelsToDelete = guild.channels.cache.filter(c => c.id !== currentChannel.id);
             for (const [, ch] of channelsToDelete) {
                 try {
@@ -478,7 +568,6 @@ async function handleEmergencyCommands(interaction) {
                 } catch (e) {}
             }
 
-            // 2. Delete non-managed, non-everyone, non-superior roles
             const rolesToDelete = guild.roles.cache.filter(r => 
                 !r.managed && 
                 r.id !== guild.roles.everyone.id && 
@@ -513,9 +602,7 @@ async function handleEmergencyCommands(interaction) {
         return interaction.editReply(`⚡ **EMERGENCY UNBAN:** Successfully unbanned ${bans.size} members.`);
     }
 }
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
-// ==========================================
+
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
@@ -525,6 +612,22 @@ function initModule(client) {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
             
+            if (cmd === 'setup-starry') {
+                await interaction.deferReply().catch(() => {});
+                const prompt = interaction.options.getString('prompt') || 'General Community';
+                const result = await provisionMasterServerStructure(interaction, prompt);
+                const embed = new EmbedBuilder()
+                    .setColor('#2ecc71')
+                    .setTitle('✨ Autonomous Server Setup Complete!')
+                    .setDescription(`Server successfully configured for theme **"${prompt}"** with full security infrastructure!`)
+                    .addFields(
+                        { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
+                        { name: '📁 Infrastructure Built', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels**.`, inline: false }
+                    )
+                    .setFooter({ text: 'Starry Master Protocol • High-Security Architecture' });
+                return interaction.editReply({ embeds: [embed] });
+            }
+
             if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) {
                 await handleEmergencyCommands(interaction);
             }
@@ -594,7 +697,7 @@ function initModule(client) {
         }
     });
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 7 OF 7)
 // ==========================================
     // --- Message Event Handler (Dyno/Carl Chat Filter & Media-Only Enforcer) ---
     client.on('messageCreate', async (message) => {
@@ -604,13 +707,11 @@ function initModule(client) {
         const isOwner = message.author.id === message.guild.ownerId;
         const config = await getSecurityConfig(message.guild.id);
 
-        // --- DYNO/CARL CHAT FILTER & AUTOMOD ENGINE ---
         if (config.modules?.dyno_carl) {
             const bypassedByOwner = config.ownerBypass && isOwner;
             if (!isStaff && !bypassedByOwner) {
                 const botMember = message.guild.members.me;
 
-                // Check Bad Words, Invite Links, and Scam Patterns
                 const hasBadWord = badWordsList.some(w => message.content.toLowerCase().includes(w));
                 const hasInviteLink = /(https?:\/\/)?(www\.)?(discord\.gg|discordapp\.com\/invite|bit\.ly|tinyurl\.com)\/[^\s]+/i.test(message.content);
 
@@ -629,18 +730,16 @@ function initModule(client) {
                         { $set: { [`userInfractions.${userId}`]: currentInfractions } }
                     ).catch(() => {});
 
-                    // AutoBan Trigger (5+ infractions)
                     if (config.autoBan && currentInfractions >= 5) {
                         if (botMember.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-                            await message.member.ban({ reason: 'Dyno/Carl Engine: Exceeded maximum infraction limit (5+ violations)' }).catch(() => {});
+                            await message.member.ban({ reason: 'Dyno/Carl Engine: Exceeded maximum infraction limit' }).catch(() => {});
                             return message.channel.send(`🔨 **AutoBan:** <@${userId}> was banned for repeated violations.`).catch(() => {});
                         }
                     }
 
-                    // AutoKick Trigger (3+ infractions)
                     if (config.autoKick && currentInfractions >= 3) {
                         if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
-                            await message.member.kick('Dyno/Carl Engine: Exceeded infraction limit (3+ violations)').catch(() => {});
+                            await message.member.kick('Dyno/Carl Engine: Exceeded infraction limit').catch(() => {});
                             return message.channel.send(`🥾 **AutoKick:** <@${userId}> was kicked for repeated violations.`).catch(() => {});
                         }
                     }
@@ -652,7 +751,6 @@ function initModule(client) {
             }
         }
 
-        // --- MEDIA ONLY CHANNEL ENFORCEMENT ---
         if (!isStaff && !isOwner) {
             const mediaChannels = getMediaData();
             if (mediaChannels.includes(message.channel.id)) {
@@ -661,9 +759,7 @@ function initModule(client) {
             }
         }
     });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6 OF 6)
-// ==========================================
+
     // --- Member Join Security Handler (Beemo & AltDentifier Engines) ---
     client.on('guildMemberAdd', async (member) => {
         if (!member.guild) return;
@@ -671,19 +767,17 @@ function initModule(client) {
         const config = await getSecurityConfig(member.guild.id);
         const botMember = member.guild.members.me;
 
-        // --- ALTDENTIFIER (VERIFICATION GATEKEEPER) ---
         if (config.modules?.altdentifier) {
             const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
-            if (accountAgeDays < 7) { // Accounts younger than 7 days
+            if (accountAgeDays < 7) {
                 if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
-                    await member.send(`⚠️ You were removed from **${member.guild.name}** because your account is younger than 7 days (AltDentifier Defense).`).catch(() => {});
-                    await member.kick('AltDentifier: Account younger than minimum requirement (7 days)').catch(() => {});
+                    await member.send(`⚠️ Removed from **${member.guild.name}**: Account younger than 7 days (AltDentifier).`).catch(() => {});
+                    await member.kick('AltDentifier: Account younger than 7 days').catch(() => {});
                     return;
                 }
             }
         }
 
-        // --- BEEMO (ANTI-RAID MASS JOIN DEFENSE) ---
         if (config.modules?.beemo) {
             const now = Date.now();
             const guildJoins = joinTracker.get(member.guild.id) || [];
@@ -692,7 +786,6 @@ function initModule(client) {
             recentJoins.push(now);
             joinTracker.set(member.guild.id, recentJoins);
 
-            // Trigger raid kick if >5 joins in 10 seconds
             if (recentJoins.length >= 5) {
                 if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
                     await member.kick('Beemo Defense: Mass raid join detected').catch(() => {});
@@ -701,7 +794,7 @@ function initModule(client) {
         }
     });
 
-    // --- Audit Log Security Handler (Wick Anti-Nuke & Admin Limits Engine) ---
+    // --- Audit Log Security Handler (Wick Anti-Nuke Engine) ---
     const handleAntiNuke = async (guild, actionType) => {
         const config = await getSecurityConfig(guild.id);
         if (!config.modules?.wick) return;
@@ -724,11 +817,10 @@ function initModule(client) {
             recentActions.push(now);
             nukeTracker.set(executorId, recentActions);
 
-            // Timeout admin if >3 deletions in 10 seconds
             if (recentActions.length >= 3) {
                 const targetAdmin = await guild.members.fetch(executorId).catch(() => null);
                 if (targetAdmin && targetAdmin.manageable) {
-                    await targetAdmin.timeout(24 * 60 * 60 * 1000, 'Wick Engine: Anti-Nuke threshold exceeded (Mass Channel/Role Deletion)').catch(() => {});
+                    await targetAdmin.timeout(24 * 60 * 60 * 1000, 'Wick Engine: Anti-Nuke threshold exceeded').catch(() => {});
                 }
             }
         } catch (err) {
