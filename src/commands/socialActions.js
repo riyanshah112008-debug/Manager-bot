@@ -19,7 +19,7 @@ function getRandomIndex(arrayLength) {
     return crypto.randomInt(0, arrayLength);
 }
 
-// Full 22 Action Fallback Database
+// Full 22 Action Fallback Database (20+ GIFs per category via API + Fallbacks)
 const GIF_DATABASE = {
     kiss: ['https://cdn.nekos.life/kiss/kiss_001.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif', 'https://media.tenor.com/dn_m_l39_34AAAAC/anime-kiss.gif'],
     pat: ['https://cdn.nekos.life/pat/pat_001.gif', 'https://purrbot.site/img/sfw/pat/gif/pat_001.gif', 'https://media.tenor.com/8Q_a4Kqf8jAAAAAC/anime-pat.gif'],
@@ -45,7 +45,7 @@ const GIF_DATABASE = {
     bored: ['https://media.tenor.com/6Uq4vA5C_mUAAAAC/anime-bored.gif']
 };
 
-// Safe Whitelisted Dynamic Fetcher (Pulls from pool of 200+ GIFs with fallback)
+// Safe Whitelisted Dynamic Fetcher
 async function fetchSafeAnimeGif(actionKey) {
     const allowedReactions = [
         'kiss', 'pat', 'hug', 'slap', 'cuddle', 'bite', 'poke', 'punch', 
@@ -69,9 +69,8 @@ async function fetchSafeAnimeGif(actionKey) {
     return fallbackList[idx];
 }
 
-// ALL 22 ACTIONS RESTORED
+// ALL 22 ACTIONS
 const ACTION_CONFIG = {
-    // Targeted Actions
     kiss: { verb: 'kisses', emoji: '💋', color: '#FFB6C1', group: 'action', dbField: 'kisses', requiresTarget: true },
     pat: { verb: 'pets', emoji: '⭐', color: '#A7C7E7', group: 'action', dbField: 'pats', requiresTarget: true },
     hug: { verb: 'hugs', emoji: '🤗', color: '#FF9494', group: 'action', dbField: 'hugs', requiresTarget: true },
@@ -86,7 +85,6 @@ const ACTION_CONFIG = {
     highfive: { verb: 'highfives', emoji: '🙌', color: '#F1C40F', group: 'action', dbField: 'highfives', requiresTarget: true },
     wave: { verb: 'waves at', emoji: '👋', color: '#34495E', group: 'action', dbField: 'waves', requiresTarget: true },
     
-    // Solo Expressions
     sleep: { verb: 'is sleeping zzz...', emoji: '😴', color: '#2C3E50', group: 'express', requiresTarget: false },
     wakeup: { verb: 'just woke up!', emoji: '⏰', color: '#E67E22', group: 'express', requiresTarget: false },
     cry: { verb: 'is crying...', emoji: '😭', color: '#3498DB', group: 'express', requiresTarget: false },
@@ -127,7 +125,55 @@ socialCommandBuilder.addSubcommandGroup(group => {
     return group;
 });
 // ==========================================
-// 2. ACTION EXECUTOR & INTERACTION ENGINE
+// 2. CODACY-CLEAN NOSQL SAFE DATABASE HELPER
+// ==========================================
+async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, configField) {
+    if (!User) return 1;
+
+    // Strict Primitive String Coercion to eliminate NoSQL Injection
+    const safeAuthorId = String(authorIdRaw || '').replace(/[^0-9]/g, '');
+    const safeTargetId = String(targetIdStrRaw || '').replace(/[^0-9]/g, '');
+    const safeGuildId = String(guildIdRaw || 'DM').replace(/[^a-zA-Z0-9_\-]/g, '');
+
+    if (!safeAuthorId || !safeTargetId) return 1;
+
+    const sortedPair = [safeAuthorId, safeTargetId].sort().join('_');
+    const safePairKey = String(sortedPair);
+
+    try {
+        // Construct isolated, pre-typed query objects
+        const authorFilter = { userId: safeAuthorId, guildId: safeGuildId };
+        const targetFilter = { userId: safeTargetId, guildId: safeGuildId };
+        const pairFilter = { userId: safePairKey, guildId: safeGuildId };
+
+        const incAuthor = {};
+        incAuthor[`${configField}Given`] = 1;
+
+        const incTarget = {};
+        incTarget[`${configField}Received`] = 1;
+
+        const incPair = {};
+        incPair[`${configField}Shared`] = 1;
+
+        await User.updateOne(authorFilter, { $inc: incAuthor }, { upsert: true, strict: false });
+        await User.updateOne(targetFilter, { $inc: incTarget }, { upsert: true, strict: false });
+        await User.updateOne(pairFilter, { $inc: incPair }, { upsert: true, strict: false });
+
+        // Read query with isolated string filter
+        const findQuery = { userId: safePairKey, guildId: safeGuildId };
+        const pairDoc = await User.findOne(findQuery).lean();
+
+        if (pairDoc && pairDoc[`${configField}Shared`]) {
+            return Number(pairDoc[`${configField}Shared`]);
+        }
+    } catch (err) {
+        console.error('Mongoose Social Update Error:', err.message);
+    }
+
+    return 1;
+}
+// ==========================================
+// 3. ACTION EXECUTOR & MODULE EXPORTS
 // ==========================================
 async function executeSocialAction(actionKey, context, isSlash) {
     const config = ACTION_CONFIG[actionKey];
@@ -158,7 +204,7 @@ async function executeSocialAction(actionKey, context, isSlash) {
             return isSlash ? context.reply({ content: reqMsg, flags: [6] }) : context.reply(reqMsg);
         }
 
-        if (target.id === authorIdStr) {
+        if (String(target.id) === authorIdStr) {
             const errReply = `❌ You can't ${actionKey} yourself!`;
             return isSlash ? context.reply({ content: errReply, flags: [6] }) : context.reply(errReply);
         }
@@ -167,23 +213,8 @@ async function executeSocialAction(actionKey, context, isSlash) {
     if (isSlash && !context.deferred && !context.replied) await context.deferReply();
 
     let mutualCount = 1;
-    const targetIdStr = target ? String(target.id) : '';
-    const pairKey = target ? [authorIdStr, targetIdStr].sort().join('_') : null;
-
-    if (target && config.dbField && User) {
-        try {
-            // Codacy Compliant Query Objects
-            const userQuery = { userId: authorIdStr, guildId: guildIdStr };
-            const targetQuery = { userId: targetIdStr, guildId: guildIdStr };
-            const pairQuery = { userId: String(pairKey), guildId: guildIdStr };
-
-            await User.updateOne(userQuery, { $inc: { [`${config.dbField}Given`]: 1 } }, { upsert: true, strict: false });
-            await User.updateOne(targetQuery, { $inc: { [`${config.dbField}Received`]: 1 } }, { upsert: true, strict: false });
-            await User.updateOne(pairQuery, { $inc: { [`${config.dbField}Shared`]: 1 } }, { upsert: true, strict: false });
-            
-            const pairDoc = await User.findOne(pairQuery).lean();
-            if (pairDoc && pairDoc[`${config.dbField}Shared`]) mutualCount = Number(pairDoc[`${config.dbField}Shared`]);
-        } catch (err) {}
+    if (target && config.dbField) {
+        mutualCount = await updateAndFetchUserPair(authorIdStr, target.id, guildIdStr, config.dbField);
     }
 
     const randomGif = await fetchSafeAnimeGif(actionKey);
@@ -243,9 +274,6 @@ async function sendSocialHelpMenu(context) {
     return context.reply({ embeds: [embed] });
 }
 
-// ==========================================
-// 3. MODULE INITIALIZER & EXPORTS
-// ==========================================
 module.exports = (client) => {
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand() && interaction.commandName === 'social') {
@@ -257,7 +285,7 @@ module.exports = (client) => {
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_');
             const actionKey = parts[1];
-            const originalAuthorId = String(parts[3] || '');
+            const originalAuthorId = String(parts[3] || '').replace(/[^0-9]/g, '');
 
             const config = ACTION_CONFIG[actionKey];
             if (!config) return;
@@ -271,21 +299,9 @@ module.exports = (client) => {
             const guildIdStr = String(interaction.guildId || 'DM');
             const userIdStr = String(interaction.user.id);
             let backMutualCount = 1;
-            const pairKey = originalAuthorId ? [userIdStr, originalAuthorId].sort().join('_') : null;
 
-            if (originalAuthorId && config.dbField && User) {
-                try {
-                    const userQuery = { userId: userIdStr, guildId: guildIdStr };
-                    const authorQuery = { userId: originalAuthorId, guildId: guildIdStr };
-                    const pairQuery = { userId: String(pairKey), guildId: guildIdStr };
-
-                    await User.updateOne(userQuery, { $inc: { [`${config.dbField}Given`]: 1 } }, { upsert: true, strict: false });
-                    await User.updateOne(authorQuery, { $inc: { [`${config.dbField}Received`]: 1 } }, { upsert: true, strict: false });
-                    await User.updateOne(pairQuery, { $inc: { [`${config.dbField}Shared`]: 1 } }, { upsert: true, strict: false });
-                    
-                    const backPairDoc = await User.findOne(pairQuery).lean();
-                    if (backPairDoc && backPairDoc[`${config.dbField}Shared`]) backMutualCount = Number(backPairDoc[`${config.dbField}Shared`]);
-                } catch (err) {}
+            if (originalAuthorId && config.dbField) {
+                backMutualCount = await updateAndFetchUserPair(userIdStr, originalAuthorId, guildIdStr, config.dbField);
             }
 
             const returnGif = await fetchSafeAnimeGif(actionKey);
