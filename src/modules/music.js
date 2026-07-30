@@ -4,18 +4,6 @@
 const { EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Helper function to enforce a safety timeout on node connections (increased to 25s for Render)
-const withTimeout = (promise, ms, errorMessage) => {
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(errorMessage)), ms);
-    });
-    return Promise.race([
-        promise.then(res => { clearTimeout(timeoutId); return res; }),
-        timeoutPromise
-    ]);
-};
-
 module.exports = (client) => {
     const checkPermissions = (channel, botMember) => {
         const permissions = channel.permissionsFor(botMember);
@@ -47,47 +35,38 @@ module.exports = (client) => {
             if (command === 'play') {
                 const query = interaction.options.getString('song', true).trim();
                 
-                // Immediately defer reply to satisfy Discord's 3s requirement
+                // Immediately defer reply to satisfy Discord 3s requirement
                 await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
 
-                // Verify Lavalink nodes are online
-                const activeNodes = manager.shoukaku.nodes;
-                const hasConnectedNode = Array.from(activeNodes.values()).some(n => n.state === 1); // 1 = CONNECTED
+                // 1. Search for track
+                const res = await manager.search(query, { requester: interaction.user });
 
-                if (!hasConnectedNode) {
-                    return interaction.editReply({ content: '⚠️ **Music Nodes Reconnecting:** Lavalink nodes are initializing. Please try again in 5 seconds!' });
-                }
-
-                // Search for the track with a generous 20s timeout
-                const res = await withTimeout(
-                    manager.search(query, { requester: interaction.user }),
-                    20000,
-                    'Song search timed out. Audio nodes are currently slow.'
-                );
-
-                if (!res || res.loadType === 'empty' || res.loadType === 'error') {
+                if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                     return interaction.editReply({ content: '❌ No songs found matching your query.' });
                 }
 
-                // Connect to Voice Channel with a 25s timeout for voice gateway handshake
+                // 2. Create Kazagumo Player with CORRECT option keys (voiceId, textId, deaf)
                 let player = manager.getPlayer(interaction.guild.id);
                 if (!player) {
-                    player = await withTimeout(
-                        manager.createPlayer({
-                            guildId: interaction.guild.id,
-                            voiceChannelId: voiceChannel.id,
-                            textChannelId: interaction.channel.id,
-                            selfDeafen: true
-                        }),
-                        25000,
-                        'Voice channel connection timed out. Please try again.'
-                    );
+                    player = await manager.createPlayer({
+                        guildId: interaction.guild.id,
+                        voiceId: voiceChannel.id,   // <-- FIXED: Kazagumo requires voiceId
+                        textId: interaction.channel.id,  // <-- FIXED: Kazagumo requires textId
+                        deaf: true                   // <-- FIXED: Kazagumo requires deaf
+                    });
+                }
+
+                // If player is connected to a different voice channel, move it
+                if (player.voiceId !== voiceChannel.id) {
+                    player.setVoiceChannel(voiceChannel.id);
                 }
 
                 if (res.loadType === 'playlist') {
-                    for (const track of res.tracks) player.queue.add(track);
+                    for (const track of res.tracks) {
+                        player.queue.add(track);
+                    }
                     if (!player.playing && !player.paused) player.play();
-                    return interaction.editReply({ content: `✅ Loaded playlist **${res.playlist.name}** (${res.tracks.length} tracks queued).` });
+                    return interaction.editReply({ content: `✅ Loaded playlist **${res.playlist?.name || 'Playlist'}** (${res.tracks.length} tracks queued).` });
                 } else {
                     const track = res.tracks[0];
                     player.queue.add(track);
@@ -120,7 +99,7 @@ module.exports = (client) => {
 
             if (command === 'stop') {
                 player.destroy();
-                return interaction.reply({ content: '🛑 **Stopped playback and left the voice channel.**', flags: [EPHEMERAL_FLAG] });
+                return interaction.reply({ content: '🛑 **Stopped playback and left voice channel.**', flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'volume') {
@@ -143,6 +122,7 @@ module.exports = (client) => {
             }
 
         } catch (error) {
+            console.error('🔴 Music Command Error:', error);
             const content = `❌ **Music Error:** \`${error.message || 'Unknown error'}\``;
             if (interaction.deferred) {
                 await interaction.editReply({ content }).catch(() => {});
