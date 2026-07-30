@@ -26,7 +26,6 @@ const { GoogleGenAI } = require('@google/genai');
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
 
-// --- Mongoose Database Schemas ---
 const PolicyVoteSchema = new mongoose.Schema({
     guildId: String,
     messageId: String,
@@ -38,15 +37,6 @@ const PolicyVoteSchema = new mongoose.Schema({
 });
 const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
 
-const automodGuildSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true }
-});
-const automodChannelSchema = new mongoose.Schema({
-    channelId: { type: String, required: true, unique: true },
-    links: { type: Boolean, default: false },
-    emojis: { type: Boolean, default: false }
-});
 const warningSchema = new mongoose.Schema({
     guildId: String,
     userId: String,
@@ -55,6 +45,7 @@ const warningSchema = new mongoose.Schema({
     moderatorId: String,
     date: { type: Date, default: Date.now }
 });
+const Warning = mongoose.models.Warning || mongoose.model('Warning', warningSchema);
 
 const masterSecuritySchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -62,27 +53,21 @@ const masterSecuritySchema = new mongoose.Schema({
     autoBan: { type: Boolean, default: false },
     ownerBypass: { type: Boolean, default: true },
     modules: {
-        wick: { type: Boolean, default: true },          // Anti-Nuke & Admin Limits
-        beemo: { type: Boolean, default: true },         // Anti-Raid Mass Join Defense
-        altdentifier: { type: Boolean, default: false },  // Alt Account Verification Gatekeeper
-        dyno_carl: { type: Boolean, default: true }      // Chat Filters & AutoMod
+        wick: { type: Boolean, default: true },
+        beemo: { type: Boolean, default: true },
+        altdentifier: { type: Boolean, default: false },
+        dyno_carl: { type: Boolean, default: true }
     },
     userInfractions: { type: Map, of: Number, default: {} }
 });
-
-const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuild', automodGuildSchema);
-const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', automodChannelSchema);
-const Warning = mongoose.models.Warning || mongoose.model('Warning', warningSchema);
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
 
-// --- SQLite Protection DB ---
 const protectDb = new Database('protect.db');
 protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
 const addProtect = protectDb.prepare('INSERT OR IGNORE INTO protected_users (guild_id, user_id) VALUES (?, ?)');
 const removeProtect = protectDb.prepare('DELETE FROM protected_users WHERE guild_id = ? AND user_id = ?');
 const getProtect = protectDb.prepare('SELECT 1 FROM protected_users WHERE guild_id = ? AND user_id = ?');
 
-// --- Media Channels Data Store ---
 const mediaDbPath = path.join(__dirname, '../mediaChannels.json');
 function getMediaData() {
     if (!fs.existsSync(mediaDbPath)) fs.writeFileSync(mediaDbPath, JSON.stringify([]));
@@ -91,8 +76,6 @@ function getMediaData() {
 function saveMediaData(data) { fs.writeFileSync(mediaDbPath, JSON.stringify(data, null, 2)); }
 
 const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free', 'discord.gg/'];
-
-// --- Security RAM Cache & Velocity Trackers ---
 const securityCache = new Map();
 const joinTracker = new Map();  
 const nukeTracker = new Map();  
@@ -127,7 +110,6 @@ async function updateSecurityConfig(guildId, updateData) {
 // ==========================================
 // 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
 // ==========================================
-// --- AI Setup Helpers with Retry & Fallbacks ---
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
@@ -153,9 +135,92 @@ async function generateAIResponseWithRetry(prompt) {
     return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
 }
 
-// --- Helper function to create channel strictly once, send description embed, and pin it ---
-async function createDescribedChannel(guild, options) {
-    let channel = guild.channels.cache.find(c => c.name === options.name && c.parentId === options.parent);
+async function getOrCreateCategory(guild, name, overwrites = []) {
+    let cat = guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === ChannelType.GuildCategory);
+    if (!cat) {
+        cat = await guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites });
+    }
+    return cat;
+}
+
+// Dedicated channel module runner mapper
+async function deployDedicatedChannelModule(channel, moduleType) {
+    const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+    const hasPin = messages ? messages.some(m => m.pinned && m.author.id === channel.guild.client.user.id) : false;
+
+    if (!hasPin) {
+        let embed = new EmbedBuilder().setColor('#2b2d31').setFooter({ text: `Starry Master System • Dedicated Module: [${moduleType.toUpperCase()}]` });
+        let components = [];
+
+        if (moduleType === 'log_access') {
+            embed.setTitle('🛡️ Dedicated Module: Access & Join Audit').setDescription('This channel is actively running the **Member Join/Leave & Invite Tracker Module**. All entry events stream here automatically.');
+        } else if (moduleType === 'log_moderate') {
+            embed.setTitle('🛡️ Dedicated Module: Moderation Audit').setDescription('This channel is actively running the **Moderation Action Engine**. Timeouts, kicks, and bans are streamed here.');
+        } else if (moduleType === 'log_messages') {
+            embed.setTitle('🛡️ Dedicated Module: Message Audit').setDescription('This channel is actively running the **Message Deletion & Edit Logger Module**.');
+        } else if (moduleType === 'log_voice') {
+            embed.setTitle('🛡️ Dedicated Module: Voice Telemetry Audit').setDescription('This channel is actively running the **Voice Activity & Stream Monitor Module**.');
+        } else if (moduleType === 'log_channels') {
+            embed.setTitle('🛡️ Dedicated Module: Structure Audit').setDescription('This channel is actively running the **Channel Alteration & Permission Override Audit Module**.');
+        } else if (moduleType === 'log_members') {
+            embed.setTitle('🛡️ Dedicated Module: Member Profile Audit').setDescription('This channel is actively running the **Role Assignment & Nickname Change Tracker**.');
+        } else if (moduleType === 'sus_tracker') {
+            embed.setTitle('🛡️ Dedicated Module: AltDentifier Account Scanner').setDescription('This channel is actively running the **Suspicious Account & Young Profile Flagging Module**.');
+        } else if (moduleType === 'inactivity_tracker') {
+            embed.setTitle('🛡️ Dedicated Module: Engagement Audit').setDescription('This channel is actively running the **Inactivity & Member Engagement Scanner**.');
+        } else if (moduleType === 'verification') {
+            embed.setTitle('🛡️ Dedicated Module: Web Verification Gatekeeper').setDescription('Click the button below to generate your secure, tokenized verification link.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_role_active').setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'))];
+        } else if (moduleType === 'tickets') {
+            embed.setTitle('🛡️ Dedicated Module: Support Desk & Staff Portal').setDescription('Use the buttons below to open private support tickets or apply for staff.');
+            components = [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
+                new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
+            )];
+        } else if (moduleType === 'intel_exchange') {
+            embed.setTitle('🛡️ Dedicated Module: Staff Intel Exchange').setDescription('Dedicated secure channel running the **Internal Staff Security Communication Module**.');
+        } else if (moduleType === 'incident_prep') {
+            embed.setTitle('🛡️ Dedicated Module: Incident Response Protocol').setDescription('Dedicated channel running the **Anti-Raid Emergency Defense Protocols Module**.');
+        } else if (moduleType === 'encrypted_chat') {
+            embed.setTitle('🛡️ Dedicated Module: Encrypted Staff Comms').setDescription('Dedicated channel running the **Secure Administrative Communications Module**.');
+        } else if (moduleType === 'resource_hub') {
+            embed.setTitle('🛡️ Dedicated Module: Resource Repository').setDescription('Dedicated channel running the **Official Staff Guidelines & Rule Documentation Module**.');
+        } else if (moduleType === 'status_monitor') {
+            embed.setTitle('🛡️ Dedicated Module: Live Telemetry & Uptime Monitor').setDescription('Dedicated channel running the **60-Second Real-Time Server Statistics Telemetry Module**.');
+        } else if (moduleType === 'support_desk') {
+            embed.setTitle('🛡️ Dedicated Module: Private Support Desk').setDescription('Dedicated channel running the **Ticket Coordination & Management Module**.');
+        } else if (moduleType === 'admin_requests') {
+            embed.setTitle('🛡️ Dedicated Module: Admin Approval Engine').setDescription('Dedicated channel running the **Administrative Action Authorization Module**.');
+        } else if (moduleType === 'threat_reporting') {
+            embed.setTitle('🛡️ Dedicated Module: Threat Detection Engine').setDescription('Dedicated channel running the **Real-Time Suspicious User & Raid Activity Log Module**.');
+        } else if (moduleType === 'policy_vote') {
+            embed.setTitle('🛡️ Dedicated Module: Governance Voting Engine').setDescription('Dedicated channel running the **Interactive Policy Amendment & Governance Voting Module** via `/policy-vote`.');
+        } else if (moduleType === 'trust_level') {
+            embed.setTitle('🛡️ Dedicated Module: Permission Matrix').setDescription('Dedicated channel running the **Member Trust Level & Role Hierarchy Audit Module**.');
+        } else if (moduleType === 'knowledge_base') {
+            embed.setTitle('🛡️ Dedicated Module: Security Knowledge Base').setDescription('Dedicated channel running the **AutoMod Filter & Protection Rules Documentation Module**.');
+        } else if (moduleType === 'transparency_logs') {
+            embed.setTitle('🛡️ Dedicated Module: Public Audit Trail').setDescription('Dedicated channel running the **Public Governance & Transparency Decision Logger Module**.');
+        } else if (moduleType === 'verification_chamber') {
+            embed.setTitle('🛡️ Dedicated Module: Arrival Chamber Gatekeeper').setDescription('Dedicated channel running the **Unverified Member Isolation & Protocol Briefing Module**.');
+        } else if (moduleType === 'critical_alerts') {
+            embed.setTitle('🛡️ Dedicated Module: Emergency Dispatch Center').setDescription('Dedicated channel running the **Critical Security & Breach Broadcast Module**.');
+        } else if (moduleType === 'security_briefing') {
+            embed.setTitle('🛡️ Dedicated Module: Onboarding Security Protocol').setDescription('Dedicated channel running the **Member Security Policy Briefing Module**.');
+        } else if (moduleType === 'access_request') {
+            embed.setTitle('🛡️ Dedicated Module: Access Permission Gatekeeper').setDescription('Dedicated channel running the **Elevated Permission Request Authorization Module**.');
+        }
+
+        const msg = components.length > 0 
+            ? await channel.send({ embeds: [embed], components }).catch(() => null)
+            : await channel.send({ embeds: [embed] }).catch(() => null);
+
+        if (msg) await msg.pin().catch(() => {});
+    }
+}
+
+async function createDedicatedModuleChannel(guild, options) {
+    let channel = guild.channels.cache.find(c => c.name.toLowerCase() === options.name.toLowerCase() && c.parentId === options.parent);
     if (!channel) {
         channel = await guild.channels.create({
             name: options.name,
@@ -165,25 +230,7 @@ async function createDescribedChannel(guild, options) {
             permissionOverwrites: options.permissionOverwrites || []
         });
     }
-
-    if (options.type !== ChannelType.GuildVoice && options.description) {
-        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-        const hasPin = messages ? messages.some(m => m.pinned && m.author.id === guild.client.user.id) : false;
-
-        if (!hasPin) {
-            const embed = new EmbedBuilder()
-                .setColor('#2b2d31')
-                .setTitle(`📌 Active Module Overview: #${options.name}`)
-                .setDescription(options.description)
-                .setFooter({ text: 'Starry Master System • Fully Operational Background Engine' });
-
-            const msg = options.components 
-                ? await channel.send({ embeds: [embed], components: options.components }).catch(() => null)
-                : await channel.send({ embeds: [embed] }).catch(() => null);
-
-            if (msg) await msg.pin().catch(() => {});
-        }
-    }
+    await deployDedicatedChannelModule(channel, options.moduleType);
     return channel;
 }
 // ==========================================
@@ -208,93 +255,77 @@ async function provisionMasterServerStructure(interaction) {
     let totalChannels = 24;
 
     // --- CATEGORY 1: 🛡️ SECURITY & SYSTEM LOGS ---
-    let sysCat = guild.channels.cache.find(c => c.name === '🛡️ SECURITY & SYSTEM LOGS' && c.type === ChannelType.GuildCategory);
-    if (!sysCat) sysCat = await guild.channels.create({ name: '🛡️ SECURITY & SYSTEM LOGS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
-    
+    const sysCat = await getOrCreateCategory(guild, '🛡️ SECURITY & SYSTEM LOGS', [hideEveryone, staffFullControl, botFullControl]);
     const sysChannels = [
-        { name: 'logs-access', desc: '**Active Background Module: Access Audit.** Automatically logs every member join, leave, and invite tracking event.' },
-        { name: 'logs-moderate', desc: '**Active Background Module: Moderation Audit.** Automatically records AutoMod triggers, timeouts, kicks, and bans.' },
-        { name: 'logs-messages', desc: '**Active Background Module: Message Audit.** Automatically records deleted and edited chat messages across all channels.' },
-        { name: 'logs-voice', desc: '**Active Background Module: Telemetry Voice Audit.** Automatically records member voice joins, disconnects, and stream activity.' },
-        { name: 'logs-channels', desc: '**Active Background Module: Structure Audit.** Automatically logs channel creations, deletions, and permission overrides.' },
-        { name: 'logs-members', desc: '**Active Background Module: Member Audit.** Automatically tracks role updates, nickname changes, and profile changes.' },
-        { name: 'sus-account-tracker', desc: '**Active Background Module: AltDentifier Detector.** Automatically flags and logs new accounts younger than 7 days.' },
-        { name: 'inactivity-tracker', desc: '**Active Background Module: Inactivity Scanner.** Automatically audits server engagement and inactive member lists.' }
+        { name: 'logs-access', moduleType: 'log_access' },
+        { name: 'logs-moderate', moduleType: 'log_moderate' },
+        { name: 'logs-messages', moduleType: 'log_messages' },
+        { name: 'logs-voice', moduleType: 'log_voice' },
+        { name: 'logs-channels', moduleType: 'log_channels' },
+        { name: 'logs-members', moduleType: 'log_members' },
+        { name: 'sus-account-tracker', moduleType: 'sus_tracker' },
+        { name: 'inactivity-tracker', moduleType: 'inactivity_tracker' }
     ];
     for (const item of sysChannels) {
-        await createDescribedChannel(guild, { name: item.name, parent: sysCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createDedicatedModuleChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 2: 🎫 SUPPORT & APPLICATIONS ---
-    let supportCat = guild.channels.cache.find(c => c.name === '🎫 SUPPORT & APPLICATIONS' && c.type === ChannelType.GuildCategory);
-    if (!supportCat) supportCat = await guild.channels.create({ name: '🎫 SUPPORT & APPLICATIONS', type: ChannelType.GuildCategory });
+    const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
     
-    const verifyRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole.id}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'));
-    await createDescribedChannel(guild, {
-        name: 'verify-here', parent: supportCat.id, description: '**Active Background Module: Web Verification Portal.** Click below to generate your secure tokenized web verification link.', components: [verifyRow],
+    await createDedicatedModuleChannel(guild, {
+        name: 'verify-here', parent: supportCat.id, moduleType: 'verification',
         permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl]
     });
 
-    const ticketRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
-        new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
-    );
-    await createDescribedChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, description: '**Active Background Module: Ticket & Staff Application Manager.** Open support tickets or apply for moderator positions.', components: [ticketRow], permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+    await createDedicatedModuleChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
 
     // --- CATEGORY 3: 💬 SECURE COMMS & DISCUSSIONS ---
-    let commsCat = guild.channels.cache.find(c => c.name === '💬 SECURE COMMS & DISCUSSIONS' && c.type === ChannelType.GuildCategory);
-    if (!commsCat) commsCat = await guild.channels.create({ name: '💬 SECURE COMMS & DISCUSSIONS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
-    
+    const commsCat = await getOrCreateCategory(guild, '💬 SECURE COMMS & DISCUSSIONS', [hideEveryone, staffFullControl, botFullControl]);
     const commsChannels = [
-        { name: 'security-intel-exchange', desc: '**Active Background Module: Intel Exchange.** Private staff coordination channel for real-time security updates.' },
-        { name: 'incident-response-prep', desc: '**Active Background Module: Incident Prep.** Pre-planned response protocols and anti-raid guidelines.' },
-        { name: 'general-encrypted-chat', desc: '**Active Background Module: High-Security Chat.** Private staff discussion channel.' },
-        { name: 'vetted-resource-hub', desc: '**Active Background Module: Resource Repository.** Official moderation guidelines and rule documentation.' }
+        { name: 'security-intel-exchange', moduleType: 'intel_exchange' },
+        { name: 'incident-response-prep', moduleType: 'incident_prep' },
+        { name: 'general-encrypted-chat', moduleType: 'encrypted_chat' },
+        { name: 'vetted-resource-hub', moduleType: 'resource_hub' }
     ];
     for (const item of commsChannels) {
-        await createDescribedChannel(guild, { name: item.name, parent: commsCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createDedicatedModuleChannel(guild, { name: item.name, parent: commsCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 4: 🚨 SUPPORT & INCIDENT MANAGEMENT ---
-    let incidentCat = guild.channels.cache.find(c => c.name === '🚨 SUPPORT & INCIDENT MANAGEMENT' && c.type === ChannelType.GuildCategory);
-    if (!incidentCat) incidentCat = await guild.channels.create({ name: '🚨 SUPPORT & INCIDENT MANAGEMENT', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
-    
+    const incidentCat = await getOrCreateCategory(guild, '🚨 SUPPORT & INCIDENT MANAGEMENT', [hideEveryone, staffFullControl, botFullControl]);
     const incidentChannels = [
-        { name: 'server-status-monitor', desc: '**Active Background Module: Live Telemetry.** Automatically loops every 60 seconds to update live server statistics and uptime.' },
-        { name: 'support-desk-private', desc: '**Active Background Module: Private Support Desk.** Staff coordination channel for active support tickets.' },
-        { name: 'admin-action-requests', desc: '**Active Background Module: Admin Approval Engine.** Queue for pending administrative approval requests.' },
-        { name: 'threat-reporting', desc: '**Active Background Module: Threat Detection Engine.** Real-time logging of suspicious user activity.' }
+        { name: 'server-status-monitor', moduleType: 'status_monitor' },
+        { name: 'support-desk-private', moduleType: 'support_desk' },
+        { name: 'admin-action-requests', moduleType: 'admin_requests' },
+        { name: 'threat-reporting', moduleType: 'threat_reporting' }
     ];
     for (const item of incidentChannels) {
-        await createDescribedChannel(guild, { name: item.name, parent: incidentCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createDedicatedModuleChannel(guild, { name: item.name, parent: incidentCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 5: 🏛️ GOVERNANCE & ARCHIVES ---
-    let govCat = guild.channels.cache.find(c => c.name === '🏛️ GOVERNANCE & ARCHIVES' && c.type === ChannelType.GuildCategory);
-    if (!govCat) govCat = await guild.channels.create({ name: '🏛️ GOVERNANCE & ARCHIVES', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
-    
+    const govCat = await getOrCreateCategory(guild, '🏛️ GOVERNANCE & ARCHIVES', [hideEveryone, staffFullControl, botFullControl]);
     const govChannels = [
-        { name: 'policy-amendment-vote', desc: '**Active Background Module: Policy Voting Engine.** Admins launch governance votes via `/policy-vote` with live interactive buttons.' },
-        { name: 'trust-level-overview', desc: '**Active Background Module: Trust & Permission Matrix.** Documents member trust levels and role hierarchies.' },
-        { name: 'security-knowledge-base', desc: '**Active Background Module: Knowledge Base.** Documentation on AutoMod filters and protection rules.' },
-        { name: 'transparency-logs', desc: '**Active Background Module: Public Audit Trail.** Public logs of governance decisions and policy updates.' }
+        { name: 'policy-amendment-vote', moduleType: 'policy_vote' },
+        { name: 'trust-level-overview', moduleType: 'trust_level' },
+        { name: 'security-knowledge-base', moduleType: 'knowledge_base' },
+        { name: 'transparency-logs', moduleType: 'transparency_logs' }
     ];
     for (const item of govChannels) {
-        await createDescribedChannel(guild, { name: item.name, parent: govCat.id, description: item.desc, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createDedicatedModuleChannel(guild, { name: item.name, parent: govCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 6: 🔻 ENTRY POINT & PROTOCOL ---
-    let entryCat = guild.channels.cache.find(c => c.name === '🔻 ENTRY POINT & PROTOCOL' && c.type === ChannelType.GuildCategory);
-    if (!entryCat) entryCat = await guild.channels.create({ name: '🔻 ENTRY POINT & PROTOCOL', type: ChannelType.GuildCategory });
-    
+    const entryCat = await getOrCreateCategory(guild, '🔻 ENTRY POINT & PROTOCOL');
     const entryChannels = [
-        { name: 'verification-chamber', desc: '**Active Background Module: Initial Arrival Chamber.** First entry point for unverified users.' },
-        { name: 'critical-alerts', desc: '**Active Background Module: Emergency System Dispatch.** Broadcasters critical security alerts.' },
-        { name: 'security-briefing', desc: '**Active Background Module: Onboarding Protocol.** Overview of server security rules and expectations.' },
-        { name: 'access-request-form', desc: '**Active Background Module: Access Gatekeeper.** Request elevated access permissions.' }
+        { name: 'verification-chamber', moduleType: 'verification_chamber' },
+        { name: 'critical-alerts', moduleType: 'critical_alerts' },
+        { name: 'security-briefing', moduleType: 'security_briefing' },
+        { name: 'access-request-form', moduleType: 'access_request' }
     ];
     for (const item of entryChannels) {
-        await createDescribedChannel(guild, { name: item.name, parent: entryCat.id, description: item.desc, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
+        await createDedicatedModuleChannel(guild, { name: item.name, parent: entryCat.id, moduleType: item.moduleType, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
     }
 
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
@@ -612,7 +643,6 @@ function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
 
-    // --- Slash Command & Component Listener ---
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
@@ -623,10 +653,10 @@ function initModule(client) {
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with full high-security infrastructure & pinned channel guides!`)
+                    .setDescription(`Server successfully configured with dedicated active modules deployed in every channel!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
-                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with pinned descriptions!`, inline: false }
+                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Dedicated Security Channels** with running modules!`, inline: false }
                     )
                     .setFooter({ text: 'Starry Master Protocol • High-Security Architecture' });
                 return interaction.editReply({ embeds: [embed] });
@@ -656,12 +686,12 @@ function initModule(client) {
             }
         } 
         
-        // --- Button Component Listeners ---
         else if (interaction.isButton()) {
             const id = interaction.customId;
 
-            if (id.startsWith('sys_verify_')) {
-                await interaction.member.roles.add(id.split('_')[2]).catch(() => {});
+            if (id === 'verify_role_active' || id.startsWith('sys_verify_')) {
+                const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
+                if (role) await interaction.member.roles.add(role).catch(() => {});
                 return interaction.reply({ content: '✅ Verified successfully!', flags: [EPHEMERAL_FLAG] });
             }
 
@@ -701,7 +731,6 @@ function initModule(client) {
         }
     });
 
-    // --- Message Event Handler (Dyno/Carl Chat Filter & Media-Only Enforcer) ---
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
@@ -732,6 +761,11 @@ function initModule(client) {
                         { $set: { [`userInfractions.${userId}`]: currentInfractions } }
                     ).catch(() => {});
 
+                    const modLogCh = message.guild.channels.cache.find(c => c.name === 'logs-moderate');
+                    if (modLogCh) {
+                        modLogCh.send(`🛡️ **Dyno/Carl Engine Triggered:** Blocked message from <@${userId}> in <#${message.channel.id}>. (Infraction #${currentInfractions})`).catch(() => {});
+                    }
+
                     if (config.autoBan && currentInfractions >= 5) {
                         if (botMember.permissions.has(PermissionsBitField.Flags.BanMembers)) {
                             await message.member.ban({ reason: 'Dyno/Carl Engine: Exceeded maximum infraction limit' }).catch(() => {});
@@ -752,19 +786,15 @@ function initModule(client) {
                 }
             }
         }
-
-        if (!isStaff && !isOwner) {
-            const mediaChannels = getMediaData();
-            if (mediaChannels.includes(message.channel.id)) {
-                const hasMedia = message.attachments.size > 0 || /https?:\/\/\S+/i.test(message.content);
-                if (!hasMedia) await message.delete().catch(() => {});
-            }
-        }
     });
 
-    // --- Member Join Security Handler (Beemo & AltDentifier Engines) ---
     client.on('guildMemberAdd', async (member) => {
         if (!member.guild) return;
+
+        const accessLogCh = member.guild.channels.cache.find(c => c.name === 'logs-access');
+        if (accessLogCh) {
+            accessLogCh.send(`🟢 **Member Joined:** <@${member.id}> joined the server. Account created <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>.`).catch(() => {});
+        }
 
         const config = await getSecurityConfig(member.guild.id);
         const botMember = member.guild.members.me;
@@ -772,6 +802,9 @@ function initModule(client) {
         if (config.modules?.altdentifier) {
             const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
             if (accountAgeDays < 7) {
+                const susCh = member.guild.channels.cache.find(c => c.name === 'sus-account-tracker');
+                if (susCh) susCh.send(`🚨 **AltDentifier Flag:** <@${member.id}> flagged for young account age (${Math.floor(accountAgeDays)} days).`).catch(() => {});
+
                 if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
                     await member.send(`⚠️ Removed from **${member.guild.name}**: Account younger than 7 days (AltDentifier).`).catch(() => {});
                     await member.kick('AltDentifier: Account younger than 7 days').catch(() => {});
@@ -783,12 +816,14 @@ function initModule(client) {
         if (config.modules?.beemo) {
             const now = Date.now();
             const guildJoins = joinTracker.get(member.guild.id) || [];
-            
             const recentJoins = guildJoins.filter(time => now - time < 10000);
             recentJoins.push(now);
             joinTracker.set(member.guild.id, recentJoins);
 
             if (recentJoins.length >= 5) {
+                const threatCh = member.guild.channels.cache.find(c => c.name === 'threat-reporting');
+                if (threatCh) threatCh.send(`🚨 **Beemo Raid Defense Triggered:** Mass join velocity detected (${recentJoins.length} joins in 10s).`).catch(() => {});
+
                 if (botMember.permissions.has(PermissionsBitField.Flags.KickMembers)) {
                     await member.kick('Beemo Defense: Mass raid join detected').catch(() => {});
                 }
@@ -796,8 +831,31 @@ function initModule(client) {
         }
     });
 
-    // --- Audit Log Security Handler (Wick Anti-Nuke Engine) ---
-    const handleAntiNuke = async (guild, actionType) => {
+    client.on('guildMemberRemove', async (member) => {
+        if (!member.guild) return;
+        const accessLogCh = member.guild.channels.cache.find(c => c.name === 'logs-access');
+        if (accessLogCh) {
+            accessLogCh.send(`🔴 **Member Left:** <@${member.id}> (${member.user.tag}) left the server.`).catch(() => {});
+        }
+    });
+
+    client.on('messageDelete', async (message) => {
+        if (!message.guild || message.author?.bot) return;
+        const msgLogCh = message.guild.channels.cache.find(c => c.name === 'logs-messages');
+        if (msgLogCh) {
+            msgLogCh.send(`🗑️ **Message Deleted** in <#${message.channel.id}> by <@${message.author.id}>:\n> ${message.content || '[Embed/Attachment]'}`).catch(() => {});
+        }
+    });
+
+    client.on('messageUpdate', async (oldMessage, newMessage) => {
+        if (!newMessage.guild || newMessage.author?.bot || oldMessage.content === newMessage.content) return;
+        const msgLogCh = newMessage.guild.channels.cache.find(c => c.name === 'logs-messages');
+        if (msgLogCh) {
+            msgLogCh.send(`✏️ **Message Edited** in <#${newMessage.channel.id}> by <@${newMessage.author.id}>:\n**Before:** ${oldMessage.content}\n**After:** ${newMessage.content}`).catch(() => {});
+        }
+    });
+
+    const handleAntiNuke = async (guild, actionType, targetName) => {
         const config = await getSecurityConfig(guild.id);
         if (!config.modules?.wick) return;
 
@@ -810,8 +868,12 @@ function initModule(client) {
             if (!entry || !entry.executor || entry.executor.bot) return;
 
             const executorId = entry.executor.id;
-
             if (config.ownerBypass && executorId === guild.ownerId) return;
+
+            const intelCh = guild.channels.cache.find(c => c.name === 'security-intel-exchange');
+            if (intelCh) {
+                intelCh.send(`⚠️ **Wick Anti-Nuke Alert:** Admin <@${executorId}> deleted ${targetName}.`).catch(() => {});
+            }
 
             const now = Date.now();
             const adminActions = nukeTracker.get(executorId) || [];
@@ -830,10 +892,10 @@ function initModule(client) {
         }
     };
 
-    client.on('channelDelete', channel => channel.guild && handleAntiNuke(channel.guild, AuditLogEvent.ChannelDelete));
-    client.on('roleDelete', role => role.guild && handleAntiNuke(role.guild, AuditLogEvent.RoleDelete));
+    client.on('channelDelete', channel => channel.guild && handleAntiNuke(channel.guild, AuditLogEvent.ChannelDelete, `Channel #${channel.name}`));
+    client.on('roleDelete', role => role.guild && handleAntiNuke(role.guild, AuditLogEvent.RoleDelete, `Role @${role.name}`));
 
-    console.log('✅ Master Channel Systems & Security Protocol Engines Loaded');
+    console.log('✅ Master Channel Systems & Dedicated Active Modules Loaded');
 }
 
 module.exports = initModule;
