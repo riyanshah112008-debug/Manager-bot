@@ -17,7 +17,6 @@ const mongoose = require('mongoose');
 const { GoogleGenAI } = require('@google/genai');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
-
 const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
 
 const PolicyVoteSchema = new mongoose.Schema({
@@ -121,37 +120,6 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
         new ButtonBuilder().setCustomId(`sys_verify_${verifiedRole.id}`).setLabel('Verify Account').setStyle(ButtonStyle.Success).setEmoji('✅')
     );
     await verifyCh.send({ embeds: [verifyEmbed], components: [verifyRow] });
-
-    const ticketCh = await guild.channels.create({
-        name: 'open-a-ticket',
-        type: ChannelType.GuildText,
-        parent: supportCat.id,
-        topic: 'Click below to open a private support ticket or apply for staff position.',
-        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
-    });
-
-    const ticketEmbed = new EmbedBuilder()
-        .setColor('#00F2FE')
-        .setTitle('🎫 Starry Support Portal')
-        .setDescription('Need help, have a question, or want to report a rule breaker? Click the button below to open a secure ticket with staff.')
-        .setFooter({ text: `${guild.name} Support System` });
-
-    const ticketRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩')
-    );
-
-    const staffAppEmbed = new EmbedBuilder()
-        .setColor('#9b59b6')
-        .setTitle('📋 Official Staff & Moderator Application')
-        .setDescription('Interested in becoming a Moderator or Helper in our community?\nClick below to fill out our interactive modal application!')
-        .setFooter({ text: `${guild.name} Staff Recruitment` });
-
-    const staffAppRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
-    );
-
-    await ticketCh.send({ embeds: [ticketEmbed], components: [ticketRow] });
-    await ticketCh.send({ embeds: [staffAppEmbed], components: [staffAppRow] });
 
     let totalCustomChannels = 0;
     let categoryCount = 2;
@@ -281,82 +249,210 @@ function start60sChannelTelemetryLoop(client) {
         });
     }, 60000);
 }
-// ==========================================
-// 3. LISTENERS & CODACY CLEAN POLICY VOTING
-// ==========================================
-function registerSystemListeners(client) {
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isButton()) return;
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        if (interaction.customId === 'sys_apply_staff') {
-            const modal = new ModalBuilder()
-                .setCustomId('sys_modal_staff_app')
-                .setTitle('📋 Staff Application Form')
-                .addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('app_age').setLabel('Your Age & Timezone').setStyle(TextInputStyle.Short).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('app_experience').setLabel('Prior Moderation Experience').setStyle(TextInputStyle.Paragraph).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('app_reason').setLabel('Why do you want to join our staff team?').setStyle(TextInputStyle.Paragraph).setRequired(true)
-                    )
-                );
-            return interaction.showModal(modal);
+async function handleEmergencyCommand(interaction, client) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: '❌ **Access Denied:** Only Administrators can execute emergency protocols!', flags: [EPHEMERAL_FLAG] });
+    }
+
+    const cmd = interaction.commandName;
+    const guild = interaction.guild;
+
+    if (cmd === 'emergency-nuke') {
+        const embed = new EmbedBuilder()
+            .setColor('#FF0000')
+            .setTitle('☢️ TOTAL EMERGENCY NUKE ☢️')
+            .setDescription(
+                '**WARNING: THIS ACTION IS COMPLETELY IRREVERSIBLE.**\n\n' +
+                'Are you sure you want to vaporize channels and roles?\n' +
+                '*Exceptions: Channels named `general`, the current channel, and roles higher than the bot.*'
+            );
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('nuke_confirm').setLabel('NUKE EVERYTHING').setStyle(ButtonStyle.Danger).setEmoji('☢️'),
+            new ButtonBuilder().setCustomId('nuke_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+        );
+
+        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
+        const filter = i => i.user.id === interaction.user.id;
+        
+        try {
+            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+            if (confirmation.customId === 'nuke_cancel') {
+                return confirmation.update({ content: '🚫 Nuke aborted. The server is safe.', embeds: [], components: [] });
+            }
+
+            await confirmation.update({ content: '☢️ **INITIATING TOTAL NUKE PROTOCOL...** ☢️', embeds: [], components: [] });
+
+            const channels = await guild.channels.fetch();
+            let deletedChannels = 0;
+            for (const [id, channel] of channels) {
+                if (id === interaction.channel.id || channel.name.toLowerCase().includes('general')) continue;
+                try {
+                    await channel.delete('Emergency Nuke Protocol initiated by Admin');
+                    deletedChannels++;
+                    await delay(400);
+                } catch (err) {}
+            }
+
+            const roles = await guild.roles.fetch();
+            let deletedRoles = 0;
+            const botRolePosition = guild.members.me.roles.highest.position;
+            for (const [id, role] of roles) {
+                if (role.name === '@everyone' || role.managed || role.position >= botRolePosition) continue;
+                try {
+                    await role.delete('Emergency Nuke Protocol initiated by Admin');
+                    deletedRoles++;
+                    await delay(400);
+                } catch (err) {}
+            }
+
+            const safeChannel = guild.channels.cache.get(interaction.channel.id);
+            if (safeChannel) {
+                const finishEmbed = new EmbedBuilder()
+                    .setColor('#2ecc71')
+                    .setTitle('☢️ Server Nuke Complete')
+                    .setDescription(`Successfully wiped:\n🧨 **${deletedChannels} Channels**\n🧨 **${deletedRoles} Roles**`);
+                await safeChannel.send({ embeds: [finishEmbed] });
+            }
+        } catch (e) {
+            await interaction.editReply({ content: '⚠️ Command timed out. Nuke aborted.', embeds: [], components: [] });
         }
-    });
+    }
 
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isModalSubmit() || interaction.customId !== 'sys_modal_staff_app') return;
+    if (cmd === 'emergency-lockdown') {
+        const embed = new EmbedBuilder()
+            .setColor('#FFA500')
+            .setTitle('🚨 INITIATE GLOBAL LOCKDOWN 🚨')
+            .setDescription('Remove typing and voice access for `@everyone` in all channels?');
 
-        await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('lock_confirm').setLabel('LOCKDOWN SERVER').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('lock_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+        );
 
-        const age = interaction.fields.getTextInputValue('app_age');
-        const exp = interaction.fields.getTextInputValue('app_experience');
-        const reason = interaction.fields.getTextInputValue('app_reason');
+        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
+        const filter = i => i.user.id === interaction.user.id;
+        
+        try {
+            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+            if (confirmation.customId === 'lock_cancel') return confirmation.update({ content: '🚫 Lockdown aborted.', embeds: [], components: [] });
 
-        const adminReqCh = interaction.guild.channels.cache.find(c => c.name === 'admin-action-requests') || 
-                           interaction.guild.channels.cache.find(c => c.name === 'logs-moderate');
+            await confirmation.update({ content: '🔒 **LOCKING DOWN ALL CHANNELS...**', embeds: [], components: [] });
+            
+            let lockedCount = 0;
+            const channels = await guild.channels.fetch();
+            for (const [id, channel] of channels) {
+                try {
+                    await channel.permissionOverwrites.edit(guild.id, { SendMessages: false, Connect: false });
+                    lockedCount++;
+                    await delay(300);
+                } catch (err) {}
+            }
 
-        if (adminReqCh) {
-            const appLogEmbed = new EmbedBuilder()
-                .setColor('#9b59b6')
-                .setTitle('📥 NEW STAFF APPLICATION SUBMITTED')
-                .addFields(
-                    { name: 'Applicant', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
-                    { name: 'Age & Timezone', value: `\`${age}\``, inline: true },
-                    { name: 'Prior Experience', value: `>>> ${exp}`, inline: false },
-                    { name: 'Motivation / Reason', value: `>>> ${reason}`, inline: false }
-                )
-                .setTimestamp();
-
-            await adminReqCh.send({ embeds: [appLogEmbed] });
+            const safeChannel = guild.channels.cache.get(interaction.channel.id);
+            if (safeChannel) safeChannel.send(`🚨 **GLOBAL LOCKDOWN COMPLETE** 🚨\nLocked **${lockedCount} channels**.`);
+        } catch (e) {
+            await interaction.editReply({ content: '⚠️ Command timed out.', embeds: [], components: [] });
         }
+    }
 
-        return interaction.editReply({ content: '✅ Your staff application has been submitted to management for review!' });
-    });
+    if (cmd === 'emergency-secure') {
+        const embed = new EmbedBuilder()
+            .setColor('#3498db')
+            .setTitle('🛡️ INITIATE SECURITY PROTOCOL 🛡️')
+            .setDescription('Instantly remove Administrator and management permissions from all roles?');
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('secure_confirm').setLabel('SECURE ROLES').setStyle(ButtonStyle.Danger).setEmoji('🛡️'),
+            new ButtonBuilder().setCustomId('secure_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+        );
+
+        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
+        const filter = i => i.user.id === interaction.user.id;
+        
+        try {
+            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+            if (confirmation.customId === 'secure_cancel') return confirmation.update({ content: '🚫 Security protocol aborted.', embeds: [], components: [] });
+
+            await confirmation.update({ content: '🛡️ **STRIPPING DANGEROUS PERMISSIONS...**', embeds: [], components: [] });
+            
+            let strippedCount = 0;
+            const roles = await guild.roles.fetch();
+            const botRolePosition = guild.members.me.roles.highest.position;
+
+            for (const [id, role] of roles) {
+                if (role.position >= botRolePosition || role.name === '@everyone' || role.managed) continue;
+                try {
+                    await role.setPermissions(role.permissions.remove([
+                        PermissionFlagsBits.Administrator,
+                        PermissionFlagsBits.BanMembers,
+                        PermissionFlagsBits.KickMembers,
+                        PermissionFlagsBits.ManageChannels,
+                        PermissionFlagsBits.ManageRoles,
+                        PermissionFlagsBits.ManageGuild,
+                        PermissionFlagsBits.ManageWebhooks
+                    ]));
+                    strippedCount++;
+                    await delay(500);
+                } catch (err) {}
+            }
+
+            const safeChannel = guild.channels.cache.get(interaction.channel.id);
+            if (safeChannel) safeChannel.send(`🛡️ **SERVER SECURED** 🛡️\nStripped permissions from **${strippedCount} roles**.`);
+        } catch (e) {
+            await interaction.editReply({ content: '⚠️ Command timed out.', embeds: [], components: [] });
+        }
+    }
+
+    if (cmd === 'emergency-unban') {
+        const embed = new EmbedBuilder()
+            .setColor('#2ecc71')
+            .setTitle('🏥 INITIATE MASS UNBAN 🏥')
+            .setDescription('Wipe the entire server ban list and unban everyone?');
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('unban_confirm').setLabel('UNBAN EVERYONE').setStyle(ButtonStyle.Danger).setEmoji('🏥'),
+            new ButtonBuilder().setCustomId('unban_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+        );
+
+        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
+        const filter = i => i.user.id === interaction.user.id;
+        
+        try {
+            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+            if (confirmation.customId === 'unban_cancel') return confirmation.update({ content: '🚫 Mass unban aborted.', embeds: [], components: [] });
+
+            await confirmation.update({ content: '🏥 **FETCHING BAN LIST...**', embeds: [], components: [] });
+            
+            const bans = await guild.bans.fetch();
+            if (bans.size === 0) return interaction.editReply({ content: 'The ban list is already empty!' });
+
+            let unbannedCount = 0;
+            for (const [userId, banInfo] of bans) {
+                try {
+                    await guild.members.unban(userId, 'Emergency Mass Unban Protocol');
+                    unbannedCount++;
+                    await delay(300);
+                } catch (err) {}
+            }
+
+            const safeChannel = guild.channels.cache.get(interaction.channel.id);
+            if (safeChannel) safeChannel.send(`🏥 **RECOVERY COMPLETE** 🏥\nSuccessfully unbanned **${unbannedCount} users**.`);
+        } catch (e) {
+            await interaction.editReply({ content: '⚠️ Command timed out.', embeds: [], components: [] });
+        }
+    }
 }
-
-const policyVotePayload = {
-    name: 'policy-vote',
-    description: '🏛️ Create an official governance policy vote in #policy-amendment-vote (Admins Only)',
-    default_member_permissions: '8',
-    options: [
-        { name: 'title', type: 3, required: true, description: 'Title of the policy amendment' },
-        { name: 'description', type: 3, required: true, description: 'Detailed explanation of the policy changes' }
-    ]
-};
 
 async function handlePolicyVoteButtons(interaction) {
     if (!interaction.isButton() || !['vote_yes', 'vote_no'].includes(interaction.customId)) return;
 
     const rawMsgId = interaction.message ? interaction.message.id : '';
     const cleanMsgId = String(rawMsgId || '').replace(/[^0-9]/g, '');
-
     if (!cleanMsgId) return;
 
-    // CODACY LINE 356 FIX: Explicit Literal Filter Assignment
     const cleanMsgString = String(cleanMsgId);
     const voteDoc = await PolicyVote.findOne({ messageId: String(cleanMsgString) });
     if (!voteDoc) return;
@@ -393,17 +489,32 @@ async function handlePolicyVoteButtons(interaction) {
 }
 
 function initModule(client) {
-    registerSystemListeners(client);
     start60sChannelTelemetryLoop(client);
 
     client.on('interactionCreate', async (interaction) => {
-        if (interaction.isButton()) {
+        if (interaction.isChatInputCommand()) {
+            const cmdName = interaction.commandName;
+            if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmdName)) {
+                await handleEmergencyCommand(interaction, client);
+            }
+        } else if (interaction.isButton()) {
             await handlePolicyVoteButtons(interaction);
         }
     });
 }
 
+const policyVotePayload = {
+    name: 'policy-vote',
+    description: '🏛️ Create an official governance policy vote in #policy-amendment-vote (Admins Only)',
+    default_member_permissions: '8',
+    options: [
+        { name: 'title', type: 3, required: true, description: 'Title of the policy amendment' },
+        { name: 'description', type: 3, required: true, description: 'Detailed explanation of the policy changes' }
+    ]
+};
+
 module.exports = initModule;
 module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.policyVotePayload = policyVotePayload;
+module.exports.handleEmergencyCommand = handleEmergencyCommand;
