@@ -1,4 +1,4 @@
- // ==========================================
+// ==========================================
 // 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
@@ -49,7 +49,6 @@ app.get('/api/servers', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch servers' });
     }
 });
-
 app.get('/', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -130,7 +129,6 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
-
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -215,7 +213,6 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-
 // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -347,19 +344,6 @@ client.manager.on('playerStart', async (player, track) => {
         }
     }
 });
-
-client.manager.on('playerException', (player) => {
-    try {
-        if (player.queue.size > 0) player.skip();
-        else player.destroy();
-    } catch (e) {}
-});
-
-client.manager.on('playerEmpty', async player => {
-    const channel = client.channels.cache.get(player.textId);
-    if (channel) channel.send('📭 The queue has ended.');
-});
-
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
@@ -389,7 +373,8 @@ client.once(Events.ClientReady, async () => {
 const commandsPath = path.join(__dirname, 'commands');
 const registerCommand = (filePath) => {
     try {
-        const command = require(filePath);
+        const safeFilePath = String(filePath || '');
+        const command = require(safeFilePath);
         if (command.data && command.data.name && typeof command.execute === 'function') {
             client.commands.set(command.data.name, command);
             console.log(`✅ Loaded Slash Command: /${command.data.name}`);
@@ -440,18 +425,25 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-
 // ==========================================
 // 5. INTERACTION ENGINE (UNIFIED & CRASH-PROOF)
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
+    // Direct module-handled commands (bypasses collection checks)
+    if (interaction.isChatInputCommand()) {
+        const moduleHandledCommands = ['setup-starry', 'policy-vote', 'social', 'devpanel'];
+        if (moduleHandledCommands.includes(interaction.commandName)) {
+            return; 
+        }
+    }
+
     // Handle button controls for music
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
-        const player = client.manager.getPlayer(interaction.guild.id);
+        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
         const action = interaction.customId;
 
         await interaction.deferUpdate().catch(() => {});
@@ -474,7 +466,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
 
-    // Unified Command Router (Loads directly from client.commands collection)
+    // Unified Command Router
     const command = client.commands.get(interaction.commandName);
     if (!command) {
         return interaction.reply({ content: '❌ This command is not recognized.', flags: [6] }).catch(() => {});
@@ -491,13 +483,13 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-
 // ==========================================
 // 6. MASTER BOOTSTRAP SEQUENCE
 // ==========================================
 const loadModule = (name, filePath) => {
     try { 
-        const absolutePath = path.resolve(__dirname, filePath);
+        const safePath = String(filePath || '');
+        const absolutePath = path.resolve(__dirname, safePath);
         if (!fs.existsSync(absolutePath)) return;
 
         const mod = require(absolutePath);
@@ -551,9 +543,14 @@ async function startBot() {
             ['Network Telemetry Engine', './modules/telemetryEngine.js'], ['Social Actions Engine', './modules/socialActions.js']
         ];
         
-        mods.forEach(([name, path]) => loadModule(name, path));
+        for (const [name, modPath] of mods) {
+            loadModule(name, String(modPath));
+        }
 
-        if (fs.existsSync('./modules/modApply.js')) loadModule('Mod Apply', './modules/modApply.js'); 
+        const modApplyPath = './modules/modApply.js';
+        if (fs.existsSync(modApplyPath)) {
+            loadModule('Mod Apply', modApplyPath);
+        }
 
         await client.login(process.env.TOKEN);
     } catch (error) {
@@ -580,3 +577,15 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
+
+client.manager.on('playerException', (player) => {
+    try {
+        if (player.queue.size > 0) player.skip();
+        else player.destroy();
+    } catch (e) {}
+});
+
+client.manager.on('playerEmpty', async player => {
+    const channel = client.channels.cache.get(player.textId);
+    if (channel) channel.send('📭 The queue has ended.');
+});
