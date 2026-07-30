@@ -186,7 +186,7 @@ async function createDescribedChannel(guild, options) {
 // ==========================================
 // 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
 // ==========================================
-async function provisionMasterServerStructure(interaction, promptText) {
+async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
 
@@ -285,70 +285,6 @@ async function provisionMasterServerStructure(interaction, promptText) {
     ];
     for (const item of entryChannels) {
         await createDescribedChannel(guild, { name: item.name, parent: entryCat.id, description: item.desc, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
-    }
-
-    // --- CATEGORY 7: DYNAMIC GEMINI AI BUILDER (WELCOME & INFO + NICHE CHANNELS) ---
-    const userPrompt = promptText || 'General Community Lounge';
-    try {
-        const aiPrompt = `Generate a Discord server channel layout customized for theme/niche: "${userPrompt}".
-Return ONLY a raw JSON object with 2 categories: "WELCOME & INFO" and a theme-specific niche category.
-Format:
-{
-  "welcomeCategory": {
-    "title": "✨ WELCOME & INFO",
-    "channels": [
-      {"name": "server-rules", "type": "text", "desc": "Official rules and guidelines for this community."},
-      {"name": "announcements", "type": "text", "desc": "Official updates and announcements."},
-      {"name": "self-roles", "type": "text", "desc": "Reaction role assignment panel."},
-      {"name": "introductions", "type": "text", "desc": "Introduce yourself to the community!"}
-    ]
-  },
-  "nicheCategories": [
-    {
-      "category": "🌸 ANIME CHILL LOUNGE",
-      "channels": [
-        {"name": "anime-discussion", "type": "text", "desc": "Chat about all anime series and seasonal drops."},
-        {"name": "manga-corner", "type": "text", "desc": "Manga and light novel discussions."},
-        {"name": "fanart-gallery", "type": "text", "desc": "Share your favorite artwork and cosplays."}
-      ]
-    }
-  ]
-}
-Do NOT include markdown syntax or extra text outside JSON.`;
-
-        const aiResult = await generateAIResponseWithRetry(aiPrompt);
-        const cleanJson = aiResult.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsedLayout = JSON.parse(cleanJson);
-
-        // Build WELCOME & INFO Category
-        if (parsedLayout.welcomeCategory) {
-            const welcomeCat = await guild.channels.create({ name: parsedLayout.welcomeCategory.title || '✨ WELCOME & INFO', type: ChannelType.GuildCategory });
-            for (const ch of parsedLayout.welcomeCategory.channels) {
-                await createDescribedChannel(guild, { name: ch.name, parent: welcomeCat.id, description: ch.desc, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
-                totalChannels++;
-            }
-        }
-
-        // Build Custom Theme Categories
-        if (Array.isArray(parsedLayout.nicheCategories)) {
-            for (const catObj of parsedLayout.nicheCategories) {
-                if (!catObj.category || !Array.isArray(catObj.channels)) continue;
-                const nicheCat = await guild.channels.create({ name: catObj.category, type: ChannelType.GuildCategory });
-                totalCategories++;
-
-                for (const chObj of catObj.channels) {
-                    await createDescribedChannel(guild, { name: chObj.name, parent: nicheCat.id, description: chObj.desc, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
-                    totalChannels++;
-                }
-            }
-        }
-    } catch (aiErr) {
-        console.warn('AI Layout Generation fallback triggered:', aiErr.message);
-        const welcomeCat = await guild.channels.create({ name: '✨ WELCOME & INFO', type: ChannelType.GuildCategory });
-        for (const ch of [{ name: 'server-rules', desc: 'Official server rules.' }, { name: 'announcements', desc: 'Official updates.' }, { name: 'self-roles', desc: 'Pick your roles.' }, { name: 'introductions', desc: 'Introduce yourself!' }]) {
-            await createDescribedChannel(guild, { name: ch.name, parent: welcomeCat.id, description: ch.desc, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
-            totalChannels++;
-        }
     }
 
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
@@ -673,12 +609,11 @@ function initModule(client) {
             
             if (cmd === 'setup-starry') {
                 await interaction.deferReply().catch(() => {});
-                const prompt = interaction.options.getString('prompt') || 'General Community';
-                const result = await provisionMasterServerStructure(interaction, prompt);
+                const result = await provisionMasterServerStructure(interaction);
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured for theme **"${prompt}"** with full security infrastructure & pinned channel guides!`)
+                    .setDescription(`Server successfully configured with full high-security infrastructure & pinned channel guides!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
                         { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with pinned descriptions!`, inline: false }
