@@ -15,6 +15,7 @@ const MANAGE_GUILD = PermissionFlagsBits.ManageGuild.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
+// Generate dynamic autorole options array
 const autoroleOptions = [
     { name: 'sticky_roles', type: 5, required: false, description: 'Enable or disable restoring previous roles on rejoin' }
 ];
@@ -47,22 +48,29 @@ const commands = [
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View and interactively manage the current music queue' },
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
-
-    // SECURITY & VERIFICATION
-    { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
+    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' }
 ];
 
-// Safely Load Module Payloads from MasterChannelSystems (Merged Mod & Automod & Governance)
+// Safely Load Upgraded Security, Governance & Moderation Payloads from MasterChannelSystems
 try {
-    const { policyVotePayload, modMasterPayload, autoModMasterPayload } = require('./src/modules/masterChannelSystems');
-    if (policyVotePayload) commands.push(policyVotePayload);
-    if (modMasterPayload) commands.push(modMasterPayload);
-    if (autoModMasterPayload) commands.push(autoModMasterPayload);
+    const master = require('./src/modules/masterChannelSystems');
+    
+    if (master.policyVotePayload) commands.push(master.policyVotePayload);
+    if (master.modMasterPayload) commands.push(master.modMasterPayload);
+    if (master.autoModMasterPayload) commands.push(master.autoModMasterPayload);
+    if (master.moderateMasterPayload) commands.push(master.moderateMasterPayload);
+    if (master.verifySetupPayload) commands.push(master.verifySetupPayload);
+    if (master.emergencyNukePayload) commands.push(master.emergencyNukePayload);
+    if (master.emergencyLockdownPayload) commands.push(master.emergencyLockdownPayload);
+    if (master.emergencySecurePayload) commands.push(master.emergencySecurePayload);
+    if (master.emergencyUnbanPayload) commands.push(master.emergencyUnbanPayload);
+    
+    console.log('✅ Loaded Master Security, Emergency, and Governance payloads');
 } catch (err) {
-    console.warn('⚠️ Could not load policies or moderation payloads from masterChannelSystems:', err.message);
+    console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
 }
 
+// Safely Load Social Command Payload
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
     if (socialCommandPayload) commands.push(socialCommandPayload);
@@ -70,7 +78,7 @@ try {
     console.warn('⚠️ Could not load socialCommandPayload:', err.message);
 }
 
-// GIVEAWAYS
+// GIVEAWAYS & REROLL ENGINE
 commands.push(
     new SlashCommandBuilder()
         .setName('giveaway')
@@ -90,8 +98,9 @@ commands.push(
         .addIntegerOption(option => option.setName('winners').setDescription('Number of winners').setRequired(false))
         .toJSON()
 );
-
-// ECONOMY, XP & MASTER MANAGEMENT
+// ==========================================
+// ECONOMY, XP, UTILITIES & MASTER SYSTEM PAYLOADS
+// ==========================================
 commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
@@ -116,10 +125,6 @@ commands.push(
     },
     
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
-    { name: 'emergency-lockdown', description: '🚨 EMERGENCY: Freezes the entire server. (Admins Only)', default_member_permissions: '8' },
-    { name: 'emergency-secure', description: '🛡️ EMERGENCY: Strips all dangerous permissions from all roles. (Admins Only)', default_member_permissions: '8' },
-    { name: 'emergency-unban', description: '🏥 EMERGENCY: Unbans every user in the server ban list. (Admins Only)', default_member_permissions: '8' },
-    { name: 'emergency-nuke', description: '⚠️ EMERGENCY: Deletes all channels except General. (Admins Only)', default_member_permissions: '8' },
     { name: 'set-name', description: 'Change the bot trigger word/name for this server (Admins Only)', default_member_permissions: '8', options: [{ name: 'name', description: 'New trigger word', type: 3, required: true }] },
     { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
     { name: 'setup-server', description: 'Automatically generates a professional server layout!', default_member_permissions: '8' },
@@ -142,9 +147,13 @@ commands.push(
     { name: 'bump', description: 'Bump server to global web list' }
 );
 
-// Deduplicate
+// Smart Deduplication: Ensures rich builders from masterChannelSystems overwrite basic definitions
 const commandMap = new Map();
-commands.forEach(cmd => { if (cmd && cmd.name) commandMap.set(cmd.name, cmd); });
+commands.forEach(cmd => { 
+    if (cmd && cmd.name) {
+        commandMap.set(cmd.name, cmd); 
+    } 
+});
 const finalPayload = Array.from(commandMap.values());
 
 async function deployCommands() {
@@ -179,4 +188,3 @@ if (require.main === module) {
 }
 
 module.exports = { commands: finalPayload, deployCommands };
-        
