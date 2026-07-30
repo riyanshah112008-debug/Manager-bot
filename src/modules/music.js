@@ -35,32 +35,33 @@ module.exports = (client) => {
             if (command === 'play') {
                 const query = interaction.options.getString('song', true).trim();
                 
-                // Immediately defer reply to satisfy Discord 3s requirement
+                // 1. Immediately defer reply to eliminate Discord 3s timeout
                 await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
 
-                // 1. Search for track
+                // 2. Search for the requested track
                 const res = await manager.search(query, { requester: interaction.user });
 
                 if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                     return interaction.editReply({ content: '❌ No songs found matching your query.' });
                 }
 
-                // 2. Create Kazagumo Player with CORRECT option keys (voiceId, textId, deaf)
+                // 3. Create Kazagumo Player with correct parameter keys
                 let player = manager.getPlayer(interaction.guild.id);
                 if (!player) {
                     player = await manager.createPlayer({
                         guildId: interaction.guild.id,
-                        voiceId: voiceChannel.id,   // <-- FIXED: Kazagumo requires voiceId
-                        textId: interaction.channel.id,  // <-- FIXED: Kazagumo requires textId
-                        deaf: true                   // <-- FIXED: Kazagumo requires deaf
+                        voiceId: voiceChannel.id,
+                        textId: interaction.channel.id,
+                        deaf: true
                     });
                 }
 
-                // If player is connected to a different voice channel, move it
+                // If active in a different channel, switch voice channel
                 if (player.voiceId !== voiceChannel.id) {
                     player.setVoiceChannel(voiceChannel.id);
                 }
 
+                // 4. Queue tracks and start playback
                 if (res.loadType === 'playlist') {
                     for (const track of res.tracks) {
                         player.queue.add(track);
