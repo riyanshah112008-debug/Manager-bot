@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 5)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -108,7 +108,7 @@ async function updateSecurityConfig(guildId, updateData) {
     return updated;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 5)
 // ==========================================
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -155,7 +155,7 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
             embed.setColor('#2ecc71').setTitle('🛡️ Server Web Verification Portal').setDescription('To access this server, click the button below to generate your secure, one-time web verification link.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole?.id || 'active'}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'))];
         } else if (moduleType === 'tickets') {
-            embed.setColor('#00F2FE').setTitle('🎫 Support & Application Portal').setDescription('Click below to open a support ticket or apply for moderator staff positions.');
+            embed.setColor('#00F2FE').setTitle('🎫 Support & Application Portal').setDescription('Click below to open a private support ticket or submit a moderator staff application.');
             components = [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
                 new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
@@ -189,7 +189,7 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
         } else if (moduleType === 'support_desk') {
             embed.setColor('#9b59b6').setTitle('deskSupport Coordination Desk').setDescription('**Status:** Active\n*Staff dispatch and ticket management queue.*');
         } else if (moduleType === 'admin_requests') {
-            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('**Status:** Monitoring\n*Queue for pending administrative approval requests.*');
+            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('**Status:** Active Dispatcher\n*Receives staff applications and pending administrative approval requests.*');
         } else if (moduleType === 'threat_reporting') {
             embed.setColor('#ED4245').setTitle('⚠️ Real-Time Threat Detection Center').setDescription('**Status:** Armed\n*Automated logging of security exploits and raid spikes.*');
         } else if (moduleType === 'policy_vote') {
@@ -233,7 +233,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     return channel;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 5)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -357,7 +357,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 5)
 // ==========================================
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -436,9 +436,7 @@ const policyVotePayload = {
     name: 'policy-vote', description: '🏛️ Governance vote (Admins Only)', default_member_permissions: '8',
     options: [{ name: 'title', type: 3, required: true, description: 'Title' }, { name: 'description', type: 3, required: true, description: 'Desc' }]
 };
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 6)
-// ==========================================
+
 async function handleModCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
     const sub = interaction.options.getSubcommand();
@@ -644,12 +642,13 @@ async function handleEmergencyCommands(interaction) {
     }
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 5)
 // ==========================================
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
 
+    // --- Slash Commands & Interaction Dispatcher ---
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
@@ -660,7 +659,7 @@ function initModule(client) {
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with interactive verification, tickets, tracker engines, and telemetry!`)
+                    .setDescription(`Server successfully configured with working interactive verification, tickets, tracker engines, and telemetry!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
                         { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with full functionality!`, inline: false }
@@ -693,6 +692,7 @@ function initModule(client) {
             }
         } 
         
+        // --- Interactive Button Handlers ---
         else if (interaction.isButton()) {
             const id = interaction.customId;
 
@@ -721,19 +721,48 @@ function initModule(client) {
                 }
 
                 const token = Math.random().toString(36).substring(2, 15);
+                if (!client.verifyMap) client.verifyMap = new Map();
                 client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId });
                 const hostUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com';
                 return interaction.reply({ content: `🔗 **Verification Link:** ${hostUrl}/verify?token=${token}\n*Link expires in 10 minutes.*`, flags: [EPHEMERAL_FLAG] });
             }
 
+            // Ticket Creation with Explicit Permission Overwrite
             if (id === 'sys_create_ticket') {
-                const ch = await interaction.guild.channels.create({ name: `ticket-${interaction.user.username}`, type: ChannelType.GuildText });
-                return interaction.reply({ content: `✅ Ticket created: ${ch}`, flags: [EPHEMERAL_FLAG] });
+                const staffRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'staff' || r.name.toLowerCase() === 'moderator');
+                const botMember = interaction.guild.members.me;
+
+                const ticketOverwrites = [
+                    { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
+                ];
+                if (staffRole) {
+                    ticketOverwrites.push({ id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+                }
+
+                const ch = await interaction.guild.channels.create({
+                    name: `ticket-${interaction.user.username}`,
+                    type: ChannelType.GuildText,
+                    permissionOverwrites: ticketOverwrites
+                });
+
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor('#00F2FE')
+                    .setTitle(`🎫 Ticket Created: #${ch.name}`)
+                    .setDescription(`Welcome <@${interaction.user.id}>! A member of the staff team will be with you shortly.`)
+                    .setFooter({ text: 'Starry Support System' });
+
+                await ch.send({ embeds: [welcomeEmbed] }).catch(() => {});
+                return interaction.reply({ content: `✅ Ticket created successfully: ${ch}`, flags: [EPHEMERAL_FLAG] });
             }
 
+            // Staff Application Modal Launcher
             if (id === 'sys_apply_staff') {
                 const modal = new ModalBuilder().setCustomId('sys_modal_staff_app').setTitle('Staff Application')
-                    .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('exp').setLabel('Experience').setStyle(TextInputStyle.Paragraph).setRequired(true)));
+                    .addComponents(new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('exp').setLabel('Prior Moderation Experience').setStyle(TextInputStyle.Paragraph).setRequired(true).setPlaceholder('Describe your experience or type 0 if none...')
+                    ));
                 return interaction.showModal(modal);
             }
 
@@ -752,8 +781,33 @@ function initModule(client) {
                 return interaction.reply({ content: `✅ Vote recorded! Current status — YES: ${vote.yesVotes.length} | NO: ${vote.noVotes.length}`, flags: [EPHEMERAL_FLAG] });
             }
         }
+
+        // --- Modal Submission Listeners ---
+        else if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'sys_modal_staff_app') {
+                const exp = interaction.fields.getTextInputValue('exp');
+                const reqChannel = interaction.guild.channels.cache.find(c => c.name === 'admin-action-requests');
+
+                const appEmbed = new EmbedBuilder()
+                    .setColor('#FEE75C')
+                    .setTitle(`📝 New Staff Application`)
+                    .addFields(
+                        { name: 'Applicant', value: `<@${interaction.user.id}> (\`${interaction.user.tag}\`)`, inline: true },
+                        { name: 'Application Date', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                        { name: 'Experience & Qualifications', value: exp }
+                    )
+                    .setFooter({ text: 'Starry Staff Application Dispatcher' });
+
+                if (reqChannel) {
+                    await reqChannel.send({ embeds: [appEmbed] }).catch(() => {});
+                }
+
+                return interaction.reply({ content: '✅ Your staff application has been submitted successfully! The administration team will review it in `#admin-action-requests`.', flags: [EPHEMERAL_FLAG] });
+            }
+        }
     });
 
+    // --- Message Event Handler (Dyno/Carl Chat Filter) ---
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
@@ -811,6 +865,7 @@ function initModule(client) {
         }
     });
 
+    // --- Member Join Event Handler (Beemo, AltDentifier & Tracker.js Engine) ---
     client.on('guildMemberAdd', async (member) => {
         if (!member.guild) return;
 
@@ -936,5 +991,4 @@ module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
 module.exports.verifySetupPayload = verifySetupCommand.toJSON();
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
 module.exports.emergencyLockdownPayload = emergencyLockdownCommand.toJSON();
-module.exports.emergencySecurePayload = emergencySecureCommand.toJSON();
-module.exports.emergencyUnbanPayload = emergencyUnbanCommand.toJSON();
+module.exports.emergencySecureP
