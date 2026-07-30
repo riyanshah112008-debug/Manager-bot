@@ -1,6 +1,5 @@
 // ==========================================
-// 1. IMPORTS, SCHEMAS & SECURE GIF ENGINE
-// 1. IMPORTS, SCHEMAS & HIGH-AVAILABILITY GIF DATABASE
+// 🎭 STARRY SUPREME SOCIAL & ANIME ACTIONS MODULE
 // ==========================================
 const { 
     SlashCommandBuilder, 
@@ -13,38 +12,9 @@ const {
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-const User = mongoose.models.User || require('../models/User');
+// EPHEMERAL RESPONSE FLAG (BITFIELD 6)
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Crypto-Secure Random Selector (Fixes Codacy Weak PRNG)
-function getRandomIndex(arrayLength) {
-    if (!arrayLength || arrayLength <= 0) return 0;
-    return crypto.randomInt(0, arrayLength);
-}
-
-// Full 22 Action Fallback Database (20+ GIFs per category via API + Fallbacks)
-const GIF_DATABASE = {
-    kiss: ['https://cdn.nekos.life/kiss/kiss_001.gif', 'https://purrbot.site/img/sfw/kiss/gif/kiss_001.gif', 'https://media.tenor.com/dn_m_l39_34AAAAC/anime-kiss.gif'],
-    pat: ['https://cdn.nekos.life/pat/pat_001.gif', 'https://purrbot.site/img/sfw/pat/gif/pat_001.gif', 'https://media.tenor.com/8Q_a4Kqf8jAAAAAC/anime-pat.gif'],
-    hug: ['https://cdn.nekos.life/hug/hug_001.gif', 'https://purrbot.site/img/sfw/hug/gif/hug_001.gif', 'https://media.tenor.com/x8mR9xK6K8AAAAAC/anime-hug.gif'],
-    slap: ['https://cdn.nekos.life/slap/slap_001.gif', 'https://purrbot.site/img/sfw/slap/gif/slap_001.gif'],
-    cuddle: ['https://cdn.nekos.life/cuddle/cuddle_001.gif', 'https://purrbot.site/img/sfw/cuddle/gif/cuddle_001.gif'],
-    bite: ['https://purrbot.site/img/sfw/bite/gif/bite_001.gif', 'https://purrbot.site/img/sfw/bite/gif/bite_002.gif'],
-    poke: ['https://cdn.nekos.life/poke/poke_001.gif', 'https://purrbot.site/img/sfw/poke/gif/poke_001.gif'],
-    punch: ['https://purrbot.site/img/sfw/punch/gif/punch_001.gif'],
-    tickle: ['https://cdn.nekos.life/tickle/tickle_001.gif', 'https://purrbot.site/img/sfw/tickle/gif/tickle_001.gif'],
-    feed: ['https://cdn.nekos.life/feed/feed_001.gif', 'https://purrbot.site/img/sfw/feed/gif/feed_001.gif'],
-    lick: ['https://cdn.nekos.life/lick/lick_001.gif', 'https://purrbot.site/img/sfw/lick/gif/lick_001.gif'],
-    highfive: ['https://purrbot.site/img/sfw/highfive/gif/highfive_001.gif'],
-    wave: ['https://purrbot.site/img/sfw/wave/gif/wave_001.gif'],
-    sleep: ['https://purrbot.site/img/sfw/sleep/gif/sleep_001.gif', 'https://media.tenor.com/7L3f6n4I5e8AAAAC/anime-sleep.gif'],
-    wakeup: ['https://media.tenor.com/yFzN-d8C_jMAAAAC/anime-wakeup.gif'],
-    cry: ['https://purrbot.site/img/sfw/cry/gif/cry_001.gif', 'https://media.tenor.com/m40fH9PZ1JkAAAAC/anime-cry.gif'],
-    laugh: ['https://purrbot.site/img/sfw/laugh/gif/laugh_001.gif', 'https://media.tenor.com/8Q_a4Kqf8jAAAAAC/anime-laugh.gif'],
-    dance: ['https://purrbot.site/img/sfw/dance/gif/dance_001.gif', 'https://media.tenor.com/x8mR9xK6K8AAAAAC/anime-dance.gif'],
-    blush: ['https://purrbot.site/img/sfw/blush/gif/blush_001.gif'],
-    pout: ['https://purrbot.site/img/sfw/pout/gif/pout_001.gif'],
-    smile: ['https://purrbot.site/img/sfw/smile/gif/smile_001.gif'],
-    bored: ['https://media.tenor.com/6Uq4vA5C_mUAAAAC/anime-bored.gif']
 // Fallback User Schema in case models/User.js is loaded dynamically
 const User = mongoose.models.User || (function() {
     try {
@@ -58,10 +28,13 @@ const User = mongoose.models.User || (function() {
     }
 })();
 
-// EPHEMERAL RESPONSE FLAG (BITFIELD 6)
-const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
+// Crypto-Secure Random Selector (Fixes Codacy Weak PRNG)
+function getRandomIndex(arrayLength) {
+    if (!arrayLength || arrayLength <= 0) return 0;
+    return crypto.randomInt(0, arrayLength);
+}
 
-// High-Availability Multi-Source GIF Database
+// High-Availability Multi-Source GIF Database (22 Categories)
 const GIF_DATABASE = {
     kiss: [
         'https://cdn.nekos.life/kiss/kiss_001.gif', 'https://cdn.nekos.life/kiss/kiss_002.gif',
@@ -168,7 +141,7 @@ async function fetchSafeAnimeGif(actionKey) {
     return fallbackList[idx];
 }
 
-// ALL 22 ACTIONS
+// ACTION CONFIGURATION
 const ACTION_CONFIG = {
     kiss: { verb: 'kisses', emoji: '💋', color: '#FFB6C1', group: 'action', dbField: 'kisses', requiresTarget: true },
     pat: { verb: 'pets', emoji: '⭐', color: '#A7C7E7', group: 'action', dbField: 'pats', requiresTarget: true },
@@ -184,8 +157,6 @@ const ACTION_CONFIG = {
     highfive: { verb: 'highfives', emoji: '🙌', color: '#F1C40F', group: 'action', dbField: 'highfives', requiresTarget: true },
     wave: { verb: 'waves at', emoji: '👋', color: '#34495E', group: 'action', dbField: 'waves', requiresTarget: true },
     
-
-    // Group 2: express (Solo Expressions)
     sleep: { verb: 'is sleeping zzz...', emoji: '😴', color: '#2C3E50', group: 'express', requiresTarget: false },
     wakeup: { verb: 'just woke up!', emoji: '⏰', color: '#E67E22', group: 'express', requiresTarget: false },
     cry: { verb: 'is crying...', emoji: '😭', color: '#3498DB', group: 'express', requiresTarget: false },
@@ -197,13 +168,13 @@ const ACTION_CONFIG = {
     bored: { verb: 'is feeling super bored...', emoji: '🥱', color: '#95A5A6', group: 'express', requiresTarget: false }
 };
 
+// SLASH COMMAND BUILDER
 const socialCommandBuilder = new SlashCommandBuilder()
     .setName('social')
     .setDescription('🎭 Perform anime social actions or express emotions!')
     .setContexts([0, 1, 2])
     .setIntegrationTypes([0, 1]);
 
-// Subcommand Group 1: Action (Targeted Interactions)
 socialCommandBuilder.addSubcommandGroup(group => {
     group.setName('action').setDescription('Targeted social actions with other members');
     Object.keys(ACTION_CONFIG).filter(k => ACTION_CONFIG[k].group === 'action').forEach(actionKey => {
@@ -216,7 +187,6 @@ socialCommandBuilder.addSubcommandGroup(group => {
     return group;
 });
 
-// Subcommand Group 2: Express (Solo Expressions)
 socialCommandBuilder.addSubcommandGroup(group => {
     group.setName('express').setDescription('Express individual feelings or emotions');
     Object.keys(ACTION_CONFIG).filter(k => ACTION_CONFIG[k].group === 'express').forEach(actionKey => {
@@ -228,9 +198,7 @@ socialCommandBuilder.addSubcommandGroup(group => {
     return group;
 });
 
-// ==========================================
-// 2. CODACY-CLEAN NOSQL SAFE DATABASE HELPER
-// ==========================================
+// SAFE DATABASE COUNTER HELPER
 async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, configField) {
     if (!User) return 1;
 
@@ -261,11 +229,7 @@ async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, c
         await User.updateOne(targetFilter, { $inc: incTarget }, { upsert: true, strict: false });
         await User.updateOne(pairFilter, { $inc: incPair }, { upsert: true, strict: false });
 
-        // CODACY AST BYPASS FIX
-        const cleanPairKey = String(safePairKey);
-        const cleanGuildId = String(safeGuildId);
-
-        const pairDoc = await User.findOne({ userId: String(cleanPairKey), guildId: String(cleanGuildId) }).lean();
+        const pairDoc = await User.findOne({ userId: safePairKey, guildId: safeGuildId }).lean();
 
         if (pairDoc && pairDoc[`${configField}Shared`]) {
             return Number(pairDoc[`${configField}Shared`]);
@@ -277,17 +241,15 @@ async function updateAndFetchUserPair(authorIdRaw, targetIdStrRaw, guildIdRaw, c
     return 1;
 }
 
-// ==========================================
-// 3. ACTION EXECUTOR & MODULE EXPORTS
-// 3. SUPREME ACTION EXECUTOR ENGINE
-// ==========================================
+// MAIN EXECUTION ENGINE
 async function executeSocialAction(actionKey, context, isSlash) {
     const config = ACTION_CONFIG[actionKey];
     if (!config) return;
 
     const guildIdStr = String(context.guildId || 'DM');
-    const authorIdStr = String(isSlash ? context.user.id : context.author.id);
-    const authorName = isSlash ? context.user.username : context.author.username;
+    const authorUser = isSlash ? context.user : context.author;
+    const authorIdStr = String(authorUser.id);
+    const authorName = authorUser.username;
 
     let target = null;
 
@@ -306,19 +268,13 @@ async function executeSocialAction(actionKey, context, isSlash) {
         }
 
         if (!target) {
-            const reqMsg = `❌ Please reply to a message or mention a user to ${actionKey} them!`;
-            return isSlash ? context.reply({ content: reqMsg, flags: [6] }) : context.reply(reqMsg);
-        }
-
-        if (String(target.id) === authorIdStr) {
-            const errReply = `❌ You can't ${actionKey} yourself!`;
-            return isSlash ? context.reply({ content: errReply, flags: [6] }) : context.reply(errReply);
+            const reqMsg = `❌ Please mention a user or reply to a message to ${actionKey} them!`;
             return isSlash 
                 ? context.reply({ content: reqMsg, flags: [EPHEMERAL_FLAG] }) 
                 : context.reply(reqMsg);
         }
 
-        if (target.id === authorId) {
+        if (String(target.id) === authorIdStr) {
             const errReply = `❌ You can't ${actionKey} yourself! Mention someone else.`;
             return isSlash 
                 ? context.reply({ content: errReply, flags: [EPHEMERAL_FLAG] }) 
@@ -326,7 +282,9 @@ async function executeSocialAction(actionKey, context, isSlash) {
         }
     }
 
-    if (isSlash && !context.deferred && !context.replied) await context.deferReply();
+    if (isSlash && !context.deferred && !context.replied) {
+        await context.deferReply().catch(() => {});
+    }
 
     let mutualCount = 1;
     if (target && config.dbField) {
@@ -336,7 +294,9 @@ async function executeSocialAction(actionKey, context, isSlash) {
     const randomGif = await fetchSafeAnimeGif(actionKey);
 
     let descriptionText = `**${authorName}** ${config.verb}`;
-    if (target) descriptionText += ` **${target.username}**!\n*You two have shared ${mutualCount} ${actionKey}s.*`;
+    if (target) {
+        descriptionText += ` **${target.username}**!\n*You two have shared ${mutualCount} ${actionKey}s.*`;
+    }
 
     const embed = new EmbedBuilder()
         .setColor(config.color)
@@ -347,27 +307,25 @@ async function executeSocialAction(actionKey, context, isSlash) {
     if (target && !target.bot) {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId(`social_${actionKey}_back_${authorIdStr}`)
-                .setCustomId(`social_${actionKey}_back_${target.id}_${authorId}`)
+                .setCustomId(`social_${actionKey}_back_${target.id}_${authorIdStr}`)
                 .setLabel(`${actionKey.charAt(0).toUpperCase() + actionKey.slice(1)} back`)
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji(config.emoji)
         );
         components.push(row);
     }
+
     if (isSlash) {
-        await context.editReply({ embeds: [embed], components });
+        await context.editReply({ embeds: [embed], components }).catch(() => {});
     } else {
-        await context.reply({ embeds: [embed], components });
+        await context.reply({ embeds: [embed], components }).catch(() => {});
     }
 }
-    let response = isSlash 
-        ? await context.editReply({ embeds: [embed], components }) 
-        : await context.reply({ embeds: [embed], components });
 
+// HELP MENU
 async function sendSocialHelpMenu(context) {
     const embed = new EmbedBuilder()
-        .setColor('#ff79c6')
+        .setColor('#FF79C6')
         .setTitle('🎭 Starry Social & Anime Actions Menu')
         .setDescription('Express feelings or interact with friends using high-quality animated anime GIFs!\n\n*Works via prefix commands (`.hug @user`) OR slash commands (`/social action hug`).*')
         .addFields(
@@ -393,31 +351,39 @@ async function sendSocialHelpMenu(context) {
     return context.reply({ embeds: [embed] });
 }
 
+// MODULE EXPORTS & EVENT INITIALIZERS
 module.exports = (client) => {
+    // 1. Slash Command /social Handler
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand() && interaction.commandName === 'social') {
-            const subCommand = interaction.options.getSubcommand();
-            if (subCommand) await executeSocialAction(subCommand, interaction, true);
+            const group = interaction.options.getSubcommandGroup(false);
+            const subCommand = interaction.options.getSubcommand(false);
+            const targetAction = subCommand || group;
+
+            if (targetAction) {
+                await executeSocialAction(targetAction, interaction, true);
+            }
             return;
-    collector.on('collect', async (i) => {
-        // Ensure only the targeted user can click "Action Back"
-        if (i.user.id !== target.id) {
-            return i.reply({ content: `❌ Only ${target.username} can use this button!`, flags: [EPHEMERAL_FLAG] });
         }
 
+        // 2. Button "Action Back" Handler
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_');
             const actionKey = parts[1];
-            const originalAuthorId = String(parts[3] || '').replace(/[^0-9]/g, '');
+            const allowedUserId = parts[3];
+            const originalAuthorId = parts[4];
+
+            if (interaction.user.id !== allowedUserId) {
+                return interaction.reply({ 
+                    content: `❌ Only <@${allowedUserId}> can use this button to action back!`, 
+                    flags: [EPHEMERAL_FLAG] 
+                }).catch(() => {});
+            }
 
             const config = ACTION_CONFIG[actionKey];
             if (!config) return;
 
             await interaction.deferReply().catch(() => {});
-
-            if (originalAuthorId && String(interaction.user.id) === originalAuthorId) {
-                return interaction.editReply({ content: `❌ You can't ${actionKey} yourself back!` }).catch(() => {});
-            }
 
             const guildIdStr = String(interaction.guildId || 'DM');
             const userIdStr = String(interaction.user.id);
@@ -438,29 +404,7 @@ module.exports = (client) => {
         }
     });
 
-        await i.editReply({ embeds: [returnEmbed] });
-    });
-}
-// ==========================================
-// 4. MODULE INITIALIZER & EXPORTS
-// ==========================================
-module.exports = (client) => {
-    // A. Handle Master Slash Command /social (Subcommands & Subcommand Groups)
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
-
-        if (interaction.commandName === 'social') {
-            const group = interaction.options.getSubcommandGroup(false);
-            const subCommand = interaction.options.getSubcommand(false);
-            const targetAction = subCommand || group;
-
-            if (targetAction) {
-                await executeSocialAction(targetAction, interaction, true);
-            }
-        }
-    });
-
-    // B. Handle Prefix Text Commands (.hug, .kiss, .slap, .sleep, etc.)
+    // 3. Prefix Commands (.hug, .kiss, .slap, etc.)
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || !message.guild) return;
 
@@ -471,8 +415,6 @@ module.exports = (client) => {
             return sendSocialHelpMenu(message);
         }
 
-        Object.keys(ACTION_CONFIG).forEach(async (actionKey) => {
-        // Check if message matches an action key with prefix '.' or raw word
         for (const actionKey of Object.keys(ACTION_CONFIG)) {
             if (firstWord === `.${actionKey}` || firstWord === actionKey) {
                 await executeSocialAction(actionKey, message, false);
@@ -482,5 +424,16 @@ module.exports = (client) => {
     });
 };
 
-// Export the command payload for deploy-commands.js
+// DIRECT SLASH COMMAND OBJECT EXPORT
+module.exports.data = socialCommandBuilder;
+module.exports.execute = async function(interaction) {
+    const group = interaction.options.getSubcommandGroup(false);
+    const subCommand = interaction.options.getSubcommand(false);
+    const targetAction = subCommand || group;
+    if (targetAction) {
+        await executeSocialAction(targetAction, interaction, true);
+    }
+};
+
+// PAYLOAD EXPORT FOR deploy-commands.js
 module.exports.socialCommandPayload = socialCommandBuilder.toJSON();
