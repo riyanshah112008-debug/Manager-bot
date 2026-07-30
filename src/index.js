@@ -223,22 +223,33 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
 // ==========================================
+// ==========================================
+// 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
+// ==========================================
 const Nodes = [
+    {
+        name: 'AjieHospitality-v4',
+        url: 'lava-v4.ajiehospitality.com:443',
+        auth: 'https://discord.gg/vM3e3U389y',
+        secure: true,
+        retryAmount: 5,
+        retryDelay: 3000
+    },
+    {
+        name: 'Serenetia-v4',
+        url: 'lavalink.serenetia.com:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 5,
+        retryDelay: 3000
+    },
     {
         name: 'Jirayu-Node-v4',
         url: 'lavalink.jirayu.net:13592',
         auth: 'youshallnotpass',
         secure: false,
         retryAmount: 5,
-        retryDelay: 5000
-    },
-    {
-        name: 'Node-v4-Primary-SSL',
-        url: 'lava-v4.ajiehospitality.com:443',
-        auth: 'https://discord.gg/vM3e3U389y',
-        secure: true,
-        retryAmount: 3,
-        retryDelay: 5000
+        retryDelay: 3000
     }
 ];
 
