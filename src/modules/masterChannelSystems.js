@@ -95,7 +95,7 @@ function saveMediaData(data) { fs.writeFileSync(mediaDbPath, JSON.stringify(data
 
 const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free', 'discord.gg/'];
 
-// --- Security RAM Cache & In-Memory Velocity Trackers ---
+// --- Security RAM Cache & Velocity Trackers ---
 const securityCache = new Map();
 const joinTracker = new Map();  // GuildID -> Array of join timestamps
 const nukeTracker = new Map();  // AdminID -> Array of deletion timestamps
@@ -244,10 +244,10 @@ const moderateMasterCommand = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
         sub.setName('toggle')
-            .setDescription('Toggle security modules')
+            .setDescription('Toggle advanced security protection modules')
             .addStringOption(o =>
                 o.setName('module')
-                    .setDescription('Security module to configure')
+                    .setDescription('Select the security protection module')
                     .setRequired(true)
                     .addChoices(
                         { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
@@ -256,11 +256,11 @@ const moderateMasterCommand = new SlashCommandBuilder()
                         { name: 'Dyno/Carl (Chat Filters & AutoMod)', value: 'dyno_carl' }
                     )
             )
-            .addBooleanOption(o => o.setName('status').setDescription('Enable or disable module').setRequired(true))
+            .addBooleanOption(o => o.setName('status').setDescription('Enable or disable this module').setRequired(true))
     )
-    .addSubcommand(sub => sub.setName('autokick').setDescription('Toggle AutoKick enforcement').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoKick').setRequired(true)))
-    .addSubcommand(sub => sub.setName('autoban').setDescription('Toggle AutoBan enforcement').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
-    .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Toggle Owner AutoMod Bypass').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)));
+    .addSubcommand(sub => sub.setName('autokick').setDescription('Configure native automated kicking rules').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoKick').setRequired(true)))
+    .addSubcommand(sub => sub.setName('autoban').setDescription('Configure native automated banning filters').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
+    .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)));
 
 const verifySetupCommand = new SlashCommandBuilder()
     .setName('verify-setup')
@@ -268,6 +268,11 @@ const verifySetupCommand = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(o => o.setName('channel').setDescription('Channel to send verification panel').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .addRoleOption(o => o.setName('role').setDescription('Role given upon verification').setRequired(true));
+
+const emergencyNukeCommand = new SlashCommandBuilder().setName('emergency-nuke').setDescription('⚡ Emergency Protocol: Purge & Recreate Channel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const emergencyLockdownCommand = new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const emergencySecureCommand = new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const emergencyUnbanCommand = new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 const policyVotePayload = {
     name: 'policy-vote', description: '🏛️ Governance vote (Admins Only)', default_member_permissions: '8',
@@ -409,6 +414,39 @@ async function handleVerifySetupCommand(interaction, client) {
     await channel.send({ embeds: [embed], components: [button] });
     return interaction.editReply(`✅ Verification panel set up in ${channel} for role ${role}!`);
 }
+
+async function handleEmergencyCommands(interaction) {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    const cmd = interaction.commandName;
+    const guild = interaction.guild;
+
+    if (cmd === 'emergency-nuke') {
+        const channel = interaction.channel;
+        const position = channel.position;
+        const newChannel = await channel.clone();
+        await channel.delete();
+        await newChannel.setPosition(position);
+        return newChannel.send('⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.');
+    }
+
+    if (cmd === 'emergency-lockdown') {
+        await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
+        return interaction.editReply('⚡ **EMERGENCY LOCKDOWN:** Channel locked down immediately.');
+    }
+
+    if (cmd === 'emergency-secure') {
+        await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false, Connect: false });
+        return interaction.editReply('⚡ **EMERGENCY SECURE:** All chat and voice connections secured.');
+    }
+
+    if (cmd === 'emergency-unban') {
+        const bans = await guild.bans.fetch();
+        for (const ban of bans.values()) {
+            await guild.bans.remove(ban.user.id).catch(() => {});
+        }
+        return interaction.editReply(`⚡ **EMERGENCY UNBAN:** Successfully unbanned ${bans.size} members.`);
+    }
+}
 // ==========================================
 // 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
 // ==========================================
@@ -422,7 +460,7 @@ function initModule(client) {
             const cmd = interaction.commandName;
             
             if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) {
-                await interaction.reply({ content: `⚡ Emergency protocol executed.`, flags: [EPHEMERAL_FLAG] });
+                await handleEmergencyCommands(interaction);
             }
             if (cmd === 'mod') await handleModCommands(interaction);
             if (cmd === 'automod') await handleAutoModCommands(interaction);
@@ -647,3 +685,7 @@ module.exports.modMasterPayload = modMasterCommand.toJSON();
 module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
 module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
 module.exports.verifySetupPayload = verifySetupCommand.toJSON();
+module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
+module.exports.emergencyLockdownPayload = emergencyLockdownCommand.toJSON();
+module.exports.emergencySecurePayload = emergencySecureCommand.toJSON();
+module.exports.emergencyUnbanPayload = emergencyUnbanCommand.toJSON();
