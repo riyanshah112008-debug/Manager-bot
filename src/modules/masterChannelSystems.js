@@ -219,7 +219,11 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 
-// --- Slash Command Payloads ---
+// ==========================================
+// 🛡️ ALL 8 COMMAND BUILDERS FOR DISCORD API
+// ==========================================
+
+// 1. /mod
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)))
@@ -230,6 +234,7 @@ const modMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('protect').setDescription('Protect user').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)))
     .addSubcommand(sub => sub.setName('unprotect').setDescription('Unprotect user').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)));
 
+// 2. /automod
 const autoModMasterCommand = new SlashCommandBuilder()
     .setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub => sub.setName('status').setDescription('Status'))
@@ -238,16 +243,17 @@ const autoModMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('unignore').setDescription('Unignore channel').addStringOption(o => o.setName('type').setDescription('Type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel').setDescription('Channel')))
     .addSubcommand(sub => sub.setName('mediaonly').setDescription('Media only').addStringOption(o => o.setName('action').setDescription('Action').setRequired(true).addChoices({ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' })).addChannelOption(o => o.setName('channel').setDescription('Channel')));
 
+// 3. /moderate (With 4 Choices: Wick, Beemo, AltDentifier, Dyno/Carl)
 const moderateMasterCommand = new SlashCommandBuilder()
     .setName('moderate')
     .setDescription('⚙️ Toggle advanced security modules & AutoMod settings')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
         sub.setName('toggle')
-            .setDescription('Toggle advanced security protection modules')
+            .setDescription('Select the security protection module')
             .addStringOption(o =>
                 o.setName('module')
-                    .setDescription('Select the security protection module')
+                    .setDescription('Select module to configure')
                     .setRequired(true)
                     .addChoices(
                         { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
@@ -262,6 +268,7 @@ const moderateMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('autoban').setDescription('Configure native automated banning filters').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
     .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)));
 
+// 4. /verify-setup
 const verifySetupCommand = new SlashCommandBuilder()
     .setName('verify-setup')
     .setDescription('Set up the server verification panel (Admins Only)')
@@ -269,6 +276,7 @@ const verifySetupCommand = new SlashCommandBuilder()
     .addChannelOption(o => o.setName('channel').setDescription('Channel to send verification panel').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .addRoleOption(o => o.setName('role').setDescription('Role given upon verification').setRequired(true));
 
+// 5. /emergency-nuke (Subcommands: channel, server)
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
@@ -283,8 +291,13 @@ const emergencyNukeCommand = new SlashCommandBuilder()
             .setDescription('⚠️ SERVER NUKE: Delete all channels (except this one) & non-essential roles')
     );
 
+// 6. /emergency-lockdown
 const emergencyLockdownCommand = new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+
+// 7. /emergency-secure
 const emergencySecureCommand = new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+
+// 8. /emergency-unban
 const emergencyUnbanCommand = new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 const policyVotePayload = {
