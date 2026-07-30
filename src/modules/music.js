@@ -4,7 +4,7 @@
 const { EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Helper function to enforce a strict timeout on node connections
+// Helper function to enforce a safety timeout on node connections (increased to 25s for Render)
 const withTimeout = (promise, ms, errorMessage) => {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
@@ -47,7 +47,7 @@ module.exports = (client) => {
             if (command === 'play') {
                 const query = interaction.options.getString('song', true).trim();
                 
-                // Immediately defer to avoid 3s Discord timeout
+                // Immediately defer reply to satisfy Discord's 3s requirement
                 await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
 
                 // Verify Lavalink nodes are online
@@ -55,13 +55,13 @@ module.exports = (client) => {
                 const hasConnectedNode = Array.from(activeNodes.values()).some(n => n.state === 1); // 1 = CONNECTED
 
                 if (!hasConnectedNode) {
-                    return interaction.editReply({ content: '⚠️ **Music Nodes Offline:** Connecting to Lavalink servers... Please try again in 10 seconds!' });
+                    return interaction.editReply({ content: '⚠️ **Music Nodes Reconnecting:** Lavalink nodes are initializing. Please try again in 5 seconds!' });
                 }
 
-                // Search for the track with a 8s max timeout
+                // Search for the track with a generous 20s timeout
                 const res = await withTimeout(
                     manager.search(query, { requester: interaction.user }),
-                    8000,
+                    20000,
                     'Song search timed out. Audio nodes are currently slow.'
                 );
 
@@ -69,7 +69,7 @@ module.exports = (client) => {
                     return interaction.editReply({ content: '❌ No songs found matching your query.' });
                 }
 
-                // Connect to Voice Channel with an 8s timeout
+                // Connect to Voice Channel with a 25s timeout for voice gateway handshake
                 let player = manager.getPlayer(interaction.guild.id);
                 if (!player) {
                     player = await withTimeout(
@@ -79,8 +79,8 @@ module.exports = (client) => {
                             textChannelId: interaction.channel.id,
                             selfDeafen: true
                         }),
-                        8000,
-                        'Failed to join voice channel. Lavalink node took too long to connect.'
+                        25000,
+                        'Voice channel connection timed out. Please try again.'
                     );
                 }
 
