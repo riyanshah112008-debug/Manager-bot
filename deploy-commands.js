@@ -3,7 +3,6 @@ const {
     REST, 
     Routes, 
     PermissionFlagsBits, 
-    ApplicationCommandType, 
     SlashCommandBuilder, 
     ChannelType 
 } = require('discord.js');
@@ -48,28 +47,58 @@ const commands = [
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View and interactively manage the current music queue' },
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' }
+    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
+
+    // 🛡️ ADVANCED MODERATION ENGINE (/moderate)
+    new SlashCommandBuilder()
+        .setName('moderate')
+        .setDescription('⚙️ Toggle advanced security modules & AutoMod settings')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addSubcommand(sub =>
+            sub.setName('toggle')
+                .setDescription('Toggle advanced security protection modules')
+                .addStringOption(o =>
+                    o.setName('module')
+                        .setDescription('Select the security protection module')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
+                            { name: 'Beemo (Anti-Raid Mass Join Defense)', value: 'beemo' },
+                            { name: 'AltDentifier (Verification Gatekeeper)', value: 'altdentifier' },
+                            { name: 'Dyno/Carl (Chat Filters & AutoMod)', value: 'dyno_carl' }
+                        )
+                )
+                .addBooleanOption(o => o.setName('status').setDescription('Enable or disable this module').setRequired(true))
+        )
+        .addSubcommand(sub => sub.setName('autokick').setDescription('Configure native automated kicking rules').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoKick').setRequired(true)))
+        .addSubcommand(sub => sub.setName('autoban').setDescription('Configure native automated banning filters').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
+        .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)))
+        .toJSON(),
+
+    // ⚡ EMERGENCY NUKE ENGINE (/emergency-nuke)
+    new SlashCommandBuilder()
+        .setName('emergency-nuke')
+        .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addSubcommand(sub =>
+            sub.setName('channel')
+                .setDescription('Purge & recreate a specific channel')
+                .addChannelOption(o => o.setName('target').setDescription('Target channel (defaults to current channel)').addChannelTypes(ChannelType.GuildText))
+        )
+        .addSubcommand(sub =>
+            sub.setName('server')
+                .setDescription('⚠️ SERVER NUKE: Delete all channels (except this one) & non-essential roles')
+        )
+        .toJSON(),
+
+    // OTHER EMERGENCY PROTOCOLS
+    new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
+    new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
+    new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
+
+    // SECURITY & VERIFICATION
+    { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
-
-// Safely Load Upgraded Security, Governance & Moderation Payloads from MasterChannelSystems
-try {
-    const master = require('./src/modules/masterChannelSystems');
-    
-    if (master.policyVotePayload) commands.push(master.policyVotePayload);
-    if (master.modMasterPayload) commands.push(master.modMasterPayload);
-    if (master.autoModMasterPayload) commands.push(master.autoModMasterPayload);
-    if (master.moderateMasterPayload) commands.push(master.moderateMasterPayload);
-    if (master.verifySetupPayload) commands.push(master.verifySetupPayload);
-    if (master.emergencyNukePayload) commands.push(master.emergencyNukePayload);
-    if (master.emergencyLockdownPayload) commands.push(master.emergencyLockdownPayload);
-    if (master.emergencySecurePayload) commands.push(master.emergencySecurePayload);
-    if (master.emergencyUnbanPayload) commands.push(master.emergencyUnbanPayload);
-    
-    console.log('✅ Loaded Master Security, Emergency, and Governance payloads');
-} catch (err) {
-    console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
-}
-
 // Safely Load Social Command Payload
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
@@ -98,9 +127,8 @@ commands.push(
         .addIntegerOption(option => option.setName('winners').setDescription('Number of winners').setRequired(false))
         .toJSON()
 );
-// ==========================================
+
 // ECONOMY, XP, UTILITIES & MASTER SYSTEM PAYLOADS
-// ==========================================
 commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
@@ -147,7 +175,7 @@ commands.push(
     { name: 'bump', description: 'Bump server to global web list' }
 );
 
-// Smart Deduplication: Ensures rich builders from masterChannelSystems overwrite basic definitions
+// DeduplicateSafely
 const commandMap = new Map();
 commands.forEach(cmd => { 
     if (cmd && cmd.name) {
