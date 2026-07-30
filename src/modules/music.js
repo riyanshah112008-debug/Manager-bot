@@ -1,79 +1,14 @@
 // ==========================================
 // 🎵 STARRY SUPREME MUSIC ENGINE MODULE
 // ==========================================
-process.env.FFMPEG_PATH = require('ffmpeg-static');
-
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { DefaultExtractors } = require('@discord-player/extractor');
+const { EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 module.exports = (client) => {
-    const player = client.player;
-    let extractorLoadPromise = null;
-
-    const ensureExtractors = async () => {
-        if (!extractorLoadPromise && player) {
-            extractorLoadPromise = (async () => {
-                try {
-                    await player.extractors.loadMulti(DefaultExtractors);
-                    console.log('✅ All Cloud-Friendly Audio Extractors loaded successfully.');
-                } catch (error) {
-                    console.error('❌ Extractor registration error:', error);
-                    throw error;
-                }
-            })().catch((error) => {
-                extractorLoadPromise = null;
-                throw error;
-            });
-        }
-        return extractorLoadPromise;
-    };
-
-    client.once('clientReady', () => {
-        ensureExtractors().catch((error) => {
-            console.error('❌ Failed to load music extractors on startup:', error);
-        });
-    });
-
-    if (player) {
-        player.events.on('error', (queue, error) => {
-            console.error('🔴 [Player Error]:', error.message || error);
-        });
-
-        player.events.on('playerError', (queue, error) => {
-            console.error('🔴 [Audio Stream Error]:', error.message || error);
-        });
-
-        player.events.on('playerStart', (queue, track) => {
-            const metadata = queue.metadata || {};
-            const textChannel = metadata.channel;
-            if (!textChannel?.send) return;
-
-            const requesterId = track.requestedBy?.id || metadata.requestedBy?.id;
-            const embed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setAuthor({ name: '🎵 Now Playing' })
-                .setTitle(track.title || 'Unknown track')
-                .setDescription([
-                    `**Duration:** \`${track.duration || 'Unknown'}\``,
-                    requesterId ? `**Requested by:** <@${requesterId}>` : null
-                ].filter(Boolean).join(' | '))
-                .setFooter({ text: 'Starry Music Player' })
-                .setTimestamp();
-
-            if (track.url) embed.setURL(track.url);
-            if (track.thumbnail) embed.setThumbnail(track.thumbnail);
-
-            textChannel.send({ embeds: [embed] }).catch(() => {});
-        });
-    }
-
     const checkPermissions = (channel, botMember) => {
         const permissions = channel.permissionsFor(botMember);
         return permissions?.has(PermissionsBitField.Flags.Connect) && permissions?.has(PermissionsBitField.Flags.Speak);
     };
-
-    const isYouTubeUrl = (query) => /(?:youtube\.com|youtu\.be)/i.test(query);
-    const isUrl = (query) => /^https?:\/\//i.test(query);
 
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
@@ -84,107 +19,101 @@ module.exports = (client) => {
 
         const voiceChannel = interaction.member?.voice?.channel;
         if (!voiceChannel) {
-            return interaction.reply({ content: '❌ You must be in a voice channel to use music commands.', ephemeral: true }).catch(() => {});
+            return interaction.reply({ content: '❌ You must be in a voice channel to use music commands.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         if (!checkPermissions(voiceChannel, interaction.guild.members.me)) {
-            return interaction.reply({ content: '❌ I need **Connect** and **Speak** permissions in your voice channel.', ephemeral: true }).catch(() => {});
+            return interaction.reply({ content: '❌ I need **Connect** and **Speak** permissions in your voice channel.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
-        const queue = player ? player.nodes.get(interaction.guildId) : null;
-        if (queue?.channel && queue.channel.id !== voiceChannel.id) {
-            return interaction.reply({ content: `❌ Join <#${queue.channel.id}> to control the active music queue.`, ephemeral: true }).catch(() => {});
-        }
+        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
 
         try {
             if (command === 'play') {
                 const query = interaction.options.getString('song', true).trim();
-                if (isYouTubeUrl(query)) {
-                    return interaction.reply({ content: '❌ YouTube playback is not supported. Use a song name, SoundCloud URL, or Spotify URL instead.', ephemeral: true });
+                
+                // ⚡ CRITICAL FIX: Immediately defer reply so Discord never triggers "The application did not respond"
+                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+
+                let activePlayer = player;
+                if (!activePlayer) {
+                    activePlayer = await client.manager.createPlayer({
+                        guildId: interaction.guild.id,
+                        voiceChannelId: voiceChannel.id,
+                        textChannelId: interaction.channel.id,
+                        selfDeafen: true
+                    });
                 }
 
-                await interaction.deferReply();
-                await ensureExtractors();
+                const res = await client.manager.search(query, { requester: interaction.user });
+                if (!res || res.loadType === 'empty' || res.loadType === 'error') {
+                    return interaction.editReply({ content: '❌ No songs found or search failed.' });
+                }
 
-                const result = await player.play(voiceChannel, query, {
-                    requestedBy: interaction.user,
-                    searchEngine: isUrl(query) ? 'auto' : 'soundcloudSearch', 
-                    nodeOptions: {
-                        metadata: { channel: interaction.channel, requestedBy: interaction.user, guildId: interaction.guildId },
-                        volume: 80,
-                        selfDeaf: true,
-                        bufferingTimeout: 15000,
-                        leaveOnEmpty: true,
-                        leaveOnEmptyCooldown: 300000,
-                        leaveOnEnd: true,
-                        leaveOnEndCooldown: 15000,
-                        leaveOnStop: true,
-                        leaveOnStopCooldown: 5000
-                    }
-                });
-
-                const track = result.track;
-                if (!track) return interaction.editReply({ content: '❌ Could not find or stream any track matching your search.' });
-
-                return interaction.editReply({
-                    embeds: [new EmbedBuilder().setColor('#3BA55C').setDescription(`✅ Added **${track.title}** to the queue.`)]
-                });
+                if (res.loadType === 'playlist') {
+                    for (const track of res.tracks) activePlayer.queue.add(track);
+                    if (!activePlayer.playing && !activePlayer.paused) activePlayer.play();
+                    return interaction.editReply({ content: `✅ Loaded playlist **${res.playlist.name}** (${res.tracks.length} songs).` });
+                } else {
+                    const track = res.tracks[0];
+                    activePlayer.queue.add(track);
+                    if (!activePlayer.playing && !activePlayer.paused) activePlayer.play();
+                    return interaction.editReply({ content: `🎵 Added to queue: **${track.title}**` });
+                }
             }
 
-            if (!queue || !queue.currentTrack) {
-                return interaction.reply({ content: '❌ Nothing is playing right now.', ephemeral: true });
+            if (!player) {
+                return interaction.reply({ content: '❌ Nothing is playing right now.', flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'pause') {
-                if (queue.node.isPaused()) return interaction.reply({ content: '⚠️ The music is already paused.', ephemeral: true });
-                queue.node.setPaused(true);
-                return interaction.reply({ content: '⏸️ **Paused the music.**' });
+                if (player.paused) return interaction.reply({ content: '⚠️ Music is already paused.', flags: [EPHEMERAL_FLAG] });
+                player.pause(true);
+                return interaction.reply({ content: '⏸️ **Paused the music.**', flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'resume') {
-                if (!queue.node.isPaused()) return interaction.reply({ content: '⚠️ The music is not paused.', ephemeral: true });
-                queue.node.setPaused(false);
-                return interaction.reply({ content: '▶️ **Resumed the music.**' });
+                if (!player.paused) return interaction.reply({ content: '⚠️ Music is not paused.', flags: [EPHEMERAL_FLAG] });
+                player.pause(false);
+                return interaction.reply({ content: '▶️ **Resumed the music.**', flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'skip') {
-                queue.node.skip();
-                return interaction.reply({ content: '⏭️ **Skipped the current song.**' });
+                player.skip();
+                return interaction.reply({ content: '⏭️ **Skipped the current song.**', flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'stop') {
-                queue.delete();
-                return interaction.reply({ content: '🛑 **Stopped the music and cleared the queue.**' });
+                player.destroy();
+                return interaction.reply({ content: '🛑 **Stopped the music and cleared the queue.**', flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'volume') {
                 const volume = interaction.options.getInteger('amount', true);
-                queue.node.setVolume(volume);
-                return interaction.reply({ content: `🔊 **Volume set to ${volume}%.**` });
+                player.setVolume(volume);
+                return interaction.reply({ content: `🔊 **Volume set to ${volume}%.**`, flags: [EPHEMERAL_FLAG] });
             }
 
             if (command === 'queue') {
-                const tracks = queue.tracks.toArray();
-                let queueText = `**🎵 Now Playing:**\n[${queue.currentTrack.title}](${queue.currentTrack.url}) - \`${queue.currentTrack.duration}\`\n\n**Up Next:**\n`;
-
-                if (tracks.length === 0) {
-                    queueText += '*The queue is empty.*';
-                } else {
-                    queueText += tracks.slice(0, 10).map((track, index) => `**${index + 1}.** [${track.title}](${track.url}) - \`${track.duration}\``).join('\n');
-                    if (tracks.length > 10) queueText += `\n*...and ${tracks.length - 10} more*`;
+                if (!player.queue || player.queue.length === 0) {
+                    return interaction.reply({ content: '📭 The queue is empty.', flags: [EPHEMERAL_FLAG] });
                 }
-
-                return interaction.reply({ embeds: [new EmbedBuilder().setColor('#5865F2').setTitle(`📜 Music Queue for ${interaction.guild.name}`).setDescription(queueText)] });
+                const queueList = player.queue.slice(0, 10).map((t, i) => `**${i + 1}.** ${t.title}`).join('\n');
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle('🎶 Current Music Queue')
+                    .setDescription(queueList)
+                    .setFooter({ text: `Total songs: ${player.queue.length}` });
+                return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] });
             }
+
         } catch (error) {
-            const message = error?.message || 'Unknown music-player error';
-            const content = `❌ I could not process that command. \`${message.slice(0, 300)}\``;
-            if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content, embeds: [] }).catch(() => {});
+            const content = `❌ Music error: \`${error.message?.slice(0, 200) || 'Unknown error'}\``;
+            if (interaction.deferred) {
+                await interaction.editReply({ content }).catch(() => {});
             } else {
-                await interaction.reply({ content, ephemeral: true }).catch(() => {});
+                await interaction.reply({ content, flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
         }
     });
 };
-            
