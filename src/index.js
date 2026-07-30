@@ -1,6 +1,7 @@
 // ==========================================
-// 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1)
 // ==========================================
+// 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
 const { 
@@ -157,7 +158,7 @@ client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 
-// Global Anti-Mass Mention Pre-Gatekeeper (With Message Deletion Fix)
+// Global Anti-Mass Mention Pre-Gatekeeper
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
 
@@ -220,8 +221,8 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-// ==========================================
-// 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
+        // ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2)
 // ==========================================
 // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
@@ -233,7 +234,7 @@ const Nodes = [
         auth: 'https://discord.gg/vM3e3U389y',
         secure: true,
         retryAmount: 5,
-        retryDelay: 3000
+        retryDelay: 5000
     },
     {
         name: 'Serenetia-v4',
@@ -241,7 +242,7 @@ const Nodes = [
         auth: 'youshallnotpass',
         secure: true,
         retryAmount: 5,
-        retryDelay: 3000
+        retryDelay: 5000
     },
     {
         name: 'Jirayu-Node-v4',
@@ -249,10 +250,9 @@ const Nodes = [
         auth: 'youshallnotpass',
         secure: false,
         retryAmount: 5,
-        retryDelay: 3000
+        retryDelay: 5000
     }
 ];
-
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
@@ -395,7 +395,7 @@ client.once(Events.ClientReady, async () => {
     }
 });
 
-// Prefix Command Handler (Silent Fail-Safe)
+// Prefix Command Handler
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
@@ -418,7 +418,8 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-            // ==========================================
+
+// ==========================================
 // 5. INTERACTION ENGINE & STATIC BOOTSTRAP
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
@@ -478,9 +479,8 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// CODACY FIX: Static module execution array to eliminate dynamic path scanning
 const MODULE_INITIALIZERS = [
-    { name: 'Music Engine', fn: () => require('./modules/music.js')(client) }, // <--- ADD THIS LINE
+    { name: 'Music Engine', fn: () => require('./modules/music.js')(client) },
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
@@ -520,7 +520,6 @@ const MODULE_INITIALIZERS = [
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
     { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
 ];
-
 
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
