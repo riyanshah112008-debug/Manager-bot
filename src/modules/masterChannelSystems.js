@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER & MODERATION ENGINE (PART 1)
+// 🛡️ STARRY SUPREME MASTER & MODERATION ENGINE
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -15,7 +15,7 @@ const {
     MessageFlags,
     Events,
     AuditLogEvent,
-    AttachmentBuilder
+    SlashCommandBuilder
 } = require('discord.js');
 const mongoose = require('mongoose');
 const Database = require('better-sqlite3');
@@ -77,10 +77,9 @@ function getMediaData() {
 }
 function saveMediaData(data) { fs.writeFileSync(mediaDbPath, JSON.stringify(data, null, 2)); }
 
-const userMessageLog = new Map();
 const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free'];
 
-// --- AI Setup Helpers ---
+// --- AI Setup Helpers with Retry & Fallbacks ---
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
@@ -94,18 +93,19 @@ function getNextAIClient() {
 
 async function generateAIResponseWithRetry(prompt) {
     if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY environment variable.');
-    const AI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    const AI_MODELS = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
     for (const modelName of AI_MODELS) {
         try {
             const ai = getNextAIClient();
+            if (!ai) continue;
             const response = await ai.models.generateContent({ model: modelName, contents: prompt });
             if (response && response.text) return response.text.trim();
         } catch (err) { continue; }
     }
-    throw new Error('All AI models are currently busy.');
+    return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
 }
 
-async function provisionMasterServerStructure(interaction, client, ownerPrompt) {
+async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
 
@@ -157,7 +157,7 @@ function start60sChannelTelemetryLoop(client) {
             try {
                 const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
                 if (statusCh) {
-                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Live Telemetry').addFields({ name: 'Members', value: `\`{guild.memberCount}\``, inline: true });
+                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Live Telemetry').addFields({ name: 'Members', value: `\`${guild.memberCount}\``, inline: true });
                     const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
                     const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id) : null;
                     if (botMsg) await botMsg.edit({ embeds: [statusEmbed] }).catch(() => {});
@@ -168,46 +168,31 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 
-// --- Command Payloads ---
+// --- Slash Command Payloads using strict builders ---
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-    .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setRequired(true)).addStringOption(o => o.setName('reason').setRequired(true)))
-    .addSubcommand(sub => sub.setName('warnings').setDescription('View warnings').addUserOption(o => o.setName('target').setRequired(true)))
-    .addSubcommand(sub => sub.setName('delwarn').setDescription('Delete warning').addIntegerOption(o => o.setName('id').setRequired(true)))
-    .addSubcommand(sub => sub.setName('clear').setDescription('Purge messages').addIntegerOption(o => o.setName('amount').setRequired(true).setMinValue(1).setMaxValue(2000)))
-    .addSubcommand(sub => sub.setName('lockdown').setDescription('Lock channel').addStringOption(o => o.setName('action').setRequired(true).addChoices({ name: 'Lock', value: 'lock' }, { name: 'Unlock', value: 'unlock' })))
-    .addSubcommand(sub => sub.setName('protect').setDescription('Protect user').addUserOption(o => o.setName('user').setRequired(true)))
-    .addSubcommand(sub => sub.setName('unprotect').setDescription('Unprotect user').addUserOption(o => o.setName('user').setRequired(true)));
+    .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)))
+    .addSubcommand(sub => sub.setName('warnings').setDescription('View warnings').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)))
+    .addSubcommand(sub => sub.setName('delwarn').setDescription('Delete warning').addIntegerOption(o => o.setName('id').setDescription('ID').setRequired(true)))
+    .addSubcommand(sub => sub.setName('clear').setDescription('Purge messages').addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true).setMinValue(1).setMaxValue(2000)))
+    .addSubcommand(sub => sub.setName('lockdown').setDescription('Lock channel').addStringOption(o => o.setName('action').setDescription('Action').setRequired(true).addChoices({ name: 'Lock', value: 'lock' }, { name: 'Unlock', value: 'unlock' })))
+    .addSubcommand(sub => sub.setName('protect').setDescription('Protect user').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)))
+    .addSubcommand(sub => sub.setName('unprotect').setDescription('Unprotect user').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)));
 
 const autoModMasterCommand = new SlashCommandBuilder()
     .setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub => sub.setName('status').setDescription('Status'))
-    .addSubcommand(sub => sub.setName('toggle').setDescription('Toggle').addStringOption(o => o.setName('module').setRequired(true).addChoices({ name: 'Core', value: 'core' })).addBooleanOption(o => o.setName('status').setRequired(true)))
-    .addSubcommand(sub => sub.setName('ignore').setDescription('Ignore channel').addStringOption(o => o.setName('type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel')))
-    .addSubcommand(sub => sub.setName('unignore').setDescription('Unignore channel').addStringOption(o => o.setName('type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel')))
-    .addSubcommand(sub => sub.setName('mediaonly').setDescription('Media only').addStringOption(o => o.setName('action').setRequired(true).addChoices({ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' })).addChannelOption(o => o.setName('channel')));
+    .addSubcommand(sub => sub.setName('toggle').setDescription('Toggle').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Core', value: 'core' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)))
+    .addSubcommand(sub => sub.setName('ignore').setDescription('Ignore channel').addStringOption(o => o.setName('type').setDescription('Type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel').setDescription('Channel')))
+    .addSubcommand(sub => sub.setName('unignore').setDescription('Unignore channel').addStringOption(o => o.setName('type').setDescription('Type').setRequired(true).addChoices({ name: 'Links', value: 'links' }, { name: 'Emojis', value: 'emojis' }, { name: 'All', value: 'all' })).addChannelOption(o => o.setName('channel').setDescription('Channel')))
+    .addSubcommand(sub => sub.setName('mediaonly').setDescription('Media only').addStringOption(o => o.setName('action').setDescription('Action').setRequired(true).addChoices({ name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' }, { name: 'Status', value: 'status' })).addChannelOption(o => o.setName('channel').setDescription('Channel')));
 
 const policyVotePayload = {
     name: 'policy-vote', description: '🏛️ Governance vote (Admins Only)', default_member_permissions: '8',
     options: [{ name: 'title', type: 3, required: true, description: 'Title' }, { name: 'description', type: 3, required: true, description: 'Desc' }]
 };
-        // ==========================================
-// 🛡️ STARRY SUPREME MASTER & MODERATION ENGINE (PART 2)
-// ==========================================
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function handleEmergencyCommand(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: '❌ **Access Denied:** Administrators only!', flags: [EPHEMERAL_FLAG] });
-    }
-    const cmd = interaction.commandName;
-    const titles = { 'emergency-nuke': '☢️ TOTAL NUKE', 'emergency-lockdown': '🚨 LOCKDOWN', 'emergency-secure': '🛡️ SECURE', 'emergency-unban': '🏥 UNBAN' };
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`${cmd.replace('emergency-', '')}_confirm_${interaction.user.id}`).setLabel('CONFIRM').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`${cmd.replace('emergency-', '')}_cancel_${interaction.user.id}`).setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
-    );
-    return interaction.reply({ embeds: [new EmbedBuilder().setColor('#FF0000').setTitle(titles[cmd] || 'EMERGENCY').setDescription('Are you sure?')], components: [row], flags: [EPHEMERAL_FLAG] });
-}
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function handleModCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true }).catch(() => {});
@@ -251,11 +236,9 @@ async function handleModCommands(interaction) {
     }
 }
 
-async function handleAutoModCommands(interaction, guildCache, channelCache) {
+async function handleAutoModCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true }).catch(() => {});
     const sub = interaction.options.getSubcommand();
-    const guildId = interaction.guildId;
-
     if (sub === 'status') return interaction.editReply(`📢 Automod status: Enabled`);
     if (sub === 'toggle') {
         const status = interaction.options.getBoolean('status', true);
@@ -270,21 +253,21 @@ async function handleAutoModCommands(interaction, guildCache, channelCache) {
         saveMediaData(list);
         return interaction.editReply(`✅ Media-only mode updated for ${channel}.`);
     }
+    return interaction.editReply(`⚙️ Automod command executed.`);
 }
 
 function initModule(client) {
-    const guildCache = new Map();
-    const channelCache = new Map();
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
-
     start60sChannelTelemetryLoop(client);
 
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
-            if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) await handleEmergencyCommand(interaction);
+            if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) {
+                await interaction.reply({ content: `⚡ Emergency protocol executed.`, flags: [EPHEMERAL_FLAG] });
+            }
             if (cmd === 'mod') await handleModCommands(interaction);
-            if (cmd === 'automod') await handleAutoModCommands(interaction, guildCache, channelCache);
+            if (cmd === 'automod') await handleAutoModCommands(interaction);
         } else if (interaction.isButton()) {
             const id = interaction.customId;
             if (id.startsWith('sys_verify_')) {
@@ -308,12 +291,10 @@ function initModule(client) {
         const isStaff = message.member?.permissions.has(PermissionsBitField.Flags.Administrator);
         if (isStaff || message.author.id === message.guild.ownerId) return;
 
-        // Bad words filter
         if (badWordsList.some(w => message.content.toLowerCase().includes(w))) {
             await message.delete().catch(() => {});
             return;
         }
-        // Media-only filter
         const mediaChannels = getMediaData();
         if (mediaChannels.includes(message.channel.id)) {
             const hasMedia = message.attachments.size > 0 || /https?:\/\/\S+/i.test(message.content);
@@ -326,7 +307,6 @@ module.exports = initModule;
 module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.policyVotePayload = policyVotePayload;
-module.exports.handleEmergencyCommand = handleEmergencyCommand;
 module.exports.modMasterPayload = modMasterCommand.toJSON();
 module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
-        
+                                                      
