@@ -427,7 +427,7 @@ client.on(Events.MessageCreate, async message => {
 // 5. INTERACTION ENGINE & STATIC BOOTSTRAP
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.guild && !interaction.isChatInputCommand()) return;
+    if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
     if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
@@ -440,26 +440,62 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
+    // 🔊 Handle Interactive Player Controls (Buttons & Select Menus)
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        const customId = interaction.customId;
+        if (!customId.startsWith('dj_') && !customId.startsWith('music_')) return;
+
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
         const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
-        const action = interaction.customId;
 
         await interaction.deferUpdate().catch(() => {});
 
-        if (!voiceChannel && action !== 'dj_refresh_panel') {
+        if (!voiceChannel && customId !== 'dj_refresh_panel') {
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
+        if (!player) {
+            return interaction.followUp({ content: '❌ No active music session playing in this server.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        }
+
         try {
-            if (player) {
-                if (action === 'music_pause') player.pause(!player.paused);
-                if (action === 'music_skip') player.skip();
-                if (action === 'music_stop') player.destroy();
+            if (customId === 'music_pause') {
+                player.pause(!player.paused);
+            } else if (customId === 'music_skip') {
+                player.skip();
+            } else if (customId === 'music_stop') {
+                player.destroy();
+            } else if (customId === 'music_loop') {
+                const modes = ['none', 'track', 'queue'];
+                const nextMode = modes[(modes.indexOf(player.loop) + 1) % modes.length];
+                player.setLoop(nextMode);
+            } else if (customId === 'dj_vol_down') {
+                const newVol = Math.max(0, player.volume - 10);
+                player.setVolume(newVol);
+            } else if (customId === 'dj_vol_up') {
+                const newVol = Math.min(100, player.volume + 10);
+                player.setVolume(newVol);
+            } else if (customId === 'dj_lock' && voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false }).catch(() => {});
+            } else if (customId === 'dj_unlock' && voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: null }).catch(() => {});
+            } else if (customId === 'music_filter' && interaction.isStringSelectMenu()) {
+                const filterValue = interaction.values[0];
+                if (filterValue === 'clear') {
+                    await player.shoukaku.clearFilters();
+                } else if (filterValue === 'bassboost') {
+                    await player.shoukaku.setEqualizer([{ band: 0, gain: 0.2 }, { band: 1, gain: 0.15 }]);
+                } else if (filterValue === 'nightcore') {
+                    await player.shoukaku.setTimescale({ speed: 1.2, pitch: 1.2, rate: 1.0 });
+                } else if (filterValue === 'vaporwave') {
+                    await player.shoukaku.setTimescale({ speed: 0.85, pitch: 0.8, rate: 1.0 });
+                } else if (filterValue === '8d') {
+                    await player.shoukaku.setRotation({ rotationHz: 0.2 });
+                }
             }
         } catch (err) {
-            console.error('❌ Button Execution Error:', err);
+            console.error('❌ Panel Interaction Execution Error:', err);
         }
         return;
     }
