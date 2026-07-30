@@ -143,41 +143,40 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
     return cat;
 }
 
-// Fully functional, interactive, non-static control panels for dedicated security channels
-async function deployDedicatedInteractivePanel(channel, moduleType) {
+async function deployActiveModulePanel(channel, moduleType) {
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-    const hasActivePanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && m.components.length > 0) : false;
+    const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && m.components.length > 0) : false;
 
-    if (!hasActivePanel) {
+    if (!hasPanel) {
         let embed = new EmbedBuilder();
         let components = [];
 
         if (moduleType === 'log_access') {
-            embed.setColor('#3BA55C').setTitle('🟢 Access & Join Stream Panel').setDescription('Real-time listener active. Click below to toggle live stream output mode for joins/leaves.');
+            embed.setColor('#3BA55C').setTitle('🟢 Access & Join Stream Engine').setDescription('Status: **ONLINE 🟢**\nListening to live member joins, leaves, and invite usages.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_toggle_access').setLabel('Toggle Stream Mode').setStyle(ButtonStyle.Secondary).setEmoji('📡'))];
         } else if (moduleType === 'log_moderate') {
-            embed.setColor('#ED4245').setTitle('🛡️ Moderation Action Control Center').setDescription('Active moderation audit dispatcher. Click below to view summary statistics of active timeouts and bans.');
+            embed.setColor('#ED4245').setTitle('🛡️ Moderation Action Control Center').setDescription('Status: **ACTIVE 🛡️**\nReal-time audit log streaming for AutoMod actions, kicks, and bans.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_mod_stats').setLabel('View Mod Summary').setStyle(ButtonStyle.Primary).setEmoji('📊'))];
         } else if (moduleType === 'log_messages') {
-            embed.setColor('#5865F2').setTitle('💬 Message Surveillance Hub').setDescription('Active message audit listener. Click below to clear local surveillance cache.');
+            embed.setColor('#5865F2').setTitle('💬 Message Surveillance Hub').setDescription('Status: **LISTENING 💬**\nIntercepting message deletions and edits across all channels.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_clear_msg_cache').setLabel('Flush Audit Cache').setStyle(ButtonStyle.Danger).setEmoji('🧹'))];
         } else if (moduleType === 'log_voice') {
-            embed.setColor('#9b59b6').setTitle('🎙️ Voice Telemetry Control Hub').setDescription('Active voice stream monitor. Click below to ping active voice channels.');
+            embed.setColor('#9b59b6').setTitle('🎙️ Voice Telemetry Control Hub').setDescription('Status: **MONITORING 🎙️**\nTracking voice channel joins, disconnects, and member streams.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_voice_ping').setLabel('Audit Voice States').setStyle(ButtonStyle.Secondary).setEmoji('🔊'))];
         } else if (moduleType === 'log_channels') {
-            embed.setColor('#FEE75C').setTitle('📁 Channel Structure Audit Hub').setDescription('Active structure monitor. Click below to verify channel permission integrity.');
+            embed.setColor('#FEE75C').setTitle('📁 Channel Structure Audit Hub').setDescription('Status: **SECURE 📁**\nAuditing channel creation, deletion, and permission changes.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_audit_perms').setLabel('Verify Permissions').setStyle(ButtonStyle.Primary).setEmoji('🔒'))];
         } else if (moduleType === 'log_members') {
-            embed.setColor('#EB459E').setTitle('👤 Member Profile Surveillance').setDescription('Active member tracker. Click below to export recent profile change logs.');
+            embed.setColor('#EB459E').setTitle('👤 Member Profile Surveillance').setDescription('Status: **ACTIVE 👤**\nTracking nickname modifications and role assignments.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_export_member_logs').setLabel('Export Member Logs').setStyle(ButtonStyle.Secondary).setEmoji('📄'))];
         } else if (moduleType === 'sus_tracker') {
-            embed.setColor('#ED4245').setTitle('🚨 AltDentifier Threat Center').setDescription('Active young account interception engine. Click below to run a manual server-wide account scan.');
+            embed.setColor('#ED4245').setTitle('🚨 AltDentifier Threat Center').setDescription('Status: **ARMED 🚨**\nIntercepting unverified alt accounts younger than 7 days.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_run_alt_scan').setLabel('Run Account Scan').setStyle(ButtonStyle.Danger).setEmoji('🔍'))];
         } else if (moduleType === 'inactivity_tracker') {
-            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Hub').setDescription('Active inactivity scanner. Click below to generate an engagement report.');
+            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Hub').setDescription('Status: **SCANNING 💤**\nAuditing member activity levels and inactivity queues.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_engagement_report').setLabel('Generate Report').setStyle(ButtonStyle.Primary).setEmoji('📈'))];
         } else if (moduleType === 'verification') {
-            embed.setColor('#2ecc71').setTitle('🌐 Supreme Web Verification Portal').setDescription('Click the secure button below to initialize human verification and unlock server access instantly.');
+            embed.setColor('#2ecc71').setTitle('🌐 Supreme Web Verification Portal').setDescription('Click the secure button below to initialize human verification and unlock full server access instantly.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_role_active').setLabel('Get Verification Link').setStyle(ButtonStyle.Success).setEmoji('🛡️'))];
         } else if (moduleType === 'tickets') {
             embed.setColor('#00F2FE').setTitle('🎫 Support Desk & Staff Application Hub').setDescription('Need help or want to join the team? Click an interactive button below to open a private ticket or apply for staff.');
@@ -186,52 +185,52 @@ async function deployDedicatedInteractivePanel(channel, moduleType) {
                 new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
             )];
         } else if (moduleType === 'intel_exchange') {
-            embed.setColor('#ED4245').setTitle('🔐 Staff Security Intel War-Room').setDescription('Secured administrative intelligence hub. Click below to broadcast an emergency security alert to staff.');
+            embed.setColor('#ED4245').setTitle('🔐 Staff Security Intel War-Room').setDescription('Status: **SECURE 🔐**\nEncrypted staff channel for real-time security coordination.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_staff_broadcast').setLabel('Broadcast Alert').setStyle(ButtonStyle.Danger).setEmoji('🚨'))];
         } else if (moduleType === 'incident_prep') {
-            embed.setColor('#FEE75C').setTitle('⚡ Incident Response & Anti-Raid Prep').setDescription('Emergency raid defense center. Click below to execute a simulated lockdown test.');
+            embed.setColor('#FEE75C').setTitle('⚡ Incident Response & Anti-Raid Prep').setDescription('Status: **ARMED ⚡**\nEmergency raid response protocols and lockdown guides.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_test_lockdown').setLabel('Test Lockdown Protocol').setStyle(ButtonStyle.Secondary).setEmoji('🔒'))];
         } else if (moduleType === 'encrypted_chat') {
-            embed.setColor('#5865F2').setTitle('💬 Secure Staff Comms Terminal').setDescription('Encrypted administrative coordination channel. Click below to clear active session logs.');
+            embed.setColor('#5865F2').setTitle('💬 Secure Staff Comms Terminal').setDescription('Status: **ENCRYPTED 💬**\nPrivate administrative coordination terminal.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_clear_comms').setLabel('Clear Terminal Session').setStyle(ButtonStyle.Primary).setEmoji('🧹'))];
         } else if (moduleType === 'resource_hub') {
-            embed.setColor('#3498db').setTitle('📚 Vetted Resource & Guidelines Hub').setDescription('Official staff reference repository. Click below to reload active moderation policies.');
+            embed.setColor('#3498db').setTitle('📚 Vetted Resource & Guidelines Hub').setDescription('Status: **LOADED 📚**\nOfficial staff reference documentation and rulebook.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_reload_policies').setLabel('Reload Policies').setStyle(ButtonStyle.Secondary).setEmoji('🔄'))];
         } else if (moduleType === 'status_monitor') {
-            embed.setColor('#2ecc71').setTitle('🟢 Live Network Telemetry & Uptime Monitor').setDescription('Autonomous telemetry system running live 60-second updates. Click below to force an immediate telemetry refresh.');
+            embed.setColor('#2ecc71').setTitle('🟢 Live Network Telemetry & Uptime Monitor').setDescription('Status: **RUNNING 🟢**\nAutonomous 60-second telemetry update loop.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_force_telemetry').setLabel('Force Telemetry Refresh').setStyle(ButtonStyle.Primary).setEmoji('⚡'))];
         } else if (moduleType === 'support_desk') {
-            embed.setColor('#9b59b6').setTitle('deskSupport Coordination Desk').setDescription('Private staff support desk. Click below to archive resolved support tickets.');
+            embed.setColor('#9b59b6').setTitle('deskSupport Coordination Desk').setDescription('Status: **ACTIVE 📦**\nPrivate staff support desk for managing active tickets.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_archive_tickets').setLabel('Archive Resolved Tickets').setStyle(ButtonStyle.Secondary).setEmoji('📦'))];
         } else if (moduleType === 'admin_requests') {
-            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('Pending approval dispatcher. Click below to review pending administrative requests.');
+            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('Status: **READY 👑**\nQueue for pending administrative approval requests.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_review_requests').setLabel('Review Requests').setStyle(ButtonStyle.Primary).setEmoji('📋'))];
         } else if (moduleType === 'threat_reporting') {
-            embed.setColor('#ED4245').setTitle('⚠️ Real-Time Threat Detection Center').setDescription('Automated threat logger. Click below to export active threat signatures.');
+            embed.setColor('#ED4245').setTitle('⚠️ Real-Time Threat Detection Center').setDescription('Status: **ARMED ⚠️**\nAutomated logging of suspicious user activity and exploits.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_export_threats').setLabel('Export Threat Signatures').setStyle(ButtonStyle.Danger).setEmoji('📥'))];
         } else if (moduleType === 'policy_vote') {
-            embed.setColor('#5865F2').setTitle('🏛️ Governance & Policy Voting Hub').setDescription('Use `/policy-vote` to launch active governance proposals. Click below to view historical voting records.');
+            embed.setColor('#5865F2').setTitle('🏛️ Governance & Policy Voting Hub').setDescription('Status: **ONLINE 🏛️**\nUse `/policy-vote` to launch active governance proposals.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_view_votes').setLabel('View Voting Archives').setStyle(ButtonStyle.Primary).setEmoji('📜'))];
         } else if (moduleType === 'trust_level') {
-            embed.setColor('#3498db').setTitle('📊 Trust Level & Permission Matrix').setDescription('Server trust hierarchy overview. Click below to audit member permission scopes.');
+            embed.setColor('#3498db').setTitle('📊 Trust Level & Permission Matrix').setDescription('Status: **AUDITED 📊**\nDocumentation of member trust levels and role hierarchies.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_audit_trust').setLabel('Audit Trust Scopes').setStyle(ButtonStyle.Secondary).setEmoji('🔍'))];
         } else if (moduleType === 'knowledge_base') {
-            embed.setColor('#2ecc71').setTitle('📖 Security Knowledge Base Hub').setDescription('AutoMod rule repository. Click below to test custom filter regex patterns.');
+            embed.setColor('#2ecc71').setTitle('📖 Security Knowledge Base Hub').setDescription('Status: **READY 📖**\nDocumentation on AutoMod filters and protection rules.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_test_filter').setLabel('Test Filter Pattern').setStyle(ButtonStyle.Primary).setEmoji('🧪'))];
         } else if (moduleType === 'transparency_logs') {
-            embed.setColor('#9b59b6').setTitle('⚖️ Public Transparency & Audit Trail').setDescription('Public governance log channel. Click below to export public audit logs.');
+            embed.setColor('#9b59b6').setTitle('⚖️ Public Transparency & Audit Trail').setDescription('Status: **PUBLIC ⚖️**\nPublic audit trail of governance decisions and policy updates.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_export_transparency').setLabel('Export Public Audit Trail').setStyle(ButtonStyle.Secondary).setEmoji('📈'))];
         } else if (moduleType === 'verification_chamber') {
-            embed.setColor('#FEE75C').setTitle('🔻 Arrival Chamber & Isolation Gateway').setDescription('First entry point for unverified visitors. Click below to broadcast verification instructions.');
+            embed.setColor('#FEE75C').setTitle('🔻 Arrival Chamber & Isolation Gateway').setDescription('Status: **ACTIVE 🔻**\nFirst entry point isolating unverified users.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_broadcast_instructions').setLabel('Broadcast Instructions').setStyle(ButtonStyle.Primary).setEmoji('📢'))];
         } else if (moduleType === 'critical_alerts') {
-            embed.setColor('#ED4245').setTitle('🚨 Critical Security Dispatch Center').setDescription('Emergency broadcast channel. Click below to run a system health check.');
+            embed.setColor('#ED4245').setTitle('🚨 Critical Security Dispatch Center').setDescription('Status: **ARMED 🚨**\nEmergency breach broadcast dispatcher.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_system_health').setLabel('Run System Health Check').setStyle(ButtonStyle.Danger).setEmoji('🩺'))];
         } else if (moduleType === 'security_briefing') {
-            embed.setColor('#3498db').setTitle('🛡️ Onboarding Security Protocol Briefing').setDescription('Server security guidelines. Click below to review active onboarding rules.');
+            embed.setColor('#3498db').setTitle('🛡️ Onboarding Security Protocol Briefing').setDescription('Status: **READY 🛡️**\nOverview of server security rules and expectations.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_review_rules').setLabel('Review Active Rules').setStyle(ButtonStyle.Secondary).setEmoji('📖'))];
         } else if (moduleType === 'access_request') {
-            embed.setColor('#5865F2').setTitle('🔑 Elevated Access Request Gatekeeper').setDescription('Access authorization queue. Click below to submit an access elevation request.');
+            embed.setColor('#5865F2').setTitle('🔑 Elevated Access Request Gatekeeper').setDescription('Status: **ACTIVE 🔑**\nAuthorization queue for elevated permissions.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_request_access').setLabel('Request Elevated Access').setStyle(ButtonStyle.Primary).setEmoji('🗝️'))];
         }
 
@@ -240,7 +239,7 @@ async function deployDedicatedInteractivePanel(channel, moduleType) {
     }
 }
 
-async function createDedicatedInteractiveChannel(guild, options) {
+async function createNonDuplicatingActiveChannel(guild, options) {
     let channel = guild.channels.cache.find(c => c.name.toLowerCase() === options.name.toLowerCase() && c.parentId === options.parent);
     if (!channel) {
         channel = await guild.channels.create({
@@ -251,7 +250,7 @@ async function createDedicatedInteractiveChannel(guild, options) {
             permissionOverwrites: options.permissionOverwrites || []
         });
     }
-    await deployDedicatedInteractivePanel(channel, options.moduleType);
+    await deployActiveModulePanel(channel, options.moduleType);
     return channel;
 }
 // ==========================================
@@ -288,18 +287,18 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'inactivity-tracker', moduleType: 'inactivity_tracker' }
     ];
     for (const item of sysChannels) {
-        await createDedicatedInteractiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 2: 🎫 SUPPORT & APPLICATIONS ---
     const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
     
-    await createDedicatedInteractiveChannel(guild, {
+    await createNonDuplicatingActiveChannel(guild, {
         name: 'verify-here', parent: supportCat.id, moduleType: 'verification',
         permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl]
     });
 
-    await createDedicatedInteractiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
+    await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
 
     // --- CATEGORY 3: 💬 SECURE COMMS & DISCUSSIONS ---
     const commsCat = await getOrCreateCategory(guild, '💬 SECURE COMMS & DISCUSSIONS', [hideEveryone, staffFullControl, botFullControl]);
@@ -310,7 +309,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'vetted-resource-hub', moduleType: 'resource_hub' }
     ];
     for (const item of commsChannels) {
-        await createDedicatedInteractiveChannel(guild, { name: item.name, parent: commsCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: commsCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 4: 🚨 SUPPORT & INCIDENT MANAGEMENT ---
@@ -322,7 +321,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'threat-reporting', moduleType: 'threat_reporting' }
     ];
     for (const item of incidentChannels) {
-        await createDedicatedInteractiveChannel(guild, { name: item.name, parent: incidentCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: incidentCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 5: 🏛️ GOVERNANCE & ARCHIVES ---
@@ -334,7 +333,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'transparency-logs', moduleType: 'transparency_logs' }
     ];
     for (const item of govChannels) {
-        await createDedicatedInteractiveChannel(guild, { name: item.name, parent: govCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: govCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] });
     }
 
     // --- CATEGORY 6: 🔻 ENTRY POINT & PROTOCOL ---
@@ -346,7 +345,7 @@ async function provisionMasterServerStructure(interaction) {
         { name: 'access-request-form', moduleType: 'access_request' }
     ];
     for (const item of entryChannels) {
-        await createDedicatedInteractiveChannel(guild, { name: item.name, parent: entryCat.id, moduleType: item.moduleType, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: entryCat.id, moduleType: item.moduleType, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel] }, botFullControl] });
     }
 
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
@@ -360,10 +359,11 @@ function start60sChannelTelemetryLoop(client) {
             try {
                 const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
                 if (statusCh) {
-                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Live Telemetry Uptime Monitor').addFields(
+                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Live Network Telemetry & Uptime Monitor').addFields(
                         { name: 'Members Count', value: `\`${guild.memberCount}\``, inline: true },
                         { name: 'Uptime Status', value: '`ONLINE 🟢`', inline: true },
-                        { name: 'Active Modules', value: '`24 Security Hubs Active`', inline: true }
+                        { name: 'Active Modules', value: '`24 Security Hubs Active`', inline: true },
+                        { name: 'Last Loop Check', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
                     );
                     const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
                     const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id && m.embeds.length > 0) : null;
@@ -678,10 +678,10 @@ function initModule(client) {
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with interactive working control panels deployed in every security channel!`)
+                    .setDescription(`Server successfully configured with non-duplicating active modules deployed in every security channel!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
-                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with non-static working panels!`, inline: false }
+                        { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with interactive control panels!`, inline: false }
                     )
                     .setFooter({ text: 'Starry Master Protocol • High-Security Architecture' });
                 return interaction.editReply({ embeds: [embed] });
@@ -714,7 +714,6 @@ function initModule(client) {
         else if (interaction.isButton()) {
             const id = interaction.customId;
 
-            // Handle panel buttons dynamically
             if (id.startsWith('panel_')) {
                 return interaction.reply({ content: `⚡ **Module Executed:** Action for \`${id}\` processed successfully!`, flags: [EPHEMERAL_FLAG] });
             }
