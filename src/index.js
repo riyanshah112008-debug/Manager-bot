@@ -123,7 +123,6 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// Serve static frontend files directly from the repository root folder
 app.use(express.static(path.join(__dirname, '../')));
 
 app.get('/health', (req, res) => res.status(200).send('awake'));
@@ -219,7 +218,6 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-
 // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -244,10 +242,7 @@ const Nodes = [
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
-    searchFallbacks: {
-        soundcloud: "scsearch",
-        youtube: "ytsearch"
-    },
+    searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
     plugins: [
         new KazagumoSpotify({ 
             clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
@@ -374,52 +369,31 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
-    console.log('ℹ️ Slash commands are deployed with `npm run deploy`.');
-});
-
-// Advanced Hybrid File Loader
-const commandsPath = path.join(__dirname, 'commands');
-const registerCommand = (filePath) => {
     try {
-        const command = require(filePath);
-        if (command.data && command.data.name && typeof command.execute === 'function') {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded Slash Command: /${command.data.name}`);
-        }
-        if (command.name && typeof command.name === 'string' && (typeof command.run === 'function' || typeof command.execute === 'function')) {
-            client.prefixCommands.set(command.name, command);
-            console.log(`✅ Loaded Prefix Command: .${command.name}`);
-            if (command.aliases && Array.isArray(command.aliases)) {
-                command.aliases.forEach(alias => client.prefixCommands.set(alias, command));
-            }
+        console.log("🔄 Auto-deploying updated command payload to Discord...");
+        // CODACY FIX: Static module import
+        const deploy = require('../deploy-commands.js');
+        if (deploy && typeof deploy.deployCommands === 'function') {
+            await deploy.deployCommands();
         }
     } catch (err) {
-        console.error(`❌ Failed to load command at ${filePath}:`, err);
+        console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
     }
-};
+});
 
-if (fs.existsSync(commandsPath)) {
-    const rootFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    for (const file of rootFiles) registerCommand(path.join(commandsPath, file));
-
-    const folders = fs.readdirSync(commandsPath).filter(f => fs.statSync(path.join(commandsPath, f)).isDirectory());
-    for (const folder of folders) {
-        const folderPath = path.join(commandsPath, folder);
-        const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.js'));
-        for (const file of files) registerCommand(path.join(folderPath, file));
-    }
-}
-
-// Prefix Command Execution Handler
+// Prefix Command Handler (Silent Fail-Safe)
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
-    const command = client.prefixCommands.get(commandName);
+    if (message.content.startsWith('.<:') || message.content.startsWith('.<a:')) return;
 
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const commandName = args.shift()?.toLowerCase();
+
+    if (!commandName) return;
+    const command = client.prefixCommands.get(commandName);
     if (!command) return;
 
     try { 
@@ -432,23 +406,29 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-
 // ==========================================
-// 5. INTERACTION ENGINE (UNIFIED & CRASH-PROOF)
+// 5. INTERACTION ENGINE & STATIC BOOTSTRAP
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand()) return;
 
-    // Handle button controls for music
+    if (interaction.isChatInputCommand()) {
+        const moduleHandledCommands = ['setup-starry', 'policy-vote', 'social', 'devpanel'];
+        if (moduleHandledCommands.includes(interaction.commandName)) {
+            return; 
+        }
+    }
+
     if (interaction.isButton() && (interaction.customId.startsWith('dj_') || interaction.customId.startsWith('music_'))) {
         const member = interaction.member;
         const voiceChannel = member?.voice?.channel;
-        const player = client.manager.getPlayer(interaction.guild.id);
+        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
         const action = interaction.customId;
 
         await interaction.deferUpdate().catch(() => {});
 
         if (!voiceChannel && action !== 'dj_refresh_panel') {
+            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [6] }).catch(() => {});
             return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
@@ -466,6 +446,9 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
 
+    const command = client.commands.get(interaction.commandName);
+    if (!command) {
+        return interaction.reply({ content: '❌ This command is not recognized.', flags: [6] }).catch(() => {});
     // Direct module-handled commands (bypasses strict collection check so module listeners run!)
     const moduleHandledCommands = ['setup-starry', 'social'];
     if (moduleHandledCommands.includes(interaction.commandName)) {
@@ -483,6 +466,9 @@ client.on(Events.InteractionCreate, async interaction => {
     } catch (error) {
         console.error(`❌ Error executing /${interaction.commandName}:`, error);
         if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
+        } else {
+            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [6] }).catch(() => {});
             await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         } else {
             await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -490,28 +476,48 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// ==========================================
-// 6. MASTER BOOTSTRAP SEQUENCE
-// ==========================================
-const loadModule = (name, filePath) => {
-    try { 
-        const absolutePath = path.resolve(__dirname, filePath);
-        if (!fs.existsSync(absolutePath)) return;
-
-        const mod = require(absolutePath);
-        if (typeof mod === 'function') {
-            mod(client, app);
-            console.log(`✅ ${name} Module Loaded`); 
-        } else if (mod && typeof mod.init === 'function') {
-            mod.init(client, app);
-            console.log(`✅ ${name} Module Loaded (Object Init)`);
-        } else {
-            console.log(`✅ ${name} Module Loaded (Object Export)`);
-        }
-    } catch (err) { 
-        console.error(`❌ Error loading ${name}:`, err.message); 
-    }
-};
+// CODACY FIX: Static module execution array to eliminate dynamic path scanning
+const MODULE_INITIALIZERS = [
+    { name: 'Moderation', fn: () => require('./modules/moderation.js')(client, app) },
+    { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
+    { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
+    { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
+    { name: 'Translator', fn: () => require('./modules/translator.js')(client, app) },
+    { name: 'Reaction Roles', fn: () => require('./modules/reactionRoles.js')(client, app) },
+    { name: 'Help', fn: () => require('./modules/help.js')(client, app) },
+    { name: 'Leveling', fn: () => require('./modules/leveling.js')(client, app) },
+    { name: 'Starry Protocol', fn: () => require('./modules/starry.js')(client, app) },
+    { name: 'Boost Tracker', fn: () => require('./modules/boostTracker.js')(client, app) },
+    { name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
+    { name: 'Support Tickets', fn: () => require('./modules/tickets.js')(client, app) },
+    { name: 'Admin Help Text Trigger', fn: () => require('./modules/ahelpText.js')(client, app) },
+    { name: 'Tracker', fn: () => require('./modules/tracker.js')(client, app) },
+    { name: 'Sus Account Detector', fn: () => require('./modules/susAccount.js')(client, app) },
+    { name: 'Whois Lookup', fn: () => require('./modules/whois.js')(client, app) },
+    { name: 'Emoji Blocker', fn: () => require('./modules/emojiBlocker.js')(client, app) },
+    { name: 'Master Setup Engine', fn: () => require('./modules/masterSetupText.js')(client, app) },
+    { name: 'Server Stats', fn: () => require('./modules/serverStats.js')(client, app) },
+    { name: 'AFK System', fn: () => require('./modules/afk.js')(client, app) },
+    { name: 'Server Logs', fn: () => require('./modules/logs.js')(client, app) },
+    { name: 'Giveaway', fn: () => require('./modules/giveaway.js')(client, app) },
+    { name: 'Counting Game', fn: () => require('./modules/count.js')(client, app) },
+    { name: 'Advanced Mod & Security', fn: () => require('./modules/advancedMod.js')(client, app) },
+    { name: 'Interactive Mod Panel', fn: () => require('./modules/modPanel.js')(client, app) },
+    { name: 'Reputation System', fn: () => require('./modules/rep.js')(client, app) },
+    { name: 'Voice Channel Manager', fn: () => require('./modules/voiceManager.js')(client, app) },
+    { name: 'Emoji Stealer', fn: () => require('./modules/steal.js')(client, app) },
+    { name: 'Welcome System', fn: () => require('./modules/welcome.js')(client, app) },
+    { name: 'Goodbye System', fn: () => require('./modules/goodbye.js')(client, app) },
+    { name: 'Server Backup Engine', fn: () => require('./modules/backupEngine.js')(client, app) },
+    { name: 'Role Manager', fn: () => require('./modules/roleManager.js')(client, app) },
+    { name: 'Anti-Abuse', fn: () => require('./modules/antiAbuse.js')(client, app) },
+    { name: 'Random Chest Drops', fn: () => require('./modules/chestDrop.js')(client, app) },
+    { name: 'Autorole & Sticky Roles', fn: () => require('./modules/autorole.js')(client, app) },
+    { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
+    { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
+    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
+    { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
+];
 
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
@@ -523,7 +529,7 @@ async function startBot() {
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
         try {
-            const bumpModule = require('./modules/bumpEngine');
+            const bumpModule = require('./modules/bumpEngine.js');
             if (typeof bumpModule === 'function') {
                 bumpModule(client, app);
                 console.log('✅ Registered Directory API Endpoints with Express Web Server!');
@@ -532,32 +538,16 @@ async function startBot() {
             console.error('⚠️ Could not load bumpEngine API routes:', e.message);
         }
 
-        const mods = [
-            ['Moderation', './modules/moderation.js'], ['Automod', './modules/automod.js'], ['Media Only', './modules/mediaOnly.js'],
-            ['Premium', './modules/premium.js'], ['Translator', './modules/translator.js'], ['Reaction Roles', './modules/reactionRoles.js'],
-            ['Help', './modules/help.js'], ['Leveling', './modules/leveling.js'], ['Starry Protocol', './modules/starry.js'],
-            ['Boost Tracker', './modules/boostTracker.js'], ['Truth or Dare', './modules/truthOrDare.js'], ['Support Tickets', './modules/tickets.js'],
-            ['Admin Help Text Trigger', './modules/ahelpText.js'], ['Tracker', './modules/tracker.js'],
-            ['Sus Account Detector', './modules/susAccount.js'], ['Whois Lookup', './modules/whois.js'], ['Emoji Blocker', './modules/emojiBlocker.js'],
-            ['Master Setup Engine', './modules/masterSetupText.js'], ['Server Stats', './modules/serverStats.js'], 
-            ['AFK System', './modules/afk.js'], ['Server Logs', './modules/logs.js'], ['Giveaway', './modules/giveaway.js'], 
-            ['Counting Game', './modules/count.js'], ['Advanced Mod & Security', './modules/advancedMod.js'], ['Interactive Mod Panel', './modules/modPanel.js'], 
-            ['Reputation System', './modules/rep.js'], ['Voice Channel Manager', './modules/voiceManager.js'], ['Emoji Stealer', './modules/steal.js'], 
-            ['Welcome System', './modules/welcome.js'], ['Goodbye System', './modules/goodbye.js'], 
-            ['Server Backup Engine', './modules/backupEngine.js'], ['Role Manager', './modules/roleManager.js'], ['Anti-Abuse', './modules/antiAbuse.js'], 
-            ['Random Chest Drops', './modules/chestDrop.js'], ['Autorole & Sticky Roles', './modules/autorole.js'], ['Verification System', './modules/verification.js'], 
-            ['Network Telemetry Engine', './modules/telemetryEngine.js'], ['Social Actions Engine', './modules/socialActions.js']
-        ];
-        
-        mods.forEach(([name, path]) => loadModule(name, path));
-
-        if (fs.existsSync('./modules/modApply.js')) loadModule('Mod Apply', './modules/modApply.js'); 
-
-        if (process.env.DEPLOY_COMMANDS_ON_STARTUP === 'true') {
-            console.log("🔄 Auto-deploying commands...");
-            const { deployCommands } = require('../deploy-commands.js');
-            await deployCommands().catch(err => console.error("❌ Auto-deploy failed:\n", err.stack || err));
+        // Execute all modules safely
+        for (const mod of MODULE_INITIALIZERS) {
+            try {
+                mod.fn();
+                console.log(`✅ ${mod.name} Module Loaded`);
+            } catch (err) {
+                console.error(`❌ Error loading ${mod.name}:`, err.message);
+            }
         }
+
         await client.login(process.env.TOKEN);
     } catch (error) {
         console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
@@ -565,7 +555,6 @@ async function startBot() {
     }
 }
 
-// Graceful shutdown handling for Render deployments
 const shutdownHandler = async (signal) => {
     console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry...`);
     try {

@@ -65,6 +65,67 @@ function getMediaData() {
 function saveMediaData(data) {
     fs.writeFileSync(mediaDbPath, JSON.stringify(data, null, 2));
 }
+const { AttachmentBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+
+async function handlePurgeCommand(messageOrInteraction, amount, targetUser = null) {
+    const channel = messageOrInteraction.channel;
+    const guild = messageOrInteraction.guild;
+
+    // Fetch messages to purge
+    const fetchedMessages = await channel.messages.fetch({ limit: Math.min(amount, 100) });
+    const filteredMessages = targetUser 
+        ? fetchedMessages.filter(m => m.author.id === targetUser.id)
+        : fetchedMessages;
+
+    if (filteredMessages.size === 0) {
+        return messageOrInteraction.reply({ content: '❌ No matching messages found to purge.', flags: [6] });
+    }
+
+    // Generate Transcript Data
+    let transcriptText = `==================================================\n`;
+    transcriptText += `📜 STARRY PURGE TRANSCRIPT LOG\n`;
+    transcriptText += `Server: ${guild.name} (${guild.id})\n`;
+    transcriptText += `Channel: #${channel.name} (${channel.id})\n`;
+    transcriptText += `Purged By: ${messageOrInteraction.author?.tag || messageOrInteraction.user?.tag}\n`;
+    transcriptText += `Total Messages: ${filteredMessages.size}\n`;
+    transcriptText += `Date: ${new Date().toISOString()}\n`;
+    transcriptText += `==================================================\n\n`;
+
+    filteredMessages.reverse().forEach(msg => {
+        const timestamp = new Date(msg.createdTimestamp).toLocaleString();
+        const attachments = msg.attachments.size > 0 ? ` [Attachments: ${msg.attachments.map(a => a.url).join(', ')}]` : '';
+        transcriptText += `[${timestamp}] ${msg.author.tag} (${msg.author.id}): ${msg.content}${attachments}\n`;
+    });
+
+    // Create File Attachment
+    const buffer = Buffer.from(transcriptText, 'utf-8');
+    const attachment = new AttachmentBuilder(buffer, { name: `purge-transcript-${channel.name}-${Date.now()}.txt` });
+
+    // Execute Bulk Delete
+    await channel.bulkDelete(filteredMessages, true).catch(() => {});
+
+    // Send Log to #logs-messages
+    const logChannel = guild.channels.cache.find(c => c.name === 'logs-messages' || c.name === 'logs-moderate');
+    if (logChannel) {
+        const logEmbed = new EmbedBuilder()
+            .setColor('#E74C3C')
+            .setTitle('🧹 Message Purge & Transcript Generated')
+            .addFields(
+                { name: 'Channel', value: `${channel}`, inline: true },
+                { name: 'Moderator', value: `${messageOrInteraction.author || messageOrInteraction.user}`, inline: true },
+                { name: 'Purged Count', value: `\`${filteredMessages.size} Messages\``, inline: true }
+            )
+            .setTimestamp();
+
+        await logChannel.send({ embeds: [logEmbed], files: [attachment] }).catch(() => {});
+    }
+
+    const replyMsg = await channel.send({ 
+        content: `🧹 Successfully purged **${filteredMessages.size}** messages! Transcript logged to security logs.` 
+    }).catch(() => null);
+
+    if (replyMsg) setTimeout(() => replyMsg.delete().catch(() => {}), 4000);
+}
 
 const userMessageLog = new Map();
 const badWordsList = ['badword1', 'badword2', 'scam', 'free nitro', 'click here for free'];

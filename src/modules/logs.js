@@ -5,7 +5,9 @@ const {
     EmbedBuilder, 
     Events, 
     SlashCommandBuilder, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    AttachmentBuilder, 
+    AuditLogEvent
 } = require('discord.js');
 const mongoose = require('mongoose');
 
@@ -51,7 +53,7 @@ module.exports = (client) => {
 
     async function handleSetLogs(interaction) {
         try {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [6] }); // Ephemeral flag fix
         } catch (e) { return; }
 
         const channel = interaction.options.getChannel('channel', true);
@@ -220,8 +222,9 @@ module.exports = (client) => {
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
+
     // ==========================================
-    // 🎙️ 4. VOICE CHANNEL AUDIT LOGS (ROUTED TO #logs-voice)
+    // 🎙️ 4. VOICE CHANNEL AUDIT LOGS
     // ==========================================
     client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         const guild = newState.guild || oldState.guild;
@@ -230,7 +233,6 @@ module.exports = (client) => {
 
         const user = newState.member.user;
 
-        // --- Joined Voice Channel ---
         if (!oldState.channelId && newState.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#23A559')
@@ -243,7 +245,6 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
-        // --- Left Voice Channel ---
         if (oldState.channelId && !newState.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#DA373C')
@@ -256,7 +257,6 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
-        // --- Switched / Moved Voice Channel ---
         if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#FEE75C')
@@ -269,7 +269,6 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
-        // --- Server Muted / Deafened ---
         if (oldState.serverMute !== newState.serverMute || oldState.serverDeaf !== newState.serverDeaf) {
             const action = newState.serverMute ? 'Muted' : newState.serverDeaf ? 'Deafened' : 'Unmuted/Undeafened';
             const embed = new EmbedBuilder()
@@ -318,6 +317,7 @@ module.exports = (client) => {
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
+
     // ==========================================
     // 📁 6. CHANNEL & PERMISSION OVERWRITE LOGS
     // ==========================================
@@ -504,22 +504,18 @@ module.exports = (client) => {
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
-};
+
     // ==========================================
     // 🧹 BULK DELETE / PURGE TRANSCRIPT LOGGER
     // ==========================================
-    const { AttachmentBuilder, AuditLogEvent } = require('discord.js');
-
     client.on(Events.MessageDeleteBulk, async (messages, channel) => {
         if (!channel.guild) return;
 
         const logChannel = await resolveLogChannel(channel.guild, 'messages');
         if (!logChannel) return;
 
-        // 1. Sort messages chronologically (Oldest -> Newest)
         const sortedMessages = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
-        // 2. Build Text Transcript Content
         let transcriptText = `==================================================\n`;
         transcriptText += `📜 STARRY BULK DELETE / PURGE TRANSCRIPT LOG\n`;
         transcriptText += `Server: ${channel.guild.name} (${channel.guild.id})\n`;
@@ -541,13 +537,11 @@ module.exports = (client) => {
             transcriptText += `[${index + 1}] [${timeStr}] ${authorTag}:\n${contentStr}${attachmentsStr}\n\n`;
         });
 
-        // 3. Create Buffer Attachment File
         const transcriptBuffer = Buffer.from(transcriptText, 'utf-8');
         const transcriptFile = new AttachmentBuilder(transcriptBuffer, { 
             name: `purge_transcript_${channel.name}_${Date.now()}.txt` 
         });
 
-        // 4. Try to find the Purger via Audit Logs
         let executor = 'Unknown (Bot / Self / Expired Audit Log)';
         try {
             const fetchedLogs = await channel.guild.fetchAuditLogs({
@@ -561,7 +555,6 @@ module.exports = (client) => {
             }
         } catch (e) {}
 
-        // 5. Send Embed & Transcript File to Log Channel
         const embed = new EmbedBuilder()
             .setColor('#ED4245')
             .setTitle(`🧹 Bulk Messages Deleted in #${channel.name}`)
@@ -580,5 +573,8 @@ module.exports = (client) => {
         }).catch(console.error);
     });
 
+}; // <-- Properly closes module.exports wrapper function
+
+// Export models and command definitions safely outside wrapper
 module.exports.LogSettings = LogSettings;
 module.exports.setLogsData = setLogsCommand;
