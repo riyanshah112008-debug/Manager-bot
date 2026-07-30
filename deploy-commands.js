@@ -31,13 +31,13 @@ const autoroleCommandDef = {
 };
 
 // ==========================================
-// INITIALIZE COMMANDS ARRAY
+// INITIALIZE COMPLETE COMMANDS ARRAY
 // ==========================================
 const commands = [
     // TELEMETRY
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
 
-    // MUSIC & VOICE AI
+    // MUSIC & VOICE AI ENGINE
     { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
@@ -53,7 +53,7 @@ const commands = [
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 ];
 
-// Safely Load Module Payloads from MasterChannelSystems
+// Safely Load Module Payloads from MasterChannelSystems (Merged Mod & Automod & Governance)
 try {
     const { policyVotePayload, modMasterPayload, autoModMasterPayload } = require('./src/modules/masterChannelSystems');
     if (policyVotePayload) commands.push(policyVotePayload);
@@ -179,4 +179,4 @@ if (require.main === module) {
 }
 
 module.exports = { commands: finalPayload, deployCommands };
-                                                                                                                                                                                                                                                                                                                                              
+        
