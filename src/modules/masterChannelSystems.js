@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER CHANNEL SYSTEMS ENGINE
+// 🛡️ STARRY SUPREME MASTER CHANNEL SYSTEMS & TELEMETRY ENGINE
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -19,10 +19,10 @@ const { GoogleGenAI } = require('@google/genai');
 // EPHEMERAL RESPONSE FLAG (BITFIELD 6)
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Mongoose Models for Persistence
+// Mongoose Models
 const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
 
-// Dynamic Policy Vote Schema
+// Policy Vote Schema
 const PolicyVoteSchema = new mongoose.Schema({
     guildId: String,
     messageId: String,
@@ -34,7 +34,7 @@ const PolicyVoteSchema = new mongoose.Schema({
 });
 const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
 
-// AI Key Rotation Fallback Helper
+// AI Key Helper
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
@@ -68,33 +68,24 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     const guild = interaction.guild;
     const botMember = guild.members.me;
 
-    // 1. Resolve or Create Verified & Staff Roles
+    // 1. Roles Setup
     let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
     if (!verifiedRole) {
-        verifiedRole = await guild.roles.create({
-            name: 'Verified',
-            color: '#2ecc71',
-            reason: 'Starry Master System: Verified Access Role'
-        });
+        verifiedRole = await guild.roles.create({ name: 'Verified', color: '#2ecc71', reason: 'Starry Master System: Verified Access Role' });
     }
 
     let staffRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'staff' || r.name.toLowerCase() === 'moderator');
     if (!staffRole) {
-        staffRole = await guild.roles.create({
-            name: 'Staff',
-            color: '#3498db',
-            reason: 'Starry Master System: Staff Role'
-        });
+        staffRole = await guild.roles.create({ name: 'Staff', color: '#3498db', reason: 'Starry Master System: Staff Role' });
     }
 
-    // Baseline Permissions Overwrites
     const hideEveryone = { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] };
     const showVerified = { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] };
     const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
     const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
 
     // ==========================================
-    // A. CATEGORY: SECURITY & SYSTEM LOGS (ALWAYS CREATED)
+    // A. CATEGORY: SECURITY & SYSTEM LOGS
     // ==========================================
     const sysCat = await guild.channels.create({
         name: '🛡️ SECURITY & SYSTEM LOGS',
@@ -118,12 +109,9 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     }
 
     // ==========================================
-    // B. CATEGORY: SUPPORT & APPLICATIONS (ALWAYS CREATED)
+    // B. CATEGORY: SUPPORT & APPLICATIONS
     // ==========================================
-    const supportCat = await guild.channels.create({
-        name: '🎫 SUPPORT & APPLICATIONS',
-        type: ChannelType.GuildCategory
-    });
+    const supportCat = await guild.channels.create({ name: '🎫 SUPPORT & APPLICATIONS', type: ChannelType.GuildCategory });
 
     const verifyCh = await guild.channels.create({
         name: 'verify-here',
@@ -174,9 +162,7 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     let categoryCount = 2;
 
     if (!ownerPrompt) {
-        // --- DEFAULT BEHAVIOR (NO PROMPT): BUILD FULL SECURITY & PROTOCOL SUITE ---
-
-        // 1. ENTRY POINT & PROTOCOL
+        // --- NO PROMPT: BUILD FULL SECURITY SUITE ---
         const entryCat = await guild.channels.create({ name: '🔻 ENTRY POINT & PROTOCOL', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
         await guild.channels.create({ name: 'security-briefing', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Server security rules & guidelines.' });
         await guild.channels.create({ name: 'verification-chamber', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Live verification activity stream.' });
@@ -188,14 +174,12 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
 
         await guild.channels.create({ name: 'critical-alerts', type: ChannelType.GuildText, parent: entryCat.id, topic: 'Emergency broadcasts & security alerts.' });
 
-        // 2. SECURE COMMS & DISCUSSIONS
         const commsCat = await guild.channels.create({ name: '💬 SECURE COMMS & DISCUSSIONS', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
         await guild.channels.create({ name: 'general-encrypted-chat', type: ChannelType.GuildText, parent: commsCat.id });
         await guild.channels.create({ name: 'security-intel-exchange', type: ChannelType.GuildText, parent: commsCat.id });
         await guild.channels.create({ name: 'vetted-resource-hub', type: ChannelType.GuildText, parent: commsCat.id });
         await guild.channels.create({ name: 'incident-response-prep', type: ChannelType.GuildText, parent: commsCat.id });
 
-        // 3. SUPPORT & INCIDENT MANAGEMENT
         const incidentCat = await guild.channels.create({ name: '🚨 SUPPORT & INCIDENT MANAGEMENT', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
         
         const threatCh = await guild.channels.create({ name: 'threat-reporting', type: ChannelType.GuildText, parent: incidentCat.id });
@@ -211,7 +195,6 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
 
         await guild.channels.create({ name: 'admin-action-requests', type: ChannelType.GuildText, parent: incidentCat.id });
 
-        // 4. GOVERNANCE & ARCHIVES
         const govCat = await guild.channels.create({ name: '🏛️ GOVERNANCE & ARCHIVES', type: ChannelType.GuildCategory, permissionOverwrites: [hideEveryone, showVerified, botFullControl] });
         
         const voteCh = await guild.channels.create({ name: 'policy-amendment-vote', type: ChannelType.GuildText, parent: govCat.id });
@@ -224,27 +207,17 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
 
         categoryCount += 4;
         totalCustomChannels = 16;
-
     } else {
-        // --- CUSTOM PROMPT PROVIDED: GENERATE THEMED CATEGORIES VIA GEMINI ---
+        // --- CUSTOM PROMPT: AI GENERATED THEMED CATEGORIES ---
         let customLayout = { categories: [] };
         try {
-            const aiPrompt = `Generate a comprehensive Discord server structure for the theme: "${ownerPrompt}".
-Return ONLY a valid JSON object matching this exact structure (no markdown formatting):
-{
-  "categories": [
-    { "name": "CATEGORY NAME 1", "channels": ["channel-1", "channel-2", "channel-3"] },
-    { "name": "CATEGORY NAME 2", "channels": ["channel-1", "channel-2", "channel-3"] }
-  ]
-}
-Ensure there are at least 3-4 categories tailored specifically to "${ownerPrompt}".`;
-
+            const aiPrompt = `Generate a comprehensive Discord server structure for: "${ownerPrompt}".
+Return ONLY a valid JSON object matching this structure:
+{ "categories": [ { "name": "CATEGORY NAME", "channels": ["ch-1", "ch-2"] } ] }`;
             const aiRaw = await generateAIResponseWithRetry(aiPrompt);
             const cleanedJson = aiRaw.replace(/```json/gi, '').replace(/```/g, '').trim();
             customLayout = JSON.parse(cleanedJson);
-        } catch (err) {
-            console.warn('⚠️ AI Custom prompt layout failed, fallback applied:', err.message);
-        }
+        } catch (err) {}
 
         if (customLayout.categories && Array.isArray(customLayout.categories)) {
             for (const catData of customLayout.categories) {
@@ -270,25 +243,94 @@ Ensure there are at least 3-4 categories tailored specifically to "${ownerPrompt
         }
     }
 
-    // Save Setup State
     await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
 
-    return {
-        verifiedRole,
-        totalCategories: categoryCount,
-        totalChannels: totalCustomChannels + 10
-    };
-}
-    // ==========================================
-// 🧠 2. DEDICATED REAL-TIME INTERACTION & AUTOMATION ENGINE
+    return { verifiedRole, totalCategories: categoryCount, totalChannels: totalCustomChannels + 10 };
+            }
+                         // ==========================================
+// 📡 2. 60-SECOND REAL-TIME TELEMETRY UPDATER ENGINE
 // ==========================================
+function start60sChannelTelemetryLoop(client) {
+    setInterval(async () => {
+        if (!client.guilds) return;
 
-// Register event listeners for dynamic UI interactions
+        client.guilds.cache.forEach(async (guild) => {
+            try {
+                // A. Live Infrastructure Status Monitor
+                const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
+                if (statusCh) {
+                    const uptimeHours = (process.uptime() / 3600).toFixed(2);
+                    const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+
+                    const statusEmbed = new EmbedBuilder()
+                        .setColor('#2ecc71')
+                        .setTitle('🟢 Live Server & Infrastructure Telemetry')
+                        .addFields(
+                            { name: '👥 Total Members', value: `\`${guild.memberCount}\``, inline: true },
+                            { name: '📡 Gateway Ping', value: `\`${client.ws.ping}ms\``, inline: true },
+                            { name: '⏳ Bot Uptime', value: `\`${uptimeHours} Hours\``, inline: true },
+                            { name: '💻 Memory Heap', value: `\`${memUsage} MB\``, inline: true },
+                            { name: '🛡️ Security Protocol', value: '`ENFORCED & ACTIVE`', inline: true },
+                            { name: '🔄 Auto-Refreshed', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                        )
+                        .setFooter({ text: `${guild.name} Autonomous System Monitor`, iconURL: client.user.displayAvatarURL() });
+
+                    const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
+                    const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id) : null;
+                    if (botMsg) await botMsg.edit({ embeds: [statusEmbed] }).catch(() => {});
+                    else await statusCh.send({ embeds: [statusEmbed] }).catch(() => {});
+                }
+
+                // B. Transparency Logs Overview
+                const transCh = guild.channels.cache.find(c => c.name === 'transparency-logs');
+                if (transCh) {
+                    const transEmbed = new EmbedBuilder()
+                        .setColor('#3498db')
+                        .setTitle('📊 Public Transparency & Audit Telemetry')
+                        .setDescription('This channel continuously broadcasts public security metrics, server health stats, and automated audit summaries.')
+                        .addFields(
+                            { name: '🛡️ Protection Level', value: '`MAXIMUM (Level 3)`', inline: true },
+                            { name: '🔒 AutoMod Status', value: '`ACTIVE & MONITORING`', inline: true },
+                            { name: '🔄 Sync Cycle', value: '`60 Seconds`', inline: true }
+                        )
+                        .setTimestamp();
+
+                    const msgs = await transCh.messages.fetch({ limit: 5 }).catch(() => null);
+                    const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id) : null;
+                    if (botMsg) await botMsg.edit({ embeds: [transEmbed] }).catch(() => {});
+                    else await transCh.send({ embeds: [transEmbed] }).catch(() => {});
+                }
+
+                // C. Trust Level Overview Panel
+                const trustCh = guild.channels.cache.find(c => c.name === 'trust-level-overview');
+                if (trustCh) {
+                    const trustEmbed = new EmbedBuilder()
+                        .setColor('#f1c40f')
+                        .setTitle('⭐ Member Trust Level & Reputation Overview')
+                        .setDescription('Member trust levels increase through active participation, verification, and reputation (+rep). Higher trust levels grant access to restricted areas.')
+                        .addFields(
+                            { name: '🔴 Tier 0 (Unverified)', value: 'Locked to `#verify-here`', inline: false },
+                            { name: '🟢 Tier 1 (Verified Member)', value: 'Full access to general community discussions', inline: false },
+                            { name: '👑 Tier 2 (Trusted / VIP)', value: 'Access to special channels via `/access-request-form`', inline: false }
+                        )
+                        .setTimestamp();
+
+                    const msgs = await trustCh.messages.fetch({ limit: 5 }).catch(() => null);
+                    const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id) : null;
+                    if (botMsg) await botMsg.edit({ embeds: [trustEmbed] }).catch(() => {});
+                    else await trustCh.send({ embeds: [trustEmbed] }).catch(() => {});
+                }
+
+            } catch (err) {}
+        });
+    }, 60000); // Triggered every 60 seconds
+}
+// ==========================================
+// 🧠 3. DEDICATED REAL-TIME INTERACTION LISTENERS
+// ==========================================
 function registerSystemListeners(client) {
 
-    // ==========================================
-    // 🛡️ A. VERIFICATION BUTTON HANDLER (#verify-here)
-    // ==========================================
+    // A. Verification Button Handler (#verify-here)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || !interaction.customId.startsWith('sys_verify_')) return;
 
@@ -296,13 +338,12 @@ function registerSystemListeners(client) {
         const role = interaction.guild.roles.cache.get(roleId);
 
         if (!role) {
-            return interaction.reply({ content: '❌ Verification role missing! Please contact an administrator.', flags: [EPHEMERAL_FLAG] });
+            return interaction.reply({ content: '❌ Verification role missing! Contact an administrator.', flags: [EPHEMERAL_FLAG] });
         }
 
         try {
             await interaction.member.roles.add(role);
 
-            // Log verification to #verification-chamber
             const chamberCh = interaction.guild.channels.cache.find(c => c.name === 'verification-chamber');
             if (chamberCh) {
                 const logEmbed = new EmbedBuilder()
@@ -312,21 +353,19 @@ function registerSystemListeners(client) {
                 await chamberCh.send({ embeds: [logEmbed] }).catch(() => {});
             }
 
-            return interaction.reply({ content: '✅ **Verification Successful!** Full server access unlocked.', flags: [EPHEMERAL_FLAG] });
+            return interaction.reply({ content: '✅ **Verification Successful!** Server access unlocked.', flags: [EPHEMERAL_FLAG] });
         } catch (err) {
-            return interaction.reply({ content: '❌ Error assigning role. Ensure my bot role is positioned higher than the Verified role!', flags: [EPHEMERAL_FLAG] });
+            return interaction.reply({ content: '❌ Error assigning role. Ensure bot role position is higher than Verified role!', flags: [EPHEMERAL_FLAG] });
         }
     });
 
-    // ==========================================
-    // 🚨 B. ANONYMOUS THREAT REPORTING ENGINE (#threat-reporting)
-    // ==========================================
+    // B. Anonymous Threat Reporting (#threat-reporting)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || interaction.customId !== 'sys_report_threat') return;
 
         const modal = new ModalBuilder()
             .setCustomId('sys_modal_threat')
-            .setTitle('🚨 Confidentially Report Threat')
+            .setTitle('🚨 Confidential Threat Report')
             .addComponents(
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder().setCustomId('threat_subject').setLabel('Target / Offender User ID or Tag').setStyle(TextInputStyle.Short).setRequired(true)
@@ -360,26 +399,19 @@ function registerSystemListeners(client) {
                 )
                 .setTimestamp();
 
-            const actionRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('threat_ack').setLabel('Acknowledge Report').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('threat_timeout').setLabel('Timeout Target').setStyle(ButtonStyle.Danger)
-            );
-
-            await adminReqCh.send({ embeds: [reportEmbed], components: [actionRow] });
+            await adminReqCh.send({ embeds: [reportEmbed] });
         }
 
         return interaction.editReply({ content: '✅ Your threat report has been encrypted and dispatched to server administrators.' });
     });
 
-    // ==========================================
-    // 📝 C. ACCESS REQUEST FORM ENGINE (#access-request-form)
-    // ==========================================
+    // C. Access Request Form (#access-request-form)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || interaction.customId !== 'sys_request_access') return;
 
         const modal = new ModalBuilder()
             .setCustomId('sys_modal_access')
-            .setTitle('📋 Special Access Request Form')
+            .setTitle('📋 Special Access Request')
             .addComponents(
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder().setCustomId('access_role').setLabel('Requested Role / Permission Level').setStyle(TextInputStyle.Short).setRequired(true)
@@ -416,12 +448,10 @@ function registerSystemListeners(client) {
             await adminReqCh.send({ embeds: [reqEmbed] });
         }
 
-        return interaction.editReply({ content: '✅ Your access request form has been submitted for administrative review.' });
+        return interaction.editReply({ content: '✅ Special access request submitted for administrative review.' });
     });
 
-    // ==========================================
-    // 🎫 D. LIVE SUPPORT TICKET ENGINE (#open-a-ticket)
-    // ==========================================
+    // D. Support Ticket Creation (#open-a-ticket)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || interaction.customId !== 'sys_create_ticket') return;
 
@@ -449,7 +479,7 @@ function registerSystemListeners(client) {
         const embed = new EmbedBuilder()
             .setColor('#00F2FE')
             .setTitle(`🎫 Private Support Channel`)
-            .setDescription(`Hello ${interaction.user}, welcome to your private ticket. Support staff will assist you shortly.\n\nClick below to close this ticket when finished.`)
+            .setDescription(`Hello ${interaction.user}, welcome to your ticket. Staff will assist you shortly.`)
             .setTimestamp();
 
         const closeRow = new ActionRowBuilder().addComponents(
@@ -458,7 +488,7 @@ function registerSystemListeners(client) {
 
         await ticketCh.send({ content: `${interaction.user}`, embeds: [embed], components: [closeRow] });
 
-        return interaction.editReply({ content: `✅ Ticket created! Proceed to ${ticketCh}.` });
+        return interaction.editReply({ content: `✅ Support ticket created at ${ticketCh}.` });
     });
 
     client.on('interactionCreate', async (interaction) => {
@@ -467,69 +497,17 @@ function registerSystemListeners(client) {
         await interaction.reply({ content: '🔒 **Closing ticket channel in 5 seconds...**' });
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     });
-                       }
-// ==========================================
-// 🏛️ 3. LIVE MONITOR & TELEMETRY UPDATER ENGINE
-// ==========================================
-
-// Real-Time Status Monitor Engine (#server-status-monitor)
-function startServerStatusMonitor(client) {
-    setInterval(async () => {
-        if (!client.guilds) return;
-        
-        client.guilds.cache.forEach(async (guild) => {
-            try {
-                const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
-                if (!statusCh) return;
-
-                const messages = await statusCh.messages.fetch({ limit: 10 }).catch(() => null);
-                const botMsg = messages ? messages.find(m => m.author.id === client.user.id) : null;
-
-                const uptimeHours = (process.uptime() / 3600).toFixed(2);
-                const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-
-                const statusEmbed = new EmbedBuilder()
-                    .setColor('#2ecc71')
-                    .setTitle('🟢 Live Server & Infrastructure Status')
-                    .addFields(
-                        { name: '👥 Total Members', value: `\`${guild.memberCount}\``, inline: true },
-                        { name: '📡 Bot Latency', value: `\`${client.ws.ping}ms\``, inline: true },
-                        { name: '⏳ System Uptime', value: `\`${uptimeHours} Hours\``, inline: true },
-                        { name: '💻 Heap Memory', value: `\`${memUsage} MB\``, inline: true },
-                        { name: '🛡️ Security Gatekeeper', value: '`ONLINE & ACTIVE`', inline: true },
-                        { name: '🔄 Last Refreshed', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
-                    )
-                    .setFooter({ text: `${guild.name} Autonomous Telemetry`, iconURL: client.user.displayAvatarURL() });
-
-                if (botMsg) {
-                    await botMsg.edit({ embeds: [statusEmbed] }).catch(() => {});
-                } else {
-                    await statusCh.send({ embeds: [statusEmbed] }).catch(() => {});
                 }
-            } catch (err) {}
-        });
-    }, 60000); // Refreshes every 60 seconds
-}
-// ==========================================
-// 🏛️ 4. COMMUNITY POLICY VOTING SYSTEM (#policy-amendment-vote)
+            // ==========================================
+// 🏛️ 4. POLICY VOTING SYSTEM & MODULE EXPORTS
 // ==========================================
 const policyVotePayload = {
     name: 'policy-vote',
     description: '🏛️ Create an official governance policy vote in #policy-amendment-vote (Admins Only)',
     default_member_permissions: '8',
     options: [
-        {
-            name: 'title',
-            type: 3,
-            required: true,
-            description: 'Title of the policy amendment'
-        },
-        {
-            name: 'description',
-            type: 3,
-            required: true,
-            description: 'Detailed explanation of the policy changes'
-        }
+        { name: 'title', type: 3, required: true, description: 'Title of the policy amendment' },
+        { name: 'description', type: 3, required: true, description: 'Detailed explanation of the policy changes' }
     ]
 };
 
@@ -577,10 +555,9 @@ async function handlePolicyVoteCommand(interaction, client) {
         noVotes: []
     });
 
-    return interaction.editReply({ content: `✅ Policy amendment vote successfully posted in ${voteCh}!` });
+    return interaction.editReply({ content: `✅ Policy amendment vote posted in ${voteCh}!` });
 }
 
-// Button Vote Handler
 async function handlePolicyVoteButtons(interaction) {
     if (!interaction.isButton() || !['vote_yes', 'vote_no'].includes(interaction.customId)) return;
 
@@ -590,7 +567,6 @@ async function handlePolicyVoteButtons(interaction) {
     const userId = interaction.user.id;
     const isYes = interaction.customId === 'vote_yes';
 
-    // Toggle vote logic
     let yesVotes = voteDoc.yesVotes || [];
     let noVotes = voteDoc.noVotes || [];
 
@@ -619,10 +595,10 @@ async function handlePolicyVoteButtons(interaction) {
     await interaction.update({ embeds: [updatedEmbed] });
 }
 
-// Module Initializer Functions
+// Module Initializer Function
 function initModule(client) {
     registerSystemListeners(client);
-    startServerStatusMonitor(client);
+    start60sChannelTelemetryLoop(client);
 
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
@@ -633,9 +609,8 @@ function initModule(client) {
     });
 }
 
-// Dual Export Support (Supports both functional loader `mod(client)` and object loader `mod.init(client)`)
+// Universal Exports
 module.exports = initModule;
 module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.policyVotePayload = policyVotePayload;
-        
