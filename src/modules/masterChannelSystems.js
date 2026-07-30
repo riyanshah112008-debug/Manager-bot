@@ -155,6 +155,55 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     await ticketCh.send({ embeds: [ticketEmbed], components: [ticketRow] });
         let totalCustomChannels = 0;
     let categoryCount = 2;
+// ==========================================
+// MANDATORY SUPPORT & APPLICATIONS CATEGORY
+// ==========================================
+const supportCat = await guild.channels.create({ 
+    name: '🎫 SUPPORT & APPLICATIONS', 
+    type: ChannelType.GuildCategory 
+});
+
+// A. Support & Ticket Channel
+const ticketCh = await guild.channels.create({
+    name: 'open-a-ticket',
+    type: ChannelType.GuildText,
+    parent: supportCat.id,
+    topic: 'Click below to open a private support ticket or apply for staff position.',
+    permissionOverwrites: [hideEveryone, showVerified, botFullControl]
+});
+
+// 1. Support Ticket Embed
+const ticketEmbed = new EmbedBuilder()
+    .setColor('#00F2FE')
+    .setTitle('🎫 Starry Support Portal')
+    .setDescription('Need help, have a question, or want to report a rule breaker? Click the button below to open a secure ticket with staff.')
+    .setFooter({ text: `${guild.name} Support System` });
+
+const ticketRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+        .setCustomId('sys_create_ticket')
+        .setLabel('Open Support Ticket')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📩')
+);
+
+// 2. Staff Application Embed
+const staffAppEmbed = new EmbedBuilder()
+    .setColor('#9b59b6')
+    .setTitle('📋 Official Staff & Moderator Application')
+    .setDescription('Interested in becoming a Moderator or Helper in our community?\nClick below to fill out our interactive modal application!')
+    .setFooter({ text: `${guild.name} Staff Recruitment` });
+
+const staffAppRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+        .setCustomId('sys_apply_staff')
+        .setLabel('Apply for Staff')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('📝')
+);
+
+await ticketCh.send({ embeds: [ticketEmbed], components: [ticketRow] });
+await ticketCh.send({ embeds: [staffAppEmbed], components: [staffAppRow] });
 
     // ==========================================
     // CONDITIONAL EXECUTION (STRICT SPLIT)
