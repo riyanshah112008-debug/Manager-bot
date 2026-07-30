@@ -127,9 +127,34 @@ async function updateSecurityConfig(guildId, updateData) {
 // ==========================================
 // 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
 // ==========================================
+// --- AI Setup Helpers with Retry & Fallbacks ---
+const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
+const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+let currentKeyIndex = 0;
+
+function getNextAIClient() {
+    if (apiKeys.length === 0) return null;
+    const key = apiKeys[currentKeyIndex];
+    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+    return new GoogleGenAI({ apiKey: key });
+}
+
+async function generateAIResponseWithRetry(prompt) {
+    if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY environment variable.');
+    const AI_MODELS = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
+    for (const modelName of AI_MODELS) {
+        try {
+            const ai = getNextAIClient();
+            if (!ai) continue;
+            const response = await ai.models.generateContent({ model: modelName, contents: prompt });
+            if (response && response.text) return response.text.trim();
+        } catch (err) { continue; }
+    }
+    return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
+}
+
 // --- Helper function to create channel strictly once, send description embed, and pin it ---
 async function createDescribedChannel(guild, options) {
-    // Check if channel already exists to prevent any duplication
     let channel = guild.channels.cache.find(c => c.name === options.name && c.parentId === options.parent);
     if (!channel) {
         channel = await guild.channels.create({
@@ -524,7 +549,7 @@ async function handleEmergencyCommands(interaction) {
             const newChannel = await channel.clone();
             await channel.delete().catch(() => {});
             await newChannel.setPosition(position).catch(() => {});
-            return newChannel.send('⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.');
+            return interaction.editReply('⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.');
         }
 
         if (targetScope === 'server') {
@@ -593,12 +618,12 @@ function initModule(client) {
             const cmd = interaction.commandName;
             
             if (cmd === 'setup-starry') {
-                await interaction.deferReply().catch(() => {});
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
                 const result = await provisionMasterServerStructure(interaction);
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with full 6-category high-security infrastructure & pinned channel guides!`)
+                    .setDescription(`Server successfully configured with full high-security infrastructure & pinned channel guides!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
                         { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with pinned descriptions!`, inline: false }
