@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER CHANNEL SYSTEMS ENGINE
+// 🛡️ STARRY SUPREME MASTER CHANNEL SYSTEMS ENGINE (PART 1)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -121,6 +121,37 @@ async function provisionMasterServerStructure(interaction, client, ownerPrompt) 
     );
     await verifyCh.send({ embeds: [verifyEmbed], components: [verifyRow] });
 
+    const ticketCh = await guild.channels.create({
+        name: 'open-a-ticket',
+        type: ChannelType.GuildText,
+        parent: supportCat.id,
+        topic: 'Click below to open a private support ticket or apply for staff position.',
+        permissionOverwrites: [hideEveryone, showVerified, botFullControl]
+    });
+
+    const ticketEmbed = new EmbedBuilder()
+        .setColor('#00F2FE')
+        .setTitle('🎫 Starry Support Portal')
+        .setDescription('Need help, have a question, or want to report a rule breaker? Click the button below to open a secure ticket with staff.')
+        .setFooter({ text: `${guild.name} Support System` });
+
+    const ticketRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩')
+    );
+
+    const staffAppEmbed = new EmbedBuilder()
+        .setColor('#9b59b6')
+        .setTitle('📋 Official Staff & Moderator Application')
+        .setDescription('Interested in becoming a Moderator or Helper in our community?\nClick below to fill out our interactive modal application!')
+        .setFooter({ text: `${guild.name} Staff Recruitment` });
+
+    const staffAppRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
+    );
+
+    await ticketCh.send({ embeds: [ticketEmbed], components: [ticketRow] });
+    await ticketCh.send({ embeds: [staffAppEmbed], components: [staffAppRow] });
+
     let totalCustomChannels = 0;
     let categoryCount = 2;
     if (!ownerPrompt) {
@@ -233,8 +264,8 @@ function start60sChannelTelemetryLoop(client) {
                         .addFields(
                             { name: '👥 Total Members', value: `\`${guild.memberCount}\``, inline: true },
                             { name: '📡 Gateway Ping', value: `\`${client.ws.ping}ms\``, inline: true },
-                            { name: '⏳ Bot Uptime', value: `\`${uptimeHours} Hours\``, inline: true },
-                            { name: '💻 Memory Heap', value: `\`${memUsage} MB\``, inline: true },
+                            { name: '⏳ Bot Uptime', value: `\`{uptimeHours} Hours\``, inline: true },
+                            { name: '💻 Memory Heap', value: `\`{memUsage} MB\``, inline: true },
                             { name: '🛡️ Security Protocol', value: '`ENFORCED & ACTIVE`', inline: true },
                             { name: '🔄 Auto-Refreshed', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
                         )
@@ -248,7 +279,10 @@ function start60sChannelTelemetryLoop(client) {
             } catch (err) {}
         });
     }, 60000);
-}
+                                     }
+                             // ==========================================
+// 🛡️ STARRY SUPREME MASTER CHANNEL SYSTEMS ENGINE (PART 2)
+// ==========================================
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function handleEmergencyCommand(interaction, client) {
@@ -257,7 +291,6 @@ async function handleEmergencyCommand(interaction, client) {
     }
 
     const cmd = interaction.commandName;
-    const guild = interaction.guild;
 
     if (cmd === 'emergency-nuke') {
         const embed = new EmbedBuilder()
@@ -270,55 +303,11 @@ async function handleEmergencyCommand(interaction, client) {
             );
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('nuke_confirm').setLabel('NUKE EVERYTHING').setStyle(ButtonStyle.Danger).setEmoji('☢️'),
-            new ButtonBuilder().setCustomId('nuke_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`nuke_confirm_${interaction.user.id}`).setLabel('NUKE EVERYTHING').setStyle(ButtonStyle.Danger).setEmoji('☢️'),
+            new ButtonBuilder().setCustomId(`nuke_cancel_${interaction.user.id}`).setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
         );
 
-        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
-        const filter = i => i.user.id === interaction.user.id;
-        
-        try {
-            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-            if (confirmation.customId === 'nuke_cancel') {
-                return confirmation.update({ content: '🚫 Nuke aborted. The server is safe.', embeds: [], components: [] });
-            }
-
-            await confirmation.update({ content: '☢️ **INITIATING TOTAL NUKE PROTOCOL...** ☢️', embeds: [], components: [] });
-
-            const channels = await guild.channels.fetch();
-            let deletedChannels = 0;
-            for (const [id, channel] of channels) {
-                if (id === interaction.channel.id || channel.name.toLowerCase().includes('general')) continue;
-                try {
-                    await channel.delete('Emergency Nuke Protocol initiated by Admin');
-                    deletedChannels++;
-                    await delay(400);
-                } catch (err) {}
-            }
-
-            const roles = await guild.roles.fetch();
-            let deletedRoles = 0;
-            const botRolePosition = guild.members.me.roles.highest.position;
-            for (const [id, role] of roles) {
-                if (role.name === '@everyone' || role.managed || role.position >= botRolePosition) continue;
-                try {
-                    await role.delete('Emergency Nuke Protocol initiated by Admin');
-                    deletedRoles++;
-                    await delay(400);
-                } catch (err) {}
-            }
-
-            const safeChannel = guild.channels.cache.get(interaction.channel.id);
-            if (safeChannel) {
-                const finishEmbed = new EmbedBuilder()
-                    .setColor('#2ecc71')
-                    .setTitle('☢️ Server Nuke Complete')
-                    .setDescription(`Successfully wiped:\n🧨 **${deletedChannels} Channels**\n🧨 **${deletedRoles} Roles**`);
-                await safeChannel.send({ embeds: [finishEmbed] });
-            }
-        } catch (e) {
-            await interaction.editReply({ content: '⚠️ Command timed out. Nuke aborted.', embeds: [], components: [] });
-        }
+        return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
     }
 
     if (cmd === 'emergency-lockdown') {
@@ -328,34 +317,11 @@ async function handleEmergencyCommand(interaction, client) {
             .setDescription('Remove typing and voice access for `@everyone` in all channels?');
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lock_confirm').setLabel('LOCKDOWN SERVER').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
-            new ButtonBuilder().setCustomId('lock_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`lock_confirm_${interaction.user.id}`).setLabel('LOCKDOWN SERVER').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId(`lock_cancel_${interaction.user.id}`).setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
         );
 
-        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
-        const filter = i => i.user.id === interaction.user.id;
-        
-        try {
-            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-            if (confirmation.customId === 'lock_cancel') return confirmation.update({ content: '🚫 Lockdown aborted.', embeds: [], components: [] });
-
-            await confirmation.update({ content: '🔒 **LOCKING DOWN ALL CHANNELS...**', embeds: [], components: [] });
-            
-            let lockedCount = 0;
-            const channels = await guild.channels.fetch();
-            for (const [id, channel] of channels) {
-                try {
-                    await channel.permissionOverwrites.edit(guild.id, { SendMessages: false, Connect: false });
-                    lockedCount++;
-                    await delay(300);
-                } catch (err) {}
-            }
-
-            const safeChannel = guild.channels.cache.get(interaction.channel.id);
-            if (safeChannel) safeChannel.send(`🚨 **GLOBAL LOCKDOWN COMPLETE** 🚨\nLocked **${lockedCount} channels**.`);
-        } catch (e) {
-            await interaction.editReply({ content: '⚠️ Command timed out.', embeds: [], components: [] });
-        }
+        return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
     }
 
     if (cmd === 'emergency-secure') {
@@ -365,45 +331,11 @@ async function handleEmergencyCommand(interaction, client) {
             .setDescription('Instantly remove Administrator and management permissions from all roles?');
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('secure_confirm').setLabel('SECURE ROLES').setStyle(ButtonStyle.Danger).setEmoji('🛡️'),
-            new ButtonBuilder().setCustomId('secure_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`secure_confirm_${interaction.user.id}`).setLabel('SECURE ROLES').setStyle(ButtonStyle.Danger).setEmoji('🛡️'),
+            new ButtonBuilder().setCustomId(`secure_cancel_${interaction.user.id}`).setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
         );
 
-        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
-        const filter = i => i.user.id === interaction.user.id;
-        
-        try {
-            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-            if (confirmation.customId === 'secure_cancel') return confirmation.update({ content: '🚫 Security protocol aborted.', embeds: [], components: [] });
-
-            await confirmation.update({ content: '🛡️ **STRIPPING DANGEROUS PERMISSIONS...**', embeds: [], components: [] });
-            
-            let strippedCount = 0;
-            const roles = await guild.roles.fetch();
-            const botRolePosition = guild.members.me.roles.highest.position;
-
-            for (const [id, role] of roles) {
-                if (role.position >= botRolePosition || role.name === '@everyone' || role.managed) continue;
-                try {
-                    await role.setPermissions(role.permissions.remove([
-                        PermissionFlagsBits.Administrator,
-                        PermissionFlagsBits.BanMembers,
-                        PermissionFlagsBits.KickMembers,
-                        PermissionFlagsBits.ManageChannels,
-                        PermissionFlagsBits.ManageRoles,
-                        PermissionFlagsBits.ManageGuild,
-                        PermissionFlagsBits.ManageWebhooks
-                    ]));
-                    strippedCount++;
-                    await delay(500);
-                } catch (err) {}
-            }
-
-            const safeChannel = guild.channels.cache.get(interaction.channel.id);
-            if (safeChannel) safeChannel.send(`🛡️ **SERVER SECURED** 🛡️\nStripped permissions from **${strippedCount} roles**.`);
-        } catch (e) {
-            await interaction.editReply({ content: '⚠️ Command timed out.', embeds: [], components: [] });
-        }
+        return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
     }
 
     if (cmd === 'emergency-unban') {
@@ -413,36 +345,159 @@ async function handleEmergencyCommand(interaction, client) {
             .setDescription('Wipe the entire server ban list and unban everyone?');
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('unban_confirm').setLabel('UNBAN EVERYONE').setStyle(ButtonStyle.Danger).setEmoji('🏥'),
-            new ButtonBuilder().setCustomId('unban_cancel').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`unban_confirm_${interaction.user.id}`).setLabel('UNBAN EVERYONE').setStyle(ButtonStyle.Danger).setEmoji('🏥'),
+            new ButtonBuilder().setCustomId(`unban_cancel_${interaction.user.id}`).setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
         );
 
-        const response = await interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
-        const filter = i => i.user.id === interaction.user.id;
-        
+        return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] });
+    }
+}
+
+async function handlePersistentButtonInteractions(interaction, client) {
+    if (!interaction.isButton()) return;
+    const customId = interaction.customId;
+
+    // 1. Verification Buttons (Persistent)
+    if (customId.startsWith('sys_verify_')) {
+        const roleId = customId.split('_')[2];
         try {
-            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-            if (confirmation.customId === 'unban_cancel') return confirmation.update({ content: '🚫 Mass unban aborted.', embeds: [], components: [] });
+            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            const member = interaction.member;
+            if (!member.roles.cache.has(roleId)) {
+                await member.roles.add(roleId);
+                return interaction.editReply({ content: '✅ **Verification Successful!** You have been granted access to the server.' });
+            } else {
+                return interaction.editReply({ content: 'ℹ️ You are already verified!' });
+            }
+        } catch (err) {
+            return interaction.editReply({ content: '❌ Failed to assign verification role. Check bot permissions.' }).catch(() => {});
+        }
+    }
 
-            await confirmation.update({ content: '🏥 **FETCHING BAN LIST...**', embeds: [], components: [] });
-            
-            const bans = await guild.bans.fetch();
-            if (bans.size === 0) return interaction.editReply({ content: 'The ban list is already empty!' });
+    // 2. Support Ticket Button (Persistent)
+    if (customId === 'sys_create_ticket') {
+        try {
+            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            const guild = interaction.guild;
+            const ticketChannel = await guild.channels.create({
+                name: `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                type: ChannelType.GuildText,
+                permissionOverwrites: [
+                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: guild.members.me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
+                ]
+            });
+            const welcomeEmbed = new EmbedBuilder()
+                .setColor('#00F2FE')
+                .setTitle(`🎫 Support Ticket - ${interaction.user.username}`)
+                .setDescription('Staff will be with you shortly. Please describe your issue or inquiry.');
+            await ticketChannel.send({ content: `${interaction.user}`, embeds: [welcomeEmbed] });
+            return interaction.editReply({ content: `✅ Support ticket created successfully: ${ticketChannel}` });
+        } catch (err) {
+            return interaction.editReply({ content: '❌ Failed to create support ticket channel.' }).catch(() => {});
+        }
+    }
 
-            let unbannedCount = 0;
-            for (const [userId, banInfo] of bans) {
+    // 3. Staff Application Modal Button (Persistent)
+    if (customId === 'sys_apply_staff') {
+        const modal = new ModalBuilder()
+            .setCustomId('sys_modal_staff_app')
+            .setTitle('📋 Staff Application Form')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('app_age').setLabel('Your Age & Timezone').setStyle(TextInputStyle.Short).setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('app_experience').setLabel('Prior Moderation Experience').setStyle(TextInputStyle.Paragraph).setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('app_reason').setLabel('Why do you want to join our staff team?').setStyle(TextInputStyle.Paragraph).setRequired(true)
+                )
+            );
+        return interaction.showModal(modal);
+    }
+
+    // 4. Access Request & Threat Reporting Buttons (Persistent)
+    if (customId === 'sys_request_access') {
+        await interaction.reply({ content: '📝 Please detail your special access request in this channel or open a ticket.', flags: [EPHEMERAL_FLAG] });
+        return;
+    }
+    if (customId === 'sys_report_threat') {
+        await interaction.reply({ content: '⚠️ Threat report noted. Management has been alerted confidentially.', flags: [EPHEMERAL_FLAG] });
+        return;
+    }
+
+    // 5. Emergency Action Confirmations (Persistent handling)
+    if (customId.startsWith('nuke_confirm_') || customId.startsWith('nuke_cancel_') ||
+        customId.startsWith('lock_confirm_') || customId.startsWith('lock_cancel_') ||
+        customId.startsWith('secure_confirm_') || customId.startsWith('secure_cancel_') ||
+        customId.startsWith('unban_confirm_') || customId.startsWith('unban_cancel_')) {
+        
+        const parts = customId.split('_');
+        const actionType = parts[0]; // nuke, lock, secure, unban
+        const actionDecision = parts[1]; // confirm, cancel
+        const targetUserId = parts[2];
+
+        if (interaction.user.id !== targetUserId) {
+            return interaction.reply({ content: '❌ Only the administrator who initiated this command can click this button!', flags: [EPHEMERAL_FLAG] });
+        }
+
+        if (actionDecision === 'cancel') {
+            return interaction.update({ content: '🚫 Emergency action cancelled.', embeds: [], components: [] });
+        }
+
+        const guild = interaction.guild;
+        await interaction.update({ content: `⚡ **Executing emergency ${actionType} protocol...**`, embeds: [], components: [] });
+
+        if (actionType === 'nuke') {
+            let deletedChannels = 0;
+            const channels = await guild.channels.fetch();
+            for (const [id, channel] of channels) {
+                if (id === interaction.channel.id || channel.name.toLowerCase().includes('general')) continue;
+                try { await channel.delete('Emergency Nuke'); deletedChannels++; await delay(400); } catch (err) {}
+            }
+            let deletedRoles = 0;
+            const roles = await guild.roles.fetch();
+            const botRolePos = guild.members.me.roles.highest.position;
+            for (const [id, role] of roles) {
+                if (role.name === '@everyone' || role.managed || role.position >= botRolePos) continue;
+                try { await role.delete('Emergency Nuke'); deletedRoles++; await delay(400); } catch (err) {}
+            }
+            await interaction.followUp({ content: `☢️ **Nuke Complete:** Wiped ${deletedChannels} channels and ${deletedRoles} roles.`, flags: [EPHEMERAL_FLAG] });
+        } else if (actionType === 'lock') {
+            let lockedCount = 0;
+            const channels = await guild.channels.fetch();
+            for (const [id, channel] of channels) {
+                try { await channel.permissionOverwrites.edit(guild.id, { SendMessages: false, Connect: false }); lockedCount++; await delay(300); } catch (err) {}
+            }
+            await interaction.followUp({ content: `🔒 **Lockdown Complete:** Locked ${lockedCount} channels.`, flags: [EPHEMERAL_FLAG] });
+        } else if (actionType === 'secure') {
+            let strippedCount = 0;
+            const roles = await guild.roles.fetch();
+            const botRolePos = guild.members.me.roles.highest.position;
+            for (const [id, role] of roles) {
+                if (role.position >= botRolePos || role.name === '@everyone' || role.managed) continue;
                 try {
-                    await guild.members.unban(userId, 'Emergency Mass Unban Protocol');
-                    unbannedCount++;
-                    await delay(300);
+                    await role.setPermissions(role.permissions.remove([
+                        PermissionFlagsBits.Administrator, PermissionFlagsBits.BanMembers,
+                        PermissionFlagsBits.KickMembers, PermissionFlagsBits.ManageChannels,
+                        PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageGuild,
+                        PermissionFlagsBits.ManageWebhooks
+                    ]));
+                    strippedCount++; await delay(500);
                 } catch (err) {}
             }
-
-            const safeChannel = guild.channels.cache.get(interaction.channel.id);
-            if (safeChannel) safeChannel.send(`🏥 **RECOVERY COMPLETE** 🏥\nSuccessfully unbanned **${unbannedCount} users**.`);
-        } catch (e) {
-            await interaction.editReply({ content: '⚠️ Command timed out.', embeds: [], components: [] });
+            await interaction.followUp({ content: `🛡️ **Security Protocol Complete:** Stripped dangerous permissions from ${strippedCount} roles.`, flags: [EPHEMERAL_FLAG] });
+        } else if (actionType === 'unban') {
+            const bans = await guild.bans.fetch();
+            let unbannedCount = 0;
+            for (const [userId] of bans) {
+                try { await guild.members.unban(userId, 'Emergency Mass Unban'); unbannedCount++; await delay(300); } catch (err) {}
+            }
+            await interaction.followUp({ content: `🏥 **Mass Unban Complete:** Successfully unbanned ${unbannedCount} users.`, flags: [EPHEMERAL_FLAG] });
         }
+        return;
     }
 }
 
@@ -453,8 +508,7 @@ async function handlePolicyVoteButtons(interaction) {
     const cleanMsgId = String(rawMsgId || '').replace(/[^0-9]/g, '');
     if (!cleanMsgId) return;
 
-    const cleanMsgString = String(cleanMsgId);
-    const voteDoc = await PolicyVote.findOne({ messageId: String(cleanMsgString) });
+    const voteDoc = await PolicyVote.findOne({ messageId: String(cleanMsgId) });
     if (!voteDoc) return;
 
     const userId = String(interaction.user.id);
@@ -481,8 +535,8 @@ async function handlePolicyVoteButtons(interaction) {
 
     const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
         .setFields(
-            { name: '✅ In Favor (Yes)', value: `\`${yesVotes.length} Votes (${yesPct}%)\``, inline: true },
-            { name: '❌ Opposed (No)', value: `\`${noVotes.length} Votes (${noPct}%)\``, inline: true }
+            { name: '✅ In Favor (Yes)', value: `\`{yesVotes.length} Votes (${yesPct}%)\``, inline: true },
+            { name: '❌ Opposed (No)', value: `\`{noVotes.length} Votes (${noPct}%)\``, inline: true }
         );
 
     await interaction.update({ embeds: [updatedEmbed] });
@@ -498,7 +552,31 @@ function initModule(client) {
                 await handleEmergencyCommand(interaction, client);
             }
         } else if (interaction.isButton()) {
+            await handlePersistentButtonInteractions(interaction, client);
             await handlePolicyVoteButtons(interaction);
+        } else if (interaction.isModalSubmit() && interaction.customId === 'sys_modal_staff_app') {
+            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            const age = interaction.fields.getTextInputValue('app_age');
+            const exp = interaction.fields.getTextInputValue('app_experience');
+            const reason = interaction.fields.getTextInputValue('app_reason');
+
+            const adminReqCh = interaction.guild.channels.cache.find(c => c.name === 'admin-action-requests') || 
+                               interaction.guild.channels.cache.find(c => c.name === 'logs-moderate');
+
+            if (adminReqCh) {
+                const appLogEmbed = new EmbedBuilder()
+                    .setColor('#9b59b6')
+                    .setTitle('📥 NEW STAFF APPLICATION SUBMITTED')
+                    .addFields(
+                        { name: 'Applicant', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
+                        { name: 'Age & Timezone', value: `\`{age}\``, inline: true },
+                        { name: 'Prior Experience', value: `>>> {exp}`, inline: false },
+                        { name: 'Motivation / Reason', value: `>>> {reason}`, inline: false }
+                    )
+                    .setTimestamp();
+                await adminReqCh.send({ embeds: [appLogEmbed] });
+            }
+            await interaction.editReply({ content: '✅ Your staff application has been submitted to management for review!' });
         }
     });
 }
