@@ -134,7 +134,9 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
-
+// ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2)
+// ==========================================
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -221,9 +223,7 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-        // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2)
-// ==========================================
+
 // ==========================================
 // 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
 // ==========================================
@@ -277,7 +277,9 @@ client.manager = new Kazagumo({
     reconnectTries: 5,
     restTimeout: 10000
 });
-
+// ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3)
+// ==========================================
 client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', () => {}); 
 client.manager.shoukaku.on('disconnect', () => {});
@@ -372,7 +374,9 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
+// ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 4)
+// ==========================================
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
@@ -478,7 +482,9 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-
+// ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 5)
+// ==========================================
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
@@ -520,7 +526,48 @@ const MODULE_INITIALIZERS = [
     { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
 ];
 
+// ==========================================
+// 6. RECURSIVE SLASH COMMAND LOADER
+// ==========================================
+function loadSlashCommands() {
+    const commandsPath = path.join(__dirname, 'commands');
 
+    if (!fs.existsSync(commandsPath)) {
+        console.warn('⚠️ No "commands" directory found.');
+        return;
+    }
+
+    const entries = fs.readdirSync(commandsPath);
+
+    for (const item of entries) {
+        const fullPath = path.join(commandsPath, item);
+        const stat = fs.statSync(fullPath);
+
+        // Load commands from subdirectories (e.g., src/commands/music/*.js)
+        if (stat.isDirectory()) {
+            const commandFiles = fs.readdirSync(fullPath).filter(file => file.endsWith('.js'));
+            for (const file of commandFiles) {
+                const filePath = path.join(fullPath, file);
+                const command = require(filePath);
+                if (command?.data?.name) {
+                    client.commands.set(command.data.name, command);
+                }
+            }
+        } 
+        // Load direct command files (e.g., src/commands/ping.js)
+        else if (item.endsWith('.js')) {
+            const command = require(fullPath);
+            if (command?.data?.name) {
+                client.commands.set(command.data.name, command);
+            }
+        }
+    }
+    console.log(`✅ Successfully loaded ${client.commands.size} slash command handlers into client.commands`);
+}
+
+// ==========================================
+// 7. BOT BOOTSTRAP & LOGINS
+// ==========================================
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
         console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
@@ -539,6 +586,9 @@ async function startBot() {
         } catch (e) {
             console.error('⚠️ Could not load bumpEngine API routes:', e.message);
         }
+
+        // Load all slash commands recursively from src/commands/
+        loadSlashCommands();
 
         for (const mod of MODULE_INITIALIZERS) {
             try {
@@ -573,4 +623,3 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
-                    
