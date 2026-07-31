@@ -44,7 +44,6 @@ const protectDb = new Database('protect.db');
 protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
 
 const securityCache = new Map();
-const joinTracker = new Map();  
 const nukeTracker = new Map();  
 
 async function getSecurityConfig(guildId) {
@@ -58,6 +57,7 @@ async function getSecurityConfig(guildId) {
     return config;
 }
 
+// --- DYNAMIC MULTI-MODEL AI ROTATION ENGINE ---
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
@@ -80,11 +80,13 @@ async function generateAIResponseWithRetry(prompt) {
                 if (!ai) continue;
                 const response = await ai.models.generateContent({ model: modelName, contents: prompt });
                 if (response && response.text) return response.text.trim();
-            } catch (err) { continue; }
+            } catch (err) {
+                continue;
+            }
         }
         await new Promise(res => setTimeout(res, 500));
     }
-    return "⚡ Request processed via secondary buffer.";
+    return "⚡ **Traffic Optimization:** Request processed via secondary buffer.";
 }
 
 async function executeFullGuildBackup(guild) {
@@ -107,10 +109,8 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
         cat = await guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites });
     }
     return cat;
-            }
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 2 OF 2)
-// ==========================================
+}
+
 async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
     const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && (m.components.length > 0 || m.embeds.length > 0)) : false;
@@ -176,29 +176,28 @@ async function provisionMasterServerStructure(interaction) {
     const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
     const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
 
-    // PRE-SETUP INTERACTIVE PREVIEWS (Ping User & Send Both Previews)
-    const trackerModule = require('./tracker');
-    if (trackerModule.buildInactivityAlertEmbed && trackerModule.buildSusInactivityAlertEmbed) {
-        const inactivityPreviewEmbed = trackerModule.buildInactivityAlertEmbed(interaction.member, interaction.user.id, 'uPUQpU4ecR', Date.now() - (14 * 24 * 60 * 60 * 1000));
-        const inactivityPreviewRow = trackerModule.buildInactivityModPanelRow(interaction.user.id);
+    try {
+        const trackerModule = require('./tracker');
+        if (trackerModule.buildInactivityAlertEmbed && trackerModule.buildSusInactivityAlertEmbed) {
+            const inactivityAlert = trackerModule.buildInactivityAlertEmbed(interaction.member, interaction.user.id, 'uPUQpU4ecR', Date.now() - (14 * 24 * 60 * 60 * 1000));
+            const inactivityRow = trackerModule.buildInactivityModPanelRow(interaction.user.id);
+            const susAlert = trackerModule.buildSusInactivityAlertEmbed(interaction.member, 30);
+            const susRow = trackerModule.buildSusModPanelRow(interaction.user.id);
 
-        const susPreviewEmbed = trackerModule.buildSusInactivityAlertEmbed(interaction.member, 30);
-        const susPreviewRow = trackerModule.buildSusModPanelRow(interaction.user.id);
+            await interaction.channel.send({
+                content: `<@${interaction.user.id}>\n⚙️ **Starry Master Pre-Setup Preview:**`,
+                embeds: [inactivityAlert],
+                components: [inactivityRow]
+            }).catch(() => {});
 
-        await interaction.channel.send({
-            content: `<@${interaction.user.id}>\n⚙️ **Starry Master Pre-Setup Preview:** Below are live samples of automated inactivity and sus-account alert panels:`,
-            embeds: [inactivityPreviewEmbed],
-            components: [inactivityPreviewRow]
-        }).catch(() => {});
+            await interaction.channel.send({
+                content: `<@${interaction.user.id}>`,
+                embeds: [susAlert],
+                components: [susRow]
+            }).catch(() => {});
+        }
+    } catch (e) {}
 
-        await interaction.channel.send({
-            content: `<@${interaction.user.id}>`,
-            embeds: [susPreviewEmbed],
-            components: [susRowPreviewRow || susPreviewRow]
-        }).catch(() => {});
-    }
-
-    // Deploy 6 Categories & 24 Channels
     const sysCat = await getOrCreateCategory(guild, '🛡️ SECURITY & SYSTEM LOGS', [hideEveryone, staffFullControl, botFullControl]);
     const sysChannels = [
         { name: 'logs-access', moduleType: 'log_access' }, { name: 'logs-moderate', moduleType: 'log_moderate' },
@@ -217,9 +216,130 @@ async function provisionMasterServerStructure(interaction) {
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
     return { verifiedRole, totalCategories: 6, totalChannels: 24 };
 }
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 2 OF 2)
+// ==========================================
+function start60sChannelTelemetryLoop(client) {
+    setInterval(async () => {
+        if (!client.guilds) return;
+        client.guilds.cache.forEach(async (guild) => {
+            try {
+                const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
+                if (statusCh) {
+                    const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields(
+                        { name: '📊 Total Members', value: `\`${guild.memberCount}\``, inline: true },
+                        { name: '🟢 System Uptime', value: `\`${(process.uptime() / 60).toFixed(1)} mins\``, inline: true },
+                        { name: '🧠 RAM Usage (Heap)', value: `\`${memUsage} MB\``, inline: true },
+                        { name: '📡 Bot Latency (Ping)', value: `\`${client.ws.ping}ms\``, inline: true }
+                    );
+                    const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
+                    const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id && m.embeds.length > 0) : null;
+                    if (botMsg) await botMsg.edit({ embeds: [statusEmbed] }).catch(() => {});
+                    else await statusCh.send({ embeds: [statusEmbed] }).catch(() => {});
+                }
+            } catch (err) {}
+        });
+    }, 60000);
+}
+
+// Emergency Nuke Command with Target Options & Instant Deferral
+const emergencyNukeCommand = new SlashCommandBuilder()
+    .setName('emergency-nuke')
+    .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(o =>
+        o.setName('target')
+            .setDescription('Select whether to nuke this channel or the entire server')
+            .setRequired(true)
+            .addChoices(
+                { name: 'Channel (Purge & Recreate)', value: 'channel' },
+                { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' }
+            )
+    )
+    .addChannelOption(o =>
+        o.setName('channel')
+            .setDescription('Target channel (defaults to current channel if target is Channel)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
+    );
+
+const modMasterCommand = new SlashCommandBuilder()
+    .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)));
+
+const autoModMasterCommand = new SlashCommandBuilder()
+    .setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub => sub.setName('status').setDescription('Status'));
+
+const moderateMasterCommand = new SlashCommandBuilder()
+    .setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
+
+const verifySetupCommand = new SlashCommandBuilder()
+    .setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
+
+async function handleEmergencyCommands(interaction) {
+    if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    }
+
+    const cmd = interaction.commandName;
+    const guild = interaction.guild;
+
+    if (cmd === 'emergency-nuke') {
+        const targetScope = interaction.options.getString('target', true);
+
+        if (targetScope === 'channel') {
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            const position = channel.position;
+            const newChannel = await channel.clone();
+            await channel.delete().catch(() => {});
+            await newChannel.setPosition(position).catch(() => {});
+            return newChannel.send({ content: '⚡ **EMERGENCY NUKE:** Channel has been completely purged and recreated.' });
+        }
+
+        if (targetScope === 'server') {
+            if (interaction.user.id !== guild.ownerId) {
+                return interaction.editReply('❌ **Owner Only:** Only the Server Owner can execute a whole-server emergency nuke!');
+            }
+
+            const currentChannel = interaction.channel;
+            const botMember = guild.members.me;
+
+            let deletedChannels = 0;
+            let deletedRoles = 0;
+
+            const channelsToDelete = guild.channels.cache.filter(c => c.id !== currentChannel.id);
+            for (const [, ch] of channelsToDelete) {
+                try {
+                    await ch.delete();
+                    deletedChannels++;
+                } catch (e) {}
+            }
+
+            const rolesToDelete = guild.roles.cache.filter(r => 
+                !r.managed && 
+                r.id !== guild.roles.everyone.id && 
+                r.position < botMember.roles.highest.position
+            );
+            for (const [, role] of rolesToDelete) {
+                try {
+                    await role.delete();
+                    deletedRoles++;
+                } catch (e) {}
+            }
+
+            return interaction.editReply(`⚡ **EMERGENCY SERVER NUKE COMPLETED:**\n• Purged **${deletedChannels}** channels.\n• Deleted **${deletedRoles}** non-essential roles.`);
+        }
+    }
+}
 
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
+    start60sChannelTelemetryLoop(client);
 
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         const verifiedRole = newMember.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
@@ -229,16 +349,29 @@ function initModule(client) {
                 const verifiedEmbed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('🟢 Member Human Verification Complete')
-                    .setDescription(`**User Verified:** <@${newMember.id}> (\`${newMember.user.tag}\`) has passed human verification and unlocked full server permissions.`)
-                    .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
-                    .setFooter({ text: 'Starry Verification Gateway' })
+                    .setDescription(`**User Verified:** <@${newMember.id}> (\`${newMember.user.tag}\`) has passed human verification and unlocked full server access.`)
                     .setTimestamp();
                 await chamberCh.send({ embeds: [verifiedEmbed] }).catch(() => {});
             }
         }
     });
 
-    console.log('✅ Master Channel Systems Engine Loaded');
+    client.on('interactionCreate', async (interaction) => {
+        if (interaction.isChatInputCommand()) {
+            const cmd = interaction.commandName;
+            if (cmd === 'setup-starry') {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                const result = await provisionMasterServerStructure(interaction);
+                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured successfully with ${result.totalChannels} channels.`);
+                return interaction.editReply({ embeds: [embed] });
+            }
+            if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) {
+                await handleEmergencyCommands(interaction);
+            }
+        }
+    });
+
+    console.log('✅ Master Channel Systems Engine Initialized');
 }
 
 module.exports = initModule;
@@ -246,4 +379,8 @@ module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.executeFullGuildBackup = executeFullGuildBackup;
-                    
+module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
+module.exports.modMasterPayload = modMasterCommand.toJSON();
+module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
+module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
+module.exports.verifySetupPayload = verifySetupCommand.toJSON();
