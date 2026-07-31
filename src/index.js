@@ -384,7 +384,8 @@ client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        const deploy = require('./deploy-commands.js');
+        // 🔧 FIXED RELATIVE PATH (pointing from src/ to root folder)
+        const deploy = require('../deploy-commands.js');
         if (deploy && typeof deploy.deployCommands === 'function') {
             await deploy.deployCommands();
         }
