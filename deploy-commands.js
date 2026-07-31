@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 1 OF 3)
+// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 1 OF 2)
 // ==========================================
 require('dotenv').config();
 const { 
@@ -17,7 +17,6 @@ const MANAGE_GUILD = PermissionFlagsBits.ManageGuild.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
-// Generate dynamic autorole options array
 const autoroleOptions = [
     { name: 'sticky_roles', type: 5, required: false, description: 'Enable or disable restoring previous roles on rejoin' }
 ];
@@ -33,7 +32,6 @@ const autoroleCommandDef = {
     options: autoroleOptions
 };
 
-// --- Safely Import Master System Payloads ---
 let masterPayloads = [];
 try {
     const masterModule = require('./src/modules/masterChannelSystems');
@@ -47,15 +45,20 @@ try {
         if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
         if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
         if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
-        if (masterModule.trackerPayload) masterPayloads.push(masterModule.trackerPayload);
     }
 } catch (err) {
     console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
 }
 
-// ==========================================
-// INITIALIZE COMPLETE COMMANDS ARRAY
-// ==========================================
+try {
+    const trackerModule = require('./src/modules/tracker');
+    if (trackerModule && trackerModule.data) {
+        masterPayloads.push(trackerModule.data.toJSON());
+    }
+} catch (err) {
+    console.warn('⚠️ Could not load tracker module payload:', err.message);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -75,9 +78,8 @@ const commands = [
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' }
 ];
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 2 OF 3)
+// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 2 OF 2)
 // ==========================================
-// 🛡️ ADVANCED MODERATION ENGINE (/moderate)
 commands.push(
     new SlashCommandBuilder()
         .setName('moderate')
@@ -104,7 +106,6 @@ commands.push(
         .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)))
         .toJSON(),
 
-    // ⚡ SINGLE EMERGENCY NUKE COMMAND WITH OPTIONS
     new SlashCommandBuilder()
         .setName('emergency-nuke')
         .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
@@ -126,16 +127,13 @@ commands.push(
         )
         .toJSON(),
 
-    // OTHER EMERGENCY PROTOCOLS
     new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
     new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
     new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
 
-    // SECURITY & VERIFICATION
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
 );
 
-// Safely Load Social Command Payload
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
     if (socialCommandPayload) commands.push(socialCommandPayload);
@@ -143,7 +141,6 @@ try {
     console.warn('⚠️ Could not load socialCommandPayload:', err.message);
 }
 
-// GIVEAWAYS & REROLL ENGINE
 commands.push(
     new SlashCommandBuilder()
         .setName('giveaway')
@@ -164,7 +161,6 @@ commands.push(
         .toJSON()
 );
 
-// ECONOMY, XP, UTILITIES & MASTER SYSTEM PAYLOADS
 commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
@@ -173,7 +169,6 @@ commands.push(
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add role to shop', type: 1, options: [{ name: 'role', description: 'Role', type: 8, required: true }, { name: 'price', description: 'Price', type: 10, required: true }, { name: 'description', description: 'Description', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops', type: 1, options: [{ name: 'channel', description: 'Channel', type: 7, required: true }] }] },
     
-    // Setup Starry Command Definition
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
@@ -196,10 +191,7 @@ commands.push(
     { name: 'devpanel', description: '💻 Open the interactive developer control panel' },
     autoroleCommandDef
 );
-// ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 3 OF 3)
-// ==========================================
-// ROLES, SETUP & UTILITIES
+
 commands.push(
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }, { name: 'title', type: 3, required: true, description: 'Title' }, { name: 'text', type: 3, required: true, description: 'Text' }] }] },
@@ -208,12 +200,10 @@ commands.push(
     { name: 'help', description: 'Show bot command list' },
     { name: 'ping', description: 'Check bot latency' },
 
-    // PREMIUM & DIRECTORY
     { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] },
     { name: 'bump', description: 'Bump server to global web list' }
 );
 
-// Deduplicate Safely by Base Command Name
 const commandMap = new Map();
 commands.forEach(cmd => { 
     if (cmd && cmd.name) {
