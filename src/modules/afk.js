@@ -421,3 +421,6 @@ module.exports = (client) => {
         }
     });
 };
+// Add this at the bottom of afk.js:
+module.exports = (client) => { ... }; // Your existing module
+module.exports.afkPayload = afkSlashCommand.toJSON(); // 👈 Add this line at the bottom
