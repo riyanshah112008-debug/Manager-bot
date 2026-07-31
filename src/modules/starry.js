@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 1 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 1 OF 8)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -25,7 +25,7 @@ try {
     ChestChannel = require('../models/ChestChannel');
     BoostChannel = require('../models/BoostChannel');
 } catch (e) {
-    // Models loaded dynamically if required
+    // Loaded dynamically if present
 }
 
 // Multi-API Key Support (Comma-separated GEMINI_API_KEY / GOOGLE_AI_KEY)
@@ -40,18 +40,17 @@ function getNextAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-// Preferred Models Fallback Chain
+// Preferred Active Models Fallback Chain
 const AI_MODELS = [
     'gemini-2.5-flash',
     'gemini-1.5-flash',
-    'gemini-1.5-pro',
     'gemini-2.0-flash-exp',
-    'gemini-1.0-pro'
+    'gemini-1.5-pro'
 ];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fail-Safe Generator with Retries, Rotation & Exponential Backoff
+// Fail-Safe AI Generator with Retries & Rotation
 async function generateAIResponseWithRetry(prompt) {
     if (apiKeys.length === 0) {
         throw new Error('Missing GEMINI_API_KEY environment variable.');
@@ -63,6 +62,7 @@ async function generateAIResponseWithRetry(prompt) {
         for (let attempt = 1; attempt <= 3; attempt++) {
             try {
                 const ai = getNextAIClient();
+                if (!ai) continue;
                 const response = await ai.models.generateContent({
                     model: modelName,
                     contents: prompt
@@ -90,12 +90,12 @@ async function generateAIResponseWithRetry(prompt) {
 
 const blacklistedUsers = new Set();
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 2 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 2 OF 8)
 // ==========================================
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
-        console.log('🚀 Supreme Starry Protocol & AI Engine Active (500+ Lines Active)'); 
+        console.log('🚀 Supreme Starry Protocol & AI Engine Active (Supercharged Local & AI Pipeline)'); 
     });
 
     // ==========================================
@@ -213,7 +213,7 @@ module.exports = (client) => {
         ) || null;
     };
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 3 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 3 OF 8)
 // ==========================================
     // ==========================================
     // 🎵 MUSIC & VOICE CONTROL INTERACTION ENGINE
@@ -327,7 +327,7 @@ module.exports = (client) => {
 
     client.on('starrySetup', handleStarrySetup);
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 4 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 4 OF 8)
 // ==========================================
     // ==========================================
     // 💎 PREMIUM MODERATION DM ENGINE
@@ -404,7 +404,7 @@ module.exports = (client) => {
         }
     });
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 5 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 5 OF 8)
 // ==========================================
     // ==========================================
     // 🎛️ INTERACTIVE DEV PANEL (UI)
@@ -483,11 +483,9 @@ module.exports = (client) => {
             }
         }
     });
-// ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 6 OF 9)
-// ==========================================
+
     // ==========================================
-    // 🤖 AI & NLP PRE-PARSER MODERATION ENGINE
+    // 🤖 MAIN AI & NLP CHAT ENGINE
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
@@ -520,8 +518,72 @@ module.exports = (client) => {
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
         const botMember = message.guild ? message.guild.members.me : null;
+// ==========================================
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 6 OF 8)
+// ==========================================
+        // ⚡ INSTANT LOCAL PRE-PARSER ENGINE (0% AI RATE LIMIT RISK)
 
-        // A. TIMEOUT PRE-PARSER
+        // A. VOICE CHANNEL CREATION (e.g., "Starry make a voice channel named music")
+        const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)/i;
+        const voiceMatch = message.content.match(voiceChanRegex);
+
+        if (voiceMatch && message.guild) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                return message.reply("❌ You or I lack **Manage Channels** permission.");
+            }
+            const vName = voiceMatch[1].trim();
+            try {
+                const vChan = await message.guild.channels.create({
+                    name: vName,
+                    type: ChannelType.GuildVoice
+                });
+                return message.reply(`🔊 Successfully created voice channel **${vChan.name}**!`);
+            } catch (err) {
+                return message.reply(`❌ Failed to create voice channel: \`${err.message}\``);
+            }
+        }
+
+        // B. TEXT CHANNEL CREATION (e.g., "Starry create a channel Owners-chat")
+        const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)/i;
+        const textMatch = message.content.match(textChanRegex);
+
+        if (textMatch && message.guild && !text.includes('voice') && !text.includes('role') && !text.includes('category')) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                return message.reply("❌ You or I lack **Manage Channels** permission.");
+            }
+            const cName = textMatch[1].trim().toLowerCase().replace(/\s+/g, '-');
+            try {
+                const tChan = await message.guild.channels.create({
+                    name: cName,
+                    type: ChannelType.GuildText
+                });
+                return message.reply(`✨ Successfully created text channel <#${tChan.id}>!`);
+            } catch (err) {
+                return message.reply(`❌ Failed to create text channel: \`${err.message}\``);
+            }
+        }
+
+        // C. CATEGORY CREATION (e.g., "Starry create category Staff-Zone")
+        const createCatRegex = /(?:create|make|add)\s+(?:a\s+)?category\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)/i;
+        const catMatch = message.content.match(createCatRegex);
+
+        if (catMatch && message.guild) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                return message.reply("❌ You or I lack **Manage Channels** permission.");
+            }
+            const catName = catMatch[1].trim();
+            try {
+                const newCat = await message.guild.channels.create({
+                    name: catName,
+                    type: ChannelType.GuildCategory
+                });
+                return message.reply(`📁 Successfully created category **${newCat.name}**!`);
+            } catch (err) {
+                return message.reply(`❌ Failed to create category: \`${err.message}\``);
+            }
+        }
+
+        // D. TIMEOUT PRE-PARSER
         const timeoutRegex = /timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)\s*(m|min|mins|minute|minutes|h|hr|hours|d|day|days)?/i;
         const timeoutMatch = message.content.match(timeoutRegex);
 
@@ -553,7 +615,7 @@ module.exports = (client) => {
             return message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
         }
 
-        // B. CREATE ROLE PRE-PARSER
+        // E. CREATE ROLE PRE-PARSER
         const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
         const roleMatch = message.content.match(createRoleRegex);
 
@@ -570,7 +632,7 @@ module.exports = (client) => {
             }
         }
 
-        // C. CLEAR / PURGE PRE-PARSER
+        // F. CLEAR / PURGE PRE-PARSER
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -585,9 +647,9 @@ module.exports = (client) => {
             return message.channel.send(`🧹 Successfully cleared ${count} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
         }
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 7 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 7 OF 8)
 // ==========================================
-        // D. POLLINATIONS AI IMAGE GENERATOR
+        // G. POLLINATIONS AI IMAGE GENERATOR
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -617,7 +679,7 @@ module.exports = (client) => {
         }
 
         // ==========================================
-        // E. CONVERSATIONAL GEMINI NLP RESPONSE ENGINE
+        // H. CONVERSATIONAL GEMINI NLP RESPONSE ENGINE
         // ==========================================
         await message.channel.sendTyping().catch(() => {});
 
@@ -669,13 +731,13 @@ ${message.author.username} says: ${message.content}`;
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 8 OF 9)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 8 OF 8)
 // ==========================================
             if (functionName && message.guild) {
                 const botMember = message.guild.members.me;
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
 
-                // --- 1. CREATE CHANNEL ACTION ---
+                // --- 1. CREATE CHANNEL ---
                 if (functionName === "create_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     let parentCategory = null;
                     if (args.category) {
@@ -694,7 +756,7 @@ ${message.author.username} says: ${message.content}`;
                     if (createdCh) await message.reply(`✨ Successfully created channel <#${createdCh.id}>!`);
                 }
 
-                // --- 2. DELETE CHANNEL ACTION ---
+                // --- 2. DELETE CHANNEL ---
                 if (functionName === "delete_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     const cleanName = (args.name || '').replace(/[<#>]/g, '').trim().toLowerCase();
                     const targetCh = message.guild.channels.cache.find(c => c.id === cleanName || c.name.toLowerCase() === cleanName);
@@ -705,13 +767,13 @@ ${message.author.username} says: ${message.content}`;
                     }
                 }
 
-                // --- 3. CREATE CATEGORY ACTION ---
+                // --- 3. CREATE CATEGORY ---
                 if (functionName === "create_category" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     const newCat = await message.guild.channels.create({ name: args.name || 'New Category', type: ChannelType.GuildCategory }).catch(() => null);
                     if (newCat) await message.reply(`📁 Successfully created category **${newCat.name}**!`);
                 }
 
-                // --- 4. DELETE CATEGORY ACTION ---
+                // --- 4. DELETE CATEGORY ---
                 if (functionName === "delete_category" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     const targetCat = message.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && (c.id === args.name || c.name.toLowerCase() === (args.name || '').toLowerCase()));
                     if (targetCat) {
@@ -721,7 +783,7 @@ ${message.author.username} says: ${message.content}`;
                     }
                 }
 
-                // --- 5. LOCK / UNLOCK CHANNEL ACTION ---
+                // --- 5. LOCK / UNLOCK CHANNEL ---
                 if ((functionName === "lockchannel" || functionName === "unlockchannel") && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     const isLock = functionName === "lockchannel";
                     const cleanName = (args.name || '').replace(/[<#>]/g, '').trim().toLowerCase();
@@ -731,16 +793,14 @@ ${message.author.username} says: ${message.content}`;
                         await message.reply(`${isLock ? '🔒 Locked' : '🔓 Unlocked'} <#${targetCh.id}> for @everyone.`);
                     }
                 }
-// ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL & SYSTEM ENGINE (PART 9 OF 9)
-// ==========================================
-                // --- 6. CREATE ROLE ACTION ---
+
+                // --- 6. CREATE ROLE ---
                 if (functionName === "create_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
                     const newRole = await message.guild.roles.create({ name: args.roleName || 'new-role' }).catch(() => null);
                     if (newRole) await message.reply(`✅ Created role **${newRole.name}**!`);
                 }
 
-                // --- 7. CLEAR MESSAGES ACTION ---
+                // --- 7. CLEAR MESSAGES ---
                 if (functionName === "clear_messages" && hasPerm(PermissionFlagsBits.ManageMessages)) {
                     const deleteCount = Math.min(args.amount, 99) + 1;
                     await message.channel.bulkDelete(deleteCount, true).catch(() => {});
@@ -790,7 +850,7 @@ ${message.author.username} says: ${message.content}`;
                 }
             }
 
-            // Text Output Dispatcher with Chunking to Prevent Discord 2000-Char Errors
+            // Output Dispatcher with Chunking to Avoid Discord 2000-Char Limit
             if (replyText && replyText.trim().length > 0) {
                 const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
                 for (const chunk of textChunks) {
