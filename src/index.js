@@ -265,7 +265,12 @@ client.manager = new Kazagumo({
     voiceConnectionTimeout: 30000,
     linkInitializers: true,
     reconnectTries: 10,
-    restTimeout: 15000
+    restTimeout: 15000,
+    // 🎵 ADD THESE BUFFER TWEAKS TO PREVENT CHOPPINESS
+    frameBufferDuration: 5000,
+    trimVoicePacket: true
+});
+
 });
 
 // ⚡ AUTO-FAILOVER & NODE EVENT HANDLERS
