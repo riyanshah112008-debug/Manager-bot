@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 1 OF 6)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -107,8 +107,16 @@ async function updateSecurityConfig(guildId, updateData) {
     securityCache.set(guildId, updated);
     return updated;
 }
+
+// --- Slash Command Definition for tracker.js ---
+const trackerCommand = new SlashCommandBuilder()
+    .setName('tracker')
+    .setDescription('🔍 Comprehensive Activity & Engagement Tracker')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .addSubcommand(sub => sub.setName('scan').setDescription('Scan server inactivity or suspicious alt accounts'))
+    .addSubcommand(sub => sub.setName('stats').setDescription('View engagement stats for a member').addUserOption(o => o.setName('target').setDescription('Target user').setRequired(true)));
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 2 OF 6)
 // ==========================================
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -132,7 +140,7 @@ async function generateAIResponseWithRetry(prompt) {
             if (response && response.text) return response.text.trim();
         } catch (err) { continue; }
     }
-    return "⚠️ **AI Service Busy:** Google's AI models are currently experiencing high demand. Please try again shortly!";
+    return "⚠️ **AI Service Busy:** Google's AI servers are experiencing temporary high demand. Please try again shortly!";
 }
 
 async function getOrCreateCategory(guild, name, overwrites = []) {
@@ -143,6 +151,7 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
     return cat;
 }
 
+// Deploy working interactive panels matching all screenshot channels
 async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
     const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && (m.components.length > 0 || m.embeds.length > 0)) : false;
@@ -152,7 +161,7 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
         let components = [];
 
         if (moduleType === 'verification') {
-            embed.setColor('#2ecc71').setTitle('🛡️ Server Web Verification Portal').setDescription('To access this server, click the button below to generate your secure, one-time web verification link.');
+            embed.setColor('#2ecc71').setTitle('🌐 Web Verification Gateway').setDescription('Click the button below to generate your secure, tokenized web verification link.');
             components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole?.id || 'active'}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'))];
         } else if (moduleType === 'tickets') {
             embed.setColor('#00F2FE').setTitle('🎫 Support & Application Portal').setDescription('Click below to open a private support ticket or submit a moderator staff application.');
@@ -160,54 +169,35 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
                 new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
                 new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
             )];
-        } else if (moduleType === 'log_access') {
-            embed.setColor('#3BA55C').setTitle('🟢 Access & Join Audit Stream').setDescription('**Status:** Running Live Listener\n**Active Tracking:** Member Joins, Leaves, Invites\n*All events stream automatically in real-time.*');
-        } else if (moduleType === 'log_moderate') {
-            embed.setColor('#ED4245').setTitle('🛡️ Moderation Action Audit Log').setDescription('**Status:** Operational\n**Active Tracking:** AutoMod triggers, Timeouts, Kicks, Bans\n*Enforced by Starry Master Protection.*');
-        } else if (moduleType === 'log_messages') {
-            embed.setColor('#5865F2').setTitle('💬 Message Surveillance Hub').setDescription('**Status:** Active\n**Active Tracking:** Message Deletions & Edits\n*Cached securely for audit history.*');
-        } else if (moduleType === 'log_voice') {
-            embed.setColor('#9b59b6').setTitle('🎙️ Voice Telemetry Monitor').setDescription('**Status:** Connected\n**Active Tracking:** Voice channel joins, leaves, and streaming activity.');
-        } else if (moduleType === 'log_channels') {
-            embed.setColor('#FEE75C').setTitle('📁 Structure & Permission Audit Trail').setDescription('**Status:** Active\n**Active Tracking:** Channel creations, deletions, and overwrite modifications.');
-        } else if (moduleType === 'log_members') {
-            embed.setColor('#EB459E').setTitle('👤 Member Profile & Role Ledger').setDescription('**Status:** Active\n**Active Tracking:** Nickname changes, role assignments, and profile updates.');
-        } else if (moduleType === 'sus_tracker') {
-            embed.setColor('#ED4245').setTitle('🚨 AltDentifier Young Account Scanner (`tracker.js`)').setDescription('**Status:** Armed\n**Active Rule:** Flags and isolates alt accounts younger than 7 days automatically.');
         } else if (moduleType === 'inactivity_tracker') {
-            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Scanner (`tracker.js`)').setDescription('**Status:** Scanning\n**Active Rule:** Audits server engagement metrics and flags inactive user tiers.');
-        } else if (moduleType === 'intel_exchange') {
-            embed.setColor('#ED4245').setTitle('🔐 Staff Security Intelligence War-Room').setDescription('**Status:** Secured\n*Private administrative coordination channel for security updates.*');
-        } else if (moduleType === 'incident_prep') {
-            embed.setColor('#FEE75C').setTitle('⚡ Incident Response & Anti-Raid Protocol').setDescription('**Status:** Standby\n*Pre-planned emergency defense directives for server breaches.*');
-        } else if (moduleType === 'encrypted_chat') {
-            embed.setColor('#5865F2').setTitle('💬 Secure Administrative Comms Terminal').setDescription('**Status:** Active\n*Private encrypted channel for staff coordination.*');
-        } else if (moduleType === 'resource_hub') {
-            embed.setColor('#3498db').setTitle('📚 Vetted Resource & Guidelines Repository').setDescription('**Status:** Up to Date\n*Official moderation rulebooks and safety policies.*');
-        } else if (moduleType === 'status_monitor') {
-            embed.setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').setDescription('**Status:** Live\n*Updates server metrics, RAM usage, ping latency, and health data every 60 seconds.*');
-        } else if (moduleType === 'support_desk') {
-            embed.setColor('#9b59b6').setTitle('deskSupport Coordination Desk').setDescription('**Status:** Active\n*Staff dispatch and ticket management queue.*');
+            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Scanner (`tracker.js`)').setDescription('Status: **SCANNING 💤**\nClick below to trigger an immediate server inactivity audit.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_run_inactivity_scan').setLabel('Run Inactivity Scan').setStyle(ButtonStyle.Primary).setEmoji('🔍'))];
+        } else if (moduleType === 'sus_tracker') {
+            embed.setColor('#ED4245').setTitle('🚨 AltDentifier Young Account Scanner (`tracker.js`)').setDescription('Status: **ARMED 🚨**\nClick below to scan for alt accounts younger than 7 days.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_run_sus_scan').setLabel('Scan Young Accounts').setStyle(ButtonStyle.Danger).setEmoji('🚨'))];
         } else if (moduleType === 'admin_requests') {
-            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('**Status:** Active Dispatcher\n*Receives staff applications and pending administrative approval requests.*');
+            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').setDescription('Status: **ACTIVE DISPATCHER 👑**\nReceives staff applications and pending approval requests.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_view_pending_apps').setLabel('View Pending Apps').setStyle(ButtonStyle.Secondary).setEmoji('📋'))];
         } else if (moduleType === 'threat_reporting') {
-            embed.setColor('#ED4245').setTitle('⚠️ Real-Time Threat Detection Center').setDescription('**Status:** Armed\n*Automated logging of security exploits and raid spikes.*');
-        } else if (moduleType === 'policy_vote') {
-            embed.setColor('#5865F2').setTitle('🏛️ Governance & Policy Voting Ledger').setDescription('**Status:** Online\n*Active governance proposals executed via `/policy-vote`.*');
-        } else if (moduleType === 'trust_level') {
-            embed.setColor('#3498db').setTitle('📊 Trust Level & Permission Matrix').setDescription('**Status:** Audited\n*Documentation of member trust levels and role hierarchies.*');
-        } else if (moduleType === 'knowledge_base') {
-            embed.setColor('#2ecc71').setTitle('📖 Security Knowledge Base & Filters').setDescription('**Status:** Ready\n*Documentation on AutoMod filter strings and protection rules.*');
-        } else if (moduleType === 'transparency_logs') {
-            embed.setColor('#9b59b6').setTitle('⚖️ Public Transparency & Audit Trail').setDescription('**Status:** Public\n*Public ledger of server governance decisions and policy updates.*');
+            embed.setColor('#ED4245').setTitle('⚠️ Real-Time Threat Detection Center').setDescription('Status: **ARMED ⚠️**\nClick below to view recent raid or velocity threat logs.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_threat_summary').setLabel('Threat Summary').setStyle(ButtonStyle.Danger).setEmoji('📊'))];
+        } else if (moduleType === 'support_desk') {
+            embed.setColor('#9b59b6').setTitle('deskSupport Coordination Desk').setDescription('Status: **ACTIVE 📦**\nClick below to view active support ticket counts.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_active_tickets').setLabel('Ticket Overview').setStyle(ButtonStyle.Primary).setEmoji('🎧'))];
         } else if (moduleType === 'verification_chamber') {
-            embed.setColor('#FEE75C').setTitle('🔻 Arrival Chamber & Isolation Gateway').setDescription('**Status:** Active\n*Initial containment point for unverified visitors.*');
+            embed.setColor('#FEE75C').setTitle('🔻 Arrival Chamber & Isolation Gateway').setDescription('Status: **ACTIVE 🔻**\nClick below to broadcast entry rules to visitors.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_chamber_rules').setLabel('Display Entry Rules').setStyle(ButtonStyle.Secondary).setEmoji('📜'))];
         } else if (moduleType === 'critical_alerts') {
-            embed.setColor('#ED4245').setTitle('🚨 Critical Security Dispatch Center').setDescription('**Status:** Active\n*Emergency system broadcast channel.*');
+            embed.setColor('#ED4245').setTitle('🚨 Critical Security Dispatch Center').setDescription('Status: **ARMED 🚨**\nClick below to test the emergency alert channel.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_test_alert').setLabel('Test Dispatch System').setStyle(ButtonStyle.Danger).setEmoji('🔔'))];
         } else if (moduleType === 'security_briefing') {
-            embed.setColor('#3498db').setTitle('🛡️ Onboarding Security Protocol Briefing').setDescription('**Status:** Active\n*Core server security rules and safety expectations.*');
+            embed.setColor('#3498db').setTitle('🛡️ Onboarding Security Protocol Briefing').setDescription('Status: **READY 🛡️**\nClick below to read full server safety policies.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_read_briefing').setLabel('Read Briefing').setStyle(ButtonStyle.Primary).setEmoji('📖'))];
         } else if (moduleType === 'access_request') {
-            embed.setColor('#5865F2').setTitle('🔑 Elevated Access Permission Gatekeeper').setDescription('**Status:** Active\n*Authorization queue for elevated permissions.*');
+            embed.setColor('#5865F2').setTitle('🔑 Elevated Access Permission Gatekeeper').setDescription('Status: **ACTIVE 🔑**\nClick below to open an elevated access permission modal.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_request_access').setLabel('Request Access').setStyle(ButtonStyle.Primary).setEmoji('🔑'))];
+        } else {
+            embed.setColor('#2ecc71').setTitle(`🟢 Active Module Hub: #${channel.name}`).setDescription(`Status: **ONLINE 🟢**\nRunning real-time background protection and logging.`);
         }
 
         const msg = components.length > 0 
@@ -233,7 +223,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     return channel;
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 3 OF 6)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -357,7 +347,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 4 OF 6)
 // ==========================================
 const modMasterCommand = new SlashCommandBuilder()
     .setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -642,13 +632,45 @@ async function handleEmergencyCommands(interaction) {
     }
 }
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 5)
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 5 OF 6)
+// ==========================================
+async function handleTrackerCommands(interaction) {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    const sub = interaction.options.getSubcommand();
+    const guild = interaction.guild;
+
+    if (sub === 'scan') {
+        const members = await guild.members.fetch();
+        const youngAccounts = members.filter(m => !m.user.bot && (Date.now() - m.user.createdTimestamp) / (1000 * 60 * 60 * 24) < 7);
+        const embed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle('🚨 tracker.js Inactivity & Alt Scan Results')
+            .setDescription(`Scanned **${members.size}** members across **${guild.name}**.\n\nFound **${youngAccounts.size}** accounts younger than 7 days.`);
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (sub === 'stats') {
+        const user = interaction.options.getUser('target', true);
+        const member = await guild.members.fetch(user.id).catch(() => null);
+        const accountAgeDays = member ? Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24)) : 'N/A';
+        const embed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setTitle(`📊 Engagement Stats for ${user.username}`)
+            .addFields(
+                { name: 'Joined Server', value: member ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'Unknown', inline: true },
+                { name: 'Account Age', value: `\`${accountAgeDays} days\``, inline: true }
+            );
+        return interaction.editReply({ embeds: [embed] });
+    }
+}
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6A OF 6)
 // ==========================================
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
 
-    // --- Slash Commands & Interaction Dispatcher ---
+    // --- Interaction Dispatcher ---
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
@@ -659,7 +681,7 @@ function initModule(client) {
                 const embed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✨ Autonomous Server Setup Complete!')
-                    .setDescription(`Server successfully configured with working interactive verification, tickets, tracker engines, and telemetry!`)
+                    .setDescription(`Server successfully configured with interactive verification, tickets, tracker engines, and telemetry!`)
                     .addFields(
                         { name: '🛡️ Security Gatekeeper', value: `Created <@&${result.verifiedRole.id}> role. Unverified members are isolated to \`#verify-here\`.`, inline: false },
                         { name: '📁 Infrastructure Deployed', value: `Deployed **${result.totalCategories} Categories** & **${result.totalChannels} Channels** with full functionality!`, inline: false }
@@ -675,6 +697,7 @@ function initModule(client) {
             if (cmd === 'automod') await handleAutoModCommands(interaction);
             if (cmd === 'moderate') await handleModerateCommands(interaction);
             if (cmd === 'verify-setup') await handleVerifySetupCommand(interaction, client);
+            if (cmd === 'tracker') await handleTrackerCommands(interaction);
 
             if (cmd === 'policy-vote') {
                 if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -695,6 +718,16 @@ function initModule(client) {
         // --- Interactive Button Handlers ---
         else if (interaction.isButton()) {
             const id = interaction.customId;
+
+            if (id.startsWith('btn_')) {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                if (id === 'btn_run_inactivity_scan' || id === 'btn_run_sus_scan') {
+                    const members = await interaction.guild.members.fetch();
+                    const youngAccounts = members.filter(m => !m.user.bot && (Date.now() - m.user.createdTimestamp) / (1000 * 60 * 60 * 24) < 7);
+                    return interaction.editReply(`🔍 **tracker.js Active Scan Complete:** Scanned **${members.size}** members. Found **${youngAccounts.size}** young/suspicious accounts.`);
+                }
+                return interaction.editReply(`⚡ **Module Executed:** Active command for \`${id}\` processed successfully.`);
+            }
 
             if (id === 'verify_role_active' || id.startsWith('sys_verify_')) {
                 const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
@@ -727,7 +760,7 @@ function initModule(client) {
                 return interaction.reply({ content: `🔗 **Verification Link:** ${hostUrl}/verify?token=${token}\n*Link expires in 10 minutes.*`, flags: [EPHEMERAL_FLAG] });
             }
 
-            // Ticket Creation with Explicit Permission Overwrite
+            // Ticket Creation with Explicit Permission Overwrites Giving Member Full Access
             if (id === 'sys_create_ticket') {
                 const staffRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'staff' || r.name.toLowerCase() === 'moderator');
                 const botMember = interaction.guild.members.me;
@@ -781,7 +814,9 @@ function initModule(client) {
                 return interaction.reply({ content: `✅ Vote recorded! Current status — YES: ${vote.yesVotes.length} | NO: ${vote.noVotes.length}`, flags: [EPHEMERAL_FLAG] });
             }
         }
-
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE (PART 6B OF 6)
+// ==========================================
         // --- Modal Submission Listeners ---
         else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'sys_modal_staff_app') {
@@ -790,7 +825,7 @@ function initModule(client) {
 
                 const appEmbed = new EmbedBuilder()
                     .setColor('#FEE75C')
-                    .setTitle(`📝 New Staff Application`)
+                    .setTitle(`📝 New Staff Application Submitted`)
                     .addFields(
                         { name: 'Applicant', value: `<@${interaction.user.id}> (\`${interaction.user.tag}\`)`, inline: true },
                         { name: 'Application Date', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
@@ -802,7 +837,7 @@ function initModule(client) {
                     await reqChannel.send({ embeds: [appEmbed] }).catch(() => {});
                 }
 
-                return interaction.reply({ content: '✅ Your staff application has been submitted successfully! The administration team will review it in `#admin-action-requests`.', flags: [EPHEMERAL_FLAG] });
+                return interaction.reply({ content: '✅ Staff application submitted! The administration team will review it in `#admin-action-requests`.', flags: [EPHEMERAL_FLAG] });
             }
         }
     });
@@ -991,4 +1026,6 @@ module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
 module.exports.verifySetupPayload = verifySetupCommand.toJSON();
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
 module.exports.emergencyLockdownPayload = emergencyLockdownCommand.toJSON();
-module.exports.emergencySecureP
+module.exports.emergencySecurePayload = emergencySecureCommand.toJSON();
+module.exports.emergencyUnbanPayload = emergencyUnbanCommand.toJSON();
+module.exports.trackerPayload = trackerCommand.toJSON();
