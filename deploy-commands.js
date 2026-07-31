@@ -47,6 +47,7 @@ try {
         if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
         if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
         if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
+    
     }
 } catch (err) {
     console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
@@ -60,6 +61,16 @@ try {
     }
 } catch (err) {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
+}
+// COUNTING 
+// Inside deploy-commands.js
+try {
+    const countModule = require('./src/modules/count'); // or './modules/count'
+    if (countModule && countModule.countSlashCommands) {
+        masterPayloads.push(...countModule.countSlashCommands);
+    }
+} catch (err) {
+    console.warn('⚠️ Could not load count module payloads:', err.message);
 }
 
 // AFK Command Payload with Subcommands (/afk set, clear, list, status)
