@@ -68,6 +68,7 @@ const trackerCommandSchema = new SlashCommandBuilder()
                     .setDescription('Fetch data only from last X days (e.g. 7, 30, 90). Leave blank for full scrape.')
                     .setRequired(false)
                     .setMinValue(1)));
+
 // ==========================================
 // 2. EMBED BUILDERS & INTERACTIVE BUTTONS
 // ==========================================
@@ -149,6 +150,7 @@ function buildInactivityAlertEmbed(member, inviterId, inviteCode, joinedAtMs) {
         .setFooter({ text: 'Starry Moderation Assistant' })
         .setTimestamp();
 }
+
 // ==========================================
 // 3. MAIN MODULE & UNSTOPPABLE SCRAPER ENGINE
 // ==========================================
@@ -188,10 +190,32 @@ const universalTrackerModule = (client) => {
         if (guildInvites) guildInvites.delete(invite.code);
     });
 
-    // --- MEMBER JOIN LISTENER ---
+    // --- MEMBER JOIN LISTENER WITH AUTOMATED SUS SCANNER ---
     client.on('guildMemberAdd', async member => {
         if (member.user.bot) return;
         const guild = member.guild;
+
+        // Automated Strict Sus Profile / Alt Detection Engine
+        const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
+        if (accountAgeDays < 7) {
+            const susCh = guild.channels.cache.find(c => c.name === 'sus-account-tracker');
+            if (susCh) {
+                const susEmbed = new EmbedBuilder()
+                    .setColor('#ED4245')
+                    .setTitle('🚨 Automated Alt / Young Profile Flagged')
+                    .setDescription(
+                        `**Member:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+                        `**Account Created:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
+                        `**Account Age:** \`${Math.floor(accountAgeDays)} days old\`\n\n` +
+                        `⚠️ **Strict Security Policy:** Flagged automatically by \`tracker.js\` engine due to creation age < 7 days.`
+                    )
+                    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                    .setFooter({ text: 'Starry Automated Sus Tracker' })
+                    .setTimestamp();
+
+                await susCh.send({ embeds: [susEmbed] }).catch(() => {});
+            }
+        }
 
         let inviterId = 'Unknown';
         let inviteCode = 'Direct/Vanity';
@@ -285,7 +309,7 @@ const universalTrackerModule = (client) => {
             try {
                 fetchedMessages = await channel.messages.fetch(options);
             } catch (err) {
-                break; // Skip channel on error safely
+                break;
             }
 
             if (!fetchedMessages || fetchedMessages.size === 0) break;
@@ -322,7 +346,7 @@ const universalTrackerModule = (client) => {
             }
 
             lastMessageId = fetchedMessages.last()?.id;
-            await sleep(250); // Rate limit throttle delay
+            await sleep(250);
         }
 
         return totalProcessedInChannel;
@@ -333,7 +357,6 @@ const universalTrackerModule = (client) => {
         if (!adminChannel) return;
 
         const minTimestamp = timeframeDays ? Date.now() - (timeframeDays * 24 * 60 * 60 * 1000) : 0;
-
         const textChannels = Array.from(guild.channels.cache.values()).filter(c => c.isTextBased());
 
         const initEmbed = new EmbedBuilder()
@@ -377,6 +400,7 @@ const universalTrackerModule = (client) => {
 
         await logMessage.edit({ embeds: [doneEmbed] }).catch(() => {});
     }
+
     // --- MODERATION PANEL BUTTON LISTENER ---
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || !interaction.customId.startsWith('mod_')) return;
