@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 1 OF 2)
+// 🚀 STARRY SUPREME DEPLOY ENGINE
 // ==========================================
 require('dotenv').config();
 const { 
@@ -11,9 +11,7 @@ const {
 } = require('discord.js');
 
 const ADMIN = PermissionFlagsBits.Administrator.toString();
-const MANAGE_MESSAGES = PermissionFlagsBits.ManageMessages.toString();
 const MANAGE_ROLES = PermissionFlagsBits.ManageRoles.toString();
-const MANAGE_GUILD = PermissionFlagsBits.ManageGuild.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
@@ -32,6 +30,7 @@ const autoroleCommandDef = {
     options: autoroleOptions
 };
 
+// Safely Import Master System Payloads
 let masterPayloads = [];
 try {
     const masterModule = require('./src/modules/masterChannelSystems');
@@ -40,7 +39,7 @@ try {
         if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
         if (masterModule.moderateMasterPayload) masterPayloads.push(masterModule.moderateMasterPayload);
         if (masterModule.verifySetupPayload) masterPayloads.push(masterModule.verifySetupPayload);
-        if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload);
+        if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload); // 👈 SINGLE /emergency-nuke COMMAND
         if (masterModule.emergencyLockdownPayload) masterPayloads.push(masterModule.emergencyLockdownPayload);
         if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
         if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
@@ -77,69 +76,11 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' }
 ];
-// ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 2 OF 2)
-// ==========================================
-commands.push(
-    new SlashCommandBuilder()
-        .setName('moderate')
-        .setDescription('⚙️ Toggle advanced security modules & AutoMod settings')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addSubcommand(sub =>
-            sub.setName('toggle')
-                .setDescription('Toggle advanced security protection modules')
-                .addStringOption(o =>
-                    o.setName('module')
-                        .setDescription('Select the security protection module')
-                        .setRequired(true)
-                        .addChoices(
-                            { name: 'Wick (Anti-Nuke & Admin Limits)', value: 'wick' },
-                            { name: 'Beemo (Anti-Raid Mass Join Defense)', value: 'beemo' },
-                            { name: 'AltDentifier (Verification Gatekeeper)', value: 'altdentifier' },
-                            { name: 'Dyno/Carl (Chat Filters & AutoMod)', value: 'dyno_carl' }
-                        )
-                )
-                .addBooleanOption(o => o.setName('status').setDescription('Enable or disable this module').setRequired(true))
-        )
-        .addSubcommand(sub => sub.setName('autokick').setDescription('Configure native automated kicking rules').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoKick').setRequired(true)))
-        .addSubcommand(sub => sub.setName('autoban').setDescription('Configure native automated banning filters').addBooleanOption(o => o.setName('status').setDescription('Enable or disable AutoBan').setRequired(true)))
-        .addSubcommand(sub => sub.setName('ownerbypass').setDescription('Manage Owner Bypass settings for AutoMod').addBooleanOption(o => o.setName('status').setDescription('Allow owner to bypass AutoMod').setRequired(true)))
-        .toJSON(),
-
-    new SlashCommandBuilder()
-        .setName('emergency-nuke')
-        .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addStringOption(o =>
-            o.setName('target')
-                .setDescription('Select whether to nuke this channel or the entire server')
-                .setRequired(true)
-                .addChoices(
-                    { name: 'Channel (Purge & Recreate)', value: 'channel' },
-                    { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' }
-                )
-        )
-        .addChannelOption(o =>
-            o.setName('channel')
-                .setDescription('Target channel (defaults to current channel if target is Channel)')
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(false)
-        )
-        .toJSON(),
-
-    new SlashCommandBuilder().setName('emergency-lockdown').setDescription('⚡ Emergency Protocol: Server Channel Lockdown').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
-    new SlashCommandBuilder().setName('emergency-secure').setDescription('⚡ Emergency Protocol: Secure Chat & Voice').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
-    new SlashCommandBuilder().setName('emergency-unban').setDescription('⚡ Emergency Protocol: Mass Unban All').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
-
-    { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
-);
 
 try {
     const { socialCommandPayload } = require('./src/modules/socialActions');
     if (socialCommandPayload) commands.push(socialCommandPayload);
-} catch (err) {
-    console.warn('⚠️ Could not load socialCommandPayload:', err.message);
-}
+} catch (err) {}
 
 commands.push(
     new SlashCommandBuilder()
@@ -168,21 +109,12 @@ commands.push(
     { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check active pet', type: 1 }, { name: 'equip', description: 'Equip a pet', type: 1, options: [{ name: 'name', description: 'Pet name', type: 3, required: true }] }] },
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add role to shop', type: 1, options: [{ name: 'role', description: 'Role', type: 8, required: true }, { name: 'price', description: 'Price', type: 10, required: true }, { name: 'description', description: 'Description', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops', type: 1, options: [{ name: 'channel', description: 'Channel', type: 7, required: true }] }] },
-    
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
         default_member_permissions: '8',
-        options: [
-            {
-                name: 'prompt',
-                type: 3,
-                required: false,
-                description: 'Describe your server theme (e.g., "Anime Chill Server", "Cyberpunk Gaming Community")'
-            }
-        ]
+        options: [{ name: 'prompt', type: 3, required: false, description: 'Describe your server theme' }]
     },
-    
     { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
     { name: 'set-name', description: 'Change the bot trigger word/name for this server (Admins Only)', default_member_permissions: '8', options: [{ name: 'name', description: 'New trigger word', type: 3, required: true }] },
     { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
@@ -199,16 +131,14 @@ commands.push(
     { name: 'setupvc', description: 'Configure join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel' }] },
     { name: 'help', description: 'Show bot command list' },
     { name: 'ping', description: 'Check bot latency' },
-
     { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] },
     { name: 'bump', description: 'Bump server to global web list' }
 );
 
+// Strict Deduplication Engine
 const commandMap = new Map();
 commands.forEach(cmd => { 
-    if (cmd && cmd.name) {
-        commandMap.set(cmd.name, cmd); 
-    } 
+    if (cmd && cmd.name) commandMap.set(cmd.name, cmd); 
 });
 const finalPayload = Array.from(commandMap.values());
 
@@ -219,9 +149,7 @@ async function deployCommands() {
     if (!token) throw new Error('🛑 CRITICAL: TOKEN environment variable must be set.');
 
     if (!clientId) {
-        try {
-            clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8');
-        } catch (e) {
+        try { clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8'); } catch (e) {
             throw new Error('🛑 Could not parse CLIENT_ID from TOKEN.');
         }
     }
@@ -239,9 +167,7 @@ async function deployCommands() {
     }
 }
 
-if (require.main === module) {
-    deployCommands().catch(() => process.exitCode = 1);
-}
+if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
 
 module.exports = { commands: finalPayload, deployCommands };
-                                                                                                                                                                             
+            
