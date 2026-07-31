@@ -378,6 +378,17 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+
+    // 🎵 INITIALIZE LAVALINK MUSIC ENGINE
+    try {
+        if (client.manager && typeof client.manager.init === 'function') {
+            await client.manager.init(client.user.id);
+            console.log('🎵 Kazagumo Music Manager successfully initialized!');
+        }
+    } catch (lavalinkErr) {
+        console.error('❌ Lavalink Initialization Failed:', lavalinkErr.message);
+    }
+
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
         // 🔧 FIXED RELATIVE PATH (pointing from src/ to root folder)
@@ -413,6 +424,7 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
+
 
 // ==========================================
 // 5. INTERACTION ENGINE & ROUTER
