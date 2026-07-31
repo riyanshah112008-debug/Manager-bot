@@ -424,13 +424,13 @@ client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
     // Direct Module Command Delegation List
-    // Add commands here that are handled by direct module listeners
+    // ⚠️ NOTE: 'afk' REMOVED from here so modules/afk.js handles it properly!
     if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
             'automod', 'mod', 'moderate', 'verify-setup',
-            'bump', 'bump-setup', 'autobump', 'set-listing', 'afk' // 👈 BUMP, DIRECTORY & AFK DELEGATED
+            'bump', 'bump-setup', 'autobump', 'set-listing'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; // Handled directly inside module listeners
