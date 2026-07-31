@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE
+// 🚀 STARRY SUPREME DEPLOY ENGINE (UPGRADED)
 // ==========================================
 require('dotenv').config();
 const { 
@@ -15,6 +15,7 @@ const MANAGE_ROLES = PermissionFlagsBits.ManageRoles.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
+// 1. BUILD AUTOROLE COMMAND DEFINITION
 const autoroleOptions = [
     { name: 'sticky_roles', type: 5, required: false, description: 'Enable or disable restoring previous roles on rejoin' }
 ];
@@ -30,8 +31,10 @@ const autoroleCommandDef = {
     options: autoroleOptions
 };
 
-// Safely Import Master System Payloads
+// 2. SAFELY IMPORT ALL MODULE PAYLOADS
 let masterPayloads = [];
+
+// Master Systems Payloads
 try {
     const masterModule = require('./src/modules/masterChannelSystems');
     if (masterModule) {
@@ -39,7 +42,7 @@ try {
         if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
         if (masterModule.moderateMasterPayload) masterPayloads.push(masterModule.moderateMasterPayload);
         if (masterModule.verifySetupPayload) masterPayloads.push(masterModule.verifySetupPayload);
-        if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload); // 👈 SINGLE /emergency-nuke COMMAND
+        if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload);
         if (masterModule.emergencyLockdownPayload) masterPayloads.push(masterModule.emergencyLockdownPayload);
         if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
         if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
@@ -49,6 +52,7 @@ try {
     console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
 }
 
+// Tracker Payload
 try {
     const trackerModule = require('./src/modules/tracker');
     if (trackerModule && trackerModule.data) {
@@ -56,6 +60,31 @@ try {
     }
 } catch (err) {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
+}
+
+// Bump Engine Payloads (/bump, /bump-setup, /autobump, /set-listing)
+try {
+    const bumpModule = require('./src/modules/bumpEngine');
+    if (bumpModule && bumpModule.bumpSlashCommands) {
+        masterPayloads.push(...bumpModule.bumpSlashCommands);
+    }
+} catch (err) {
+    console.warn('⚠️ Could not load bumpEngine payloads:', err.message);
+}
+
+// Backup Engine Payload
+try {
+    const backupModule = require('./src/modules/serverBackupManager');
+    if (backupModule && backupModule.backupCommandPayload) {
+        masterPayloads.push(backupModule.backupCommandPayload);
+    }
+} catch (err) {
+    try {
+        const altBackupModule = require('./src/modules/backupEngine');
+        if (altBackupModule && altBackupModule.backupCommandPayload) {
+            masterPayloads.push(altBackupModule.backupCommandPayload);
+        }
+    } catch (e) {}
 }
 
 const commands = [
@@ -131,22 +160,23 @@ commands.push(
     { name: 'setupvc', description: 'Configure join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel' }] },
     { name: 'help', description: 'Show bot command list' },
     { name: 'ping', description: 'Check bot latency' },
-    { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] },
-    { name: 'bump', description: 'Bump server to global web list' }
+    { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] }
 );
 
-// Strict Deduplication Engine
+// 3. STRICT DEDUPLICATION ENGINE
 const commandMap = new Map();
 commands.forEach(cmd => { 
     if (cmd && cmd.name) commandMap.set(cmd.name, cmd); 
 });
 const finalPayload = Array.from(commandMap.values());
 
+// 4. DEPLOYMENT FUNCTION
 async function deployCommands() {
-    const token = process.env.TOKEN;
-    let clientId = process.env.CLIENT_ID;
+    const token = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
+    let clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID;
+    const testGuildId = process.env.TEST_GUILD_ID || process.env.GUILD_ID;
 
-    if (!token) throw new Error('🛑 CRITICAL: TOKEN environment variable must be set.');
+    if (!token) throw new Error('🛑 CRITICAL: DISCORD_TOKEN, BOT_TOKEN, or TOKEN environment variable must be set.');
 
     if (!clientId) {
         try { clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8'); } catch (e) {
@@ -160,6 +190,14 @@ async function deployCommands() {
         console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally across Discord...`);
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
+
+        // Clean test guild cache if a test guild ID is configured to prevent single-server command lock
+        if (testGuildId) {
+            console.log(`🧹 Clearing legacy test guild commands (${testGuildId}) to eliminate duplicate listings...`);
+            await rest.put(Routes.applicationGuildCommands(clientId, testGuildId), { body: [] }).catch(() => {});
+            console.log(`✅ Test guild command cache cleaned successfully!`);
+        }
+
         return result;
     } catch (error) {
         console.error('❌ Discord API Rejected Command Payload:', error);
@@ -170,4 +208,3 @@ async function deployCommands() {
 if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
 
 module.exports = { commands: finalPayload, deployCommands };
-            
