@@ -216,22 +216,31 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 // 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3/6)
 // ==========================================
+// 🔄 MULTIPLE NODES WITH AUTO-FAILOVER CONFIGURATION
 const Nodes = [
     {
         name: 'Main-Node-Lavasearch',
         url: 'lava.darrennathanael.com:443',
         auth: 'youshallnotpass',
         secure: true,
-        retryAmount: 5,
-        retryDelay: 5000
+        retryAmount: 10,
+        retryDelay: 3000
     },
     {
         name: 'Node-Jirayu-Backup',
         url: 'lavalink.jirayu.net:13592',
         auth: 'youshallnotpass',
         secure: false,
-        retryAmount: 5,
-        retryDelay: 5000
+        retryAmount: 10,
+        retryDelay: 3000
+    },
+    {
+        name: 'Node-Serenetia-Backup',
+        url: 'lavalink.serenetia.com:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 10,
+        retryDelay: 3000
     }
 ];
 
@@ -255,13 +264,22 @@ client.manager = new Kazagumo({
 }, new Connectors.DiscordJS(client), Nodes, {
     voiceConnectionTimeout: 30000,
     linkInitializers: true,
-    reconnectTries: 5,
-    restTimeout: 10000
+    reconnectTries: 10,
+    restTimeout: 15000
 });
 
-client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
-client.manager.shoukaku.on('error', () => {}); 
-client.manager.shoukaku.on('disconnect', () => {});
+// ⚡ AUTO-FAILOVER & NODE EVENT HANDLERS
+client.manager.shoukaku.on('ready', (name) => {
+    console.log(`🎵 [Lavalink] Successfully connected & active on node: ${name}`);
+});
+
+client.manager.shoukaku.on('error', (name, error) => {
+    console.error(`⚠️ [Lavalink] Node Error on [${name}]:`, error.message || error);
+});
+
+client.manager.shoukaku.on('disconnect', (name, count) => {
+    console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Attempting auto-reconnect/failover... (Retry count: ${count})`);
+});
 
 client.manager.on('playerStart', async (player, track) => {
     const channel = client.channels.cache.get(player.textId);
@@ -365,11 +383,11 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 
-    // 🎵 INITIALIZE LAVALINK MUSIC ENGINE (Fixes No node found)
+    // 🎵 INITIALIZE LAVALINK MULTI-NODE POOL WITH FAILOVER
     try {
         if (client.manager && typeof client.manager.init === 'function') {
             await client.manager.init(client.user.id);
-            console.log('🎵 Kazagumo Music Manager successfully initialized!');
+            console.log('🎵 Kazagumo Multi-Node Music Manager successfully initialized!');
         }
     } catch (lavalinkErr) {
         console.error('❌ Lavalink Initialization Failed:', lavalinkErr.message);
