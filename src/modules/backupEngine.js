@@ -20,7 +20,11 @@ module.exports = (client) => {
             const guild = message.guild;
 
             try {
-                const rolesData = guild.roles.cache
+                // UPGRADE: Fetch all roles and channels via API to bypass cache truncation limits
+                const fetchedRoles = await guild.roles.fetch();
+                const fetchedChannels = await guild.channels.fetch();
+
+                const rolesData = fetchedRoles
                     .filter(r => !r.managed && r.name !== '@everyone' && r.id !== guild.id)
                     .map(r => ({
                         id: r.id, name: r.name, color: r.hexColor, hoist: r.hoist, 
@@ -31,12 +35,12 @@ module.exports = (client) => {
                     id: ow.id, type: ow.type, allow: ow.allow.bitfield.toString(), deny: ow.deny.bitfield.toString()
                 }));
 
-                const categoriesData = guild.channels.cache
-                    .filter(c => c.type === ChannelType.GuildCategory)
+                const categoriesData = fetchedChannels
+                    .filter(c => c && c.type === ChannelType.GuildCategory)
                     .map(c => ({ id: c.id, name: c.name, overwrites: getOverwrites(c) }));
 
-                const channelsData = guild.channels.cache
-                    .filter(c => c.type !== ChannelType.GuildCategory)
+                const channelsData = fetchedChannels
+                    .filter(c => c && c.type !== ChannelType.GuildCategory)
                     .map(c => ({
                         id: c.id, name: c.name, type: c.type, parentId: c.parentId, 
                         topic: c.topic, nsfw: c.nsfw, rateLimitPerUser: c.rateLimitPerUser, 
@@ -52,7 +56,7 @@ module.exports = (client) => {
                 const embed = new EmbedBuilder()
                     .setColor('#3498db')
                     .setTitle('✅ Server Backup Complete')
-                    .setDescription(`Successfully saved a snapshot of the server!\n\n**Roles Saved:** ${rolesData.length}\n**Categories Saved:** ${categoriesData.length}\n**Channels Saved:** ${channelsData.length}\n\n*Run \`.restore\` if the server is ever nuked.*`)
+                    .setDescription(`Successfully saved a full snapshot of the server!\n\n**Roles Saved:** ${rolesData.length}\n**Categories Saved:** ${categoriesData.length}\n**Channels Saved:** ${channelsData.length}\n\n*Run \`.restore\` if the server is ever nuked.*`)
                     .setTimestamp();
 
                 return msg.edit({ content: '', embeds: [embed] });
@@ -95,10 +99,17 @@ module.exports = (client) => {
                 let roleMap = new Map();
                 let categoryMap = new Map(); 
 
+                // Ensure cache is updated for mapping validation during restoration
+                await guild.roles.fetch();
+                await guild.channels.fetch();
+
                 for (const bRole of backup.roles) {
                     let existing = guild.roles.cache.find(r => r.name === bRole.name);
                     if (!existing) {
-                        try { existing = await guild.roles.create({ name: bRole.name, color: bRole.color, hoist: bRole.hoist, permissions: BigInt(bRole.permissions), position: bRole.position }); await delay(300); } 
+                        try { 
+                            existing = await guild.roles.create({ name: bRole.name, color: bRole.color, hoist: bRole.hoist, permissions: BigInt(bRole.permissions), position: bRole.position }); 
+                            await delay(300); 
+                        } 
                         catch (e) { continue; }
                     } else { await existing.setPermissions(BigInt(bRole.permissions)).catch(()=>{}); }
                     roleMap.set(bRole.id, existing.id);
@@ -113,21 +124,27 @@ module.exports = (client) => {
                 };
 
                 for (const bCat of backup.categories) {
-                    let existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === bCat.name);
+                    let existing = guild.channels.cache.find(c => c && c.type === ChannelType.GuildCategory && c.name === bCat.name);
                     const mappedOverwrites = parseOverwrites(bCat.overwrites);
                     if (!existing) {
-                        try { existing = await guild.channels.create({ name: bCat.name, type: ChannelType.GuildCategory, permissionOverwrites: mappedOverwrites }); await delay(400); } 
+                        try { 
+                            existing = await guild.channels.create({ name: bCat.name, type: ChannelType.GuildCategory, permissionOverwrites: mappedOverwrites }); 
+                            await delay(400); 
+                        } 
                         catch (e) { continue; }
                     } else { await existing.permissionOverwrites.set(mappedOverwrites).catch(()=>{}); }
                     categoryMap.set(bCat.id, existing.id);
                 }
 
                 for (const bChan of backup.channels) {
-                    let existing = guild.channels.cache.find(c => c.type === bChan.type && c.name === bChan.name);
+                    let existing = guild.channels.cache.find(c => c && c.type === bChan.type && c.name === bChan.name);
                     const mappedOverwrites = parseOverwrites(bChan.overwrites);
                     const newParentId = bChan.parentId ? categoryMap.get(bChan.parentId) : null;
                     if (!existing) {
-                        try { await guild.channels.create({ name: bChan.name, type: bChan.type, parent: newParentId, topic: bChan.topic, nsfw: bChan.nsfw, rateLimitPerUser: bChan.rateLimitPerUser, userLimit: bChan.userLimit, permissionOverwrites: mappedOverwrites }); await delay(400); } 
+                        try { 
+                            await guild.channels.create({ name: bChan.name, type: bChan.type, parent: newParentId, topic: bChan.topic, nsfw: bChan.nsfw, rateLimitPerUser: bChan.rateLimitPerUser, userLimit: bChan.userLimit, permissionOverwrites: mappedOverwrites }); 
+                            await delay(400); 
+                        } 
                         catch (e) {}
                     } else {
                         await existing.permissionOverwrites.set(mappedOverwrites).catch(()=>{});
@@ -142,4 +159,3 @@ module.exports = (client) => {
         }
     });
 };
-                                 
