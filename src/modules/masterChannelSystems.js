@@ -138,15 +138,11 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
             embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Scanner').addFields({ name: 'Engine Status', value: '`SCANNING 💤`', inline: true }, { name: 'Tracking Window', value: '`14-Day Inactivity Matrix`', inline: true });
         } else if (moduleType === 'status_monitor') {
             embed.setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields({ name: 'Metrics Update', value: '`Loops every 60 seconds`', inline: true }, { name: 'Monitored Assets', value: '`Members • RAM Heap • Ping • Modules`', inline: true });
-        } else if (moduleType === 'admin_requests') {
-            embed.setColor('#FEE75C').setTitle('👑 Admin Action Authorization Queue').addFields({ name: 'Queue State', value: '`ACTIVE DISPATCHER 👑`', inline: true }, { name: 'Request Types', value: '`Staff Applications & Admin Approvals`', inline: true });
-        } else {
-            embed.setColor('#2ecc71').setTitle(`🟢 Active Module Hub: #${channel.name}`).setDescription(`Status: **ONLINE 🟢**\nRunning real-time background protection and logging.`);
         }
 
         if (components.length > 0) {
             await channel.send({ embeds: [embed], components }).catch(() => null);
-        } else {
+        } else if (embed.data.title) {
             await channel.send({ embeds: [embed] }).catch(() => null);
         }
     }
@@ -162,7 +158,9 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
     return channel;
 }
-
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 3 OF 6)
+// ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
@@ -174,247 +172,57 @@ async function provisionMasterServerStructure(interaction) {
     if (!staffRole) staffRole = await guild.roles.create({ name: 'Staff', color: '#3498db', reason: 'Starry Master System' });
 
     const hideEveryone = { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] };
+    const showEveryone = { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] };
     const showVerified = { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] };
     const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
     const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
 
-    try {
-        const trackerModule = require('./tracker');
-        if (trackerModule.buildInactivityAlertEmbed && trackerModule.buildSusInactivityAlertEmbed) {
-            const inactivityAlert = trackerModule.buildInactivityAlertEmbed(interaction.member, interaction.user.id, 'uPUQpU4ecR', Date.now() - (14 * 24 * 60 * 60 * 1000));
-            const inactivityRow = trackerModule.buildInactivityModPanelRow(interaction.user.id);
-            const susAlert = trackerModule.buildSusInactivityAlertEmbed(interaction.member, 30);
-            const susRow = trackerModule.buildSusModPanelRow(interaction.user.id);
+    // 1. SECURITY & GOVERNANCE CATEGORY
+    const govCat = await getOrCreateCategory(guild, '🛡️ SECURITY & GOVERNANCE', [showEveryone, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'rules-and-info', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'announcements', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'server-status-monitor', parent: govCat.id, moduleType: 'status_monitor', permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
 
-            await interaction.channel.send({
-                content: `<@${interaction.user.id}>\n⚙️ **Starry Master Pre-Setup Preview:**`,
-                embeds: [inactivityAlert],
-                components: [inactivityRow]
-            }).catch(() => {});
-
-            await interaction.channel.send({
-                content: `<@${interaction.user.id}>`,
-                embeds: [susAlert],
-                components: [susRow]
-            }).catch(() => {});
-        }
-    } catch (e) {}
-
-    const sysCat = await getOrCreateCategory(guild, '🛡️ SECURITY & SYSTEM LOGS', [hideEveryone, staffFullControl, botFullControl]);
+    // 2. INCIDENT & AUDIT LOGS CATEGORY
+    const sysCat = await getOrCreateCategory(guild, '🚨 INCIDENT & SECURITY LOGS', [hideEveryone, staffFullControl, botFullControl]);
     const sysChannels = [
-        { name: 'logs-access', moduleType: 'log_access' }, { name: 'logs-moderate', moduleType: 'log_moderate' },
-        { name: 'logs-messages', moduleType: 'log_messages' }, { name: 'logs-voice', moduleType: 'log_voice' },
-        { name: 'logs-channels', moduleType: 'log_channels' }, { name: 'logs-members', moduleType: 'log_members' },
-        { name: 'sus-account-tracker', moduleType: 'sus_tracker' }, { name: 'inactivity-tracker', moduleType: 'inactivity_tracker' }
+        { name: 'logs-access', moduleType: 'log_access' }, 
+        { name: 'logs-moderate', moduleType: 'log_moderate' },
+        { name: 'logs-messages', moduleType: 'log_messages' }, 
+        { name: 'logs-voice', moduleType: 'log_voice' },
+        { name: 'logs-channels', moduleType: 'log_channels' }, 
+        { name: 'logs-members', moduleType: 'log_members' }
     ];
     for (const item of sysChannels) {
         await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     }
 
+    // 3. AUTOMATED TRACKERS CATEGORY
+    const trackerCat = await getOrCreateCategory(guild, '📡 AUTOMATED TRACKERS', [hideEveryone, staffFullControl, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'sus-account-tracker', parent: trackerCat.id, moduleType: 'sus_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'inactivity-tracker', parent: trackerCat.id, moduleType: 'inactivity_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'chest-drops', parent: trackerCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+
+    // 4. SUPPORT & APPLICATIONS CATEGORY
     const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
     await createNonDuplicatingActiveChannel(guild, { name: 'verify-here', parent: supportCat.id, moduleType: 'verification', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
 
+    // 5. ADMIN & STAFF HQ CATEGORY
+    const staffCat = await getOrCreateCategory(guild, '👑 ADMIN & STAFF HQ', [hideEveryone, staffFullControl, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'owners-chat', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'staff-discussion', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+
+    // 6. COMMUNITY PROTOCOL CATEGORY
+    const commCat = await getOrCreateCategory(guild, '📊 COMMUNITY PROTOCOL', [hideEveryone, showVerified, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'general-chat', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'bot-commands', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+
     await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
-    return { verifiedRole, totalCategories: 6, totalChannels: 24 };
-}
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 3 OF 6)
-// ==========================================
-// --- CORE CHANNEL & CATEGORY PROMPT UTILITIES ---
-
-async function createChannelAction(guild, name, type = ChannelType.GuildText, categoryName = null, topic = '') {
-    let parentCategory = null;
-    if (categoryName) {
-        parentCategory = guild.channels.cache.find(c => 
-            c.type === ChannelType.GuildCategory && 
-            c.name.toLowerCase() === categoryName.toLowerCase().trim()
-        );
-        if (!parentCategory) {
-            parentCategory = await guild.channels.create({
-                name: categoryName.trim(),
-                type: ChannelType.GuildCategory
-            });
-        }
-    }
-
-    const createdChannel = await guild.channels.create({
-        name: name.toLowerCase().replace(/\s+/g, '-'),
-        type: type,
-        parent: parentCategory ? parentCategory.id : null,
-        topic: topic
-    });
-
-    return createdChannel;
-}
-
-async function deleteChannelAction(guild, channelIdentifier) {
-    const cleanId = channelIdentifier.replace(/[<#>]/g, '').trim();
-    let targetChannel = guild.channels.cache.find(c => 
-        c.id === cleanId || 
-        c.name.toLowerCase() === channelIdentifier.toLowerCase().replace('#', '').trim()
-    );
-
-    if (!targetChannel) throw new Error(`Channel "${channelIdentifier}" not found.`);
-    const channelName = targetChannel.name;
-    await targetChannel.delete();
-    return channelName;
-}
-
-async function createCategoryAction(guild, name) {
-    let existingCategory = guild.channels.cache.find(c => 
-        c.type === ChannelType.GuildCategory && 
-        c.name.toLowerCase() === name.toLowerCase().trim()
-    );
-
-    if (existingCategory) return existingCategory;
-
-    const newCategory = await guild.channels.create({
-        name: name.trim(),
-        type: ChannelType.GuildCategory
-    });
-
-    return newCategory;
-}
-
-async function deleteCategoryAction(guild, categoryName) {
-    const category = guild.channels.cache.find(c => 
-        c.type === ChannelType.GuildCategory && 
-        (c.id === categoryName || c.name.toLowerCase() === categoryName.toLowerCase().trim())
-    );
-
-    if (!category) throw new Error(`Category "${categoryName}" not found.`);
-    const name = category.name;
-    await category.delete();
-    return name;
-}
-
-async function lockUnlockChannelAction(guild, channelTarget, lockState = true) {
-    const cleanId = channelTarget.replace(/[<#>]/g, '').trim();
-    let channel = guild.channels.cache.find(c => c.id === cleanId || c.name.toLowerCase() === cleanId.toLowerCase());
-    if (!channel) throw new Error(`Channel "${channelTarget}" not found.`);
-
-    await channel.permissionOverwrites.edit(guild.roles.everyone, {
-        SendMessages: lockState ? false : null,
-        Connect: lockState ? false : null
-    });
-
-    return channel;
+    return { verifiedRole: verifiedRole.name, totalCategories: 6, totalChannels: 22 };
 }
 // ==========================================
 // 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 4 OF 6)
-// ==========================================
-// --- FULL NATURAL LANGUAGE CHAT PROMPT ENGINE ---
-
-async function processPromptChannelCommands(message) {
-    if (!message.guild || message.author.bot) return false;
-
-    const rawContent = message.content.trim();
-    const lowerContent = rawContent.toLowerCase();
-
-    // Trigger check
-    if (!lowerContent.startsWith('starry')) return false;
-
-    // Security Check: User must have Manage Channels or Administrator permission
-    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && 
-        !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return false;
-    }
-
-    const guild = message.guild;
-
-    try {
-        // 1. CREATE CHANNEL PROMPT (e.g., "Starry create a channel Owners-chat", "Starry create a voice channel Chill in category Lounge")
-        const createChannelMatch = rawContent.match(/starry\s+(?:please\s+)?create\s+(?:a\s+)?(?:(text|voice|stage)\s+)?channel\s+([a-zA-Z0-9_-]+)(?:\s+in\s+(?:category\s+)?([a-zA-Z0-9_\s-]+))?/i);
-        if (createChannelMatch) {
-            const [, typeStr, channelName, categoryName] = createChannelMatch;
-            const channelType = typeStr?.toLowerCase() === 'voice' ? ChannelType.GuildVoice : 
-                              typeStr?.toLowerCase() === 'stage' ? ChannelType.GuildStageVoice : ChannelType.GuildText;
-
-            const ch = await createChannelAction(guild, channelName, channelType, categoryName);
-            const embed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setTitle('✨ Channel Created via Prompt')
-                .setDescription(`**Channel:** <#${ch.id}>\n**Type:** \`${typeStr ? typeStr.toUpperCase() : 'TEXT'}\`${categoryName ? `\n**Category:** \`${categoryName.trim()}\`` : ''}`)
-                .setFooter({ text: 'Starry Master Prompt Engine' });
-
-            await message.reply({ embeds: [embed] });
-            return true;
-        }
-
-        // 2. DELETE CHANNEL PROMPT (e.g., "Starry delete channel #old-chat", "Starry delete channel Owners-chat")
-        const deleteChannelMatch = rawContent.match(/starry\s+(?:please\s+)?delete\s+(?:the\s+)?channel\s+([a-zA-Z0-9_#<>-]+)/i);
-        if (deleteChannelMatch) {
-            const channelTarget = deleteChannelMatch[1];
-            const deletedName = await deleteChannelAction(guild, channelTarget);
-
-            const embed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setTitle('🗑️ Channel Deleted via Prompt')
-                .setDescription(`Channel **#${deletedName}** has been removed.`)
-                .setFooter({ text: 'Starry Master Prompt Engine' });
-
-            await message.reply({ embeds: [embed] });
-            return true;
-        }
-
-        // 3. CREATE CATEGORY PROMPT (e.g., "Starry create category Staff-Zone")
-        const createCatMatch = rawContent.match(/starry\s+(?:please\s+)?create\s+(?:a\s+)?category\s+([a-zA-Z0-9_\s-]+)/i);
-        if (createCatMatch) {
-            const categoryName = createCatMatch[1].trim();
-            const cat = await createCategoryAction(guild, categoryName);
-
-            const embed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setTitle('📁 Category Created via Prompt')
-                .setDescription(`**Category Name:** \`${cat.name}\``)
-                .setFooter({ text: 'Starry Master Prompt Engine' });
-
-            await message.reply({ embeds: [embed] });
-            return true;
-        }
-
-        // 4. DELETE CATEGORY PROMPT (e.g., "Starry delete category Staff-Zone")
-        const deleteCatMatch = rawContent.match(/starry\s+(?:please\s+)?delete\s+(?:the\s+)?category\s+([a-zA-Z0-9_\s-]+)/i);
-        if (deleteCatMatch) {
-            const categoryName = deleteCatMatch[1].trim();
-            const deletedCatName = await deleteCategoryAction(guild, categoryName);
-
-            const embed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setTitle('🗑️ Category Deleted via Prompt')
-                .setDescription(`Category **${deletedCatName}** has been removed.`)
-                .setFooter({ text: 'Starry Master Prompt Engine' });
-
-            await message.reply({ embeds: [embed] });
-            return true;
-        }
-
-        // 5. LOCK / UNLOCK CHANNEL PROMPT (e.g., "Starry lock channel #general", "Starry unlock channel #general")
-        const lockMatch = rawContent.match(/starry\s+(lock|unlock)\s+(?:channel\s+)?([a-zA-Z0-9_#<>-]+)/i);
-        if (lockMatch) {
-            const isLock = lockMatch[1].toLowerCase() === 'lock';
-            const channelTarget = lockMatch[2];
-            const ch = await lockUnlockChannelAction(guild, channelTarget, isLock);
-
-            const embed = new EmbedBuilder()
-                .setColor(isLock ? '#ED4245' : '#2ecc71')
-                .setTitle(isLock ? '🔒 Channel Locked' : '🔓 Channel Unlocked')
-                .setDescription(`Channel <#${ch.id}> has been ${isLock ? 'locked' : 'unlocked'} for @everyone.`)
-                .setFooter({ text: 'Starry Master Prompt Engine' });
-
-            await message.reply({ embeds: [embed] });
-            return true;
-        }
-    } catch (err) {
-        await message.reply(`❌ **Prompt Execution Error:** ${err.message}`).catch(() => {});
-        return true;
-    }
-
-    return false;
-}
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 5 OF 6)
 // ==========================================
 function start60sChannelTelemetryLoop(client) {
     setInterval(async () => {
@@ -455,7 +263,7 @@ const emergencyNukeCommand = new SlashCommandBuilder()
     )
     .addChannelOption(o =>
         o.setName('channel')
-            .setDescription('Target channel (defaults to current channel if target is Channel)')
+            .setDescription('Target channel')
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(false)
     );
@@ -476,7 +284,9 @@ const verifySetupCommand = new SlashCommandBuilder()
     .setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
-
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 5 OF 6)
+// ==========================================
 async function handleEmergencyCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -531,8 +341,8 @@ async function handleEmergencyCommands(interaction) {
             return interaction.editReply(`⚡ **EMERGENCY SERVER NUKE COMPLETED:**\n• Purged **${deletedChannels}** channels.\n• Deleted **${deletedRoles}** non-essential roles.`);
         }
     }
-                   }
-                                                           // ==========================================
+}
+// ==========================================
 // 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 6 OF 6)
 // ==========================================
 function initModule(client) {
@@ -554,25 +364,30 @@ function initModule(client) {
         }
     });
 
-    // 🛑 REMOVED messageCreate HERE TO PREVENT DOUBLE-REPLYING!
+    // 🛑 STRICTLY NO messageCreate LISTENER HERE TO PREVENT DOUBLE-REPLYING!
 
-    // ⚡ LISTEN TO EXISTING SYSTEM INTERACTION SLASH COMMANDS ONLY
+    // ⚡ LISTEN TO SYSTEM INTERACTION SLASH COMMANDS ONLY
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
+
             if (cmd === 'setup-starry') {
                 if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
                 const result = await provisionMasterServerStructure(interaction);
-                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured successfully with ${result.totalChannels} channels.`);
+                const embed = new EmbedBuilder()
+                    .setColor('#2ecc71')
+                    .setTitle('✨ Autonomous Server Setup Complete!')
+                    .setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
                 return interaction.editReply({ embeds: [embed] });
             }
+
             if (['emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban'].includes(cmd)) {
                 await handleEmergencyCommands(interaction);
             }
         }
     });
 
-    console.log('✅ Master Channel Systems Engine Initialized');
+    console.log('✅ Master Channel Systems Engine Initialized (Slash & Setup Engine Only - Zero Double-Reply)');
 }
 
 module.exports = initModule;
