@@ -1,5 +1,5 @@
 // ==========================================
-// 1. IMPORTS & SCHEMAS
+// 🛡️ STARRY TRACKER ENGINE (PART 1 OF 2)
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -42,7 +42,7 @@ function generateProgressBar(current, total, length = 12) {
     return `\`${bar}\` **${Math.floor(progress * 100)}%**`;
 }
 
-// Slash Command Definition
+// Slash Command Definition for tracker.js
 const trackerCommandSchema = new SlashCommandBuilder()
     .setName('tracker')
     .setDescription('Universal Invite Tracker & 14-Day Inactivity System')
@@ -69,31 +69,12 @@ const trackerCommandSchema = new SlashCommandBuilder()
                     .setRequired(false)
                     .setMinValue(1)));
 
-// ==========================================
-// 2. EMBED BUILDERS & INTERACTIVE BUTTONS
-// ==========================================
 function buildModPanelRow(targetUserId) {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`mod_timeout_${targetUserId}`)
-            .setLabel('Timeout (7d)')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('⏰'),
-        new ButtonBuilder()
-            .setCustomId(`mod_kick_${targetUserId}`)
-            .setLabel('Kick User')
-            .setStyle(ButtonStyle.Danger)
-            .setEmoji('👢'),
-        new ButtonBuilder()
-            .setCustomId(`mod_ban_${targetUserId}`)
-            .setLabel('Ban User')
-            .setStyle(ButtonStyle.Danger)
-            .setEmoji('🔨'),
-        new ButtonBuilder()
-            .setCustomId(`mod_dismiss_${targetUserId}`)
-            .setLabel('Dismiss Alert')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('🗑️')
+        new ButtonBuilder().setCustomId(`mod_timeout_${targetUserId}`).setLabel('Timeout (7d)').setStyle(ButtonStyle.Secondary).setEmoji('⏰'),
+        new ButtonBuilder().setCustomId(`mod_kick_${targetUserId}`).setLabel('Kick User').setStyle(ButtonStyle.Danger).setEmoji('👢'),
+        new ButtonBuilder().setCustomId(`mod_ban_${targetUserId}`).setLabel('Ban User').setStyle(ButtonStyle.Danger).setEmoji('🔨'),
+        new ButtonBuilder().setCustomId(`mod_dismiss_${targetUserId}`).setLabel('Dismiss Alert').setStyle(ButtonStyle.Secondary).setEmoji('🗑️')
     );
 }
 
@@ -106,10 +87,7 @@ function buildLiveTrackingEmbed(member, inviterId, inviteCode, joinedAtMs, stats
 
     return new EmbedBuilder()
         .setColor('#5865F2')
-        .setAuthor({ 
-            name: 'Invite Tracker • Member Joined', 
-            iconURL: member.guild.iconURL({ dynamic: true }) || undefined 
-        })
+        .setAuthor({ name: 'Invite Tracker • Member Joined', iconURL: member.guild.iconURL({ dynamic: true }) || undefined })
         .setTitle(`👋 Welcome to ${member.guild.name}`)
         .setDescription(
             `<@${member.id}> joined with invite code \`${inviteCode}\` created by ${inviterMention}.\n\n` +
@@ -150,9 +128,8 @@ function buildInactivityAlertEmbed(member, inviterId, inviteCode, joinedAtMs) {
         .setFooter({ text: 'Starry Moderation Assistant' })
         .setTimestamp();
 }
-
 // ==========================================
-// 3. MAIN MODULE & UNSTOPPABLE SCRAPER ENGINE
+// 🛡️ STARRY TRACKER ENGINE (PART 2 OF 2)
 // ==========================================
 const universalTrackerModule = (client) => {
 
@@ -165,7 +142,6 @@ const universalTrackerModule = (client) => {
         client.commands.set('tracker', { data: trackerCommandSchema, execute: handleCommand });
     }
 
-    // --- INVITE CACHING ---
     const invitesCache = new Map();
 
     client.once('ready', async () => {
@@ -190,12 +166,11 @@ const universalTrackerModule = (client) => {
         if (guildInvites) guildInvites.delete(invite.code);
     });
 
-    // --- MEMBER JOIN LISTENER WITH AUTOMATED SUS SCANNER ---
+    // --- MEMBER JOIN LISTENER WITH AUTOMATED STRICT SUS PROFILE SCANNER ---
     client.on('guildMemberAdd', async member => {
         if (member.user.bot) return;
         const guild = member.guild;
 
-        // Automated Strict Sus Profile / Alt Detection Engine
         const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
         if (accountAgeDays < 7) {
             const susCh = guild.channels.cache.find(c => c.name === 'sus-account-tracker');
@@ -207,10 +182,10 @@ const universalTrackerModule = (client) => {
                         `**Member:** <@${member.id}> (\`${member.user.tag}\`)\n` +
                         `**Account Created:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
                         `**Account Age:** \`${Math.floor(accountAgeDays)} days old\`\n\n` +
-                        `⚠️ **Strict Security Policy:** Flagged automatically by \`tracker.js\` engine due to creation age < 7 days.`
+                        `⚠️ **Strict Security Policy:** Flagged automatically by Starry Security Engine due to account age < 7 days.`
                     )
                     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                    .setFooter({ text: 'Starry Automated Sus Tracker' })
+                    .setFooter({ text: 'Starry Security Engine' })
                     .setTimestamp();
 
                 await susCh.send({ embeds: [susEmbed] }).catch(() => {});
@@ -271,7 +246,6 @@ const universalTrackerModule = (client) => {
         }
     });
 
-    // --- LIVE DASHBOARD BUILDER ---
     async function updateLiveDashboard(logMessage, currentChannel, processedMsgs, completed = 0, total = 0, timeframeDays = null) {
         try {
             const progressBar = generateProgressBar(completed, total);
@@ -295,7 +269,6 @@ const universalTrackerModule = (client) => {
         } catch (err) {}
     }
 
-    // --- UNSTOPPABLE CHANNEL SCRAPER ---
     async function scrapeChannelHistory(channel, logMessage, totalChannels, completedChannels, minTimestamp = 0, timeframeDays = null) {
         let totalProcessedInChannel = 0;
         let lastMessageId = null;
@@ -401,7 +374,6 @@ const universalTrackerModule = (client) => {
         await logMessage.edit({ embeds: [doneEmbed] }).catch(() => {});
     }
 
-    // --- MODERATION PANEL BUTTON LISTENER ---
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton() || !interaction.customId.startsWith('mod_')) return;
 
@@ -433,7 +405,6 @@ const universalTrackerModule = (client) => {
         }
     });
 
-    // --- COMMAND EXECUTION HANDLER ---
     async function handleCommand(interaction) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
             return interaction.reply({ content: '❌ You need **Manage Server** permissions.', ephemeral: true });
@@ -508,7 +479,6 @@ const universalTrackerModule = (client) => {
         await handleCommand(interaction);
     });
 
-    // --- DEVELOPER TEST COMMAND (.testalert) ---
     client.on('messageCreate', async (message) => {
         if (!message.content.startsWith('.testalert')) return;
 
