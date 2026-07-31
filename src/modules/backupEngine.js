@@ -1,4 +1,5 @@
-const { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, AttachmentBuilder } = require('discord.js');
+const PDFDocument = require('pdfkit');
 
 let ServerBackup;
 try { ServerBackup = require('../models/ServerBackup'); } catch(e) {}
@@ -10,17 +11,16 @@ module.exports = (client) => {
         if (message.author.bot || !message.guild) return;
 
         // ==========================================
-        // 💾 COMMAND: .backup
+        // 💾 COMMAND: .backup (and .backup export pdf)
         // ==========================================
-        if (message.content.toLowerCase() === '.backup') {
+        if (message.content.toLowerCase() === '.backup' || message.content.toLowerCase() === '.backup export') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Admins only.');
             if (!ServerBackup) return message.reply('❌ Backup database model not found.');
 
-            const msg = await message.reply('💾 **Scanning server architecture and creating backup...**');
+            const msg = await message.reply('💾 **Scanning server architecture and generating backup data & PDF report...**');
             const guild = message.guild;
 
             try {
-                // UPGRADE: Fetch all roles and channels via API to bypass cache truncation limits
                 const fetchedRoles = await guild.roles.fetch();
                 const fetchedChannels = await guild.channels.fetch();
 
@@ -53,16 +53,54 @@ module.exports = (client) => {
                     { upsert: true }
                 );
 
-                const embed = new EmbedBuilder()
-                    .setColor('#3498db')
-                    .setTitle('✅ Server Backup Complete')
-                    .setDescription(`Successfully saved a full snapshot of the server!\n\n**Roles Saved:** ${rolesData.length}\n**Categories Saved:** ${categoriesData.length}\n**Channels Saved:** ${channelsData.length}\n\n*Run \`.restore\` if the server is ever nuked.*`)
-                    .setTimestamp();
+                // --- GENERATE ORGANIZED PDF REPORT ---
+                const doc = new PDFDocument({ margin: 50 });
+                const buffers = [];
+                doc.on('data', chunk => buffers.push(chunk));
+                
+                doc.fontSize(22).fillColor('#2c3e50').text(`Server Architecture Backup`, { align: 'center' });
+                doc.fontSize(12).fillColor('#7f8c8d').text(`Guild Name: ${guild.name} (ID: ${guild.id})`, { align: 'center' });
+                doc.text(`Backup Date: ${new Date().toLocaleString()}`, { align: 'center' });
+                doc.moveDown(2);
 
-                return msg.edit({ content: '', embeds: [embed] });
+                doc.fontSize(16).fillColor('#2980b9').text(`1. Roles Overview (${rolesData.length} Saved)`);
+                doc.fontSize(10).fillColor('#333333');
+                rolesData.forEach((r, index) => {
+                    doc.text(`• [Pos: ${r.position}] ${r.name} (Color: ${r.color})`);
+                });
+                doc.moveDown(1.5);
+
+                doc.fontSize(16).fillColor('#2980b9').text(`2. Categories Overview (${categoriesData.length} Saved)`);
+                doc.fontSize(10).fillColor('#333333');
+                categoriesData.forEach((c) => {
+                    doc.text(`📁 Category: ${c.name}`);
+                });
+                doc.moveDown(1.5);
+
+                doc.fontSize(16).fillColor('#2980b9').text(`3. Channels Overview (${channelsData.length} Saved)`);
+                doc.fontSize(10).fillColor('#333333');
+                channelsData.forEach((ch) => {
+                    doc.text(`💬 [#${ch.type}] ${ch.name} (Topic: ${ch.topic || 'None'})`);
+                });
+
+                doc.end();
+
+                doc.on('end', async () => {
+                    const pdfBuffer = Buffer.concat(buffers);
+                    const attachment = new AttachmentBuilder(pdfBuffer, { name: `Server_Backup_${guild.id}.pdf` });
+
+                    const embed = new EmbedBuilder()
+                        .setColor('#3498db')
+                        .setTitle('✅ Server Backup & PDF Report Complete')
+                        .setDescription(`Successfully saved snapshot to database and compiled a well-organized PDF report!\n\n**Roles Saved:** ${rolesData.length}\n**Categories Saved:** ${categoriesData.length}\n**Channels Saved:** ${channelsData.length}`)
+                        .setTimestamp();
+
+                    return msg.edit({ content: '', embeds: [embed], files: [attachment] });
+                });
+
             } catch (err) {
                 console.error(err);
-                return msg.edit('❌ Failed to create backup.');
+                return msg.edit('❌ Failed to create backup or PDF report.');
             }
         }
 
@@ -99,7 +137,6 @@ module.exports = (client) => {
                 let roleMap = new Map();
                 let categoryMap = new Map(); 
 
-                // Ensure cache is updated for mapping validation during restoration
                 await guild.roles.fetch();
                 await guild.channels.fetch();
 
