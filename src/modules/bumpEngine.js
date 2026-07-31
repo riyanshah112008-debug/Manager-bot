@@ -45,7 +45,7 @@ const bumpSchema = new mongoose.Schema({
 const BumpSystem = mongoose.models.BumpSystem || mongoose.model('BumpSystem', bumpSchema);
 
 // ==========================================
-// 2. SLASH COMMAND DEFINITIONS
+// 2. SLASH COMMAND DEFINITIONS & PAYLOADS
 // ==========================================
 const setListingCommand = new SlashCommandBuilder()
     .setName('set-listing')
@@ -85,7 +85,18 @@ const bumpCommand = new SlashCommandBuilder()
 const autoBumpCommand = new SlashCommandBuilder()
     .setName('autobump')
     .setDescription('💎 Premium: Enable or disable 24/7 automatic bumping!')
+    .addBooleanOption(option =>
+        option.setName('status')
+            .setDescription('Enable or disable 24/7 Auto-Bump')
+            .setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+
+// Convert Builders to API Payloads for REST deployment
+const setListingPayload = setListingCommand.toJSON();
+const bumpSetupPayload = bumpSetupCommand.toJSON();
+const bumpPayload = bumpCommand.toJSON();
+const autoBumpPayload = autoBumpCommand.toJSON();
+const bumpSlashCommands = [setListingPayload, bumpSetupPayload, bumpPayload, autoBumpPayload];
 
 // ==========================================
 // 🌐 3. REST API ENDPOINTS FOR WEBSITE FRONTEND
@@ -93,7 +104,6 @@ const autoBumpCommand = new SlashCommandBuilder()
 function setupWebDirectoryAPI(app) {
     if (!app) return;
 
-    // GET /api/v1/servers/recently-bumped - Homepage feed
     app.get('/api/v1/servers/recently-bumped', async (req, res) => {
         try {
             const limit = parseInt(req.query.limit) || 6;
@@ -120,7 +130,6 @@ function setupWebDirectoryAPI(app) {
         }
     });
 
-    // GET /api/v1/servers - Search, filter & pagination endpoint
     app.get('/api/v1/servers', async (req, res) => {
         try {
             const { q, sort = 'bumped', page = 1, limit = 12, nsfw = 0 } = req.query;
@@ -162,7 +171,6 @@ function setupWebDirectoryAPI(app) {
         }
     });
 
-    // GET /api/servers - Legacy Endpoint Fallback
     app.get('/api/servers', async (req, res) => {
         try {
             const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
@@ -184,7 +192,7 @@ function getTimeAgo(date) {
 }
 
 // ==========================================
-// 4. MAIN ENGINE MODULE FUNCTION
+// 4. MAIN ENGINE MODULE FUNCTION & WORKERS
 // ==========================================
 const bumpEngineModule = (client, expressApp) => {
 
@@ -203,7 +211,7 @@ const bumpEngineModule = (client, expressApp) => {
             const owner = await guild.fetchOwner().catch(() => null);
 
             let inviteUrl = "Not generated yet (Run /bump)";
-            if (guild.members.me.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
+            if (guild.members.me?.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
                 const defaultChannel = guild.systemChannel || guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreateInstantInvite));
                 if (defaultChannel) {
                     const invite = await defaultChannel.createInvite({ maxAge: 0, maxUses: 0, reason: 'Starryboard Directory Sync' }).catch(() => null);
@@ -232,16 +240,84 @@ const bumpEngineModule = (client, expressApp) => {
         }
     }
 
+    // --- ⏰ AUTONOMOUS 24/7 AUTO-BUMPER & REMINDER WORKER LOOP ---
+    function startAutoBumpWorker() {
+        setInterval(async () => {
+            try {
+                const now = new Date();
+                const pendingBumps = await BumpSystem.find({ nextBump: { $lte: now } });
+
+                for (const config of pendingBumps) {
+                    const guild = client.guilds.cache.get(config.guildId);
+                    if (!guild) continue;
+
+                    const cooldown = 2 * 60 * 60 * 1000;
+                    const channel = guild.channels.cache.get(config.reminderChannelId) || 
+                                    guild.systemChannel || 
+                                    guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages));
+
+                    // 💎 CASE A: Auto-Bump Enabled
+                    if (config.autoBumpEnabled) {
+                        let listing = await ServerListing.findOne({ guildId: guild.id });
+                        if (!listing) listing = new ServerListing({ guildId: guild.id, name: guild.name });
+
+                        listing.bumps = (listing.bumps || 0) + 1;
+                        listing.lastBump = now;
+                        await listing.save();
+
+                        config.nextBump = new Date(Date.now() + cooldown);
+                        config.isReady = false;
+                        await config.save();
+
+                        if (channel) {
+                            const embed = new EmbedBuilder()
+                                .setColor('#00F2FE')
+                                .setTitle('💎 24/7 Auto-Bump Executed!')
+                                .setDescription(`**${guild.name}** was automatically pushed to the top of **[Starryboard](${STARRY_WEB_URL})**!`)
+                                .addFields(
+                                    { name: 'Total Bumps', value: `📈 \`${listing.bumps}\``, inline: true },
+                                    { name: 'Next Auto-Bump', value: `⏳ <t:${Math.floor((Date.now() + cooldown) / 1000)}:R>`, inline: true }
+                                )
+                                .setFooter({ text: 'Starryboard Autonomous Bumper' });
+
+                            await channel.send({ embeds: [embed] }).catch(() => {});
+                        }
+                    } 
+                    // 🔔 CASE B: Auto-Bump Disabled -> Send Reminder Ping
+                    else if (!config.isReady) {
+                        config.isReady = true;
+                        await config.save();
+
+                        if (channel) {
+                            const pingStr = config.pingRoleId ? `<@&${config.pingRoleId}>` : '';
+                            const embed = new EmbedBuilder()
+                                .setColor('#5865F2')
+                                .setTitle('🚀 Server Ready To Bump!')
+                                .setDescription(`The 2-hour cooldown has ended! Type **/bump** now to bring **${guild.name}** to the top of **[Starryboard](${STARRY_WEB_URL})**!`)
+                                .setFooter({ text: 'Starryboard Reminder System' });
+
+                            await channel.send({ content: pingStr, embeds: [embed] }).catch(() => {});
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('⚠️ [Auto-Bump Worker Error]:', err.message);
+            }
+        }, 60000); // Checks every 60 seconds
+    }
+
     client.once('ready', async () => {
         for (const [id, guild] of client.guilds.cache) {
             await syncGuildData(guild);
         }
+        startAutoBumpWorker();
+        console.log('🚀 Starryboard Auto-Bumper & Reminder Worker Armed.');
     });
 
     client.on('guildCreate', async (guild) => await syncGuildData(guild));
     client.on('guildUpdate', async (oldG, newG) => await syncGuildData(newG));
 
-    // --- 🚀 /bump HANDLER ---
+    // --- 🚀 HANDLERS ---
     async function handleBump(interaction) {
         try {
             if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
@@ -349,29 +425,50 @@ const bumpEngineModule = (client, expressApp) => {
 
         const pingRole = interaction.options.getRole('ping_role');
         const channel = interaction.options.getChannel('channel');
+        const autoBumpOpt = interaction.options.getBoolean('auto_bump');
 
         let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
         if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
 
         if (pingRole) bumpData.pingRoleId = pingRole.id;
         if (channel) bumpData.reminderChannelId = channel.id;
+        if (autoBumpOpt !== null && autoBumpOpt !== undefined) bumpData.autoBumpEnabled = autoBumpOpt;
 
         await bumpData.save();
-        return interaction.editReply({ content: '⚙️ **Auto-Bump preferences saved successfully!**' });
+
+        const embed = new EmbedBuilder()
+            .setColor('#2ecc71')
+            .setTitle('⚙️ Bump Configuration Updated')
+            .addFields(
+                { name: 'Reminder Channel', value: bumpData.reminderChannelId ? `<#${bumpData.reminderChannelId}>` : '`Not Set`', inline: true },
+                { name: 'Ping Role', value: bumpData.pingRoleId ? `<@&${bumpData.pingRoleId}>` : '`None`', inline: true },
+                { name: '24/7 Auto-Bump', value: bumpData.autoBumpEnabled ? '`ENABLED 🟢`' : '`DISABLED 🔴`', inline: true }
+            );
+
+        return interaction.editReply({ embeds: [embed] });
     }
 
     async function handleAutoBump(interaction) {
         try {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [6] });
         } catch (e) { return; }
+
+        const statusOpt = interaction.options.getBoolean('status');
 
         let bumpData = await BumpSystem.findOne({ guildId: interaction.guild.id });
         if (!bumpData) bumpData = new BumpSystem({ guildId: interaction.guild.id });
 
-        bumpData.autoBumpEnabled = !bumpData.autoBumpEnabled;
+        if (statusOpt !== null && statusOpt !== undefined) {
+            bumpData.autoBumpEnabled = statusOpt;
+        } else {
+            bumpData.autoBumpEnabled = !bumpData.autoBumpEnabled;
+        }
+
         await bumpData.save();
 
-        return interaction.editReply({ content: `💎 Auto-Bump status updated to **${bumpData.autoBumpEnabled ? 'ENABLED' : 'DISABLED'}**!` });
+        return interaction.editReply({ 
+            content: `💎 **24/7 Auto-Bump status updated to:** ${bumpData.autoBumpEnabled ? '`ENABLED 🟢`' : '`DISABLED 🔴`'}` 
+        });
     }
 
     client.on('interactionCreate', async (interaction) => {
@@ -385,4 +482,10 @@ const bumpEngineModule = (client, expressApp) => {
 
 bumpEngineModule.ServerListing = ServerListing;
 bumpEngineModule.BumpSystem = BumpSystem;
+bumpEngineModule.setListingPayload = setListingPayload;
+bumpEngineModule.bumpSetupPayload = bumpSetupPayload;
+bumpEngineModule.bumpPayload = bumpPayload;
+bumpEngineModule.autoBumpPayload = autoBumpPayload;
+bumpEngineModule.bumpSlashCommands = bumpSlashCommands;
+
 module.exports = bumpEngineModule;
