@@ -127,8 +127,8 @@ function buildInactivityAlertEmbed(member, inviterId, inviteCode, joinedAtMs) {
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
         .setFooter({ text: 'Starry Moderation Assistant' })
         .setTimestamp();
-}
-// ==========================================
+                                                 }
+            // ==========================================
 // 🛡️ STARRY TRACKER ENGINE (PART 2 OF 2)
 // ==========================================
 const universalTrackerModule = (client) => {
@@ -166,11 +166,12 @@ const universalTrackerModule = (client) => {
         if (guildInvites) guildInvites.delete(invite.code);
     });
 
-    // --- MEMBER JOIN LISTENER WITH AUTOMATED STRICT SUS PROFILE SCANNER ---
+    // --- MEMBER JOIN LISTENER DIRECTED TO #inactivity-tracker ---
     client.on('guildMemberAdd', async member => {
         if (member.user.bot) return;
         const guild = member.guild;
 
+        // Automated Strict Sus Profile / Young Account Detection -> #sus-account-tracker
         const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
         if (accountAgeDays < 7) {
             const susCh = guild.channels.cache.find(c => c.name === 'sus-account-tracker');
@@ -213,19 +214,17 @@ const universalTrackerModule = (client) => {
             }
         }
 
-        let logChannel = null;
-        if (GuildTrackerSettings) {
+        // --- ENFORCE #inactivity-tracker AS TARGET CHANNEL ---
+        let logChannel = guild.channels.cache.find(c => c.name === 'inactivity-tracker');
+        if (!logChannel && GuildTrackerSettings) {
             const settings = await GuildTrackerSettings.findOne({ guildId: guild.id }).catch(() => null);
             if (settings?.customLogChannel) logChannel = guild.channels.cache.get(settings.customLogChannel);
-        }
-
-        if (!logChannel && typeof client.getLogChannel === 'function') {
-            logChannel = client.getLogChannel(guild, 'access');
         }
 
         let trackingMsgId = null;
         const joinedAtMs = Date.now();
 
+        // Send 14-Day Activity Counter embed specifically to #inactivity-tracker
         if (logChannel) {
             const trackEmbed = buildLiveTrackingEmbed(member, inviterId, inviteCode, joinedAtMs);
             const sentMsg = await logChannel.send({ embeds: [trackEmbed] }).catch(() => null);
@@ -510,4 +509,4 @@ universalTrackerModule.execute = async (interaction) => {
 
 module.exports = universalTrackerModule;
 module.exports.startServerScrape = universalTrackerModule.startServerScrape;
-            
+                                 
