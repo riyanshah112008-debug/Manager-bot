@@ -554,12 +554,9 @@ function initModule(client) {
         }
     });
 
-    // 💬 LISTEN TO ALL NATURAL LANGUAGE PROMPTS DYNAMICALLY
-    client.on('messageCreate', async (message) => {
-        await processPromptChannelCommands(message);
-    });
+    // 🛑 REMOVED messageCreate HERE TO PREVENT DOUBLE-REPLYING!
 
-    // ⚡ LISTEN TO EXISTING SYSTEM INTERACTION SLASH COMMANDS
+    // ⚡ LISTEN TO EXISTING SYSTEM INTERACTION SLASH COMMANDS ONLY
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
@@ -575,7 +572,7 @@ function initModule(client) {
         }
     });
 
-    console.log('✅ Master Channel Systems Engine Initialized (Pure Prompt Driven Capabilities Active)');
+    console.log('✅ Master Channel Systems Engine Initialized');
 }
 
 module.exports = initModule;
