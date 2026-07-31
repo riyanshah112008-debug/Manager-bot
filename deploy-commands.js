@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (WITH AFK)
+// 🚀 STARRY SUPREME DEPLOY ENGINE (UPGRADED)
 // ==========================================
 require('dotenv').config();
 const { 
@@ -62,9 +62,11 @@ try {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
 }
 
-// AFK Command Payload 💤
+// AFK Command Payload 💤 (Robust multi-path resolver)
 try {
-    const afkModule = require('./src/modules/afk');
+    let afkModule = null;
+    try { afkModule = require('./src/modules/afk'); } catch (e) { afkModule = require('./modules/afk'); }
+    
     if (afkModule && afkModule.afkPayload) {
         masterPayloads.push(afkModule.afkPayload);
     }
@@ -74,7 +76,9 @@ try {
 
 // Bump Engine Payloads
 try {
-    const bumpModule = require('./src/modules/bumpEngine');
+    let bumpModule = null;
+    try { bumpModule = require('./src/modules/bumpEngine'); } catch (e) { bumpModule = require('./modules/bumpEngine'); }
+    
     if (bumpModule && bumpModule.bumpSlashCommands) {
         masterPayloads.push(...bumpModule.bumpSlashCommands);
     }
