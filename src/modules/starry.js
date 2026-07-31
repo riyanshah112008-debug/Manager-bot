@@ -18,15 +18,13 @@ const { provisionMasterServerStructure } = require('./masterChannelSystems');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Safely Require MongoDB Models
+// Safely Require Mongoose Models
 let ServerSettings, ChestChannel, BoostChannel;
 try {
     ServerSettings = require('../models/ServerSettings');
     ChestChannel = require('../models/ChestChannel');
     BoostChannel = require('../models/BoostChannel');
-} catch (e) {
-    // Loaded dynamically if present
-}
+} catch (e) {}
 
 // Multi-API Key Support (Comma-separated GEMINI_API_KEY / GOOGLE_AI_KEY)
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
@@ -40,17 +38,15 @@ function getNextAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-// Preferred Active Models Fallback Chain
+// ⚡ ROCK-SOLID 24/7 ULTRA-FAST AI MODELS
 const AI_MODELS = [
-    'gemini-2.5-flash',
     'gemini-1.5-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-1.5-pro'
+    'gemini-1.5-pro',
+    'gemini-2.0-flash-exp'
 ];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fail-Safe AI Generator with Retries & Rotation
 async function generateAIResponseWithRetry(prompt) {
     if (apiKeys.length === 0) {
         throw new Error('Missing GEMINI_API_KEY environment variable.');
@@ -74,9 +70,7 @@ async function generateAIResponseWithRetry(prompt) {
             } catch (err) {
                 lastError = err;
                 const errStatus = err.status || err.statusCode || (err.message && err.message.includes('503') ? 503 : 0);
-                const isRateLimit = errStatus === 429 || errStatus === 503 || (err.message && err.message.includes('high demand'));
-
-                if (isRateLimit && attempt < 3) {
+                if ((errStatus === 429 || errStatus === 503) && attempt < 3) {
                     await sleep(attempt * 1000);
                     continue;
                 }
@@ -85,7 +79,7 @@ async function generateAIResponseWithRetry(prompt) {
         }
     }
 
-    throw lastError || new Error('All AI models are currently busy.');
+    throw lastError || new Error('AI Engine temporarily unreachable.');
 }
 
 const blacklistedUsers = new Set();
@@ -95,14 +89,14 @@ const blacklistedUsers = new Set();
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
-        console.log('🚀 Supreme Starry Protocol & AI Engine Active (Supercharged Local & AI Pipeline)'); 
+        console.log('🚀 Supreme Starry Protocol & AI Engine Active (Zero Double-Reply & Fast Local Pipeline)'); 
     });
 
     // ==========================================
-    // 🛡️ 1. AUTOMOD ENGINE: ANTI-MASS PING DETECTOR
+    // 🛡️ AUTOMOD: ANTI-MASS PING DETECTOR
     // ==========================================
-    client.on('messageCreate', async (message) => {
-        if (!message.guild || message.author.bot || !message.member) return;
+    async function handleAutoModPing(message) {
+        if (!message.guild || message.author.bot || !message.member) return false;
 
         const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
         const userMentionCount = message.mentions.users.size;
@@ -114,9 +108,7 @@ module.exports = (client) => {
             rawPingMatches.length
         );
 
-        const PING_LIMIT = 5;
-
-        if (totalPings >= PING_LIMIT) {
+        if (totalPings >= 5) {
             const botMember = message.guild.members.me;
 
             if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
@@ -151,42 +143,22 @@ module.exports = (client) => {
                 if (warningMsg) {
                     setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
                 }
-
-                const modLogChannel = client.getLogChannel(message.guild, 'moderate');
-                if (modLogChannel) {
-                    const logEmbed = new EmbedBuilder()
-                        .setColor('#ED4245')
-                        .setTitle('🛡️ AutoMod Action: Anti-Mass Ping')
-                        .addFields(
-                            { name: 'Offender', value: `<@${message.author.id}> (\`${message.author.id}\`)`, inline: true },
-                            { name: 'Channel', value: `<#${message.channel.id}>`, inline: true },
-                            { name: 'Total Mentions', value: `\`${totalPings}\``, inline: true },
-                            { name: 'Action Taken', value: '`Message Deleted + 10m Timeout`', inline: true },
-                            { name: 'Case ID', value: `\`#${caseId}\``, inline: true }
-                        )
-                        .setTimestamp();
-
-                    await modLogChannel.send({ embeds: [logEmbed] }).catch(() => {});
-                }
             }
+            return true;
         }
-    });
+        return false;
+    }
 
-    // ==========================================
-    // 👑 MULTI-OWNER VERIFICATION HELPER
-    // ==========================================
+    // Multi-Owner Verification
     client.isOwner = (userId) => {
         const defaultOwners = ['1465049039153135639', '1257676837249617971'];
         const envOwners = (process.env.OWNER_ID || '').split(',').map(id => id.trim()).filter(id => id.length > 0);
         return [...new Set([...defaultOwners, ...envOwners])].includes(userId);
     };
 
-    // ==========================================
-    // 🧭 UNIVERSAL SMART LOG ROUTING ENGINE
-    // ==========================================
+    // Smart Log Router
     client.getLogChannel = (guild, logType = 'misc') => {
         if (!guild || !guild.channels) return null;
-
         const typeMap = {
             'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
             'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs', 'automod-logs'],
@@ -216,7 +188,7 @@ module.exports = (client) => {
 // 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 3 OF 8)
 // ==========================================
     // ==========================================
-    // 🎵 MUSIC & VOICE CONTROL INTERACTION ENGINE
+    // 🎵 MUSIC CONTROL INTERACTION ENGINE
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
@@ -365,18 +337,16 @@ module.exports = (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
 
-    // ==========================================
-    // 📡 DEVELOPER CLI TEXT COMMANDS
-    // ==========================================
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
-
+    // Developer CLI Helper
+    async function handleDevCLI(client, message) {
         const text = message.content.toLowerCase();
+        if (!text.startsWith('.dev') && !text.startsWith('.sysinfo') && !text.startsWith('.eval ')) return false;
+
         const isOwner = client.isOwner(message.author.id);
         const notOwnerMsg = "❌ **Access Denied:** You are not recognized as a bot owner!";
 
         if (text === '.dev') {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
+            if (!isOwner) { await message.reply(notOwnerMsg).catch(()=>{}); return true; }
             const devEmbed = new EmbedBuilder()
                 .setColor('#2C2F33')
                 .setTitle('💻 Starry Developer Menu')
@@ -384,25 +354,30 @@ module.exports = (client) => {
                 .setFooter({ text: 'Starry Developer CLI' });
             try {
                 await message.author.send({ embeds: [devEmbed] });
-                return message.reply('📬 Sent developer CLI guide to your DMs!').catch(() => {});
-            } catch (err) { return message.reply('❌ Could not DM you!').catch(() => {}); }
+                await message.reply('📬 Sent developer CLI guide to your DMs!').catch(() => {});
+            } catch (err) { await message.reply('❌ Could not DM you!').catch(() => {}); }
+            return true;
         }
 
         if (text === '.sysinfo') {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
+            if (!isOwner) { await message.reply(notOwnerMsg).catch(()=>{}); return true; }
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-            return message.reply(`📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms\n- **Servers:** ${client.guilds.cache.size}`).catch(()=>{});
+            await message.reply(`📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms\n- **Servers:** ${client.guilds.cache.size}`).catch(()=>{});
+            return true;
         }
 
         if (text.startsWith('.eval ')) {
-            if (!isOwner) return message.reply(notOwnerMsg).catch(()=>{});
+            if (!isOwner) { await message.reply(notOwnerMsg).catch(()=>{}); return true; }
             try {
                 let evaled = eval(message.content.slice(6));
                 if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                return message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
-            } catch (err) { return message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
+                await message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
+            } catch (err) { await message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
+            return true;
         }
-    });
+
+        return false;
+    }
 // ==========================================
 // 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 5 OF 8)
 // ==========================================
@@ -485,51 +460,78 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 🤖 MAIN AI & NLP CHAT ENGINE
+    // ⚡ INSTANT LOCAL PRE-PARSERS (<50ms - ZERO AI DEPENDENCY)
     // ==========================================
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
-
-        let triggerWord = 'starry';
-        let displayName = 'Starry'; 
-
-        if (message.guild) {
-            try {
-                if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
-                const settings = await ServerSettings.findOne({ guildId: message.guild.id });
-                if (settings && settings.triggerWord) {
-                    triggerWord = settings.triggerWord.toLowerCase();
-                    displayName = settings.triggerWord;
-                }
-            } catch (err) {}
-        }
-
+    async function handleLocalActions(client, message) {
+        if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
-        const isImagine = text.startsWith('.imagine ');
-        const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes(triggerWord) || text.includes('jarvis');
-        let isReplyToBot = false;
+        const botMember = message.guild.members.me;
 
-        if (message.reference) {
-            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
-            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
+        // 1. BULK DELETE CHANNELS IN A CATEGORY (e.g. "Delete all the channels in Security and system logs category")
+        const bulkDelRegex = /(?:delete|remove|purge)\s+(?:all\s+)?(?:the\s+)?channels\s+in\s+(?:the\s+)?([a-zA-Z0-9_\-\s🛡️🚨📡🎫👑📊]+?)(?:\s+category)?$/i;
+        const bulkMatch = message.content.match(bulkDelRegex);
+
+        if (bulkMatch) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
+            }
+            const catSearch = bulkMatch[1].trim().toLowerCase();
+            const targetCategory = message.guild.channels.cache.find(c => 
+                c.type === ChannelType.GuildCategory && 
+                (c.name.toLowerCase() === catSearch || c.name.toLowerCase().includes(catSearch) || catSearch.includes(c.name.toLowerCase()))
+            );
+
+            if (!targetCategory) {
+                await message.reply(`❌ Could not find a category matching **"${bulkMatch[1].trim()}"**.`);
+                return true;
+            }
+
+            const childChannels = message.guild.channels.cache.filter(c => c.parentId === targetCategory.id);
+            let deletedCount = 0;
+            for (const [, ch] of childChannels) {
+                await ch.delete().catch(() => {});
+                deletedCount++;
+            }
+
+            await message.reply(`🗑️ Successfully deleted **${deletedCount} channels** in category **${targetCategory.name}**!`);
+            return true;
         }
 
-        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
+        // 2. DELETE CATEGORY DIRECTLY (e.g. "Delete category Security and system logs")
+        const delCatRegex = /(?:delete|remove)\s+(?:the\s+)?category\s+([a-zA-Z0-9_\-\s🛡️🚨📡🎫👑📊]+)$/i;
+        const delCatMatch = message.content.match(delCatRegex);
 
-        const botMember = message.guild ? message.guild.members.me : null;
-// ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 6 OF 8)
-// ==========================================
-        // ⚡ INSTANT LOCAL PRE-PARSER ENGINE (0% AI RATE LIMIT RISK)
+        if (delCatMatch) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
+            }
+            const catSearch = delCatMatch[1].trim().toLowerCase();
+            const targetCategory = message.guild.channels.cache.find(c => 
+                c.type === ChannelType.GuildCategory && 
+                (c.name.toLowerCase() === catSearch || c.name.toLowerCase().includes(catSearch))
+            );
 
-        // A. VOICE CHANNEL CREATION (e.g., "Starry make a voice channel named music")
-        const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)/i;
+            if (!targetCategory) {
+                await message.reply(`❌ Could not find category **"${delCatMatch[1].trim()}"**.`);
+                return true;
+            }
+
+            const name = targetCategory.name;
+            await targetCategory.delete().catch(() => {});
+            await message.reply(`🗑️ Successfully deleted category **${name}**.`);
+            return true;
+        }
+
+        // 3. VOICE CHANNEL CREATION (e.g., "Starry make a voice channel named music")
+        const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
         const voiceMatch = message.content.match(voiceChanRegex);
 
-        if (voiceMatch && message.guild) {
+        if (voiceMatch) {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                return message.reply("❌ You or I lack **Manage Channels** permission.");
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
             }
             const vName = voiceMatch[1].trim();
             try {
@@ -537,19 +539,21 @@ module.exports = (client) => {
                     name: vName,
                     type: ChannelType.GuildVoice
                 });
-                return message.reply(`🔊 Successfully created voice channel **${vChan.name}**!`);
+                await message.reply(`🔊 Successfully created voice channel **${vChan.name}**!`);
             } catch (err) {
-                return message.reply(`❌ Failed to create voice channel: \`${err.message}\``);
+                await message.reply(`❌ Failed to create voice channel: \`${err.message}\``);
             }
+            return true;
         }
 
-        // B. TEXT CHANNEL CREATION (e.g., "Starry create a channel Owners-chat")
-        const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)/i;
+        // 4. TEXT CHANNEL CREATION (e.g., "Starry create a channel Owners-chat")
+        const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
         const textMatch = message.content.match(textChanRegex);
 
-        if (textMatch && message.guild && !text.includes('voice') && !text.includes('role') && !text.includes('category')) {
+        if (textMatch && !text.includes('voice') && !text.includes('role') && !text.includes('category')) {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                return message.reply("❌ You or I lack **Manage Channels** permission.");
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
             }
             const cName = textMatch[1].trim().toLowerCase().replace(/\s+/g, '-');
             try {
@@ -557,19 +561,21 @@ module.exports = (client) => {
                     name: cName,
                     type: ChannelType.GuildText
                 });
-                return message.reply(`✨ Successfully created text channel <#${tChan.id}>!`);
+                await message.reply(`✨ Successfully created text channel <#${tChan.id}>!`);
             } catch (err) {
-                return message.reply(`❌ Failed to create text channel: \`${err.message}\``);
+                await message.reply(`❌ Failed to create text channel: \`${err.message}\``);
             }
+            return true;
         }
 
-        // C. CATEGORY CREATION (e.g., "Starry create category Staff-Zone")
-        const createCatRegex = /(?:create|make|add)\s+(?:a\s+)?category\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)/i;
+        // 5. CREATE CATEGORY (e.g. "Starry create category Staff-Zone")
+        const createCatRegex = /(?:create|make|add)\s+(?:a\s+)?category\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
         const catMatch = message.content.match(createCatRegex);
 
-        if (catMatch && message.guild) {
+        if (catMatch) {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                return message.reply("❌ You or I lack **Manage Channels** permission.");
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
             }
             const catName = catMatch[1].trim();
             try {
@@ -577,19 +583,21 @@ module.exports = (client) => {
                     name: catName,
                     type: ChannelType.GuildCategory
                 });
-                return message.reply(`📁 Successfully created category **${newCat.name}**!`);
+                await message.reply(`📁 Successfully created category **${newCat.name}**!`);
             } catch (err) {
-                return message.reply(`❌ Failed to create category: \`${err.message}\``);
+                await message.reply(`❌ Failed to create category: \`${err.message}\``);
             }
+            return true;
         }
 
-        // D. TIMEOUT PRE-PARSER
+        // 6. TIMEOUT PRE-PARSER
         const timeoutRegex = /timeout\s+<@!?(\d+)>\s*(?:for\s*)?(\d+)\s*(m|min|mins|minute|minutes|h|hr|hours|d|day|days)?/i;
         const timeoutMatch = message.content.match(timeoutRegex);
 
-        if (timeoutMatch && message.guild) {
+        if (timeoutMatch) {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-                return message.reply("❌ You or I lack **Moderate Members** permission.");
+                await message.reply("❌ You or I lack **Moderate Members** permission.");
+                return true;
             }
             const targetId = timeoutMatch[1];
             const amount = parseInt(timeoutMatch[2]) || 1;
@@ -599,57 +607,48 @@ module.exports = (client) => {
             if (unit.startsWith('d')) durationMs = amount * 24 * 60 * 60 * 1000;
 
             const tMember = await message.guild.members.fetch(targetId).catch(() => null);
-            if (!tMember) return message.reply("❌ Target member not found in server.");
+            if (!tMember) { await message.reply("❌ Target member not found in server."); return true; }
 
-            if (tMember.id === message.guild.ownerId) return message.reply("❌ I cannot moderate the **Server Owner**!");
-            if (tMember.id === client.user.id) return message.reply("❌ I cannot moderate **myself**!");
+            if (tMember.id === message.guild.ownerId) { await message.reply("❌ I cannot moderate the **Server Owner**!"); return true; }
+            if (tMember.id === client.user.id) { await message.reply("❌ I cannot moderate **myself**!"); return true; }
 
             if (tMember.roles.highest.position >= botMember.roles.highest.position) {
-                return message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role is higher than or equal to mine!`);
+                await message.reply(`❌ Cannot moderate **${tMember.user.tag}** because their role is higher than or equal to mine!`);
+                return true;
             }
 
             const caseId = Math.floor(Math.random() * 90000) + 10000;
             const dmSent = await client.sendPremiumModDM(tMember, message.member, 'timeout', 'Direct Staff Command', `${amount} ${unit}`, message.guild, caseId);
 
             await tMember.timeout(durationMs, `Requested by ${message.author.tag}`).catch(() => {});
-            return message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+            await message.reply(`⏰ Timed out <@${targetId}> for ${amount} ${unit}. ${dmSent ? '*(User Notified)*' : '*(DMs Closed)*'}`);
+            return true;
         }
 
-        // E. CREATE ROLE PRE-PARSER
-        const createRoleRegex = /(?:create|make|add) (?:a |an )?(?:role|role named) ([\w\s\-_]+)/i;
-        const roleMatch = message.content.match(createRoleRegex);
-
-        if (roleMatch && message.guild && !text.includes('channel') && !text.includes('category')) {
-            const roleName = roleMatch[1].trim();
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                return message.reply('❌ Missing **Manage Roles** permission.');
-            }
-            try {
-                const newRole = await message.guild.roles.create({ name: roleName, reason: `Requested by ${message.author.tag}` });
-                return message.reply(`✅ Successfully created role **${newRole.name}**!`);
-            } catch (err) {
-                return message.reply(`❌ Failed to create role: \`${err.message}\``);
-            }
-        }
-
-        // F. CLEAR / PURGE PRE-PARSER
-        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?/i;
+        // 7. PURGE MESSAGES PRE-PARSER
+        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
         const clearMatch = message.content.match(clearRegex);
 
-        if (clearMatch && message.guild && !text.includes('channel') && !text.includes('category')) {
+        if (clearMatch && !text.includes('channel') && !text.includes('category')) {
             if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                return message.reply('❌ Missing **Manage Messages** permission.');
+                await message.reply('❌ Missing **Manage Messages** permission.');
+                return true;
             }
             const count = parseInt(clearMatch[1]);
-            if (count <= 0) return message.reply('❌ Please specify a valid number of messages to clear.');
+            if (count <= 0) { await message.reply('❌ Please specify a valid number of messages to clear.'); return true; }
             const deleteCount = Math.min(count, 99) + 1;
             await message.channel.bulkDelete(deleteCount, true).catch(() => {});
-            return message.channel.send(`🧹 Successfully cleared ${count} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
+            const sent = await message.channel.send(`🧹 Successfully cleared ${count} messages!`);
+            setTimeout(() => sent.delete().catch(() => {}), 3500);
+            return true;
         }
+
+        return false;
+    }
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 7 OF 8)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 6 OF 8)
 // ==========================================
-        // G. POLLINATIONS AI IMAGE GENERATOR
+    async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -662,9 +661,9 @@ module.exports = (client) => {
         }
 
         if (isImageRequest) {
-            if (!imagePrompt) return message.reply('❌ Please tell me what to draw!').catch(() => {});
+            if (!imagePrompt) { await message.reply('❌ Please tell me what to draw!').catch(() => {}); return true; }
             const replyMsg = await message.reply('🎨 Painting your picture... Please wait.').catch(() => null);
-            if (!replyMsg) return;
+            if (!replyMsg) return true;
             try {
                 const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
                 const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true`;
@@ -672,15 +671,16 @@ module.exports = (client) => {
                     content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, 
                     files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] 
                 }).catch(() => {});
-                return await replyMsg.delete().catch(() => {});
+                await replyMsg.delete().catch(() => {});
             } catch (error) { 
-                return replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
+                await replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
             }
+            return true;
         }
+        return false;
+    }
 
-        // ==========================================
-        // H. CONVERSATIONAL GEMINI NLP RESPONSE ENGINE
-        // ==========================================
+    async function handleConversationalGemini(client, message, displayName) {
         await message.channel.sendTyping().catch(() => {});
 
         try {
@@ -731,7 +731,7 @@ ${message.author.username} says: ${message.content}`;
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 8 OF 8)
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 7 OF 8)
 // ==========================================
             if (functionName && message.guild) {
                 const botMember = message.guild.members.me;
@@ -807,7 +807,7 @@ ${message.author.username} says: ${message.content}`;
                     await message.channel.send(`🧹 Successfully cleared ${args.amount} messages!`).then(m => setTimeout(() => m.delete().catch(() => {}), 3500));
                 }
 
-                // --- 8. MODERATION ACTIONS (TIMEOUT / KICK / BAN / UNBAN) ---
+                // --- 8. MODERATION ACTIONS ---
                 const tId = (args.userId || '').replace(/\D/g, '');
                 if (tId && message.guild) {
                     const tMember = await message.guild.members.fetch(tId).catch(() => null);
@@ -850,7 +850,6 @@ ${message.author.username} says: ${message.content}`;
                 }
             }
 
-            // Output Dispatcher with Chunking to Avoid Discord 2000-Char Limit
             if (replyText && replyText.trim().length > 0) {
                 const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
                 for (const chunk of textChunks) {
@@ -862,5 +861,58 @@ ${message.author.username} says: ${message.content}`;
             console.error("Gemini AI Engine Error:", error.message || error);
             return message.reply(`⏳ **High Demand Notice:** Google AI servers are experiencing a temporary traffic spike. Please try again in a few seconds!`).catch(() => {});
         }
-    }); 
+    }
+// ==========================================
+// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 8 OF 8)
+// ==========================================
+
+    // ==========================================
+    // 🌐 SINGLE UNIFIED MESSAGE DISPATCHER PIPELINE
+    // ==========================================
+    client.on('messageCreate', async (message) => {
+        if (!message.guild || message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
+
+        // 1. AutoMod Ping Check
+        if (await handleAutoModPing(message)) return;
+
+        // 2. Developer CLI Commands (.dev, .sysinfo, .eval)
+        if (await handleDevCLI(client, message)) return;
+
+        // Trigger Word Check
+        let triggerWord = 'starry';
+        let displayName = 'Starry'; 
+
+        try {
+            if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
+            const settings = await ServerSettings.findOne({ guildId: message.guild.id });
+            if (settings && settings.triggerWord) {
+                triggerWord = settings.triggerWord.toLowerCase();
+                displayName = settings.triggerWord;
+            }
+        } catch (err) {}
+
+        const text = message.content.toLowerCase().trim();
+        const isImagine = text.startsWith('.imagine ');
+        const mentionsBot = message.mentions.has(client.user.id);
+        const hasName = text.includes(triggerWord) || text.includes('jarvis');
+        let isReplyToBot = false;
+
+        if (message.reference) {
+            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
+            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
+        }
+
+        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
+
+        // 3. Fast Local Actions Pre-Parser (<50ms Execution)
+        const localHandled = await handleLocalActions(client, message);
+        if (localHandled) return; // Handled locally, stop execution immediately!
+
+        // 4. Pollinations AI Media Generation
+        const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
+        if (imageHandled) return;
+
+        // 5. Conversational Gemini NLP AI Engine
+        await handleConversationalGemini(client, message, displayName);
+    });
 };
