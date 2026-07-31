@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 1 OF 2)
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 1 OF 6)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -88,7 +88,9 @@ async function generateAIResponseWithRetry(prompt) {
     }
     return "⚡ **Traffic Optimization:** Request processed via secondary buffer.";
 }
-
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 2 OF 6)
+// ==========================================
 async function executeFullGuildBackup(guild) {
     try {
         const allRoles = await guild.roles.fetch();
@@ -217,7 +219,202 @@ async function provisionMasterServerStructure(interaction) {
     return { verifiedRole, totalCategories: 6, totalChannels: 24 };
 }
 // ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 2 OF 2)
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 3 OF 6)
+// ==========================================
+// --- CORE CHANNEL & CATEGORY PROMPT UTILITIES ---
+
+async function createChannelAction(guild, name, type = ChannelType.GuildText, categoryName = null, topic = '') {
+    let parentCategory = null;
+    if (categoryName) {
+        parentCategory = guild.channels.cache.find(c => 
+            c.type === ChannelType.GuildCategory && 
+            c.name.toLowerCase() === categoryName.toLowerCase().trim()
+        );
+        if (!parentCategory) {
+            parentCategory = await guild.channels.create({
+                name: categoryName.trim(),
+                type: ChannelType.GuildCategory
+            });
+        }
+    }
+
+    const createdChannel = await guild.channels.create({
+        name: name.toLowerCase().replace(/\s+/g, '-'),
+        type: type,
+        parent: parentCategory ? parentCategory.id : null,
+        topic: topic
+    });
+
+    return createdChannel;
+}
+
+async function deleteChannelAction(guild, channelIdentifier) {
+    const cleanId = channelIdentifier.replace(/[<#>]/g, '').trim();
+    let targetChannel = guild.channels.cache.find(c => 
+        c.id === cleanId || 
+        c.name.toLowerCase() === channelIdentifier.toLowerCase().replace('#', '').trim()
+    );
+
+    if (!targetChannel) throw new Error(`Channel "${channelIdentifier}" not found.`);
+    const channelName = targetChannel.name;
+    await targetChannel.delete();
+    return channelName;
+}
+
+async function createCategoryAction(guild, name) {
+    let existingCategory = guild.channels.cache.find(c => 
+        c.type === ChannelType.GuildCategory && 
+        c.name.toLowerCase() === name.toLowerCase().trim()
+    );
+
+    if (existingCategory) return existingCategory;
+
+    const newCategory = await guild.channels.create({
+        name: name.trim(),
+        type: ChannelType.GuildCategory
+    });
+
+    return newCategory;
+}
+
+async function deleteCategoryAction(guild, categoryName) {
+    const category = guild.channels.cache.find(c => 
+        c.type === ChannelType.GuildCategory && 
+        (c.id === categoryName || c.name.toLowerCase() === categoryName.toLowerCase().trim())
+    );
+
+    if (!category) throw new Error(`Category "${categoryName}" not found.`);
+    const name = category.name;
+    await category.delete();
+    return name;
+}
+
+async function lockUnlockChannelAction(guild, channelTarget, lockState = true) {
+    const cleanId = channelTarget.replace(/[<#>]/g, '').trim();
+    let channel = guild.channels.cache.find(c => c.id === cleanId || c.name.toLowerCase() === cleanId.toLowerCase());
+    if (!channel) throw new Error(`Channel "${channelTarget}" not found.`);
+
+    await channel.permissionOverwrites.edit(guild.roles.everyone, {
+        SendMessages: lockState ? false : null,
+        Connect: lockState ? false : null
+    });
+
+    return channel;
+}
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 4 OF 6)
+// ==========================================
+// --- FULL NATURAL LANGUAGE CHAT PROMPT ENGINE ---
+
+async function processPromptChannelCommands(message) {
+    if (!message.guild || message.author.bot) return false;
+
+    const rawContent = message.content.trim();
+    const lowerContent = rawContent.toLowerCase();
+
+    // Trigger check
+    if (!lowerContent.startsWith('starry')) return false;
+
+    // Security Check: User must have Manage Channels or Administrator permission
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) && 
+        !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return false;
+    }
+
+    const guild = message.guild;
+
+    try {
+        // 1. CREATE CHANNEL PROMPT (e.g., "Starry create a channel Owners-chat", "Starry create a voice channel Chill in category Lounge")
+        const createChannelMatch = rawContent.match(/starry\s+(?:please\s+)?create\s+(?:a\s+)?(?:(text|voice|stage)\s+)?channel\s+([a-zA-Z0-9_-]+)(?:\s+in\s+(?:category\s+)?([a-zA-Z0-9_\s-]+))?/i);
+        if (createChannelMatch) {
+            const [, typeStr, channelName, categoryName] = createChannelMatch;
+            const channelType = typeStr?.toLowerCase() === 'voice' ? ChannelType.GuildVoice : 
+                              typeStr?.toLowerCase() === 'stage' ? ChannelType.GuildStageVoice : ChannelType.GuildText;
+
+            const ch = await createChannelAction(guild, channelName, channelType, categoryName);
+            const embed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('✨ Channel Created via Prompt')
+                .setDescription(`**Channel:** <#${ch.id}>\n**Type:** \`${typeStr ? typeStr.toUpperCase() : 'TEXT'}\`${categoryName ? `\n**Category:** \`${categoryName.trim()}\`` : ''}`)
+                .setFooter({ text: 'Starry Master Prompt Engine' });
+
+            await message.reply({ embeds: [embed] });
+            return true;
+        }
+
+        // 2. DELETE CHANNEL PROMPT (e.g., "Starry delete channel #old-chat", "Starry delete channel Owners-chat")
+        const deleteChannelMatch = rawContent.match(/starry\s+(?:please\s+)?delete\s+(?:the\s+)?channel\s+([a-zA-Z0-9_#<>-]+)/i);
+        if (deleteChannelMatch) {
+            const channelTarget = deleteChannelMatch[1];
+            const deletedName = await deleteChannelAction(guild, channelTarget);
+
+            const embed = new EmbedBuilder()
+                .setColor('#ED4245')
+                .setTitle('🗑️ Channel Deleted via Prompt')
+                .setDescription(`Channel **#${deletedName}** has been removed.`)
+                .setFooter({ text: 'Starry Master Prompt Engine' });
+
+            await message.reply({ embeds: [embed] });
+            return true;
+        }
+
+        // 3. CREATE CATEGORY PROMPT (e.g., "Starry create category Staff-Zone")
+        const createCatMatch = rawContent.match(/starry\s+(?:please\s+)?create\s+(?:a\s+)?category\s+([a-zA-Z0-9_\s-]+)/i);
+        if (createCatMatch) {
+            const categoryName = createCatMatch[1].trim();
+            const cat = await createCategoryAction(guild, categoryName);
+
+            const embed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('📁 Category Created via Prompt')
+                .setDescription(`**Category Name:** \`${cat.name}\``)
+                .setFooter({ text: 'Starry Master Prompt Engine' });
+
+            await message.reply({ embeds: [embed] });
+            return true;
+        }
+
+        // 4. DELETE CATEGORY PROMPT (e.g., "Starry delete category Staff-Zone")
+        const deleteCatMatch = rawContent.match(/starry\s+(?:please\s+)?delete\s+(?:the\s+)?category\s+([a-zA-Z0-9_\s-]+)/i);
+        if (deleteCatMatch) {
+            const categoryName = deleteCatMatch[1].trim();
+            const deletedCatName = await deleteCategoryAction(guild, categoryName);
+
+            const embed = new EmbedBuilder()
+                .setColor('#ED4245')
+                .setTitle('🗑️ Category Deleted via Prompt')
+                .setDescription(`Category **${deletedCatName}** has been removed.`)
+                .setFooter({ text: 'Starry Master Prompt Engine' });
+
+            await message.reply({ embeds: [embed] });
+            return true;
+        }
+
+        // 5. LOCK / UNLOCK CHANNEL PROMPT (e.g., "Starry lock channel #general", "Starry unlock channel #general")
+        const lockMatch = rawContent.match(/starry\s+(lock|unlock)\s+(?:channel\s+)?([a-zA-Z0-9_#<>-]+)/i);
+        if (lockMatch) {
+            const isLock = lockMatch[1].toLowerCase() === 'lock';
+            const channelTarget = lockMatch[2];
+            const ch = await lockUnlockChannelAction(guild, channelTarget, isLock);
+
+            const embed = new EmbedBuilder()
+                .setColor(isLock ? '#ED4245' : '#2ecc71')
+                .setTitle(isLock ? '🔒 Channel Locked' : '🔓 Channel Unlocked')
+                .setDescription(`Channel <#${ch.id}> has been ${isLock ? 'locked' : 'unlocked'} for @everyone.`)
+                .setFooter({ text: 'Starry Master Prompt Engine' });
+
+            await message.reply({ embeds: [embed] });
+            return true;
+        }
+    } catch (err) {
+        await message.reply(`❌ **Prompt Execution Error:** ${err.message}`).catch(() => {});
+        return true;
+    }
+
+    return false;
+}
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 5 OF 6)
 // ==========================================
 function start60sChannelTelemetryLoop(client) {
     setInterval(async () => {
@@ -243,7 +440,6 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 
-// Emergency Nuke Command with Target Options & Instant Deferral
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
@@ -335,8 +531,10 @@ async function handleEmergencyCommands(interaction) {
             return interaction.editReply(`⚡ **EMERGENCY SERVER NUKE COMPLETED:**\n• Purged **${deletedChannels}** channels.\n• Deleted **${deletedRoles}** non-essential roles.`);
         }
     }
-}
-
+                   }
+                                                           // ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 6 OF 6)
+// ==========================================
 function initModule(client) {
     client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
@@ -356,6 +554,12 @@ function initModule(client) {
         }
     });
 
+    // 💬 LISTEN TO ALL NATURAL LANGUAGE PROMPTS DYNAMICALLY
+    client.on('messageCreate', async (message) => {
+        await processPromptChannelCommands(message);
+    });
+
+    // ⚡ LISTEN TO EXISTING SYSTEM INTERACTION SLASH COMMANDS
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
@@ -371,7 +575,7 @@ function initModule(client) {
         }
     });
 
-    console.log('✅ Master Channel Systems Engine Initialized');
+    console.log('✅ Master Channel Systems Engine Initialized (Pure Prompt Driven Capabilities Active)');
 }
 
 module.exports = initModule;
