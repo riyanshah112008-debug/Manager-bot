@@ -1,3 +1,6 @@
+// ==========================================
+// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 1 OF 3)
+// ==========================================
 require('dotenv').config();
 const { 
     REST, 
@@ -30,10 +33,32 @@ const autoroleCommandDef = {
     options: autoroleOptions
 };
 
+// --- Safely Import Master System Payloads ---
+let masterPayloads = [];
+try {
+    const masterModule = require('./src/modules/masterChannelSystems');
+    if (masterModule) {
+        if (masterModule.modMasterPayload) masterPayloads.push(masterModule.modMasterPayload);
+        if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
+        if (masterModule.moderateMasterPayload) masterPayloads.push(masterModule.moderateMasterPayload);
+        if (masterModule.verifySetupPayload) masterPayloads.push(masterModule.verifySetupPayload);
+        if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload);
+        if (masterModule.emergencyLockdownPayload) masterPayloads.push(masterModule.emergencyLockdownPayload);
+        if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
+        if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
+        if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
+        if (masterModule.trackerPayload) masterPayloads.push(masterModule.trackerPayload);
+    }
+} catch (err) {
+    console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
+}
+
 // ==========================================
 // INITIALIZE COMPLETE COMMANDS ARRAY
 // ==========================================
 const commands = [
+    ...masterPayloads,
+
     // TELEMETRY
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
 
@@ -47,9 +72,13 @@ const commands = [
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View and interactively manage the current music queue' },
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
-
-    // 🛡️ ADVANCED MODERATION ENGINE (/moderate)
+    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' }
+];
+// ==========================================
+// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 2 OF 3)
+// ==========================================
+// 🛡️ ADVANCED MODERATION ENGINE (/moderate)
+commands.push(
     new SlashCommandBuilder()
         .setName('moderate')
         .setDescription('⚙️ Toggle advanced security modules & AutoMod settings')
@@ -104,7 +133,7 @@ const commands = [
 
     // SECURITY & VERIFICATION
     { name: 'verify-setup', description: 'Set up the server verification panel (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'The channel to send the verification panel' }, { name: 'role', type: 8, required: true, description: 'The role to give users when they verify' }] }
-];
+);
 
 // Safely Load Social Command Payload
 try {
@@ -167,7 +196,9 @@ commands.push(
     { name: 'devpanel', description: '💻 Open the interactive developer control panel' },
     autoroleCommandDef
 );
-
+// ==========================================
+// 🚀 STARRY SUPREME DEPLOY ENGINE (PART 3 OF 3)
+// ==========================================
 // ROLES, SETUP & UTILITIES
 commands.push(
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
