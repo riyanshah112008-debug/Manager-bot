@@ -42,7 +42,7 @@ function generateProgressBar(current, total, length = 12) {
     return `\`${bar}\` **${Math.floor(progress * 100)}%**`;
 }
 
-// Slash Command Definition for tracker.js
+// Slash Command Definition
 const trackerCommandSchema = new SlashCommandBuilder()
     .setName('tracker')
     .setDescription('Universal Invite Tracker & 14-Day Inactivity System')
@@ -509,3 +509,5 @@ universalTrackerModule.execute = async (interaction) => {
 };
 
 module.exports = universalTrackerModule;
+module.exports.startServerScrape = universalTrackerModule.startServerScrape;
+            
