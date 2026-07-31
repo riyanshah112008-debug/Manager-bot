@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 1 OF 6)
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 1 OF 3)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -21,7 +21,6 @@ const mongoose = require('mongoose');
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
-const { GoogleGenAI } = require('@google/genai');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
@@ -44,7 +43,6 @@ const protectDb = new Database('protect.db');
 protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
 
 const securityCache = new Map();
-const nukeTracker = new Map();  
 
 async function getSecurityConfig(guildId) {
     if (securityCache.has(guildId)) return securityCache.get(guildId);
@@ -57,40 +55,6 @@ async function getSecurityConfig(guildId) {
     return config;
 }
 
-// --- DYNAMIC MULTI-MODEL AI ROTATION ENGINE ---
-const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
-const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
-let currentKeyIndex = 0;
-
-function getNextAIClient() {
-    if (apiKeys.length === 0) return null;
-    const key = apiKeys[currentKeyIndex];
-    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-    return new GoogleGenAI({ apiKey: key });
-}
-
-async function generateAIResponseWithRetry(prompt) {
-    if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY environment variable.');
-    const AI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro'];
-    
-    for (let attempt = 0; attempt < 3; attempt++) {
-        for (const modelName of AI_MODELS) {
-            try {
-                const ai = getNextAIClient();
-                if (!ai) continue;
-                const response = await ai.models.generateContent({ model: modelName, contents: prompt });
-                if (response && response.text) return response.text.trim();
-            } catch (err) {
-                continue;
-            }
-        }
-        await new Promise(res => setTimeout(res, 500));
-    }
-    return "⚡ **Traffic Optimization:** Request processed via secondary buffer.";
-}
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 2 OF 6)
-// ==========================================
 async function executeFullGuildBackup(guild) {
     try {
         const allRoles = await guild.roles.fetch();
@@ -104,7 +68,9 @@ async function executeFullGuildBackup(guild) {
         return { rolesSaved: guild.roles.cache.size, categoriesSaved: guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size, channelsSaved: guild.channels.cache.filter(c => c.type !== ChannelType.GuildCategory).size };
     }
 }
-
+// ==========================================
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 2 OF 3)
+// ==========================================
 async function getOrCreateCategory(guild, name, overwrites = []) {
     let cat = guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === ChannelType.GuildCategory);
     if (!cat) {
@@ -158,9 +124,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
     return channel;
 }
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 3 OF 6)
-// ==========================================
+
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
@@ -222,7 +186,7 @@ async function provisionMasterServerStructure(interaction) {
     return { verifiedRole: verifiedRole.name, totalCategories: 6, totalChannels: 22 };
 }
 // ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 4 OF 6)
+// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 3 OF 3)
 // ==========================================
 function start60sChannelTelemetryLoop(client) {
     setInterval(async () => {
@@ -284,9 +248,7 @@ const verifySetupCommand = new SlashCommandBuilder()
     .setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 5 OF 6)
-// ==========================================
+
 async function handleEmergencyCommands(interaction) {
     if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -342,11 +304,8 @@ async function handleEmergencyCommands(interaction) {
         }
     }
 }
-// ==========================================
-// 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 6 OF 6)
-// ==========================================
+
 function initModule(client) {
-    client.isUserProtected = (guildId, userId) => !!getProtect.get(guildId, userId);
     start60sChannelTelemetryLoop(client);
 
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
@@ -364,7 +323,7 @@ function initModule(client) {
         }
     });
 
-    // 🛑 STRICTLY NO messageCreate LISTENER HERE TO PREVENT DOUBLE-REPLYING!
+    // 🛑 STRICTLY ZERO messageCreate LISTENERS HERE TO PREVENT DOUBLE-REPLYING!
 
     // ⚡ LISTEN TO SYSTEM INTERACTION SLASH COMMANDS ONLY
     client.on('interactionCreate', async (interaction) => {
@@ -393,7 +352,6 @@ function initModule(client) {
 module.exports = initModule;
 module.exports.init = initModule;
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
-module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.executeFullGuildBackup = executeFullGuildBackup;
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
 module.exports.modMasterPayload = modMasterCommand.toJSON();
