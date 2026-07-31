@@ -1,5 +1,5 @@
 // ==========================================
-// 📦 STARRY AUTONOMOUS BACKUP & MESSAGE ARCHIVE ENGINE
+// 📦 STARRY NEAT-JSON BACKUP & RESTORE ENGINE
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -20,7 +20,7 @@ try {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: Safely fetch recent messages without hitting Discord API rate limits
+// Helper: Safely fetch recent channel message history
 async function fetchChannelMessageArchive(channel, limit = 50) {
     if (!channel.isTextBased() || channel.isVoiceBased()) return [];
     const botPerms = channel.permissionsFor(channel.guild.members.me);
@@ -31,102 +31,134 @@ async function fetchChannelMessageArchive(channel, limit = 50) {
         if (!fetched || fetched.size === 0) return [];
 
         return fetched.map(m => ({
-            id: m.id,
-            authorTag: m.author ? m.author.tag : 'Unknown User',
-            authorId: m.author ? m.author.id : null,
+            time: new Date(m.createdTimestamp).toLocaleString(),
+            author: m.author ? m.author.tag : 'Unknown User',
             isBot: m.author ? m.author.bot : false,
             content: m.content || '',
-            timestamp: m.createdTimestamp,
             attachments: m.attachments.map(a => a.url),
-            embedCount: m.embeds.length
-        })).reverse(); // Store chronologically
+            id: m.id
+        })).reverse(); // Chronological order
     } catch (err) {
         return [];
     }
 }
 
-// Core Function: Execute Full Server Architecture + Message History Backup
+// Core Backup Execution Routine
 async function executeServerFullBackup(guild) {
     const fetchedRoles = await guild.roles.fetch();
     const fetchedChannels = await guild.channels.fetch();
 
+    // 1. Roles sorted by position (Highest to Lowest)
     const rolesData = fetchedRoles
         .filter(r => !r.managed && r.name !== '@everyone' && r.id !== guild.id)
+        .sort((a, b) => b.position - a.position)
         .map(r => ({
-            id: r.id, 
-            name: r.name, 
-            color: r.hexColor, 
-            hoist: r.hoist, 
-            permissions: r.permissions ? r.permissions.bitfield.toString() : '0', 
-            position: r.position
+            position: r.position,
+            name: r.name,
+            color: r.hexColor,
+            hoist: r.hoist,
+            permissions: r.permissions ? r.permissions.bitfield.toString() : '0',
+            id: r.id
         }));
 
     const getOverwrites = (channel) => channel.permissionOverwrites.cache.map(ow => ({
-        id: ow.id, 
-        type: ow.type, 
-        allow: ow.allow ? ow.allow.bitfield.toString() : '0', 
+        id: ow.id,
+        type: ow.type,
+        allow: ow.allow ? ow.allow.bitfield.toString() : '0',
         deny: ow.deny ? ow.deny.bitfield.toString() : '0'
     }));
 
-    const categoriesData = fetchedChannels
-        .filter(c => c && c.type === ChannelType.GuildCategory)
-        .map(c => ({ id: c.id, name: c.name, overwrites: getOverwrites(c) }));
+    // 2. Categories Map
+    const categoriesMap = new Map();
+    const categoriesData = [];
 
+    fetchedChannels
+        .filter(c => c && c.type === ChannelType.GuildCategory)
+        .forEach(c => {
+            categoriesMap.set(c.id, c.name);
+            categoriesData.push({
+                name: c.name,
+                id: c.id,
+                overwrites: getOverwrites(c)
+            });
+        });
+
+    // 3. Channels Organized Category-Wise
     const channelsData = [];
     let totalMessagesArchived = 0;
 
-    // Iterate through text channels to back up metadata + message archives
-    for (const [, c] of fetchedChannels) {
-        if (!c || c.type === ChannelType.GuildCategory) continue;
+    const sortedChannels = Array.from(fetchedChannels.values())
+        .filter(c => c && c.type !== ChannelType.GuildCategory)
+        .sort((a, b) => {
+            const catA = a.parentId ? (categoriesMap.get(a.parentId) || 'Uncategorized') : 'Uncategorized';
+            const catB = b.parentId ? (categoriesMap.get(b.parentId) || 'Uncategorized') : 'Uncategorized';
+            return catA.localeCompare(catB);
+        });
+
+    for (const c of sortedChannels) {
+        const categoryName = c.parentId ? (categoriesMap.get(c.parentId) || 'Uncategorized') : 'No Category';
 
         let messageHistory = [];
         if (c.isTextBased()) {
-            messageHistory = await fetchChannelMessageArchive(c, 50); // Fetch last 50 messages per channel
+            messageHistory = await fetchChannelMessageArchive(c, 50);
             totalMessagesArchived += messageHistory.length;
-            await delay(200); // Throttling delay to stay safe from Discord API bans
+            await delay(150); // Throttling for Discord API safety
         }
 
         channelsData.push({
-            id: c.id, 
-            name: c.name, 
-            type: c.type, 
-            parentId: c.parentId, 
-            topic: c.topic || '', 
-            nsfw: c.nsfw || false, 
-            rateLimitPerUser: c.rateLimitPerUser || 0, 
-            userLimit: c.userLimit || 0, 
-            overwrites: getOverwrites(c),
-            messages: messageHistory // 💬 MESSAGE HISTORY ARCHIVE
+            category: categoryName,
+            name: `#${c.name}`,
+            topic: c.topic || 'None',
+            type: c.type === 0 ? 'Text Channel' : (c.type === 2 ? 'Voice Channel' : `Type ${c.type}`),
+            archivedMessagesCount: messageHistory.length,
+            messages: messageHistory,
+            // Programmatic keys for .restore
+            id: c.id,
+            parentId: c.parentId,
+            rawType: c.type,
+            nsfw: c.nsfw || false,
+            rateLimitPerUser: c.rateLimitPerUser || 0,
+            userLimit: c.userLimit || 0,
+            overwrites: getOverwrites(c)
         });
     }
 
     const backupPayload = {
-        guildId: guild.id,
-        guildName: guild.name,
+        _info: "================ STARRY FULL SERVER ARCHIVE ================",
+        serverName: guild.name,
+        serverId: guild.id,
+        createdAt: new Date().toLocaleString(),
         timestamp: Date.now(),
-        roles: rolesData,
-        categories: categoriesData,
-        channels: channelsData,
-        stats: {
+        summary: {
             totalRoles: rolesData.length,
             totalCategories: categoriesData.length,
             totalChannels: channelsData.length,
-            totalMessages: totalMessagesArchived
-        }
+            totalArchivedMessages: totalMessagesArchived
+        },
+        roles: rolesData,
+        categories: categoriesData,
+        channels: channelsData
     };
 
+    // Save to MongoDB
     if (ServerBackup) {
         await ServerBackup.findOneAndUpdate(
             { guildId: guild.id },
-            backupPayload,
+            { 
+                guildId: guild.id, 
+                timestamp: backupPayload.timestamp, 
+                roles: rolesData, 
+                categories: categoriesData, 
+                channels: channelsData 
+            },
             { upsert: true }
-        ).catch(e => console.error('MongoDB Backup Save Error:', e));
+        ).catch(e => console.error('MongoDB Backup Error:', e));
     }
 
     return backupPayload;
 }
 
-// Helper: Locate Admin Channel to dispatch daily backup file
+// Locate Admin Channel for Dispatch
 function findAdminChannel(guild) {
     return guild.channels.cache.find(c => 
         c.isTextBased() && 
@@ -145,12 +177,11 @@ function findAdminChannel(guild) {
 module.exports = (client) => {
 
     // ==========================================
-    // 🕒 AUTOMATED DAILY BACKUP SCHEDULER (EVERY 24 HOURS)
+    // 🕒 AUTOMATED DAILY BACKUP SCHEDULER (24 HOURS)
     // ==========================================
     client.once('ready', () => {
         console.log('⏰ Autonomous Daily Backup Engine Armed.');
 
-        // Run backup cycle every 24 hours (24 * 60 * 60 * 1000 ms)
         setInterval(async () => {
             console.log('🔄 Executing Scheduled Daily Server Backups...');
 
@@ -161,18 +192,18 @@ module.exports = (client) => {
 
                     if (adminCh) {
                         const jsonBuffer = Buffer.from(JSON.stringify(backupData, null, 2), 'utf-8');
-                        const fileAttachment = new AttachmentBuilder(jsonBuffer, { name: `Daily_Backup_${guild.id}.json` });
+                        const fileAttachment = new AttachmentBuilder(jsonBuffer, { name: `Server_Backup_${guild.id}.json` });
 
                         const embed = new EmbedBuilder()
                             .setColor('#2ecc71')
                             .setTitle('🤖 Scheduled Daily Backup Complete')
                             .setDescription(
-                                `The daily automated server & message history snapshot has been generated and saved to MongoDB!\n\n` +
-                                `• **Roles Saved:** \`${backupData.stats.totalRoles}\`\n` +
-                                `• **Categories Saved:** \`${backupData.stats.totalCategories}\`\n` +
-                                `• **Channels Saved:** \`${backupData.stats.totalChannels}\`\n` +
-                                `• **Messages Archived:** \`${backupData.stats.totalMessages}\` msgs\n\n` +
-                                `*An archived JSON backup file is attached below for manual export.*`
+                                `The daily automated server & message history snapshot has been generated!\n\n` +
+                                `• **Roles Saved:** \`${backupData.summary.totalRoles}\`\n` +
+                                `• **Categories Saved:** \`${backupData.summary.totalCategories}\`\n` +
+                                `• **Channels Saved:** \`${backupData.summary.totalChannels}\`\n` +
+                                `• **Messages Archived:** \`${backupData.summary.totalArchivedMessages}\` msgs\n\n` +
+                                `*A clean JSON archive file is attached below.*`
                             )
                             .setFooter({ text: 'Starry Autonomous Backup Core' })
                             .setTimestamp();
@@ -206,6 +237,7 @@ module.exports = (client) => {
             try {
                 const backupData = await executeServerFullBackup(guild);
 
+                // Pretty-print JSON with 2-space indentation
                 const jsonBuffer = Buffer.from(JSON.stringify(backupData, null, 2), 'utf-8');
                 const fileAttachment = new AttachmentBuilder(jsonBuffer, { name: `Server_Backup_${guild.id}.json` });
 
@@ -214,10 +246,10 @@ module.exports = (client) => {
                     .setTitle('✅ Server & Message History Backup Complete')
                     .setDescription(
                         `Successfully saved full architecture and text archives to database!\n\n` +
-                        `• **Roles Saved:** \`${backupData.stats.totalRoles}\`\n` +
-                        `• **Categories Saved:** \`${backupData.stats.totalCategories}\`\n` +
-                        `• **Channels Saved:** \`${backupData.stats.totalChannels}\`\n` +
-                        `• **Messages Archived:** \`${backupData.stats.totalMessages}\` msgs\n\n` +
+                        `• **Roles Saved:** \`${backupData.summary.totalRoles}\`\n` +
+                        `• **Categories Saved:** \`${backupData.summary.totalCategories}\`\n` +
+                        `• **Channels Saved:** \`${backupData.summary.totalChannels}\`\n` +
+                        `• **Messages Archived:** \`${backupData.summary.totalArchivedMessages}\` msgs\n\n` +
                         `*Run \`.restore\` if the server is ever nuked.*`
                     )
                     .setTimestamp();
@@ -330,19 +362,22 @@ module.exports = (client) => {
                     if (existing) categoryMap.set(bCat.id, existing.id);
                 }
 
-                // 3. Restore Channels & Archived Messages
+                // 3. Restore Channels & Messages
                 for (const bChan of (backup.channels || [])) {
-                    let existing = guild.channels.cache.find(c => c && c.type === bChan.type && c.name === bChan.name);
+                    const cleanChannelName = bChan.name.startsWith('#') ? bChan.name.substring(1) : bChan.name;
+                    const channelType = bChan.rawType !== undefined ? bChan.rawType : bChan.type;
+
+                    let existing = guild.channels.cache.find(c => c && c.type === channelType && c.name === cleanChannelName);
                     const mappedOverwrites = parseOverwrites(bChan.overwrites);
                     const newParentId = bChan.parentId ? categoryMap.get(bChan.parentId) : null;
 
                     if (!existing) {
                         try { 
                             existing = await guild.channels.create({ 
-                                name: bChan.name, 
-                                type: bChan.type, 
+                                name: cleanChannelName, 
+                                type: channelType, 
                                 parent: newParentId, 
-                                topic: bChan.topic, 
+                                topic: bChan.topic === 'None' ? '' : bChan.topic, 
                                 nsfw: bChan.nsfw, 
                                 rateLimitPerUser: bChan.rateLimitPerUser, 
                                 userLimit: bChan.userLimit, 
@@ -357,16 +392,17 @@ module.exports = (client) => {
                         }
                     }
 
-                    // 💬 RESTORE ARCHIVED MESSAGES BACK TO CHANNEL
+                    // Re-post archived messages back into recreated channel
                     if (existing && existing.isTextBased() && bChan.messages && bChan.messages.length > 0) {
                         for (const msgData of bChan.messages) {
-                            if (!msgData.content && msgData.attachments.length === 0) continue;
+                            const authorName = msgData.author || msgData.authorTag || 'User';
+                            if (!msgData.content && (!msgData.attachments || msgData.attachments.length === 0)) continue;
 
-                            const contentStr = `**[ARCHIVE - ${msgData.authorTag}]:** ${msgData.content}` +
-                                (msgData.attachments.length > 0 ? `\n📎 ${msgData.attachments.join('\n📎 ')}` : '');
+                            const contentStr = `**[ARCHIVE - ${authorName}]:** ${msgData.content}` +
+                                (msgData.attachments && msgData.attachments.length > 0 ? `\n📎 ${msgData.attachments.join('\n📎 ')}` : '');
 
                             await existing.send({ content: contentStr }).catch(() => {});
-                            await delay(300); // Throttles message sending
+                            await delay(300);
                         }
                     }
                 }
