@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (UPGRADED)
+// 🚀 STARRY SUPREME DEPLOY ENGINE (WITH AFK)
 // ==========================================
 require('dotenv').config();
 const { 
@@ -62,7 +62,17 @@ try {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
 }
 
-// Bump Engine Payloads (/bump, /bump-setup, /autobump, /set-listing)
+// AFK Command Payload 💤
+try {
+    const afkModule = require('./src/modules/afk');
+    if (afkModule && afkModule.afkPayload) {
+        masterPayloads.push(afkModule.afkPayload);
+    }
+} catch (err) {
+    console.warn('⚠️ Could not load AFK module payload:', err.message);
+}
+
+// Bump Engine Payloads
 try {
     const bumpModule = require('./src/modules/bumpEngine');
     if (bumpModule && bumpModule.bumpSlashCommands) {
@@ -191,9 +201,8 @@ async function deployCommands() {
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
 
-        // Clean test guild cache if a test guild ID is configured to prevent single-server command lock
         if (testGuildId) {
-            console.log(`🧹 Clearing legacy test guild commands (${testGuildId}) to eliminate duplicate listings...`);
+            console.log(`🧹 Clearing legacy test guild commands (${testGuildId})...`);
             await rest.put(Routes.applicationGuildCommands(clientId, testGuildId), { body: [] }).catch(() => {});
             console.log(`✅ Test guild command cache cleaned successfully!`);
         }
