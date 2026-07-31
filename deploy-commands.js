@@ -62,7 +62,7 @@ try {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
 }
 
-// AFK Command Payload 💤 (Robust multi-path resolver)
+// AFK Command Payload 💤 (Imports the subcommands from afk.js)
 try {
     let afkModule = null;
     try { afkModule = require('./src/modules/afk'); } catch (e) { afkModule = require('./modules/afk'); }
