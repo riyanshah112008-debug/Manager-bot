@@ -216,7 +216,6 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 // 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3/6)
 // ==========================================
-// 🔄 MULTIPLE NODES WITH AUTO-FAILOVER CONFIGURATION
 const Nodes = [
     {
         name: 'Main-Node-Lavasearch',
@@ -266,14 +265,10 @@ client.manager = new Kazagumo({
     linkInitializers: true,
     reconnectTries: 10,
     restTimeout: 15000,
-    // 🎵 ADD THESE BUFFER TWEAKS TO PREVENT CHOPPINESS
     frameBufferDuration: 5000,
     trimVoicePacket: true
 });
 
-});
-
-// ⚡ AUTO-FAILOVER & NODE EVENT HANDLERS
 client.manager.shoukaku.on('ready', (name) => {
     console.log(`🎵 [Lavalink] Successfully connected & active on node: ${name}`);
 });
@@ -388,7 +383,6 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 
-    // 🎵 INITIALIZE LAVALINK MULTI-NODE POOL WITH FAILOVER
     try {
         if (client.manager && typeof client.manager.init === 'function') {
             await client.manager.init(client.user.id);
