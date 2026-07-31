@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME DEPLOY ENGINE (UPGRADED)
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE
 // ==========================================
 require('dotenv').config();
 const { 
@@ -62,7 +62,7 @@ try {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
 }
 
-// AFK Command Payload 💤 (Imports the subcommands from afk.js)
+// AFK Command Payload with Subcommands (/afk set, clear, list, status)
 try {
     let afkModule = null;
     try { afkModule = require('./src/modules/afk'); } catch (e) { afkModule = require('./modules/afk'); }
@@ -184,11 +184,10 @@ commands.forEach(cmd => {
 });
 const finalPayload = Array.from(commandMap.values());
 
-// 4. DEPLOYMENT FUNCTION
+// 4. GLOBAL DEPLOYMENT FUNCTION
 async function deployCommands() {
     const token = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
     let clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID;
-    const testGuildId = process.env.TEST_GUILD_ID || process.env.GUILD_ID;
 
     if (!token) throw new Error('🛑 CRITICAL: DISCORD_TOKEN, BOT_TOKEN, or TOKEN environment variable must be set.');
 
@@ -201,15 +200,13 @@ async function deployCommands() {
     const rest = new REST({ version: '10' }).setToken(token);
 
     try {
-        console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally across Discord...`);
+        console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally across all servers...`);
+        
+        // Pushes commands globally to Discord's API endpoint
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
+        
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
-
-        if (testGuildId) {
-            console.log(`🧹 Clearing legacy test guild commands (${testGuildId})...`);
-            await rest.put(Routes.applicationGuildCommands(clientId, testGuildId), { body: [] }).catch(() => {});
-            console.log(`✅ Test guild command cache cleaned successfully!`);
-        }
+        console.log(`⏳ Note: Global commands can take up to 1 hour to propagate to all servers (or restart your Discord client).`);
 
         return result;
     } catch (error) {
