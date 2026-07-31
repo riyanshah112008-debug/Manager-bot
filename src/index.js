@@ -1,7 +1,6 @@
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1/6)
 // ==========================================
-// 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
 const { 
@@ -28,16 +27,11 @@ const fs = require('fs');
 const path = require('path');
 const KazagumoSpotify = require('kazagumo-spotify');
 
-// EPHEMERAL RESPONSE FLAG (BITFIELD 6)
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Import ServerListing model safely from bumpEngine
 const bumpEngine = require('./modules/bumpEngine');
 const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
 
-// ==========================================
-// 1. WEB SERVER & DASHBOARD HOSTING
-// ==========================================
 const app = express();
 const port = process.env.PORT || 10000;
 
@@ -134,9 +128,8 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
-
 // ==========================================
-// 2. DISCORD CLIENT INITIALIZATION
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2/6)
 // ==========================================
 const client = new Client({
     intents: [
@@ -158,7 +151,6 @@ client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 
-// Global Anti-Mass Mention Pre-Gatekeeper
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
 
@@ -221,12 +213,8 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-
 // ==========================================
-// 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
-// ==========================================
-// ==========================================
-// 3. 24/7 MULTI-NODE LAVALINK MUSIC ENGINE SETUP
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3/6)
 // ==========================================
 const Nodes = [
     {
@@ -246,7 +234,6 @@ const Nodes = [
         retryDelay: 5000
     }
 ];
-
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "youtube",
@@ -366,9 +353,8 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-
 // ==========================================
-// 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 4/6)
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -379,7 +365,7 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
 
-    // 🎵 INITIALIZE LAVALINK MUSIC ENGINE
+    // 🎵 INITIALIZE LAVALINK MUSIC ENGINE (Fixes No node found)
     try {
         if (client.manager && typeof client.manager.init === 'function') {
             await client.manager.init(client.user.id);
@@ -391,7 +377,6 @@ client.once(Events.ClientReady, async () => {
 
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        // 🔧 FIXED RELATIVE PATH (pointing from src/ to root folder)
         const deploy = require('../deploy-commands.js');
         if (deploy && typeof deploy.deployCommands === 'function') {
             await deploy.deployCommands();
@@ -401,7 +386,6 @@ client.once(Events.ClientReady, async () => {
     }
 });
 
-// Prefix Command Handler
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
@@ -424,16 +408,12 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-
-
 // ==========================================
-// 5. INTERACTION ENGINE & ROUTER
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 5/6)
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
-    // Direct Module Command Delegation List
-    // ⚠️ NOTE: 'afk' REMOVED from here so modules/afk.js handles it properly!
     if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
@@ -442,11 +422,10 @@ client.on(Events.InteractionCreate, async interaction => {
             'bump', 'bump-setup', 'autobump', 'set-listing'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
-            return; // Handled directly inside module listeners
+            return; 
         }
     }
 
-    // 🔊 Handle Interactive Player Controls (Buttons & Select Menus)
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         const customId = interaction.customId;
         if (!customId.startsWith('dj_') && !customId.startsWith('music_')) return;
@@ -524,13 +503,11 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-
 // ==========================================
-// 6. MODULE INITIALIZERS
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 6/6)
 // ==========================================
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
-    { name: 'Media Only', fn: () => require('./modules/mediaOnly.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
     { name: 'Translator', fn: () => require('./modules/translator.js')(client, app) },
     { name: 'Reaction Roles', fn: () => require('./modules/reactionRoles.js')(client, app) },
@@ -569,9 +546,6 @@ const MODULE_INITIALIZERS = [
     { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
 ];
 
-// ==========================================
-// 7. RECURSIVE SLASH COMMAND LOADER
-// ==========================================
 function loadSlashCommands() {
     const commandsPath = path.join(__dirname, 'commands');
 
@@ -606,9 +580,6 @@ function loadSlashCommands() {
     console.log(`✅ Successfully loaded ${client.commands.size} slash command handlers into client.commands`);
 }
 
-// ==========================================
-// 8. BOT BOOTSTRAP & LOGINS
-// ==========================================
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
         console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
