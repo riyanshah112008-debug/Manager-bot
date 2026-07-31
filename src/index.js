@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1)
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS
 // ==========================================
 // 🔧 0. CRITICAL AUDIO ENGINE FIX & IMPORTS
 process.env.FFMPEG_PATH = require('ffmpeg-static');
@@ -134,9 +134,7 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2)
-// ==========================================
+
 // ==========================================
 // 2. DISCORD CLIENT INITIALIZATION
 // ==========================================
@@ -277,9 +275,7 @@ client.manager = new Kazagumo({
     reconnectTries: 5,
     restTimeout: 10000
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3)
-// ==========================================
+
 client.manager.shoukaku.on('ready', (name) => console.log(`🎵 [Lavalink] Connected to node: ${name}`));
 client.manager.shoukaku.on('error', () => {}); 
 client.manager.shoukaku.on('disconnect', () => {});
@@ -374,9 +370,7 @@ client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     if (channel) channel.send('📭 The queue has ended.');
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 4)
-// ==========================================
+
 // ==========================================
 // 4. GLOBAL ERROR CATCHERS & COMMAND LOADER
 // ==========================================
@@ -390,7 +384,7 @@ client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as ${client.user.tag}`);
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        const deploy = require('../deploy-commands.js');
+        const deploy = require('./deploy-commands.js');
         if (deploy && typeof deploy.deployCommands === 'function') {
             await deploy.deployCommands();
         }
@@ -424,19 +418,22 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // ==========================================
-// 5. INTERACTION ENGINE & STATIC BOOTSTRAP
+// 5. INTERACTION ENGINE & ROUTER
 // ==========================================
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
+    // Direct Module Command Delegation List
+    // Add commands here that are handled by direct module listeners
     if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
-            'automod', 'mod', 'moderate', 'verify-setup'
+            'automod', 'mod', 'moderate', 'verify-setup',
+            'bump', 'bump-setup', 'autobump', 'set-listing', 'afk' // 👈 BUMP, DIRECTORY & AFK DELEGATED
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
-            return; 
+            return; // Handled directly inside module listeners
         }
     }
 
@@ -518,8 +515,9 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
+
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 5)
+// 6. MODULE INITIALIZERS
 // ==========================================
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
@@ -563,7 +561,7 @@ const MODULE_INITIALIZERS = [
 ];
 
 // ==========================================
-// 6. RECURSIVE SLASH COMMAND LOADER
+// 7. RECURSIVE SLASH COMMAND LOADER
 // ==========================================
 function loadSlashCommands() {
     const commandsPath = path.join(__dirname, 'commands');
@@ -579,7 +577,6 @@ function loadSlashCommands() {
         const fullPath = path.join(commandsPath, item);
         const stat = fs.statSync(fullPath);
 
-        // Load commands from subdirectories (e.g., src/commands/music/*.js)
         if (stat.isDirectory()) {
             const commandFiles = fs.readdirSync(fullPath).filter(file => file.endsWith('.js'));
             for (const file of commandFiles) {
@@ -590,7 +587,6 @@ function loadSlashCommands() {
                 }
             }
         } 
-        // Load direct command files (e.g., src/commands/ping.js)
         else if (item.endsWith('.js')) {
             const command = require(fullPath);
             if (command?.data?.name) {
@@ -602,7 +598,7 @@ function loadSlashCommands() {
 }
 
 // ==========================================
-// 7. BOT BOOTSTRAP & LOGINS
+// 8. BOT BOOTSTRAP & LOGINS
 // ==========================================
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
@@ -623,7 +619,6 @@ async function startBot() {
             console.error('⚠️ Could not load bumpEngine API routes:', e.message);
         }
 
-        // Load all slash commands recursively from src/commands/
         loadSlashCommands();
 
         for (const mod of MODULE_INITIALIZERS) {
