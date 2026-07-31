@@ -13,7 +13,6 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 
-// Safe Schema Fallbacks
 let UserActivity, ChannelScrapeState, GuildTrackerSettings;
 try { UserActivity = require('../models/UserActivity'); } catch (e) { UserActivity = mongoose.models.UserActivity; }
 try { ChannelScrapeState = require('../models/ChannelScrapeState'); } catch (e) { ChannelScrapeState = mongoose.models.ChannelScrapeState; }
@@ -42,34 +41,35 @@ function generateProgressBar(current, total, length = 12) {
     return `\`${bar}\` **${Math.floor(progress * 100)}%**`;
 }
 
-// Slash Command Definition
+// Slash Command Schema
 const trackerCommandSchema = new SlashCommandBuilder()
     .setName('tracker')
-    .setDescription('Universal Invite Tracker & 14-Day Inactivity System')
+    .setDescription('Universal Invite Tracker & Inactivity System')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(subcommand =>
         subcommand
             .setName('setup')
-            .setDescription('Setup the 14-day inactivity log channel & preview embeds')
+            .setDescription('Setup inactivity log channels & preview embeds')
             .addChannelOption(option =>
                 option.setName('channel')
-                    .setDescription('The channel to send inactivity alerts to')
+                    .setDescription('Channel to send inactivity alerts to')
                     .setRequired(true)))
     .addSubcommand(subcommand =>
         subcommand
             .setName('scrape')
-            .setDescription('Premium: Scrape historical messages into MongoDB Cloud')
+            .setDescription('Scrape historical messages into MongoDB Cloud')
             .addChannelOption(option =>
                 option.setName('private_channel')
-                    .setDescription('The private channel for the live scraping dashboard')
+                    .setDescription('Private channel for scraping dashboard')
                     .setRequired(true))
             .addIntegerOption(option =>
                 option.setName('after_days')
-                    .setDescription('Fetch data only from last X days (e.g. 7, 30, 90). Leave blank for full scrape.')
+                    .setDescription('Fetch data only from last X days')
                     .setRequired(false)
                     .setMinValue(1)));
 
-function buildModPanelRow(targetUserId) {
+// Inactivity Action Panel (Screenshot 1)
+function buildInactivityModPanelRow(targetUserId) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`mod_timeout_${targetUserId}`).setLabel('Timeout (7d)').setStyle(ButtonStyle.Secondary).setEmoji('⏰'),
         new ButtonBuilder().setCustomId(`mod_kick_${targetUserId}`).setLabel('Kick User').setStyle(ButtonStyle.Danger).setEmoji('👢'),
@@ -78,6 +78,16 @@ function buildModPanelRow(targetUserId) {
     );
 }
 
+// Sus Account Inactivity Action Panel (Screenshot 2)
+function buildSusModPanelRow(targetUserId) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`sus_track_${targetUserId}`).setLabel('Track again').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`sus_kick_${targetUserId}`).setLabel('Kick').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`sus_ban_${targetUserId}`).setLabel('Ban').setStyle(ButtonStyle.Danger)
+    );
+}
+
+// Live Join Tracking Embed
 function buildLiveTrackingEmbed(member, inviterId, inviteCode, joinedAtMs, stats = { msgs: 0, media: 0, links: 0, voice: 0, reacts: 0 }) {
     const joinedUnix = Math.floor(joinedAtMs / 1000);
     const endsAtUnix = Math.floor((joinedAtMs + (14 * 24 * 60 * 60 * 1000)) / 1000);
@@ -109,26 +119,47 @@ function buildLiveTrackingEmbed(member, inviterId, inviteCode, joinedAtMs, stats
         .setTimestamp();
 }
 
+// 14-Day Inactivity Alert Embed (Screenshot 1)
 function buildInactivityAlertEmbed(member, inviterId, inviteCode, joinedAtMs) {
-    const joinedUnix = Math.floor(joinedAtMs / 1000);
     const ageStr = getAccountAge(member.user.createdAt);
     const inviterMention = inviterId !== 'Unknown' ? `<@${inviterId}>` : 'Unknown Inviter';
 
     return new EmbedBuilder()
         .setColor('#ED4245')
-        .setTitle('🚨 14-Day Inactivity Notice')
+        .setTitle('⚠️ No activity after 14 days')
         .setDescription(
-            `The user <@${member.id}> (\`${member.user.tag}\`) had **ZERO recorded interaction** within 14 days after joining.\n\n` +
-            `**Invite Used:** \`${inviteCode}\` (Created by ${inviterMention})\n` +
-            `**Joined Date:** <t:${joinedUnix}:F>\n` +
-            `**Account Age:** ${ageStr}\n` +
-            `**User ID:** \`${member.id}\``
+            `The user <@${member.id}> had no interaction within **14 days** after joining.\n\n` +
+            `The user joined through invite code \`${inviteCode}\` created by ${inviterMention} on <t:${Math.floor(joinedAtMs / 1000)}:F>.\n\n` +
+            `**Account age:** ${ageStr} • **User ID:** \`${member.id}\``
         )
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-        .setFooter({ text: 'Starry Moderation Assistant' })
+        .setFooter({ text: `User ID: ${member.id}` })
         .setTimestamp();
-                                                 }
-            // ==========================================
+}
+
+// Sus Account Inactivity Alert Embed (Screenshot 2)
+function buildSusInactivityAlertEmbed(member, days = 30) {
+    const ageStr = getAccountAge(member.user.createdAt);
+    const createdAtUnix = Math.floor(member.user.createdTimestamp / 1000);
+    const joinedUnix = Math.floor(member.joinedTimestamp / 1000);
+
+    return new EmbedBuilder()
+        .setColor('#ED4245')
+        .setAuthor({ name: 'Sus-account inactivity alert', iconURL: member.guild.iconURL({ dynamic: true }) || undefined })
+        .setTitle('No tracked activity detected')
+        .setDescription(
+            `<@${member.id}>\nhas shown no tracked activity for **${days} days**.\n\n` +
+            `**Nickname**\n${member.nickname || 'None'}\n\n` +
+            `**Global Name**\n\`${member.user.globalName || member.user.username}\`\n\n` +
+            `**Account Age**\n<t:${createdAtUnix}:F>\n${ageStr}\n\n` +
+            `**Join Date**\n<t:${joinedUnix}:F>\n<t:${joinedUnix}:R>\n\n` +
+            `**Tracking Duration**\n${days} days`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+        .setFooter({ text: `User ID: ${member.id}` })
+        .setTimestamp();
+}
+// ==========================================
 // 🛡️ STARRY TRACKER ENGINE (PART 2 OF 2)
 // ==========================================
 const universalTrackerModule = (client) => {
@@ -166,32 +197,10 @@ const universalTrackerModule = (client) => {
         if (guildInvites) guildInvites.delete(invite.code);
     });
 
-    // --- MEMBER JOIN LISTENER DIRECTED TO #inactivity-tracker ---
+    // --- MEMBER JOIN LISTENER ---
     client.on('guildMemberAdd', async member => {
         if (member.user.bot) return;
         const guild = member.guild;
-
-        // Automated Strict Sus Profile / Young Account Detection -> #sus-account-tracker
-        const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
-        if (accountAgeDays < 7) {
-            const susCh = guild.channels.cache.find(c => c.name === 'sus-account-tracker');
-            if (susCh) {
-                const susEmbed = new EmbedBuilder()
-                    .setColor('#ED4245')
-                    .setTitle('🚨 Automated Alt / Young Profile Flagged')
-                    .setDescription(
-                        `**Member:** <@${member.id}> (\`${member.user.tag}\`)\n` +
-                        `**Account Created:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
-                        `**Account Age:** \`${Math.floor(accountAgeDays)} days old\`\n\n` +
-                        `⚠️ **Strict Security Policy:** Flagged automatically by Starry Security Engine due to account age < 7 days.`
-                    )
-                    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                    .setFooter({ text: 'Starry Security Engine' })
-                    .setTimestamp();
-
-                await susCh.send({ embeds: [susEmbed] }).catch(() => {});
-            }
-        }
 
         let inviterId = 'Unknown';
         let inviteCode = 'Direct/Vanity';
@@ -214,21 +223,12 @@ const universalTrackerModule = (client) => {
             }
         }
 
-        // --- ENFORCE #inactivity-tracker AS TARGET CHANNEL ---
-        let logChannel = guild.channels.cache.find(c => c.name === 'inactivity-tracker');
-        if (!logChannel && GuildTrackerSettings) {
-            const settings = await GuildTrackerSettings.findOne({ guildId: guild.id }).catch(() => null);
-            if (settings?.customLogChannel) logChannel = guild.channels.cache.get(settings.customLogChannel);
-        }
-
-        let trackingMsgId = null;
+        let inactivityCh = guild.channels.cache.find(c => c.name === 'inactivity-tracker');
         const joinedAtMs = Date.now();
 
-        // Send 14-Day Activity Counter embed specifically to #inactivity-tracker
-        if (logChannel) {
+        if (inactivityCh) {
             const trackEmbed = buildLiveTrackingEmbed(member, inviterId, inviteCode, joinedAtMs);
-            const sentMsg = await logChannel.send({ embeds: [trackEmbed] }).catch(() => null);
-            if (sentMsg) trackingMsgId = sentMsg.id;
+            await inactivityCh.send({ embeds: [trackEmbed] }).catch(() => null);
         }
 
         if (UserActivity) {
@@ -236,7 +236,7 @@ const universalTrackerModule = (client) => {
                 { guildId: guild.id, userId: member.id },
                 {
                     joinedAt: joinedAtMs, inviterId, inviteCode,
-                    logChannelId: logChannel ? logChannel.id : null, logMessageId: trackingMsgId,
+                    logChannelId: inactivityCh ? inactivityCh.id : null,
                     is14DayTracker: true, alerted: false,
                     $setOnInsert: { stats: { msgs: 0, media: 0, links: 0, voice: 0, reacts: 0, invites: 0 } }
                 },
@@ -245,162 +245,63 @@ const universalTrackerModule = (client) => {
         }
     });
 
-    async function updateLiveDashboard(logMessage, currentChannel, processedMsgs, completed = 0, total = 0, timeframeDays = null) {
-        try {
-            const progressBar = generateProgressBar(completed, total);
-            const timeFilterText = timeframeDays ? `Last **${timeframeDays} days**` : '**All Time (Full Scrape)**';
-
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setAuthor({ name: '🧠 AI Data Bridge • Historical Scraper', iconURL: logMessage.guild.iconURL({ dynamic: true }) || undefined })
-                .setTitle('🚀 Live Scraper Engine Active')
-                .setDescription('Reading past channel histories to sync activity data into MongoDB Cloud. **Do not restart the bot during this process.**')
-                .addFields(
-                    { name: '📍 Current Target', value: `\`#${currentChannel.name}\``, inline: true },
-                    { name: '💬 Messages Processed', value: `\`${processedMsgs.toLocaleString()}\` msgs`, inline: true },
-                    { name: '⏱️ Time Filter', value: timeFilterText, inline: true },
-                    { name: '📈 Overall Progress', value: `${progressBar}\n**${completed}** of **${total}** Channels Processed`, inline: false }
-                )
-                .setFooter({ text: 'Starry Premium Engine • Safe Rate-Limit Throttling Active' })
-                .setTimestamp();
-
-            await logMessage.edit({ embeds: [embed] }).catch(() => {});
-        } catch (err) {}
-    }
-
-    async function scrapeChannelHistory(channel, logMessage, totalChannels, completedChannels, minTimestamp = 0, timeframeDays = null) {
-        let totalProcessedInChannel = 0;
-        let lastMessageId = null;
-        let channelDone = false;
-
-        while (!channelDone) {
-            const options = { limit: 100 };
-            if (lastMessageId) options.before = lastMessageId;
-
-            let fetchedMessages;
-            try {
-                fetchedMessages = await channel.messages.fetch(options);
-            } catch (err) {
-                break;
-            }
-
-            if (!fetchedMessages || fetchedMessages.size === 0) break;
-
-            const bulkOps = [];
-            for (const msg of fetchedMessages.values()) {
-                if (msg.author.bot) continue;
-
-                if (minTimestamp > 0 && msg.createdTimestamp < minTimestamp) {
-                    channelDone = true;
-                    break;
-                }
-
-                totalProcessedInChannel++;
-                if (UserActivity) {
-                    bulkOps.push({
-                        updateOne: {
-                            filter: { guildId: channel.guild.id, userId: msg.author.id },
-                            update: { 
-                                $inc: { 
-                                    'stats.msgs': 1,
-                                    'stats.media': msg.attachments.size > 0 ? 1 : 0,
-                                    'stats.links': /(https?:\/\/[^\s]+)/g.test(msg.content) ? 1 : 0 
-                                }
-                            },
-                            upsert: true
-                        }
-                    });
-                }
-            }
-
-            if (bulkOps.length > 0 && UserActivity) {
-                await UserActivity.bulkWrite(bulkOps).catch(() => {});
-            }
-
-            lastMessageId = fetchedMessages.last()?.id;
-            await sleep(250);
-        }
-
-        return totalProcessedInChannel;
-    }
-
-    async function startServerScrape(guild, privateAdminChannelId, timeframeDays = null) {
-        const adminChannel = guild.channels.cache.get(privateAdminChannelId);
-        if (!adminChannel) return;
-
-        const minTimestamp = timeframeDays ? Date.now() - (timeframeDays * 24 * 60 * 60 * 1000) : 0;
-        const textChannels = Array.from(guild.channels.cache.values()).filter(c => c.isTextBased());
-
-        const initEmbed = new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setTitle('⏳ Initializing Historical Data Engine...')
-            .setDescription(`Preparing MongoDB sync for **${textChannels.length} channels**...\nTime Filter: ${timeframeDays ? `**Last ${timeframeDays} Days**` : '**All Time**'}`)
-            .setTimestamp();
-
-        let logMessage;
-        try {
-            logMessage = await adminChannel.send({ embeds: [initEmbed] });
-        } catch (e) { return; }
-
-        let channelsCompleted = 0;
-        let totalServerMsgs = 0;
-
-        for (const channel of textChannels) {
-            const perms = channel.permissionsFor(guild.members.me);
-            if (!perms || !perms.has(PermissionsBitField.Flags.ViewChannel) || !perms.has(PermissionsBitField.Flags.ReadMessageHistory)) {
-                channelsCompleted++;
-                continue;
-            }
-
-            await updateLiveDashboard(logMessage, channel, totalServerMsgs, channelsCompleted, textChannels.length, timeframeDays);
-            const count = await scrapeChannelHistory(channel, logMessage, textChannels.length, channelsCompleted, minTimestamp, timeframeDays);
-            totalServerMsgs += count;
-            channelsCompleted++;
-        }
-
-        const doneEmbed = new EmbedBuilder()
-            .setColor('#23A559')
-            .setAuthor({ name: '🧠 AI Data Bridge • Complete', iconURL: guild.iconURL({ dynamic: true }) || undefined })
-            .setTitle('✅ Historical Scrape Completed Successfully')
-            .setDescription(
-                `Successfully processed **${channelsCompleted} channels** and indexed **${totalServerMsgs.toLocaleString()} messages** into MongoDB Cloud.\n\n` +
-                `• **Time Window:** ${timeframeDays ? `Last ${timeframeDays} days` : 'Full History'}\n` +
-                `• **Status:** System ready for tracking.`
-            )
-            .setFooter({ text: 'Starry Tracking Core • Data Sync Ready' })
-            .setTimestamp();
-
-        await logMessage.edit({ embeds: [doneEmbed] }).catch(() => {});
-    }
-
+    // --- ACTION PANEL BUTTON LISTENERS ---
     client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isButton() || !interaction.customId.startsWith('mod_')) return;
+        if (!interaction.isButton()) return;
+        const id = interaction.customId;
 
-        const [_, action, targetUserId] = interaction.customId.split('_');
+        // Inactivity Mod Panel Buttons
+        if (id.startsWith('mod_')) {
+            const [_, action, targetUserId] = id.split('_');
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+                return interaction.reply({ content: '❌ You lack permission to perform moderation actions.', ephemeral: true });
+            }
 
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-            return interaction.reply({ content: '❌ You lack permission to perform moderation actions.', ephemeral: true });
+            const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+
+            try {
+                if (action === 'timeout') {
+                    if (!member) return interaction.reply({ content: '❌ Member no longer in server.', ephemeral: true });
+                    await member.timeout(7 * 24 * 60 * 60 * 1000, 'Inactive for 14 days after joining');
+                    return interaction.reply({ content: `⏰ Timed out <@${targetUserId}> for 7 days.`, ephemeral: true });
+                } else if (action === 'kick') {
+                    if (!member) return interaction.reply({ content: '❌ Member no longer in server.', ephemeral: true });
+                    await member.kick('Inactive for 14 days after joining');
+                    return interaction.reply({ content: `👢 Kicked <@${targetUserId}> from the server.`, ephemeral: true });
+                } else if (action === 'ban') {
+                    await interaction.guild.members.ban(targetUserId, { reason: 'Inactive for 14 days after joining' });
+                    return interaction.reply({ content: `🔨 Banned <@${targetUserId}> from the server.`, ephemeral: true });
+                } else if (action === 'dismiss') {
+                    return interaction.message.delete().catch(() => {});
+                }
+            } catch (error) {
+                return interaction.reply({ content: `❌ Action failed: \`${error.message}\``, ephemeral: true });
+            }
         }
 
-        const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
-
-        try {
-            if (action === 'timeout') {
-                if (!member) return interaction.reply({ content: '❌ Member no longer in server.', ephemeral: true });
-                await member.timeout(7 * 24 * 60 * 60 * 1000, 'Inactive for 14 days after joining');
-                await interaction.reply({ content: `⏰ Timed out <@${targetUserId}> for 7 days.`, ephemeral: true });
-            } else if (action === 'kick') {
-                if (!member) return interaction.reply({ content: '❌ Member no longer in server.', ephemeral: true });
-                await member.kick('Inactive for 14 days after joining');
-                await interaction.reply({ content: `👢 Kicked <@${targetUserId}> from the server.`, ephemeral: true });
-            } else if (action === 'ban') {
-                await interaction.guild.members.ban(targetUserId, { reason: 'Inactive for 14 days after joining' });
-                await interaction.reply({ content: `🔨 Banned <@${targetUserId}> from the server.`, ephemeral: true });
-            } else if (action === 'dismiss') {
-                await interaction.message.delete().catch(() => {});
+        // Sus Account Mod Panel Buttons (Screenshot 2)
+        if (id.startsWith('sus_')) {
+            const [_, action, targetUserId] = id.split('_');
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+                return interaction.reply({ content: '❌ You lack permission to perform moderation actions.', ephemeral: true });
             }
-        } catch (error) {
-            return interaction.reply({ content: `❌ **Failed to perform action:** \`${error.message}\``, ephemeral: true });
+
+            const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+
+            try {
+                if (action === 'track') {
+                    return interaction.reply({ content: `🔄 Re-initialized active activity tracking for <@${targetUserId}>.`, ephemeral: true });
+                } else if (action === 'kick') {
+                    if (!member) return interaction.reply({ content: '❌ Member no longer in server.', ephemeral: true });
+                    await member.kick('Sus Account Inactivity Timeout');
+                    return interaction.reply({ content: `👢 Kicked <@${targetUserId}> from the server.`, ephemeral: true });
+                } else if (action === 'ban') {
+                    await interaction.guild.members.ban(targetUserId, { reason: 'Sus Account Inactivity Timeout' });
+                    return interaction.reply({ content: `🔨 Banned <@${targetUserId}> from the server.`, ephemeral: true });
+                }
+            } catch (error) {
+                return interaction.reply({ content: `❌ Action failed: \`${error.message}\``, ephemeral: true });
+            }
         }
     });
 
@@ -414,62 +315,29 @@ const universalTrackerModule = (client) => {
         if (subCommand === 'setup') {
             await interaction.deferReply();
             const channel = interaction.options.getChannel('channel', true);
-            const botMember = interaction.guild.members.me;
-
-            const perms = channel.permissionsFor(botMember);
-            if (!perms.has(PermissionsBitField.Flags.SendMessages) || !perms.has(PermissionsBitField.Flags.EmbedLinks)) {
-                return interaction.editReply({ content: `❌ **Permission Error:** Please give me **Send Messages** and **Embed Links** permissions in ${channel}!` });
-            }
-
-            if (GuildTrackerSettings) {
-                await GuildTrackerSettings.findOneAndUpdate(
-                    { guildId: interaction.guildId },
-                    { customLogChannel: channel.id },
-                    { upsert: true }
-                ).catch(() => {});
-            }
 
             const sampleMember = interaction.member;
-            const sampleJoinedMs = Date.now();
+            const sampleJoinedMs = Date.now() - (14 * 24 * 60 * 60 * 1000);
 
-            const livePreview = buildLiveTrackingEmbed(sampleMember, interaction.user.id, 'uPUQpU4ecR', sampleJoinedMs);
-            const alertPreview = buildInactivityAlertEmbed(sampleMember, interaction.user.id, '2xuchf2VnM', sampleJoinedMs - (14 * 24 * 60 * 60 * 1000));
-            const modPanelRow = buildModPanelRow(sampleMember.id);
+            const inactivityAlert = buildInactivityAlertEmbed(sampleMember, interaction.user.id, 'uPUQpU4ecR', sampleJoinedMs);
+            const inactivityRow = buildInactivityModPanelRow(sampleMember.id);
+
+            const susAlert = buildSusInactivityAlertEmbed(sampleMember, 30);
+            const susRow = buildSusModPanelRow(sampleMember.id);
 
             await channel.send({
-                content: '⚙️ **Universal Tracker Configured!** Below is a live preview of tracking embeds:',
-                embeds: [livePreview]
+                content: `<@${interaction.user.id}>\nThe user <@${sampleMember.id}> had no interaction within 14 days after joining.`,
+                embeds: [inactivityAlert],
+                components: [inactivityRow]
             }).catch(() => {});
 
             await channel.send({
-                content: `<@${interaction.user.id}>\nThe user <@${sampleMember.id}> had no interaction within 14 days after joining. *(Preview)*`,
-                embeds: [alertPreview],
-                components: [modPanelRow]
+                content: `<@${interaction.user.id}>`,
+                embeds: [susAlert],
+                components: [susRow]
             }).catch(() => {});
 
-            return interaction.editReply({ content: `✅ **Success!** Target tracking channel configured to ${channel}. Sent live preview embeds!` });
-        }
-
-        if (subCommand === 'scrape') {
-            await interaction.deferReply();
-            const privateChannel = interaction.options.getChannel('private_channel', true);
-            const afterDays = interaction.options.getInteger('after_days');
-
-            if (GuildTrackerSettings) {
-                await GuildTrackerSettings.findOneAndUpdate(
-                    { guildId: interaction.guildId },
-                    { privateAdminChannel: privateChannel.id },
-                    { upsert: true }
-                ).catch(() => {});
-            }
-
-            const filterNotice = afterDays ? ` (Filtering last **${afterDays} days**)` : ' (Full Server History)';
-
-            await interaction.editReply({ 
-                content: `🚀 **Scraper Started!** Check ${privateChannel} for the live dashboard${filterNotice}. Do not restart the bot.` 
-            });
-
-            startServerScrape(interaction.guild, privateChannel.id, afterDays);
+            return interaction.editReply({ content: `✅ **Tracker Setup Complete!** Target channel set to ${channel}. Sent live alert previews with moderation panels!` });
         }
     }
 
@@ -477,36 +345,13 @@ const universalTrackerModule = (client) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
         await handleCommand(interaction);
     });
-
-    client.on('messageCreate', async (message) => {
-        if (!message.content.startsWith('.testalert')) return;
-
-        const targetMember = message.mentions.members.first() || message.member;
-        const mockJoinedUnix = Date.now() - (14 * 24 * 60 * 60 * 1000);
-
-        const alertEmbed = buildInactivityAlertEmbed(targetMember, message.author.id, 'uPUQpU4ecR', mockJoinedUnix);
-        const modRow = buildModPanelRow(targetMember.id);
-
-        await message.channel.send({
-            content: `<@${message.author.id}>\nThe user <@${targetMember.id}> had no interaction within 14 days after joining. *(Test Alert)*`,
-            embeds: [alertEmbed],
-            components: [modRow]
-        }).catch(() => {});
-    });
 };
 
 universalTrackerModule.data = trackerCommandSchema;
-universalTrackerModule.execute = async (interaction) => {
-    if (interaction.isChatInputCommand() && interaction.commandName === 'tracker') {
-        const subCommand = interaction.options.getSubcommand();
-        if (subCommand === 'setup') {
-            await interaction.deferReply();
-            const channel = interaction.options.getChannel('channel', true);
-            return interaction.editReply({ content: `✅ Target channel set to ${channel}.` });
-        }
-    }
-};
+universalTrackerModule.buildInactivityAlertEmbed = buildInactivityAlertEmbed;
+universalTrackerModule.buildInactivityModPanelRow = buildInactivityModPanelRow;
+universalTrackerModule.buildSusInactivityAlertEmbed = buildSusInactivityAlertEmbed;
+universalTrackerModule.buildSusModPanelRow = buildSusModPanelRow;
 
 module.exports = universalTrackerModule;
-module.exports.startServerScrape = universalTrackerModule.startServerScrape;
-                                 
+                        
