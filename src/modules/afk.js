@@ -13,10 +13,10 @@ const {
 const afkCollection = new Map();
 const PREFIX = '.'; 
 
-// Slash Command Builder Payload
+// Slash Command Builder Payload using /afk
 const afkSlashCommand = new SlashCommandBuilder()
     .setName('afk')
-    .setDescription('Manage AFK status for this server.')
+    .setDescription('Manage your AFK status for this server.')
     .setContexts([0])
     .addStringOption(option => 
         option.setName('reason')
@@ -63,7 +63,7 @@ const afkSlashCommand = new SlashCommandBuilder()
 module.exports = (client) => {
 
     // ==========================================
-    // 1. SLASH COMMAND EXECUTION (WITH FALLBACKS)
+    // 1. SLASH COMMAND EXECUTION
     // ==========================================
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'afk') return;
@@ -72,10 +72,8 @@ module.exports = (client) => {
         const user = interaction.user;
         const member = interaction.member;
 
-        // Safely extract subcommand (returns null if Discord is still using the old single-command cache)
         const subcommand = interaction.options.getSubcommand(false);
 
-        // --- SUBCOMMAND: SET OR FALLBACK TOP-LEVEL /AFK ---
         if (!subcommand || subcommand === 'set') {
             const reason = interaction.options.getString('reason') || 'AFK';
             const afkKey = `${guildId}-${user.id}`;
@@ -92,7 +90,6 @@ module.exports = (client) => {
             return interaction.reply({ content: `<@${user.id}>`, embeds: [embed] }).catch(() => {});
         }
 
-        // --- SUBCOMMAND: CLEAR ---
         if (subcommand === 'clear') {
             const clearAll = interaction.options.getBoolean('all');
             const targetUser = interaction.options.getUser('user');
@@ -126,7 +123,6 @@ module.exports = (client) => {
                 return interaction.reply({ content: `✅ Cleared AFK status for **${targetUser.username}**.` });
             }
 
-            // Clear Self
             const afkKey = `${guildId}-${user.id}`;
             if (!afkCollection.has(afkKey)) {
                 return interaction.reply({ content: '❌ You are not currently AFK.', ephemeral: true });
@@ -136,7 +132,6 @@ module.exports = (client) => {
             return interaction.reply({ content: '✅ Your AFK status has been cleared.' });
         }
 
-        // --- SUBCOMMAND: LIST ---
         if (subcommand === 'list') {
             const afkEntries = [];
             for (const [key, data] of afkCollection.entries()) {
@@ -159,7 +154,6 @@ module.exports = (client) => {
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
-        // --- SUBCOMMAND: STATUS ---
         if (subcommand === 'status') {
             const targetUser = interaction.options.getUser('user') || user;
             const targetKey = `${guildId}-${targetUser.id}`;
@@ -194,13 +188,11 @@ module.exports = (client) => {
 
         const authorKey = `${message.guild.id}-${message.author.id}`;
 
-        // --- A. THE PREFIX COMMAND (.afk) ---
         if (message.content.toLowerCase().startsWith(PREFIX + 'afk')) {
             const rawArgs = message.content.slice(PREFIX.length + 3).trim();
             const argsArr = rawArgs.split(/\s+/);
             const subArg = argsArr[0]?.toLowerCase();
 
-            // --- SUBCOMMAND: .afk clear / .afk remove ---
             if (subArg === 'clear' || subArg === 'remove') {
                 const isAll = argsArr[1]?.toLowerCase() === 'all';
                 const targetUser = message.mentions.users.first();
@@ -234,7 +226,6 @@ module.exports = (client) => {
                 return message.reply('✅ Your AFK status has been cleared.');
             }
 
-            // --- SUBCOMMAND: .afk list ---
             if (subArg === 'list') {
                 const afkEntries = [];
                 for (const [key, data] of afkCollection.entries()) {
@@ -255,7 +246,6 @@ module.exports = (client) => {
                 return message.reply({ embeds: [embed] });
             }
 
-            // --- SUBCOMMAND: .afk status / .afk info ---
             if (subArg === 'status' || subArg === 'info') {
                 const targetUser = message.mentions.users.first() || message.author;
                 const targetKey = `${message.guild.id}-${targetUser.id}`;
@@ -279,7 +269,6 @@ module.exports = (client) => {
                 return message.reply({ embeds: [embed] });
             }
 
-            // --- DEFAULT / SUBCOMMAND: .afk set or .afk <reason> ---
             let reason = rawArgs;
             if (subArg === 'set') {
                 reason = argsArr.slice(1).join(' ');
@@ -301,7 +290,6 @@ module.exports = (client) => {
             return;
         }
 
-        // --- B. REMOVE AFK WHEN THEY TALK ---
         if (afkCollection.has(authorKey)) {
             const afkData = afkCollection.get(authorKey);
             
@@ -334,7 +322,6 @@ module.exports = (client) => {
             }
         }
 
-        // --- C. WARN USERS WHO PING THEM (DYNO STYLE) ---
         const targets = new Set(message.mentions.users.values());
         if (message.mentions.repliedUser) targets.add(message.mentions.repliedUser);
 
