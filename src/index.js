@@ -282,6 +282,9 @@ client.manager.shoukaku.on('disconnect', (name, count) => {
 });
 
 client.manager.on('playerStart', async (player, track) => {
+    // 📻 Save current track in memory so autoplay engine knows what to recommend next
+    player.data.set('previousTrack', track);
+
     const channel = client.channels.cache.get(player.textId);
     const interaction = player.data.get('interaction');
     player.data.delete('interaction');
@@ -367,8 +370,40 @@ client.manager.on('playerException', (player) => {
     } catch (e) {}
 });
 
+// 📻 UPGRADED AUTOPLAY PLAYEREMPTY ENGINE
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
+    const isAutoplay = player.data.get('autoplay');
+
+    if (isAutoplay) {
+        const previousTrack = player.data.get('previousTrack');
+        if (previousTrack) {
+            try {
+                if (channel) {
+                    await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
+                }
+
+                // Search YouTube Mix / Related Recommendations
+                const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
+                let result = await client.manager.search(searchQuery, { requester: previousTrack.requester });
+
+                if (!result || !result.tracks || !result.tracks.length) {
+                    const fallbackQuery = `ytsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
+                    result = await client.manager.search(fallbackQuery, { requester: previousTrack.requester });
+                }
+
+                if (result && result.tracks && result.tracks.length > 0) {
+                    const nextTrack = result.tracks.find(t => t.identifier !== previousTrack.identifier) || result.tracks[0];
+                    player.queue.add(nextTrack);
+                    await player.play();
+                    return;
+                }
+            } catch (err) {
+                console.error('❌ Autoplay Recommendation Error:', err.message || err);
+            }
+        }
+    }
+
     if (channel) channel.send('📭 The queue has ended.');
 });
 // ==========================================
@@ -560,8 +595,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
     { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
-    { name: 'Starry Protocol',  fn: () => require('./modules/masterChannelSystems.js')(client, app) }
-
+    { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
 ];
 
 function loadSlashCommands() {
