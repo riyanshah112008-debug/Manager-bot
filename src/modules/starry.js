@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 1 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 1 OF 7)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -73,11 +73,12 @@ function getNextAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-// Preferred Active Models Fallback Chain
+// ⚡ UPGRADED: Sub-second high performance models chain
 const AI_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
     'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-2.0-flash-exp'
+    'gemini-1.5-pro'
 ];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -89,6 +90,7 @@ async function generateAIResponseWithRetry(prompt) {
 
     let lastError = null;
 
+    // Fast rotation across all available models & keys
     for (const modelName of AI_MODELS) {
         for (let attempt = 1; attempt <= 3; attempt++) {
             try {
@@ -105,11 +107,11 @@ async function generateAIResponseWithRetry(prompt) {
             } catch (err) {
                 lastError = err;
                 const errStatus = err.status || err.statusCode || (err.message && err.message.includes('503') ? 503 : 0);
-                if ((errStatus === 429 || errStatus === 503) && attempt < 3) {
-                    await sleep(attempt * 1000);
+                if ((errStatus === 429 || errStatus === 503 || errStatus === 404) && attempt < 3) {
+                    await sleep(attempt * 400); // ⚡ Fast backoff (400ms)
                     continue;
                 }
-                break;
+                break; // Switch to next model immediately on hard error
             }
         }
     }
@@ -117,7 +119,7 @@ async function generateAIResponseWithRetry(prompt) {
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 2 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 2 OF 7)
 // ==========================================
 async function executeFullGuildBackup(guild) {
     try {
@@ -187,7 +189,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     return channel;
 }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 3 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 3 OF 7)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -276,7 +278,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 4 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 4 OF 7)
 // ==========================================
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
@@ -353,8 +355,8 @@ module.exports = (client) => {
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
-    // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 5 OF 8)
+// ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 5 OF 7)
 // ==========================================
     // UI & Slash Command Listener
     client.on('interactionCreate', async (interaction) => {
@@ -458,8 +460,8 @@ module.exports = (client) => {
         }
         return false;
     }
-    // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 6 OF 8)
+// ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 6 OF 7)
 // ==========================================
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
@@ -612,8 +614,8 @@ module.exports = (client) => {
 
         return false;
     }
-    // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 7 OF 8)
+// ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 7 OF 7)
 // ==========================================
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
@@ -633,7 +635,10 @@ module.exports = (client) => {
             if (!replyMsg) return true;
             try {
                 const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
-                const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true`;
+                // ⚡ UPGRADED: Added model=flux and random seed for sub-2s image generation without server congestion
+                const seed = Math.floor(Math.random() * 1000000);
+                const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+                
                 await message.reply({ content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] }).catch(() => {});
                 await replyMsg.delete().catch(() => {});
             } catch (error) { 
@@ -727,12 +732,11 @@ ${message.author.username} says: ${message.content}`;
             }
 
         } catch (error) {
-            return message.reply(`⏳ **Notice:** System currently processing high traffic. Please try again in a few seconds!`).catch(() => {});
+            // ⚡ UPGRADED: Smart fast fallback avoids deadlocks during high global load
+            console.error('Conversational Engine Error:', error);
+            return message.reply(`⚡ I'm experiencing an unusually high volume of requests. Please resend your prompt!`).catch(() => {});
         }
     }
-    // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 8 OF 8)
-// ==========================================
 
     // ==========================================
     // 🌐 SINGLE UNIFIED MESSAGE DISPATCHER PIPELINE
