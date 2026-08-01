@@ -625,16 +625,13 @@ module.exports = (client) => {
             imagePrompt = message.content.slice(9).trim();
         } else if (hasName || mentionsBot) {
             const rawText = message.content.toLowerCase();
-            // Check if the user is asking to create/draw/generate an image
             const hasImageKeywords = /(?:create|generate|draw|make|paint|imagine|picture|photo|art|image)/i.test(rawText);
 
             if (hasImageKeywords) {
-                // Strip bot trigger names
                 let cleanPrompt = message.content
                     .replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '')
                     .trim();
 
-                // Clean out action verbs, articles, and filler words flexible to any word order
                 cleanPrompt = cleanPrompt
                     .replace(/^(?:create|generate|draw|make|paint|imagine)\s+/i, '')
                     .replace(/\b(?:an?|some|the)\b\s+/gi, '')
@@ -673,7 +670,15 @@ module.exports = (client) => {
 
         try {
             const prompt = `[SYSTEM INSTRUCTION]
-You are ${displayName}, an advanced Discord AI companion equipped with full autonomous moderation, channel, category, and role management capabilities.
+You are ${displayName}, an all-in-one Discord AI companion and server administrator.
+
+YOUR FULL CAPABILITIES INCLUDE:
+1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command (e.g. "draw a penguin", "create an image of...").
+2. 🎵 Music & DJ Controls: Playing high-quality audio, track control (pause, skip, loop, volume), and DJ channel management.
+3. 🔢 Counting & Mini-Games: Managing counting channels, chest drops, and server activity tracking.
+4. 🛡️ Autonomous Moderation & Security: Kicking, banning, unbanning, timing out users, clearing messages, mass-ping AutoMod, and security logging.
+5. 📁 Channel & Category Management: Dynamically creating, deleting, and organizing text/voice channels and categories.
+6. 🎭 Role Management: Creating roles, assigning roles, and managing permissions.
 
 COMMAND SPECIFICATION PROTOCOL:
 If the user asks you to perform a server management action, embed the appropriate tag anywhere in your output:
@@ -685,7 +690,7 @@ If the user asks you to perform a server management action, embed the appropriat
   * Create Category: [CMD:CREATECATEGORY|NAME:category_name]
   * Delete Category: [CMD:DELETECATEGORY|NAME:category_name]
 
-Always acknowledge the action warmly, clearly, and concisely.
+When asked about your features, list ALL of your capabilities (Image Generation, Music, Counting, Moderation, Channels, and Roles) in a clean bulleted format. Always acknowledge requests warmly, clearly, and concisely.
 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
