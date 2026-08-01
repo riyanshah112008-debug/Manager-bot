@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 1 OF 8)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -117,7 +117,7 @@ async function generateAIResponseWithRetry(prompt) {
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 2 OF 8)
 // ==========================================
 async function executeFullGuildBackup(guild) {
     try {
@@ -187,7 +187,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     return channel;
 }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 3 OF 8)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -276,7 +276,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 4 OF 8)
 // ==========================================
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
@@ -296,10 +296,14 @@ const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setD
 const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
 
 module.exports = (client) => {
+    // 🛡️ FAIL-SAFE PREVENT MULTIPLE REGISTRATIONS ON THE SAME CLIENT
+    if (client.starryEngineInitialized) {
+        console.log('⚠️ Starry Engine already initialized. Skipping duplicate registration.');
+        return;
+    }
+    client.starryEngineInitialized = true;
 
-    client.on('clientReady', () => { 
-        console.log('🚀 Supreme Starry Unified Engine Active (Single Dispatcher & Fully Merged Master Capabilities)'); 
-    });
+    console.log('🚀 Supreme Starry Unified Engine Active (Single Pipeline & Merged Master System Capabilities)');
 
     start60sChannelTelemetryLoop(client);
 
@@ -349,7 +353,9 @@ module.exports = (client) => {
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
-
+    // ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 5 OF 8)
+// ==========================================
     // UI & Slash Command Listener
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
@@ -398,9 +404,7 @@ module.exports = (client) => {
             }
         }
     });
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
-// ==========================================
+
     function cleanCategoryName(str) {
         if (!str) return '';
         return str
@@ -454,7 +458,9 @@ module.exports = (client) => {
         }
         return false;
     }
-
+    // ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 6 OF 8)
+// ==========================================
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
@@ -606,8 +612,8 @@ module.exports = (client) => {
 
         return false;
     }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+    // ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 7 OF 8)
 // ==========================================
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
@@ -724,8 +730,8 @@ ${message.author.username} says: ${message.content}`;
             return message.reply(`⏳ **Notice:** System currently processing high traffic. Please try again in a few seconds!`).catch(() => {});
         }
     }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
+    // ==========================================
+// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 8 OF 8)
 // ==========================================
 
     // ==========================================
@@ -778,8 +784,9 @@ ${message.author.username} says: ${message.content}`;
         await handleConversationalGemini(client, message, displayName);
     });
 };
+
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
+// EXPORTS (replaces masterChannelSystems.js)
 // ==========================================
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
