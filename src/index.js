@@ -560,8 +560,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
     { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
-    { name: 'Starry Protocol', fn: () => require('./modules/starry.js')(client, app) },
-{ name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
+    { name: 'Starry Protocol',  fn: () => require('./modules/masterChannelSystems.js')(client, app) }
 
 ];
 
