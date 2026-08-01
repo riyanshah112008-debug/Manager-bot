@@ -618,15 +618,35 @@ module.exports = (client) => {
 // 🧠 STARRY SUPREME UNIFIED ENGINE (PART 7 OF 7)
 // ==========================================
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
-        const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
         let isImageRequest = isImagine;
         let imagePrompt = "";
 
         if (isImagine) {
             imagePrompt = message.content.slice(9).trim();
         } else if (hasName || mentionsBot) {
-            const match = message.content.match(imageRegex);
-            if (match) { isImageRequest = true; imagePrompt = match[1].trim(); }
+            const rawText = message.content.toLowerCase();
+            // Check if the user is asking to create/draw/generate an image
+            const hasImageKeywords = /(?:create|generate|draw|make|paint|imagine|picture|photo|art|image)/i.test(rawText);
+
+            if (hasImageKeywords) {
+                // Strip bot trigger names
+                let cleanPrompt = message.content
+                    .replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '')
+                    .trim();
+
+                // Clean out action verbs, articles, and filler words flexible to any word order
+                cleanPrompt = cleanPrompt
+                    .replace(/^(?:create|generate|draw|make|paint|imagine)\s+/i, '')
+                    .replace(/\b(?:an?|some|the)\b\s+/gi, '')
+                    .replace(/\b(?:image|picture|drawing|art|photo|pic|illustration)s?\b/gi, '')
+                    .replace(/\b(?:of|about|showing|with)\b\s+/gi, '')
+                    .trim();
+
+                if (cleanPrompt.length > 0) {
+                    isImageRequest = true;
+                    imagePrompt = cleanPrompt;
+                }
+            }
         }
 
         if (isImageRequest) {
@@ -635,7 +655,6 @@ module.exports = (client) => {
             if (!replyMsg) return true;
             try {
                 const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
-                // ⚡ UPGRADED: Added model=flux and random seed for sub-2s image generation without server congestion
                 const seed = Math.floor(Math.random() * 1000000);
                 const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
                 
@@ -732,7 +751,6 @@ ${message.author.username} says: ${message.content}`;
             }
 
         } catch (error) {
-            // ⚡ UPGRADED: Smart fast fallback avoids deadlocks during high global load
             console.error('Conversational Engine Error:', error);
             return message.reply(`⚡ I'm experiencing an unusually high volume of requests. Please resend your prompt!`).catch(() => {});
         }
@@ -778,7 +796,7 @@ ${message.author.username} says: ${message.content}`;
 
         // 3. Fast Local Pre-Parsers (<50ms Execution - Zero AI Calls)
         const localHandled = await handleLocalActions(client, message);
-        if (localHandled) return; // Action handled locally! Stop execution immediately!
+        if (localHandled) return; 
 
         // 4. Pollinations AI Media Generation
         const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
