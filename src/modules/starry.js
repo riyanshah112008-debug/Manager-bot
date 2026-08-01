@@ -1,8 +1,9 @@
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 4 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
 // ==========================================
 const { 
     PermissionFlagsBits, 
+    PermissionsBitField,
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
@@ -11,20 +12,54 @@ const {
     TextInputBuilder, 
     TextInputStyle, 
     ChannelType, 
-    MessageFlags 
+    MessageFlags,
+    SlashCommandBuilder
 } = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
-const { provisionMasterServerStructure } = require('./masterChannelSystems');
+const mongoose = require('mongoose');
+const Database = require('better-sqlite3');
+const fs = require('fs');
+const path = require('path');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 // Safely Require Mongoose Models
-let ServerSettings, ChestChannel, BoostChannel;
-try {
-    ServerSettings = require('../models/ServerSettings');
-    ChestChannel = require('../models/ChestChannel');
-    BoostChannel = require('../models/BoostChannel');
-} catch (e) {}
+let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote;
+try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {}
+try { ChestChannel = mongoose.models.ChestChannel || require('../models/ChestChannel'); } catch (e) {}
+try { BoostChannel = mongoose.models.BoostChannel || require('../models/BoostChannel'); } catch (e) {}
+
+const PolicyVoteSchema = new mongoose.Schema({
+    guildId: String, messageId: String, title: String, description: String,
+    yesVotes: { type: Array, default: [] }, noVotes: { type: Array, default: [] }, createdAt: { type: Date, default: Date.now }
+});
+PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
+
+const masterSecuritySchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
+    modules: { wick: { type: Boolean, default: true }, beemo: { type: Boolean, default: true }, altdentifier: { type: Boolean, default: false }, dyno_carl: { type: Boolean, default: true } },
+    userInfractions: { type: Map, of: Number, default: {} }
+});
+MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+
+// SQLite Protection Database
+const protectDb = new Database('protect.db');
+protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
+
+const securityCache = new Map();
+const blacklistedUsers = new Set();
+
+async function getSecurityConfig(guildId) {
+    if (securityCache.has(guildId)) return securityCache.get(guildId);
+    let config = await MasterSecurity.findOne({ guildId }).lean();
+    if (!config) {
+        config = { guildId, autoKick: false, autoBan: false, ownerBypass: true, modules: { wick: true, beemo: true, altdentifier: false, dyno_carl: true }, userInfractions: new Map() };
+        await MasterSecurity.create(config).catch(() => {});
+    }
+    securityCache.set(guildId, config);
+    return config;
+}
 
 // Multi-API Key Support (Comma-separated GEMINI_API_KEY / GOOGLE_AI_KEY)
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
@@ -38,7 +73,7 @@ function getNextAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-// ⚡ HIGH-AVAILABILITY 24/7 AI MODELS
+// Preferred Active Models Fallback Chain
 const AI_MODELS = [
     'gemini-1.5-flash',
     'gemini-1.5-pro',
@@ -81,52 +116,192 @@ async function generateAIResponseWithRetry(prompt) {
 
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
+// ==========================================
+async function executeFullGuildBackup(guild) {
+    try {
+        const allRoles = await guild.roles.fetch();
+        const allChannels = await guild.channels.fetch();
+        return {
+            rolesSaved: allRoles.size,
+            categoriesSaved: allChannels.filter(c => c.type === ChannelType.GuildCategory).size,
+            channelsSaved: allChannels.filter(c => c.type !== ChannelType.GuildCategory).size
+        };
+    } catch (e) {
+        return { rolesSaved: guild.roles.cache.size, categoriesSaved: guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size, channelsSaved: guild.channels.cache.filter(c => c.type !== ChannelType.GuildCategory).size };
+    }
+}
 
-const blacklistedUsers = new Set();
+async function getOrCreateCategory(guild, name, overwrites = []) {
+    let cat = guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === ChannelType.GuildCategory);
+    if (!cat) {
+        cat = await guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites });
+    }
+    return cat;
+}
+
+async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
+    const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+    const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && (m.components.length > 0 || m.embeds.length > 0)) : false;
+
+    if (!hasPanel) {
+        let embed = new EmbedBuilder().setColor('#2b2d31');
+        let components = [];
+
+        if (moduleType === 'verification') {
+            embed.setColor('#2ecc71').setTitle('🛡️ Server Web Verification Portal').setDescription('Welcome! Human verification is required before full channel access is granted.\n\nClick the button below to generate your secure verification link.');
+            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole?.id || 'active'}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'))];
+        } else if (moduleType === 'tickets') {
+            embed.setColor('#00F2FE').setTitle('🎫 Support & Application Portal').setDescription('• **Open Support Ticket:** Opens a private channel with staff.\n• **Apply for Staff:** Opens an application form.');
+            components = [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
+                new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
+            )];
+        } else if (moduleType === 'log_access') {
+            embed.setColor('#3BA55C').setTitle('🟢 Access & Member Join Audit Engine').addFields({ name: 'Engine Status', value: '`RUNNING 🟢`', inline: true }, { name: 'Active Listeners', value: '`Member Joins • Leaves • Invites`', inline: true });
+        } else if (moduleType === 'sus_tracker') {
+            embed.setColor('#ED4245').setTitle('🚨 Young Account & Sus Profile Scanner').addFields({ name: 'Engine Status', value: '`ARMED 🚨`', inline: true }, { name: 'Detection Rule', value: '`Flags accounts < 7 days old`', inline: true });
+        } else if (moduleType === 'inactivity_tracker') {
+            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Scanner').addFields({ name: 'Engine Status', value: '`SCANNING 💤`', inline: true }, { name: 'Tracking Window', value: '`14-Day Inactivity Matrix`', inline: true });
+        } else if (moduleType === 'status_monitor') {
+            embed.setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields({ name: 'Metrics Update', value: '`Loops every 60 seconds`', inline: true }, { name: 'Monitored Assets', value: '`Members • RAM Heap • Ping • Modules`', inline: true });
+        }
+
+        if (components.length > 0) {
+            await channel.send({ embeds: [embed], components }).catch(() => null);
+        } else if (embed.data.title) {
+            await channel.send({ embeds: [embed] }).catch(() => null);
+        }
+    }
+}
+
+async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
+    let channel = guild.channels.cache.find(c => c.name.toLowerCase() === options.name.toLowerCase() && c.parentId === options.parent);
+    if (!channel) {
+        channel = await guild.channels.create({
+            name: options.name, type: options.type || ChannelType.GuildText, parent: options.parent, topic: options.topic || '', permissionOverwrites: options.permissionOverwrites || []
+        });
+    }
+    await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
+    return channel;
+}
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 5 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
 // ==========================================
+async function provisionMasterServerStructure(interaction) {
+    const guild = interaction.guild;
+    const botMember = guild.members.me;
+
+    let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
+    if (!verifiedRole) verifiedRole = await guild.roles.create({ name: 'Verified', color: '#2ecc71', reason: 'Starry Master System' });
+
+    let staffRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'staff' || r.name.toLowerCase() === 'moderator');
+    if (!staffRole) staffRole = await guild.roles.create({ name: 'Staff', color: '#3498db', reason: 'Starry Master System' });
+
+    const hideEveryone = { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] };
+    const showEveryone = { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] };
+    const showVerified = { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] };
+    const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
+    const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
+
+    // 1. SECURITY & GOVERNANCE CATEGORY
+    const govCat = await getOrCreateCategory(guild, '🛡️ SECURITY & GOVERNANCE', [showEveryone, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'rules-and-info', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'announcements', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'server-status-monitor', parent: govCat.id, moduleType: 'status_monitor', permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
+
+    // 2. INCIDENT & AUDIT LOGS CATEGORY
+    const sysCat = await getOrCreateCategory(guild, '🚨 INCIDENT & SECURITY LOGS', [hideEveryone, staffFullControl, botFullControl]);
+    const sysChannels = [
+        { name: 'logs-access', moduleType: 'log_access' }, 
+        { name: 'logs-moderate', moduleType: 'log_moderate' },
+        { name: 'logs-messages', moduleType: 'log_messages' }, 
+        { name: 'logs-voice', moduleType: 'log_voice' },
+        { name: 'logs-channels', moduleType: 'log_channels' }, 
+        { name: 'logs-members', moduleType: 'log_members' }
+    ];
+    for (const item of sysChannels) {
+        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    }
+
+    // 3. AUTOMATED TRACKERS CATEGORY
+    const trackerCat = await getOrCreateCategory(guild, '📡 AUTOMATED TRACKERS', [hideEveryone, staffFullControl, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'sus-account-tracker', parent: trackerCat.id, moduleType: 'sus_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'inactivity-tracker', parent: trackerCat.id, moduleType: 'inactivity_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'chest-drops', parent: trackerCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+
+    // 4. SUPPORT & APPLICATIONS CATEGORY
+    const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
+    await createNonDuplicatingActiveChannel(guild, { name: 'verify-here', parent: supportCat.id, moduleType: 'verification', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+
+    // 5. ADMIN & STAFF HQ CATEGORY
+    const staffCat = await getOrCreateCategory(guild, '👑 ADMIN & STAFF HQ', [hideEveryone, staffFullControl, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'owners-chat', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'staff-discussion', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
+
+    // 6. COMMUNITY PROTOCOL CATEGORY
+    const commCat = await getOrCreateCategory(guild, '📊 COMMUNITY PROTOCOL', [hideEveryone, showVerified, botFullControl]);
+    await createNonDuplicatingActiveChannel(guild, { name: 'general-chat', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+    await createNonDuplicatingActiveChannel(guild, { name: 'bot-commands', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+
+    if (ServerSettings) {
+        await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
+    }
+    return { verifiedRole: verifiedRole.name, totalCategories: 6, totalChannels: 22 };
+}
+
+function start60sChannelTelemetryLoop(client) {
+    setInterval(async () => {
+        if (!client.guilds) return;
+        client.guilds.cache.forEach(async (guild) => {
+            try {
+                const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
+                if (statusCh) {
+                    const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields(
+                        { name: '📊 Total Members', value: `\`${guild.memberCount}\``, inline: true },
+                        { name: '🟢 System Uptime', value: `\`${(process.uptime() / 60).toFixed(1)} mins\``, inline: true },
+                        { name: '🧠 RAM Usage (Heap)', value: `\`${memUsage} MB\``, inline: true },
+                        { name: '📡 Bot Latency (Ping)', value: `\`${client.ws.ping}ms\``, inline: true }
+                    );
+                    const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
+                    const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id && m.embeds.length > 0) : null;
+                    if (botMsg) await botMsg.edit({ embeds: [statusEmbed] }).catch(() => {});
+                    else await statusCh.send({ embeds: [statusEmbed] }).catch(() => {});
+                }
+            } catch (err) {}
+        });
+    }, 60000);
+}
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
+// ==========================================
+const emergencyNukeCommand = new SlashCommandBuilder()
+    .setName('emergency-nuke')
+    .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(o =>
+        o.setName('target')
+            .setDescription('Select whether to nuke this channel or the entire server')
+            .setRequired(true)
+            .addChoices({ name: 'Channel (Purge & Recreate)', value: 'channel' }, { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' })
+    )
+    .addChannelOption(o => o.setName('channel').setDescription('Target channel').addChannelTypes(ChannelType.GuildText).setRequired(false));
+
+const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)));
+const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('status').setDescription('Status'));
+const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
+const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
+
 module.exports = (client) => {
 
     client.on('clientReady', () => { 
-        console.log('🚀 Supreme Starry AI Protocol Engine Active (Single Dispatcher & Fast Local Execution)'); 
+        console.log('🚀 Supreme Starry Unified Engine Active (Single Dispatcher & Fully Merged Master Capabilities)'); 
     });
 
-    // AutoMod Anti-Mass Ping
-    async function handleAutoModPing(message) {
-        if (!message.guild || message.author.bot || !message.member) return false;
-
-        const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
-        const userMentionCount = message.mentions.users.size;
-        const roleMentionCount = message.mentions.roles.size;
-        const everyoneMention = message.mentions.everyone ? 1 : 0;
-        const totalPings = Math.max(userMentionCount + roleMentionCount + everyoneMention, rawPingMatches.length);
-
-        if (totalPings >= 5) {
-            const botMember = message.guild.members.me;
-
-            if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                await message.delete().catch(() => {});
-            }
-
-            const durationMs = 10 * 60 * 1000;
-            const caseId = Math.floor(Math.random() * 90000) + 10000;
-            const reason = `Automated Anti-Mass Ping (${totalPings} mentions in single message)`;
-
-            if (
-                botMember.permissions.has(PermissionFlagsBits.ModerateMembers) &&
-                message.member.roles.highest.position < botMember.roles.highest.position &&
-                message.author.id !== message.guild.ownerId
-            ) {
-                const dmSent = await client.sendPremiumModDM(message.member, botMember, 'timeout', reason, '10 minutes', message.guild, caseId);
-                await message.member.timeout(durationMs, reason).catch(() => {});
-                const warningMsg = await message.channel.send(`🛡️ **AutoMod Triggered:** <@${message.author.id}> was timed out for **10 minutes** due to Mass Mentioning (${totalPings} pings)! ${dmSent ? '*(User Notified)*' : ''}`).catch(() => null);
-                if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
-            }
-            return true;
-        }
-        return false;
-    }
+    start60sChannelTelemetryLoop(client);
 
     client.isOwner = (userId) => {
         const defaultOwners = ['1465049039153135639', '1257676837249617971'];
@@ -154,37 +329,6 @@ module.exports = (client) => {
         return guild.channels.cache.find(c => c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'system-logs', 'logs'].includes(c.name)) || null;
     };
 
-    // DJ Music Interaction Handler
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isButton()) return;
-        const customId = interaction.customId;
-
-        if (['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(customId)) {
-            const guild = interaction.guild;
-            if (!guild) return;
-
-            const member = interaction.member;
-            const voiceChannel = member?.voice?.channel;
-            const player = client.manager ? client.manager.getPlayer(guild.id) : null;
-
-            if (!voiceChannel) return interaction.reply({ content: '❌ You must be connected to a voice channel to use music controls!', flags: [EPHEMERAL_FLAG] });
-            if (!player) return interaction.reply({ content: '❌ No active audio player found in this server!', flags: [EPHEMERAL_FLAG] });
-
-            await interaction.deferUpdate().catch(() => {});
-
-            try {
-                if (customId === 'music_pause') player.pause(!player.paused);
-                else if (customId === 'music_skip') player.skip();
-                else if (customId === 'music_stop') player.destroy();
-                else if (customId === 'music_loop') player.setLoop(player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none');
-                else if (customId === 'dj_vol_down') player.setVolume(Math.max(10, player.volume - 10));
-                else if (customId === 'dj_vol_up') player.setVolume(Math.min(100, player.volume + 10));
-                else if (customId === 'dj_lock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                else if (customId === 'dj_unlock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: true });
-            } catch (err) {}
-        }
-    });
-
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
         if (!member || !member.user || member.user.bot) return false;
         const actionType = action.toLowerCase();
@@ -205,11 +349,58 @@ module.exports = (client) => {
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
-// ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 6 OF 8)
-// ==========================================
 
-    // Helper: Smart Emojiless Normalizer for Category Matching
+    // UI & Slash Command Listener
+    client.on('interactionCreate', async (interaction) => {
+        if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
+            const guild = interaction.guild;
+            if (!guild) return;
+            const member = interaction.member;
+            const voiceChannel = member?.voice?.channel;
+            const player = client.manager ? client.manager.getPlayer(guild.id) : null;
+
+            if (!voiceChannel) return interaction.reply({ content: '❌ Connect to a voice channel first!', flags: [EPHEMERAL_FLAG] });
+            if (!player) return interaction.reply({ content: '❌ No active player in this server!', flags: [EPHEMERAL_FLAG] });
+
+            await interaction.deferUpdate().catch(() => {});
+            try {
+                if (interaction.customId === 'music_pause') player.pause(!player.paused);
+                else if (interaction.customId === 'music_skip') player.skip();
+                else if (interaction.customId === 'music_stop') player.destroy();
+                else if (interaction.customId === 'music_loop') player.setLoop(player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none');
+                else if (interaction.customId === 'dj_vol_down') player.setVolume(Math.max(10, player.volume - 10));
+                else if (interaction.customId === 'dj_vol_up') player.setVolume(Math.min(100, player.volume + 10));
+                else if (interaction.customId === 'dj_lock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
+                else if (interaction.customId === 'dj_unlock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: true });
+            } catch (err) {}
+            return;
+        }
+
+        if (interaction.isChatInputCommand()) {
+            if (interaction.commandName === 'setup-starry') {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
+                const result = await provisionMasterServerStructure(interaction);
+                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
+                return interaction.editReply({ embeds: [embed] });
+            }
+
+            if (interaction.commandName === 'emergency-nuke') {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                const targetScope = interaction.options.getString('target', true);
+                if (targetScope === 'channel') {
+                    const channel = interaction.options.getChannel('channel') || interaction.channel;
+                    const pos = channel.position;
+                    const newCh = await channel.clone();
+                    await channel.delete().catch(() => {});
+                    await newCh.setPosition(pos).catch(() => {});
+                    return newCh.send({ content: '⚡ **EMERGENCY NUKE:** Channel purged and recreated.' });
+                }
+            }
+        }
+    });
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
+// ==========================================
     function cleanCategoryName(str) {
         if (!str) return '';
         return str
@@ -221,7 +412,49 @@ module.exports = (client) => {
             .trim();
     }
 
-    // ⚡ INSTANT LOCAL PRE-PARSER ENGINE (<50ms EXECUTION)
+    async function handleAutoModPing(message) {
+        if (!message.guild || message.author.bot || !message.member) return false;
+        const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
+        const totalPings = Math.max(message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0), rawPingMatches.length);
+
+        if (totalPings >= 5) {
+            const botMember = message.guild.members.me;
+            if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) await message.delete().catch(() => {});
+
+            if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers) && message.member.roles.highest.position < botMember.roles.highest.position && message.author.id !== message.guild.ownerId) {
+                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} pings)`).catch(() => {});
+                const warningMsg = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for **10 minutes** due to Mass Mentioning!`).catch(() => null);
+                if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    async function handleDevCLI(client, message) {
+        const text = message.content.toLowerCase();
+        if (!text.startsWith('.dev') && !text.startsWith('.sysinfo') && !text.startsWith('.eval ')) return false;
+
+        const isOwner = client.isOwner(message.author.id);
+        if (!isOwner) { await message.reply("❌ Access Denied.").catch(()=>{}); return true; }
+
+        if (text === '.sysinfo') {
+            const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+            await message.reply(`📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
+            return true;
+        }
+        if (text.startsWith('.eval ')) {
+            try {
+                let evaled = eval(message.content.slice(6));
+                if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
+                await message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
+            } catch (err) { await message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
+            return true;
+        }
+        return false;
+    }
+
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
@@ -266,7 +499,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 2. DELETE A CATEGORY DIRECTLY
+        // 2. DELETE CATEGORY DIRECTLY
         const delCatRegex = /(?:delete|remove)\s+(?:the\s+)?category\s+(.+)$/i;
         const delCatMatch = message.content.match(delCatRegex);
 
@@ -353,7 +586,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 6. CLEAR MESSAGES PRE-PARSER
+        // 6. PURGE MESSAGES
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -363,7 +596,7 @@ module.exports = (client) => {
                 return true;
             }
             const count = parseInt(clearMatch[1]);
-            if (count <= 0) { await message.reply('❌ Please specify a valid number of messages to clear.'); return true; }
+            if (count <= 0) { await message.reply('❌ Specify a valid message count.'); return true; }
             const deleteCount = Math.min(count, 99) + 1;
             await message.channel.bulkDelete(deleteCount, true).catch(() => {});
             const sent = await message.channel.send(`🧹 Successfully cleared ${count} messages!`);
@@ -374,7 +607,7 @@ module.exports = (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 7 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
 // ==========================================
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         const imageRegex = /(?:create|generate|draw|make|paint) (?:an? |some )?(?:image|picture|drawing|art|photo) (?:of )?(.*)/i;
@@ -492,7 +725,7 @@ ${message.author.username} says: ${message.content}`;
         }
     }
 // ==========================================
-// 🧠 STARRY SUPREME AI PROTOCOL ENGINE (PART 8 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // ==========================================
 
     // ==========================================
@@ -503,6 +736,9 @@ ${message.author.username} says: ${message.content}`;
 
         // 1. AutoMod Ping Check
         if (await handleAutoModPing(message)) return;
+
+        // 2. Developer CLI Commands (.dev, .sysinfo, .eval)
+        if (await handleDevCLI(client, message)) return;
 
         // Trigger Word Check
         let triggerWord = 'starry';
@@ -530,15 +766,26 @@ ${message.author.username} says: ${message.content}`;
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // 2. Fast Local Pre-Parsers (<50ms Execution - Zero AI Calls)
+        // 3. Fast Local Pre-Parsers (<50ms Execution - Zero AI Calls)
         const localHandled = await handleLocalActions(client, message);
         if (localHandled) return; // Action handled locally! Stop execution immediately!
 
-        // 3. Pollinations AI Media Generation
+        // 4. Pollinations AI Media Generation
         const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
         if (imageHandled) return;
 
-        // 4. Conversational Gemini AI Engine (General Chat Only)
+        // 5. Conversational Gemini AI Engine (General Chat Only)
         await handleConversationalGemini(client, message, displayName);
     });
 };
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
+// ==========================================
+module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
+module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
+module.exports.executeFullGuildBackup = executeFullGuildBackup;
+module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
+module.exports.modMasterPayload = modMasterCommand.toJSON();
+module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
+module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
+module.exports.verifySetupPayload = verifySetupCommand.toJSON();
