@@ -456,19 +456,18 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
-    if (interaction.isChatInputCommand()) {
+   if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
             'automod', 'mod', 'moderate', 'verify-setup',
             'bump', 'bump-setup', 'autobump', 'set-listing',
-            'ticketsetup', 'applysetup' // 👈 Added here so modules handle them
+            'ticketsetup', 'applysetup' // 👈 Add these two
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
         }
     }
-
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         const customId = interaction.customId;
         if (!customId.startsWith('dj_') && !customId.startsWith('music_')) return;
