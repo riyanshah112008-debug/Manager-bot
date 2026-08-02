@@ -1,957 +1,680 @@
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1 OF 4)
 // ==========================================
+process.env.FFMPEG_PATH = require('ffmpeg-static');
+
 const { 
-    PermissionFlagsBits, 
-    PermissionsBitField,
+    Client, 
+    GatewayIntentBits, 
+    Partials, 
+    Collection, 
+    Events, 
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    ModalBuilder, 
-    TextInputBuilder, 
-    TextInputStyle, 
-    ChannelType, 
-    MessageFlags,
-    SlashCommandBuilder
+    StringSelectMenuBuilder, 
+    PermissionFlagsBits,
+    MessageFlags
 } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
-const mongoose = require('mongoose');
-const Database = require('better-sqlite3');
+const express = require('express');
+const cors = require('cors'); 
+const https = require('https'); 
+const mongoose = require('mongoose'); 
+const { Connectors } = require('shoukaku');
+const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
+const KazagumoSpotify = require('kazagumo-spotify');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Safely Require Mongoose Models
-let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote, CountGuild;
-try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {}
-try { ChestChannel = mongoose.models.ChestChannel || require('../models/ChestChannel'); } catch (e) {}
-try { BoostChannel = mongoose.models.BoostChannel || require('../models/BoostChannel'); } catch (e) {}
+const bumpEngine = require('./modules/bumpEngine');
+const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
 
-const PolicyVoteSchema = new mongoose.Schema({
-    guildId: String, messageId: String, title: String, description: String,
-    yesVotes: { type: Array, default: [] }, noVotes: { type: Array, default: [] }, createdAt: { type: Date, default: Date.now }
-});
-PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
+const app = express();
+const port = process.env.PORT || 10000;
 
-const masterSecuritySchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
-    modules: { wick: { type: Boolean, default: true }, beemo: { type: Boolean, default: true }, altdentifier: { type: Boolean, default: false }, dyno_carl: { type: Boolean, default: true } },
-    userInfractions: { type: Map, of: Number, default: {} }
-});
-MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); 
 
-const CountSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    channelId: { type: String, required: true },
-    currentNumber: { type: Number, default: 1 },
-    highScore: { type: Number, default: 0 },
-    lastUser: { type: String, default: null }
-});
-CountGuild = mongoose.models.CountGuild || mongoose.model('CountGuild', CountSchema);
-
-// SQLite Protection Database
-const protectDb = new Database('protect.db');
-protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
-
-const securityCache = new Map();
-const blacklistedUsers = new Set();
-
-async function getSecurityConfig(guildId) {
-    if (securityCache.has(guildId)) return securityCache.get(guildId);
-    let config = await MasterSecurity.findOne({ guildId }).lean();
-    if (!config) {
-        config = { guildId, autoKick: false, autoBan: false, ownerBypass: true, modules: { wick: true, beemo: true, altdentifier: false, dyno_carl: true }, userInfractions: new Map() };
-        await MasterSecurity.create(config).catch(() => {});
-    }
-    securityCache.set(guildId, config);
-    return config;
-}
-
-// Multi-API Key Support (Comma-separated GEMINI_API_KEY / GOOGLE_AI_KEY)
-const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
-const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
-let currentKeyIndex = 0;
-
-function getNextAIClient() {
-    if (apiKeys.length === 0) return null;
-    const key = apiKeys[currentKeyIndex];
-    currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-    return new GoogleGenAI({ apiKey: key });
-}
-
-// Preferred Active Models Fallback Chain
-const AI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro'
-];
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function generateAIResponseWithRetry(prompt) {
-    if (apiKeys.length === 0) {
-        throw new Error('Missing GEMINI_API_KEY environment variable.');
-    }
-
-    let lastError = null;
-
-    for (const modelName of AI_MODELS) {
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                const ai = getNextAIClient();
-                if (!ai) continue;
-                const response = await ai.models.generateContent({
-                    model: modelName,
-                    contents: prompt
-                });
-
-                if (response && response.text && response.text.trim().length > 0) {
-                    return response.text.trim();
-                }
-            } catch (err) {
-                lastError = err;
-                const errStatus = err.status || err.statusCode || (err.message && err.message.includes('503') ? 503 : 0);
-                if ((errStatus === 429 || errStatus === 503 || errStatus === 404) && attempt < 3) {
-                    await sleep(attempt * 400);
-                    continue;
-                }
-                break;
-            }
-        }
-    }
-
-    throw lastError || new Error('AI Engine temporarily unreachable.');
-}
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
-// ==========================================
-async function executeFullGuildBackup(guild) {
+app.get('/api/servers', async (req, res) => {
     try {
-        const allRoles = await guild.roles.fetch();
-        const allChannels = await guild.channels.fetch();
-        return {
-            rolesSaved: allRoles.size,
-            categoriesSaved: allChannels.filter(c => c.type === ChannelType.GuildCategory).size,
-            channelsSaved: allChannels.filter(c => c.type !== ChannelType.GuildCategory).size
-        };
-    } catch (e) {
-        return { rolesSaved: guild.roles.cache.size, categoriesSaved: guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size, channelsSaved: guild.channels.cache.filter(c => c.type !== ChannelType.GuildCategory).size };
+        if (!ServerListing) return res.json([]);
+        const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
+        res.json(servers);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch servers' });
     }
-}
+});
 
-async function getOrCreateCategory(guild, name, overwrites = []) {
-    let cat = guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === ChannelType.GuildCategory);
-    if (!cat) {
-        cat = await guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites });
-    }
-    return cat;
-}
-
-async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
-    const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-    const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && (m.components.length > 0 || m.embeds.length > 0)) : false;
-
-    if (!hasPanel) {
-        let embed = new EmbedBuilder().setColor('#2b2d31');
-        let components = [];
-
-        if (moduleType === 'verification') {
-            embed.setColor('#2ecc71').setTitle('🛡️ Server Web Verification Portal').setDescription('Welcome! Human verification is required before full channel access is granted.\n\nClick the button below to generate your secure verification link.');
-            components = [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${verifiedRole?.id || 'active'}`).setLabel('Get Verification Link').setStyle(ButtonStyle.Primary).setEmoji('🌐'))];
-        } else if (moduleType === 'tickets') {
-            embed.setColor('#00F2FE').setTitle('🎫 Support & Application Portal').setDescription('• **Open Support Ticket:** Opens a private channel with staff.\n• **Apply for Staff:** Opens an application form.');
-            components = [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
-                new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
-            )];
-        } else if (moduleType === 'log_access') {
-            embed.setColor('#3BA55C').setTitle('🟢 Access & Member Join Audit Engine').addFields({ name: 'Engine Status', value: '`RUNNING 🟢`', inline: true }, { name: 'Active Listeners', value: '`Member Joins • Leaves • Invites`', inline: true });
-        } else if (moduleType === 'sus_tracker') {
-            embed.setColor('#ED4245').setTitle('🚨 Young Account & Sus Profile Scanner').addFields({ name: 'Engine Status', value: '`ARMED 🚨`', inline: true }, { name: 'Detection Rule', value: '`Flags accounts < 7 days old`', inline: true });
-        } else if (moduleType === 'inactivity_tracker') {
-            embed.setColor('#5865F2').setTitle('💤 Engagement & Inactivity Scanner').addFields({ name: 'Engine Status', value: '`SCANNING 💤`', inline: true }, { name: 'Tracking Window', value: '`14-Day Inactivity Matrix`', inline: true });
-        } else if (moduleType === 'status_monitor') {
-            embed.setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields({ name: 'Metrics Update', value: '`Loops every 60 seconds`', inline: true }, { name: 'Monitored Assets', value: '`Members • RAM Heap • Ping • Modules`', inline: true });
-        }
-
-        if (components.length > 0) {
-            await channel.send({ embeds: [embed], components }).catch(() => null);
-        } else if (embed.data.title) {
-            await channel.send({ embeds: [embed] }).catch(() => null);
-        }
-    }
-}
-
-async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
-    let channel = guild.channels.cache.find(c => c.name.toLowerCase() === options.name.toLowerCase() && c.parentId === options.parent);
-    if (!channel) {
-        channel = await guild.channels.create({
-            name: options.name, type: options.type || ChannelType.GuildText, parent: options.parent, topic: options.topic || '', permissionOverwrites: options.permissionOverwrites || []
-        });
-    }
-    await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
-    return channel;
-}
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
-// ==========================================
-async function provisionMasterServerStructure(interaction) {
-    const guild = interaction.guild;
-    const botMember = guild.members.me;
-
-    let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
-    if (!verifiedRole) verifiedRole = await guild.roles.create({ name: 'Verified', color: '#2ecc71', reason: 'Starry Master System' });
-
-    let staffRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'staff' || r.name.toLowerCase() === 'moderator');
-    if (!staffRole) staffRole = await guild.roles.create({ name: 'Staff', color: '#3498db', reason: 'Starry Master System' });
-
-    const hideEveryone = { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] };
-    const showEveryone = { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] };
-    const showVerified = { id: verifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] };
-    const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
-    const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
-
-    // 1. SECURITY & GOVERNANCE CATEGORY
-    const govCat = await getOrCreateCategory(guild, '🛡️ SECURITY & GOVERNANCE', [showEveryone, botFullControl]);
-    await createNonDuplicatingActiveChannel(guild, { name: 'rules-and-info', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'announcements', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'server-status-monitor', parent: govCat.id, moduleType: 'status_monitor', permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
-
-    // 2. INCIDENT & AUDIT LOGS CATEGORY
-    const sysCat = await getOrCreateCategory(guild, '🚨 INCIDENT & SECURITY LOGS', [hideEveryone, staffFullControl, botFullControl]);
-    const sysChannels = [
-        { name: 'logs-access', moduleType: 'log_access' }, 
-        { name: 'logs-moderate', moduleType: 'log_moderate' },
-        { name: 'logs-messages', moduleType: 'log_messages' }, 
-        { name: 'logs-voice', moduleType: 'log_voice' },
-        { name: 'logs-channels', moduleType: 'log_channels' }, 
-        { name: 'logs-members', moduleType: 'log_members' }
-    ];
-    for (const item of sysChannels) {
-        await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
-    }
-
-    // 3. AUTOMATED TRACKERS CATEGORY
-    const trackerCat = await getOrCreateCategory(guild, '📡 AUTOMATED TRACKERS', [hideEveryone, staffFullControl, botFullControl]);
-    await createNonDuplicatingActiveChannel(guild, { name: 'sus-account-tracker', parent: trackerCat.id, moduleType: 'sus_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'inactivity-tracker', parent: trackerCat.id, moduleType: 'inactivity_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'chest-drops', parent: trackerCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
-
-    // 4. SUPPORT & APPLICATIONS CATEGORY
-    const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
-    await createNonDuplicatingActiveChannel(guild, { name: 'verify-here', parent: supportCat.id, moduleType: 'verification', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
-
-    // 5. ADMIN & STAFF HQ CATEGORY
-    const staffCat = await getOrCreateCategory(guild, '👑 ADMIN & STAFF HQ', [hideEveryone, staffFullControl, botFullControl]);
-    await createNonDuplicatingActiveChannel(guild, { name: 'owners-chat', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'staff-discussion', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
-
-    // 6. COMMUNITY PROTOCOL CATEGORY
-    const commCat = await getOrCreateCategory(guild, '📊 COMMUNITY PROTOCOL', [hideEveryone, showVerified, botFullControl]);
-    await createNonDuplicatingActiveChannel(guild, { name: 'general-chat', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
-    await createNonDuplicatingActiveChannel(guild, { name: 'bot-commands', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
-
-    if (ServerSettings) {
-        await ServerSettings.findOneAndUpdate({ guildId: String(guild.id) }, { setupCompleted: true, verifiedRoleId: verifiedRole.id }, { upsert: true });
-    }
-    return { verifiedRole: verifiedRole.name, totalCategories: 6, totalChannels: 22 };
-}
-
-function start60sChannelTelemetryLoop(client) {
-    setInterval(async () => {
-        if (!client.guilds) return;
-        client.guilds.cache.forEach(async (guild) => {
-            try {
-                const statusCh = guild.channels.cache.find(c => c.name === 'server-status-monitor');
-                if (statusCh) {
-                    const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-                    const statusEmbed = new EmbedBuilder().setColor('#2ecc71').setTitle('🟢 Autonomous Network Telemetry & Uptime Hub').addFields(
-                        { name: '📊 Total Members', value: `\`${guild.memberCount}\``, inline: true },
-                        { name: '🟢 System Uptime', value: `\`${(process.uptime() / 60).toFixed(1)} mins\``, inline: true },
-                        { name: '🧠 RAM Usage (Heap)', value: `\`${memUsage} MB\``, inline: true },
-                        { name: '📡 Bot Latency (Ping)', value: `\`${client.ws.ping}ms\``, inline: true }
-                    );
-                    const msgs = await statusCh.messages.fetch({ limit: 5 }).catch(() => null);
-                    const botMsg = msgs ? msgs.find(m => m.author.id === client.user.id && m.embeds.length > 0) : null;
-                    if (botMsg) await botMsg.edit({ embeds: [statusEmbed] }).catch(() => {});
-                    else await statusCh.send({ embeds: [statusEmbed] }).catch(() => {});
-                }
-            } catch (err) {}
-        });
-    }, 60000);
-}
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
-// ==========================================
-const emergencyNukeCommand = new SlashCommandBuilder()
-    .setName('emergency-nuke')
-    .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption(o =>
-        o.setName('target')
-            .setDescription('Select whether to nuke this channel or the entire server')
-            .setRequired(true)
-            .addChoices({ name: 'Channel (Purge & Recreate)', value: 'channel' }, { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' })
-    )
-    .addChannelOption(o => o.setName('channel').setDescription('Target channel').addChannelTypes(ChannelType.GuildText).setRequired(false));
-
-const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)));
-const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('status').setDescription('Status'));
-const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
-const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
-
-module.exports = (client) => {
-    // 🛡️ FAIL-SAFE: PREVENT DUPLICATE EVENT REGISTRATIONS ON THE SAME CLIENT
-    if (client.starryEngineInitialized) {
-        console.log('⚠️ Starry Engine already initialized. Skipping duplicate registration.');
-        return;
-    }
-    client.starryEngineInitialized = true;
-
-    console.log('🚀 Supreme Starry Unified Engine Active (Single Dispatcher Pipeline & Infinite Social Buttons)');
-
-    start60sChannelTelemetryLoop(client);
-
-    client.isOwner = (userId) => {
-        const defaultOwners = ['1465049039153135639', '1257676837249617971'];
-        const envOwners = (process.env.OWNER_ID || '').split(',').map(id => id.trim()).filter(id => id.length > 0);
-        return [...new Set([...defaultOwners, ...envOwners])].includes(userId);
-    };
-
-    client.getLogChannel = (guild, logType = 'misc') => {
-        if (!guild || !guild.channels) return null;
-        const typeMap = {
-            'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
-            'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs', 'automod-logs'],
-            'messages': ['logs-messages', 'message-logs', 'chat-logs'],
-            'voice': ['logs-voice', 'voice-logs', 'vc-logs'],
-            'channels': ['logs-channels', 'channel-logs'],
-            'members': ['logs-members', 'member-logs', 'user-logs'],
-            'roles': ['logs-roles', 'role-logs'],
-            'misc': ['logs-misc', 'bot-logs']
-        };
-
-        const targetNames = typeMap[logType.toLowerCase()] || typeMap['misc'];
-        let channel = guild.channels.cache.find(c => c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-        if (channel) return channel;
-
-        return guild.channels.cache.find(c => c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'system-logs', 'logs'].includes(c.name)) || null;
-    };
-
-    client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
-        if (!member || !member.user || member.user.bot) return false;
-        const actionType = action.toLowerCase();
-        let embedColor = actionType === 'ban' ? '#ED4245' : actionType === 'kick' ? '#FEE75C' : '#5865F2';
-
-        const modEmbed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setAuthor({ name: `${guild.name} | Security & Moderation`, iconURL: guild.iconURL({ dynamic: true }) })
-            .setTitle(`🛡️ Moderation Notice: ${actionType.toUpperCase()}`)
-            .setDescription(`Hello **${member.user.username}**, you received a moderation action in **${guild.name}**.`)
-            .addFields(
-                { name: '👤 Moderator', value: `\`${moderator.user ? moderator.user.username : 'Starry AutoMod'}\``, inline: true },
-                { name: '🛡️ Action', value: `\`${actionType}\``, inline: true },
-                { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
-                { name: '📝 Reason', value: `>>> ${reason || 'No reason provided.'}`, inline: false }
-            )
-            .setTimestamp();
-
-        try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
-    };
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
-// ==========================================
-    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS - NO EXPIRATION EVER)
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.guild) return;
-
-        // 1. PERMANENT INFINITE-TIME SOCIAL ACTION BUTTON HANDLER (PAT BACK, HUG BACK, KISS BACK, BITE BACK, CUDDLE BACK, etc.)
-        if (interaction.isButton() && interaction.customId.startsWith('social_')) {
-            const parts = interaction.customId.split('_'); // Format: social_<actionType>_<targetUserId>
-            const actionType = parts[1] || 'pat';
-            let targetUserId = parts[2] && parts[2] !== 'back' ? parts[2] : null;
-
-            // Fallback: Parse target from original embed description if present
-            if (!targetUserId && interaction.message.embeds.length > 0) {
-                const desc = interaction.message.embeds[0].description || '';
-                const match = desc.match(/<@!?(\d+)>/);
-                if (match) targetUserId = match[1];
-            }
-
-            // Fallback: Default to message author if no explicit target ID
-            if (!targetUserId && interaction.message.author) {
-                targetUserId = interaction.message.author.id;
-            }
-
-            // Infinite-time GIF Repository for All Social Commands
-            const actionGifs = {
-                pat: 'https://media.tenor.com/E6f13T34EwAAAAAC/anime-pat.gif',
-                hug: 'https://media.tenor.com/gg15582f3cAAAAAC/hug-anime.gif',
-                kiss: 'https://media.tenor.com/v4P2p1aP9xAAAAAC/anime-kiss.gif',
-                bite: 'https://media.tenor.com/39_X38I5ZqAAAAAC/anime-bite.gif',
-                cuddle: 'https://media.tenor.com/6Xz9sV5b-W0AAAAC/cuddle-anime.gif',
-                slap: 'https://media.tenor.com/Ws6vh1xRGAEAAAAC/anime-slap.gif',
-                tickle: 'https://media.tenor.com/AInAIs2aF3AAAAAC/anime-tickle.gif',
-                poke: 'https://media.tenor.com/1OInG6sX0x8AAAAC/anime-poke.gif',
-                lick: 'https://media.tenor.com/0V4f6I5xP3UAAAAC/anime-lick.gif',
-                handhold: 'https://media.tenor.com/kCZ9z7aG6b4AAAAC/anime-handhold.gif'
-            };
-
-            const gifUrl = actionGifs[actionType.toLowerCase()] || actionGifs['pat'];
-            const formattedAction = actionType.charAt(0).toUpperCase() + actionType.slice(1);
-
-            const replyEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setDescription(`✨ <@${interaction.user.id}> ${actionType}ted back ${targetUserId ? `<@${targetUserId}>` : 'everyone'}! ❤️`)
-                .setImage(gifUrl)
-                .setTimestamp();
-
-            // Permanent Infinite-Time Reciprocal Button
-            const reciprocalRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`social_${actionType.toLowerCase()}_${interaction.user.id}`)
-                    .setLabel(`${formattedAction} back`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji('⭐')
-            );
-
-            return interaction.reply({ embeds: [replyEmbed], components: [reciprocalRow] }).catch(() => {});
-        }
-
-        // 2. DJ MUSIC PLAYER BUTTON HANDLER
-        if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
-            const guild = interaction.guild;
-            const member = interaction.member;
-            const voiceChannel = member?.voice?.channel;
-            const player = client.manager ? client.manager.getPlayer(guild.id) : null;
-
-            if (!voiceChannel) return interaction.reply({ content: '❌ Connect to a voice channel first!', flags: [EPHEMERAL_FLAG] });
-            if (!player) return interaction.reply({ content: '❌ No active player in this server!', flags: [EPHEMERAL_FLAG] });
-
-            await interaction.deferUpdate().catch(() => {});
-            try {
-                if (interaction.customId === 'music_pause') player.pause(!player.paused);
-                else if (interaction.customId === 'music_skip') player.skip();
-                else if (interaction.customId === 'music_stop') player.destroy();
-                else if (interaction.customId === 'music_loop') player.setLoop(player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none');
-                else if (interaction.customId === 'dj_vol_down') player.setVolume(Math.max(10, player.volume - 10));
-                else if (interaction.customId === 'dj_vol_up') player.setVolume(Math.min(100, player.volume + 10));
-                else if (interaction.customId === 'dj_lock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                else if (interaction.customId === 'dj_unlock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: true });
-            } catch (err) {}
-            return;
-        }
-
-        // 3. SLASH COMMAND ROUTER
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'setup-starry') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
-                const result = await provisionMasterServerStructure(interaction);
-                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
-                return interaction.editReply({ embeds: [embed] });
-            }
-
-            if (interaction.commandName === 'emergency-nuke') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
-                const targetScope = interaction.options.getString('target', true);
-                if (targetScope === 'channel') {
-                    const channel = interaction.options.getChannel('channel') || interaction.channel;
-                    const pos = channel.position;
-                    const newCh = await channel.clone();
-                    await channel.delete().catch(() => {});
-                    await newCh.setPosition(pos).catch(() => {});
-                    return newCh.send({ content: '⚡ **EMERGENCY NUKE:** Channel purged and recreated.' });
+app.get('/', (req, res) => {
+    const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Starry | Global Server List</title>
+        <style>
+            body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1f22; color: #dcddde; display: flex; flex-direction: column; align-items: center; }
+            header { width: 100%; background-color: #2b2d31; padding: 20px 0; text-align: center; border-bottom: 2px solid #5865F2; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+            h1 { margin: 0; color: #fff; font-size: 2.5rem; }
+            h1 span { color: #5865F2; }
+            .container { width: 90%; max-width: 1200px; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-bottom: 50px; }
+            .card { background-color: #2b2d31; border-radius: 12px; width: 320px; padding: 20px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; text-align: center; border: 1px solid transparent; }
+            .card:hover { transform: translateY(-5px); border-bottom: 1px solid #5865F2; }
+            .icon { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; background-color: #1e1f22; border: 2px solid #5865F2; }
+            .name { font-size: 1.4rem; font-weight: bold; color: #fff; margin: 0 0 10px 0; }
+            .desc { font-size: 0.95rem; color: #b5bac1; margin-bottom: 15px; height: 60px; overflow: hidden; }
+            .stats { display: flex; gap: 15px; font-size: 0.9rem; font-weight: bold; color: #949ba4; margin-bottom: 15px; }
+            .tags { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+            .tag { background-color: #1e1f22; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; color: #5865F2; }
+            .join-btn { background-color: #5865F2; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; width: 80%; transition: background 0.2s; }
+            .join-btn:hover { background-color: #4752c4; }
+            .bump-time { font-size: 0.8rem; color: #80848e; margin-top: 15px; }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1><span>Starry</span> Global Network</h1>
+            <p>Discover the best communities across Discord</p>
+        </header>
+        <div class="container" id="server-list">
+            <p style="font-size: 1.2rem;">Loading servers...</p>
+        </div>
+        <script>
+            async function loadServers() {
+                try {
+                    const res = await fetch('/api/servers');
+                    const servers = await res.json();
+                    const container = document.getElementById('server-list');
+                    container.innerHTML = '';
+                    if(!servers || servers.length === 0) { container.innerHTML = '<p>No servers bumped yet. Add Starry and run /bump!</p>'; return; }
+                    servers.forEach(s => {
+                        const defaultIcon = 'https://cdn.discordapp.com/embed/avatars/0.png';
+                        const timeAgo = s.lastBump ? new Date(s.lastBump).toLocaleString() : 'Recently';
+                        let tagsHtml = (s.tags || []).map(function(t) { return '<span class="tag">' + t + '</span>'; }).join('');
+                        container.innerHTML += '<div class="card">' +
+                            '<img src="' + (s.iconUrl || defaultIcon) + '" class="icon" alt="Icon">' +
+                            '<h2 class="name">' + s.name + '</h2>' +
+                            '<p class="desc">' + s.description + '</p>' +
+                            '<div class="stats"><span>👥 ' + s.memberCount + ' Members</span><span>🚀 ' + (s.bumps || 0) + ' Bumps</span></div>' +
+                            '<div class="tags">' + tagsHtml + '</div>' +
+                            '<a href="' + s.inviteLink + '" target="_blank" class="join-btn">Join Server</a>' +
+                            '<span class="bump-time">Last bumped: ' + timeAgo + '</span>' +
+                            '</div>';
+                    });
+                } catch(e) {
+                    document.getElementById('server-list').innerHTML = '<p>Error loading servers. Check back later!</p>';
                 }
             }
-        }
-    });
+            loadServers();
+        </script>
+    </body>
+    </html>
+    `;
+    res.send(html);
+});
 
-    function cleanCategoryName(str) {
-        if (!str) return '';
-        return str
-            .toLowerCase()
-            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-            .replace(/&/g, 'and')
-            .replace(/[^a-z0-9\s]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
+app.use(express.static(path.join(__dirname, '../')));
+
+app.get('/health', (req, res) => res.status(200).send('awake'));
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
+    setInterval(() => {
+        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com';
+        https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
+    }, 840000); 
+});
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2 OF 4)
 // ==========================================
-    async function handleAutoModPing(message) {
-        if (!message.guild || message.author.bot || !message.member) return false;
-        const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
-        const totalPings = Math.max(message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0), rawPingMatches.length);
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
+}); 
 
-        if (totalPings >= 5) {
-            const botMember = message.guild.members.me;
-            if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) await message.delete().catch(() => {});
+client.setMaxListeners(50);
+client.commands = new Collection(); 
+client.prefixCommands = new Collection();
+client.verifyMap = new Map(); 
+client.voiceCalls = new Map();
 
-            if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers) && message.member.roles.highest.position < botMember.roles.highest.position && message.author.id !== message.guild.ownerId) {
-                const caseId = Math.floor(Math.random() * 90000) + 10000;
-                await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} pings)`).catch(() => {});
-                const warningMsg = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for **10 minutes** due to Mass Mentioning!`).catch(() => null);
-                if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
-            }
-            return true;
-        }
-        return false;
-    }
+client.on('messageCreate', async (message) => {
+    if (!message.guild || message.author.bot || !message.member) return;
 
-    async function handleDevCLI(client, message) {
-        const text = message.content.toLowerCase();
-        if (!text.startsWith('.dev') && !text.startsWith('.sysinfo') && !text.startsWith('.eval ')) return false;
+    const rawPings = (message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || []).length;
+    const parsedPings = message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0);
+    const totalPings = Math.max(rawPings, parsedPings);
 
-        const isOwner = client.isOwner(message.author.id);
-        if (!isOwner) { await message.reply("❌ Access Denied.").catch(()=>{}); return true; }
-
-        if (text === '.sysinfo') {
-            const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-            await message.reply(`📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
-            return true;
-        }
-        if (text.startsWith('.eval ')) {
-            try {
-                let evaled = eval(message.content.slice(6));
-                if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                await message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
-            } catch (err) { await message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
-            return true;
-        }
-        return false;
-    }
-
-    async function handleLocalActions(client, message) {
-        if (!message.guild) return false;
-        const text = message.content.toLowerCase().trim();
+    if (totalPings >= 5) {
         const botMember = message.guild.members.me;
 
-        // 0. UPGRADED .PREMIUM SUITE DISPLAY COMMAND
-        if (text === '.premium' || text === 'starry premium' || text === 'jarvis premium') {
-            const displayName = client.user.username;
-            const premiumEmbed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setAuthor({ name: `${displayName} Protocol | Premium Suite`, iconURL: client.user.displayAvatarURL() })
-                .setTitle('💎 Starry Premium Features & Capabilities')
-                .setDescription('Below is the complete overview of all high-tier, automated, and AI-powered features active on this server:')
-                .addFields(
-                    { 
-                        name: '⚡ 1. High-Speed Gemini Multi-Model AI Engine', 
-                        value: '• Sub-second response priority via Gemini 2.5 Flash & 2.0 Flash.\n• Dynamic multi-key API rotation with automatic failover.\n• Natural language parsing for moderation, channels, and roles.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🎨 2. High-Res Flux AI Image Generator', 
-                        value: '• Instant art generation using the Flux model (`.imagine <prompt>` or `Starry draw...`).\n• Unique seed randomization with zero queue delays.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '♾️ 3. Infinite-Time Social Action Buttons', 
-                        value: '• Permanent reciprocal buttons (`Pat back`, `Hug back`, `Kiss back`, `Cuddle`, `Bite`, `Slap`).\n• Stateless execution—buttons never expire, even months or years later!', 
-                        inline: false 
-                    },
-                    { 
-                        name: '💎 4. Premium Branded Moderation DMs', 
-                        value: '• Rich, color-coded DM notices sent to offenders upon Ban, Kick, or Timeout.\n• Includes official Case IDs, moderator tags, reason blocks, and timestamps.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🌐 5. Multilingual Translation & Auto-Detect Engine', 
-                        value: '• Dynamic multi-language translation and language detection across text channels.\n• Enables seamless global community communication.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '⚡ 6. Instant Local Admin Actions (<50ms)', 
-                        value: '• Zero AI rate-limit risk for administrative commands.\n• Bulk category purges, role assignments, voice/text channel creation, and message clearing.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🎵 7. Lavalink Audio Filters & Autoplay Engine', 
-                        value: '• Related track autoplay recommendations when the queue ends.\n• Audio filters: Bassboost, 8D Audio, Nightcore, Vaporwave, Tremolo, Vibrato, Karaoke.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🛡️ 8. Master Server Infrastructure & Telemetry', 
-                        value: '• Autonomous layout deployment (`/setup-starry`) with 6 categories & 22 security channels.\n• Real-time 60-second telemetry monitor (`#server-status-monitor`).\n• Emergency Nuke & Purge protocol (`/emergency-nuke`).', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🔢 9. Smart Counting Game & High-Score Engine', 
-                        value: '• Interactive counting channel setup (`/setupcount` or `.setupcount`).\n• Smart Math Solver (evaluates expressions like `5+5`).\n• Live streak tracker, server high scores (`/countstats`), and milestone alerts.', 
-                        inline: false 
-                    }
-                )
-                .setFooter({ text: 'Starry Master System • Premium Tier Active', iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
-
-            await message.reply({ embeds: [premiumEmbed] });
-            return true;
-        }
-
-        // 1. FAST LOCAL ROLE ASSIGNMENT
-        const roleAssignRegex = /(?:assign|give|add)\s+(?:role\s+)?<@&(\d+)>\s+(?:to\s+)?<@!?(\d+)>/i;
-        const roleAssignMatch = message.content.match(roleAssignRegex);
-
-        if (roleAssignMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                await message.reply("❌ You or I lack **Manage Roles** permission.");
-                return true;
-            }
-
-            const targetRoleId = roleAssignMatch[1];
-            const targetUserId = roleAssignMatch[2];
-
-            const role = message.guild.roles.cache.get(targetRoleId);
-            const targetMember = await message.guild.members.fetch(targetUserId).catch(() => null);
-
-            if (!role) { await message.reply("❌ Role not found on this server."); return true; }
-            if (!targetMember) { await message.reply("❌ User not found in this server."); return true; }
-
-            if (role.position >= botMember.roles.highest.position) {
-                await message.reply(`❌ I cannot assign **${role.name}** because it is equal to or higher than my highest role!`);
-                return true;
-            }
-
-            try {
-                await targetMember.roles.add(role);
-                await message.reply(`✅ Successfully assigned role **${role.name}** to <@${targetMember.id}>!`);
-            } catch (err) {
-                await message.reply(`❌ Failed to assign role: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        // 2. BULK DELETE CHANNELS IN A CATEGORY
-        const bulkDelRegex = /(?:delete|remove|purge)\s+(?:all\s+)?(?:the\s+)?channels\s+in\s+(.+)$/i;
-        const bulkMatch = message.content.match(bulkDelRegex);
-
-        if (bulkMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-
-            let rawSearch = bulkMatch[1].trim();
-            if (rawSearch.toLowerCase().endsWith('category')) rawSearch = rawSearch.slice(0, -8).trim();
-            const cleanSearch = cleanCategoryName(rawSearch);
-
-            const targetCategory = message.guild.channels.cache.find(c => {
-                if (c.type !== ChannelType.GuildCategory) return false;
-                const cleanCatName = cleanCategoryName(c.name);
-                return cleanCatName === cleanSearch || cleanCatName.includes(cleanSearch) || cleanSearch.includes(cleanCatName);
-            });
-
-            if (!targetCategory) {
-                await message.reply(`❌ Could not find category matching **"${rawSearch}"**.`);
-                return true;
-            }
-
-            const childChannels = message.guild.channels.cache.filter(c => c.parentId === targetCategory.id);
-            let deletedCount = 0;
-            for (const [, ch] of childChannels) {
-                await ch.delete().catch(() => {});
-                deletedCount++;
-            }
-
-            await message.reply(`🗑️ Successfully deleted **${deletedCount} channels** in category **${targetCategory.name}**!`);
-            return true;
-        }
-
-        // 3. DELETE CATEGORY DIRECTLY
-        const delCatRegex = /(?:delete|remove)\s+(?:the\s+)?category\s+(.+)$/i;
-        const delCatMatch = message.content.match(delCatRegex);
-
-        if (delCatMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-
-            const rawSearch = delCatMatch[1].trim();
-            const cleanSearch = cleanCategoryName(rawSearch);
-
-            const targetCategory = message.guild.channels.cache.find(c => {
-                if (c.type !== ChannelType.GuildCategory) return false;
-                const cleanCatName = cleanCategoryName(c.name);
-                return cleanCatName === cleanSearch || cleanCatName.includes(cleanSearch);
-            });
-
-            if (!targetCategory) {
-                await message.reply(`❌ Could not find category **"${rawSearch}"**.`);
-                return true;
-            }
-
-            const name = targetCategory.name;
-            await targetCategory.delete().catch(() => {});
-            await message.reply(`🗑️ Successfully deleted category **${name}**.`);
-            return true;
-        }
-
-        // 4. PURGE MESSAGES
-        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
-        const clearMatch = message.content.match(clearRegex);
-
-        if (clearMatch && !text.includes('channel') && !text.includes('category')) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                await message.reply('❌ Missing **Manage Messages** permission.');
-                return true;
-            }
-            const count = parseInt(clearMatch[1]);
-            if (count <= 0) { await message.reply('❌ Specify a valid message count.'); return true; }
-            const deleteCount = Math.min(count, 99) + 1;
-            await message.channel.bulkDelete(deleteCount, true).catch(() => {});
-            const sent = await message.channel.send(`🧹 Successfully cleared ${count} messages!`);
-            setTimeout(() => sent.delete().catch(() => {}), 3500);
-            return true;
-        }
-
-        return false;
-    }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
-// ==========================================
-    async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
-        let isImageRequest = isImagine;
-        let imagePrompt = "";
-
-        if (isImagine) {
-            imagePrompt = message.content.slice(9).trim();
-        } else if (hasName || mentionsBot) {
-            const rawText = message.content.toLowerCase();
-            const hasImageKeywords = /(?:create|generate|draw|make|paint|imagine|picture|photo|art|image)/i.test(rawText);
-
-            if (hasImageKeywords) {
-                let cleanPrompt = message.content
-                    .replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '')
-                    .trim();
-
-                cleanPrompt = cleanPrompt
-                    .replace(/^(?:create|generate|draw|make|paint|imagine)\s+/i, '')
-                    .replace(/\b(?:an?|some|the)\b\s+/gi, '')
-                    .replace(/\b(?:image|picture|drawing|art|photo|pic|illustration)s?\b/gi, '')
-                    .replace(/\b(?:of|about|showing|with)\b\s+/gi, '')
-                    .trim();
-
-                if (cleanPrompt.length > 0) {
-                    isImageRequest = true;
-                    imagePrompt = cleanPrompt;
-                }
-            }
-        }
-
-        if (isImageRequest) {
-            if (!imagePrompt) { await message.reply('❌ Please tell me what to draw!').catch(() => {}); return true; }
-            const replyMsg = await message.reply('🎨 Painting your picture... Please wait.').catch(() => null);
-            if (!replyMsg) return true;
-            try {
-                const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
-                const seed = Math.floor(Math.random() * 1000000);
-                const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-                
-                await message.reply({ content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] }).catch(() => {});
-                if (replyMsg) await replyMsg.delete().catch(() => {});
-            } catch (error) { 
-                if (replyMsg) await replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
-            }
-            return true;
-        }
-        return false;
-    }
-
-    async function handleConversationalGemini(client, message, displayName) {
-        await message.channel.sendTyping().catch(() => {});
+        if (message.author.id === message.guild.ownerId) return;
+        if (message.member.roles.highest.position >= botMember.roles.highest.position) return;
 
         try {
-            const prompt = `[SYSTEM INSTRUCTION]
-You are ${displayName}, an advanced all-in-one Discord AI companion and server administrator.
-
-YOUR FULL CAPABILITIES INCLUDE:
-1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command (`.imagine` or `Starry draw...`).
-2. 🎵 Music & DJ Controls: Playing high-quality audio, track control (pause, skip, loop, volume), and VC locks.
-3. 🌐 Translator & Multilingual Engine: Auto-translating text between languages, detecting language, and multilingual support.
-4. 🔢 Smart Counting Game & High Scores: Managing server counting channels (`/setupcount` or `.setupcount`), evaluating math expressions (e.g. `5+5`), tracking streaks, and displaying stats (`/countstats`).
-5. 🛡️ Autonomous Moderation & Security: Kicking, banning, unbanning, timing out users, clearing messages, mass-ping AutoMod, and security logging.
-6. 📁 Channel & Category Management: Dynamically creating, deleting, and organizing text/voice channels and categories.
-7. 🎭 Role Management: Creating roles, assigning/removing roles from members, and managing permissions.
-
-COMMAND SPECIFICATION PROTOCOL:
-If the user asks you to perform a server management action, embed the appropriate tag anywhere in your output:
-- Moderation Actions: [CMD:KICK|ID:user_id|REASON:reason], [CMD:BAN|ID:user_id|REASON:reason], [CMD:UNBAN|ID:user_id], [CMD:CLEAR|AMOUNT:count], [CMD:TIMEOUT|ID:user_id|MINUTES:count|REASON:reason], [CMD:UNTIMEOUT|ID:user_id].
-- Role Actions: [CMD:CREATEROLE|NAME:role_name], [CMD:GIVEROLE|USER_ID:user_id|ROLE_ID:role_id], [CMD:REMOVEROLE|USER_ID:user_id|ROLE_ID:role_id].
-- Channel & Category Actions:
-  * Create Channel: [CMD:CREATECHANNEL|NAME:channel_name|TYPE:text|CATEGORY:category_name]
-  * Delete Channel: [CMD:DELETECHANNEL|NAME:channel_name]
-  * Create Category: [CMD:CREATECATEGORY|NAME:category_name]
-  * Delete Category: [CMD:DELETECATEGORY|NAME:category_name]
-
-When asked about your features, list ALL 7 of your capabilities (Image Generation, Music, Translator, Counting Game, Moderation, Channels/Categories, and Roles) in a clean bulleted format. Always acknowledge requests warmly, clearly, and concisely.
-
-[USER MESSAGE]
-${message.author.username} says: ${message.content}`;
-
-            let replyText = await generateAIResponseWithRetry(prompt);
-
-            let functionName = null; 
-            let args = {};
-
-            const cmdMatch = replyText.match(/\[.*?CMD:(KICK|BAN|UNBAN|CLEAR|TIMEOUT|UNTIMEOUT|GIVEROLE|REMOVEROLE|CREATEROLE|DELETEROLE|CREATECHANNEL|DELETECHANNEL|CREATECATEGORY|DELETECATEGORY)(?:\|(.*?))?\]/i);
-            if (cmdMatch) {
-                const action = cmdMatch[1].toUpperCase(); 
-                const params = (cmdMatch[2] || '').split('|');
-                const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
-
-                if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME') || getParam('ROLE'); }
-                else if (action === 'GIVEROLE') { functionName = 'give_role'; args.userId = getParam('USER_ID') || getParam('ID'); args.roleId = getParam('ROLE_ID') || getParam('ROLE'); }
-                else if (action === 'REMOVEROLE') { functionName = 'remove_role'; args.userId = getParam('USER_ID') || getParam('ID'); args.roleId = getParam('ROLE_ID') || getParam('ROLE'); }
-                else if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 10; }
-                else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 2; args.reason = getParam('REASON') || "AI Moderation"; }
-                else if (action === 'UNTIMEOUT') { functionName = 'untimeout_member'; args.userId = getParam('ID'); }
-                else if (action === 'UNBAN') { functionName = 'unban_member'; args.userId = getParam('ID'); }
-                else if (action === 'KICK' || action === 'BAN') { functionName = action.toLowerCase() + '_member'; args.userId = getParam('ID'); args.reason = getParam('REASON') || "AI Moderation"; }
-                else if (action === 'CREATECHANNEL') { functionName = 'create_channel'; args.name = getParam('NAME'); args.type = getParam('TYPE') || 'text'; args.category = getParam('CATEGORY'); }
-                else if (action === 'DELETECHANNEL') { functionName = 'delete_channel'; args.name = getParam('NAME'); }
-
-                replyText = replyText.replace(cmdMatch[0], '').trim();
-            }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
-// ==========================================
-            if (functionName && message.guild) {
-                const botMember = message.guild.members.me;
-                const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
-
-                // --- 1. GIVE ROLE ACTION ---
-                if (functionName === "give_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
-                    const tId = (args.userId || '').replace(/\D/g, '');
-                    const rId = (args.roleId || '').replace(/\D/g, '');
-                    const tMember = await message.guild.members.fetch(tId).catch(() => null);
-                    const role = message.guild.roles.cache.get(rId) || message.guild.roles.cache.find(r => r.name.toLowerCase() === args.roleId?.toLowerCase());
-
-                    if (tMember && role && role.position < botMember.roles.highest.position) {
-                        await tMember.roles.add(role).catch(() => null);
-                        await message.reply(`✅ Assigned role **${role.name}** to <@${tMember.id}>!`);
-                    }
-                }
-
-                // --- 2. REMOVE ROLE ACTION ---
-                if (functionName === "remove_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
-                    const tId = (args.userId || '').replace(/\D/g, '');
-                    const rId = (args.roleId || '').replace(/\D/g, '');
-                    const tMember = await message.guild.members.fetch(tId).catch(() => null);
-                    const role = message.guild.roles.cache.get(rId) || message.guild.roles.cache.find(r => r.name.toLowerCase() === args.roleId?.toLowerCase());
-
-                    if (tMember && role && role.position < botMember.roles.highest.position) {
-                        await tMember.roles.remove(role).catch(() => null);
-                        await message.reply(`🗑️ Removed role **${role.name}** from <@${tMember.id}>.`);
-                    }
-                }
-
-                // --- 3. CREATE CHANNEL ---
-                if (functionName === "create_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
-                    let parentCategory = null;
-                    if (args.category) {
-                        parentCategory = message.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === args.category.toLowerCase());
-                    }
-                    const chType = (args.type || '').toLowerCase() === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
-                    const createdCh = await message.guild.channels.create({
-                        name: (args.name || 'new-channel').toLowerCase().replace(/\s+/g, '-'),
-                        type: chType,
-                        parent: parentCategory ? parentCategory.id : null
-                    }).catch(() => null);
-
-                    if (createdCh) await message.reply(`✨ Successfully created channel <#${createdCh.id}>!`);
-                }
-
-                // --- 4. DELETE CHANNEL ---
-                if (functionName === "delete_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
-                    const cleanName = (args.name || '').replace(/[<#>]/g, '').trim().toLowerCase();
-                    const targetCh = message.guild.channels.cache.find(c => c.id === cleanName || c.name.toLowerCase() === cleanName);
-                    if (targetCh) {
-                        const deletedName = targetCh.name;
-                        await targetCh.delete().catch(() => null);
-                        await message.reply(`🗑️ Successfully deleted channel **#${deletedName}**.`);
-                    }
-                }
-            }
-
-            if (replyText && replyText.trim().length > 0) {
-                const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
-                for (const chunk of textChunks) {
-                    await message.reply(chunk).catch(() => {});
-                }
-            }
-
-        } catch (error) {
-            console.error('Conversational Engine Error:', error);
-            return message.reply(`⚡ I'm experiencing an unusually high volume of requests. Please resend your prompt!`).catch(() => {});
-        }
-    }
-
-    // ==========================================
-    // 🌐 SINGLE UNIFIED MESSAGE DISPATCHER PIPELINE
-    // ==========================================
-    client.on('messageCreate', async (message) => {
-        if (!message.guild || message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
-
-        // 1. AutoMod Ping Check
-        if (await handleAutoModPing(message)) return;
-
-        // 2. Developer CLI Commands (.dev, .sysinfo, .eval)
-        if (await handleDevCLI(client, message)) return;
-
-        // Trigger Word Check
-        let triggerWord = 'starry';
-        let displayName = 'Starry'; 
-
-        try {
-            if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
-            const settings = await ServerSettings.findOne({ guildId: message.guild.id });
-            if (settings && settings.triggerWord) {
-                triggerWord = settings.triggerWord.toLowerCase();
-                displayName = settings.triggerWord;
+            if (message.channel.permissionsFor(botMember)?.has(PermissionFlagsBits.ManageMessages)) {
+                await message.delete();
             }
         } catch (err) {}
 
-        const text = message.content.toLowerCase().trim();
-        const isImagine = text.startsWith('.imagine ');
-        const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes(triggerWord) || text.includes('jarvis');
-        let isReplyToBot = false;
+        if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+            await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} mentions)`).catch(() => {});
+            
+            const warn = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for 10 minutes for mass mentioning (${totalPings} pings)!`).catch(() => null);
+            if (warn) setTimeout(() => warn.delete().catch(() => {}), 5000);
+        }
+    }
+});
 
-        if (message.reference) {
-            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
-            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
+app.get('/verify', (req, res) => {
+    const token = req.query.token;
+    if (!client.verifyMap.has(token)) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif; margin-top:50px;">❌ Invalid or Expired Link. Please generate a new one in Discord.</h1>');
+    res.send(`
+        <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:10vh;">
+            <img src="https://i.imgur.com/13w1J4L.png" width="100" style="border-radius:50%; margin-bottom:20px;">
+            <h2>Starry Security Protocol</h2>
+            <p style="color:#b5bac1; margin-bottom:40px;">To protect our server from automated bots, please verify you are human.</p>
+            <form action="/verify" method="POST">
+                <input type="hidden" name="token" value="${token}">
+                <button type="submit" style="padding:15px 40px; font-size:18px; font-weight:bold; background-color:#23a559; color:white; border:none; border-radius:8px; cursor:pointer; box-shadow: 0 4px 15px rgba(35,165,89,0.4);">
+                    I am human (Verify)
+                </button>
+            </form>
+        </body></html>
+    `);
+});
+
+app.post('/verify', async (req, res) => {
+    const token = req.body.token;
+    const data = client.verifyMap.get(token);
+    if (!data) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Token expired or invalid.</h1>');
+    try {
+        const guild = client.guilds.cache.get(data.guildId);
+        const member = await guild.members.fetch(data.userId);
+        await member.roles.add(data.roleId);
+        client.verifyMap.delete(token); 
+        res.send(`<body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:20vh;"><h1 style="color:#23a559; font-size:50px; margin-bottom:10px;">✅ Success!</h1><h3>You are now verified. You may close this tab and return to Discord.</h3></body>`);
+    } catch (error) {
+        console.error('Web Verification Error:', error);
+        res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
+    }
+});
+// ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3 OF 4)
+// ==========================================
+const Nodes = [
+    {
+        name: 'Main-Node-Lavasearch',
+        url: 'lava.darrennathanael.com:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 10,
+        retryDelay: 3000
+    },
+    {
+        name: 'Node-Jirayu-Backup',
+        url: 'lavalink.jirayu.net:13592',
+        auth: 'youshallnotpass',
+        secure: false,
+        retryAmount: 10,
+        retryDelay: 3000
+    },
+    {
+        name: 'Node-Serenetia-Backup',
+        url: 'lavalink.serenetia.com:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 10,
+        retryDelay: 3000
+    }
+];
+
+client.manager = new Kazagumo({
+    defaultSearchEngine: "youtube",
+    searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
+    plugins: [
+        new KazagumoSpotify({ 
+            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
+            playlistPageLimit: 2, 
+            albumPageLimit: 1, 
+            searchMarket: 'IN', 
+            searchPrefix: 'ytsearch:' 
+        })
+    ],
+    send: (guildId, payload) => {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) guild.shard.send(payload);
+    }
+}, new Connectors.DiscordJS(client), Nodes, {
+    voiceConnectionTimeout: 30000,
+    linkInitializers: true,
+    reconnectTries: 10,
+    restTimeout: 15000,
+    frameBufferDuration: 5000,
+    trimVoicePacket: true
+});
+
+client.manager.shoukaku.on('ready', (name) => {
+    console.log(`🎵 [Lavalink] Successfully connected & active on node: ${name}`);
+});
+
+client.manager.shoukaku.on('error', (name, error) => {
+    console.error(`⚠️ [Lavalink] Node Error on [${name}]:`, error.message || error);
+});
+
+client.manager.shoukaku.on('disconnect', (name, count) => {
+    console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Attempting auto-reconnect/failover... (Retry count: ${count})`);
+});
+
+client.manager.on('playerStart', async (player, track) => {
+    player.data.set('previousTrack', track);
+
+    const channel = client.channels.cache.get(player.textId);
+    const interaction = player.data.get('interaction');
+    player.data.delete('interaction');
+
+    try {
+        const guild = client.guilds.cache.get(player.guildId);
+        if (guild && client.vcLocks && client.vcLocks.get(guild.id)) {
+            const voiceChannel = guild.channels.cache.get(player.voiceId);
+            if (voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
+            }
+        }
+    } catch (lockErr) {}
+
+    const formatTime = (ms) => {
+        if (!ms) return '0:00';
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+    };
+
+    const embed = new EmbedBuilder()
+        .setColor('#2b2d31')
+        .setAuthor({ name: 'Now Playing', iconURL: 'https://i.imgur.com/13w1J4L.png' })
+        .setTitle(track.title)
+        .setURL(track.uri)
+        .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
+        .setDescription(
+            `ℹ️ **Song Details**\n▶️ **Status:** Playing\n⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue'}\n🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown'}\n🔠 **Queue:** ${player.queue.length} songs in queue\n\n⚙️ **Playback & Filters**\nUse the interactive controls below to manage your audio session.`
+        )
+        .setFooter({ text: 'Starry Music Player • Use /help for commands', iconURL: client.user.displayAvatarURL() });
+
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+    );
+
+    const filterRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
+            { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
+            { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
+            { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
+            { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
+            { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
+            { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' },
+            { label: 'Karaoke', description: 'Reduces vocal volume', value: 'karaoke', emoji: '🎤' },
+            { label: 'Tremolo', description: 'Modulates volume', value: 'tremolo', emoji: '🌊' },
+            { label: 'Vibrato', description: 'Modulates pitch', value: 'vibrato', emoji: '〰️' }
+        ])
+    );
+
+    const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
+
+    try {
+        if (interaction) {
+            await interaction.editReply(messageData);
+        } else if (channel) {
+            const msg = await channel.send(messageData);
+            player.data.set('nowPlayingMessage', msg);
+        }
+    } catch (e) {
+        if (channel) {
+            const msg = await channel.send(messageData).catch(() => {});
+            if (msg) player.data.set('nowPlayingMessage', msg);
+        }
+    }
+});
+
+client.manager.on('playerException', (player) => {
+    try {
+        if (player.queue.size > 0) player.skip();
+        else player.destroy();
+    } catch (e) {}
+});
+
+client.manager.on('playerEmpty', async player => {
+    const channel = client.channels.cache.get(player.textId);
+    const isAutoplay = player.data.get('autoplay');
+
+    if (isAutoplay) {
+        const previousTrack = player.data.get('previousTrack');
+        if (previousTrack) {
+            try {
+                if (channel) {
+                    await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
+                }
+
+                const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
+                let result = await client.manager.search(searchQuery, { requester: previousTrack.requester });
+
+                if (!result || !result.tracks || !result.tracks.length) {
+                    const fallbackQuery = `ytsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
+                    result = await client.manager.search(fallbackQuery, { requester: previousTrack.requester });
+                }
+
+                if (result && result.tracks && result.tracks.length > 0) {
+                    const nextTrack = result.tracks.find(t => t.identifier !== previousTrack.identifier) || result.tracks[0];
+                    player.queue.add(nextTrack);
+                    await player.play();
+                    return;
+                }
+            } catch (err) {
+                console.error('❌ Autoplay Recommendation Error:', err.message || err);
+            }
+        }
+    }
+
+    if (channel) channel.send('📭 The queue has ended.');
+});
+// ==========================================
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 4 OF 4)
+// ==========================================
+client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
+client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
+client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
+process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
+process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
+
+client.once(Events.ClientReady, async () => {
+    console.log(`🚀 Successfully logged in as ${client.user.tag}`);
+
+    try {
+        if (client.manager && typeof client.manager.init === 'function') {
+            await client.manager.init(client.user.id);
+            console.log('🎵 Kazagumo Multi-Node Music Manager successfully initialized!');
+        }
+    } catch (lavalinkErr) {
+        console.error('❌ Lavalink Initialization Failed:', lavalinkErr.message);
+    }
+
+    try {
+        console.log("🔄 Auto-deploying updated command payload to Discord...");
+        const deploy = require('../deploy-commands.js');
+        if (deploy && typeof deploy.deployCommands === 'function') {
+            await deploy.deployCommands();
+        }
+    } catch (err) {
+        console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
+    }
+});
+
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild) return;
+    const PREFIX = '.'; 
+    if (!message.content.startsWith(PREFIX)) return;
+    if (message.content.startsWith('.<:') || message.content.startsWith('.<a:')) return;
+
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const commandName = args.shift()?.toLowerCase();
+    if (!commandName) return;
+    const command = client.prefixCommands.get(commandName);
+    if (!command) return;
+
+    try { 
+        if (typeof command.run === 'function') {
+            await command.run(client, message, args);
+        } else {
+            await command.execute(message, args, client);
+        }
+    } catch (error) { 
+        console.error(`❌ Error executing prefix command ${commandName}:`, error); 
+    }
+});
+
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
+
+    if (interaction.isChatInputCommand()) {
+        const moduleHandledCommands = [
+            'setup-starry', 'policy-vote', 'social', 'devpanel',
+            'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
+            'automod', 'mod', 'moderate', 'verify-setup',
+            'bump', 'bump-setup', 'autobump', 'set-listing'
+        ];
+        if (moduleHandledCommands.includes(interaction.commandName)) {
+            return; 
+        }
+    }
+
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        const customId = interaction.customId;
+        if (!customId.startsWith('dj_') && !customId.startsWith('music_')) return;
+
+        const member = interaction.member;
+        const voiceChannel = member?.voice?.channel;
+        const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
+
+        await interaction.deferUpdate().catch(() => {});
+
+        if (!voiceChannel && customId !== 'dj_refresh_panel') {
+            return interaction.followUp({ content: '❌ You must be connected to a voice channel to use these controls!', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
-        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
+        if (!player) {
+            return interaction.followUp({ content: '❌ No active music session playing in this server.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        }
 
-        // 3. Fast Local Pre-Parsers (<50ms Execution - Zero AI Calls)
-        const localHandled = await handleLocalActions(client, message);
-        if (localHandled) return; 
+        try {
+            if (customId === 'music_pause') {
+                player.pause(!player.paused);
+            } else if (customId === 'music_skip') {
+                player.skip();
+            } else if (customId === 'music_stop') {
+                player.destroy();
+            } else if (customId === 'music_loop') {
+                const modes = ['none', 'track', 'queue'];
+                const nextMode = modes[(modes.indexOf(player.loop) + 1) % modes.length];
+                player.setLoop(nextMode);
+            } else if (customId === 'dj_vol_down') {
+                const newVol = Math.max(0, player.volume - 10);
+                player.setVolume(newVol);
+            } else if (customId === 'dj_vol_up') {
+                const newVol = Math.min(100, player.volume + 10);
+                player.setVolume(newVol);
+            } else if (customId === 'dj_lock' && voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false }).catch(() => {});
+            } else if (customId === 'dj_unlock' && voiceChannel) {
+                await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: null }).catch(() => {});
+            } else if (customId === 'music_filter' && interaction.isStringSelectMenu()) {
+                const filterValue = interaction.values[0];
+                if (filterValue === 'clear') {
+                    await player.shoukaku.clearFilters();
+                } else if (filterValue === 'bassboost') {
+                    await player.shoukaku.setEqualizer([{ band: 0, gain: 0.2 }, { band: 1, gain: 0.15 }]);
+                } else if (filterValue === 'nightcore') {
+                    await player.shoukaku.setTimescale({ speed: 1.2, pitch: 1.2, rate: 1.0 });
+                } else if (filterValue === 'vaporwave') {
+                    await player.shoukaku.setTimescale({ speed: 0.85, pitch: 0.8, rate: 1.0 });
+                } else if (filterValue === '8d') {
+                    await player.shoukaku.setRotation({ rotationHz: 0.2 });
+                }
+            }
+        } catch (err) {
+            console.error('❌ Panel Interaction Execution Error:', err);
+        }
+        return;
+    }
 
-        // 4. Pollinations AI Media Generation
-        const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
-        if (imageHandled) return;
+    if (!interaction.isChatInputCommand()) return;
 
-        // 5. Conversational Gemini AI Engine (General Chat Only)
-        await handleConversationalGemini(client, message, displayName);
-    });
+    const command = client.commands.get(interaction.commandName);
+    if (!command) {
+        return interaction.reply({ content: '❌ This command is not recognized.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    }
+
+    try { 
+        await command.execute(interaction, client); 
+    } catch (error) {
+        console.error(`❌ Error executing /${interaction.commandName}:`, error);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        } else {
+            await interaction.followUp({ content: '⚠️ An error occurred while executing this command.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        }
+    }
+});
+
+const MODULE_INITIALIZERS = [
+    { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
+    { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
+    { name: 'Translator', fn: () => require('./modules/translator.js')(client, app) },
+    { name: 'Reaction Roles', fn: () => require('./modules/reactionRoles.js')(client, app) },
+    { name: 'Help', fn: () => require('./modules/help.js')(client, app) },
+    { name: 'Leveling', fn: () => require('./modules/leveling.js')(client, app) },
+    { name: 'Starry Protocol', fn: () => require('./modules/starry.js')(client, app) },
+    { name: 'Boost Tracker', fn: () => require('./modules/boostTracker.js')(client, app) },
+    { name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
+    { name: 'Support Tickets', fn: () => require('./modules/tickets.js')(client, app) },
+    { name: 'Admin Help Text Trigger', fn: () => require('./modules/ahelpText.js')(client, app) },
+    { name: 'Tracker', fn: () => require('./modules/tracker.js')(client, app) },
+    { name: 'Sus Account Detector', fn: () => require('./modules/susAccount.js')(client, app) },
+    { name: 'Whois Lookup', fn: () => require('./modules/whois.js')(client, app) },
+    { name: 'Emoji Blocker', fn: () => require('./modules/emojiBlocker.js')(client, app) },
+    { name: 'Master Setup Engine', fn: () => require('./modules/masterSetupText.js')(client, app) },
+    { name: 'Server Stats', fn: () => require('./modules/serverStats.js')(client, app) },
+    { name: 'AFK System', fn: () => require('./modules/afk.js')(client, app) },
+    { name: 'Server Logs', fn: () => require('./modules/logs.js')(client, app) },
+    { name: 'Giveaway', fn: () => require('./modules/giveaway.js')(client, app) },
+    { name: 'Counting Game', fn: () => require('./modules/count.js')(client, app) },
+    { name: 'Advanced Mod & Security', fn: () => require('./modules/advancedMod.js')(client, app) },
+    { name: 'Interactive Mod Panel', fn: () => require('./modules/modPanel.js')(client, app) },
+    { name: 'Reputation System', fn: () => require('./modules/rep.js')(client, app) },
+    { name: 'Voice Channel Manager', fn: () => require('./modules/voiceManager.js')(client, app) },
+    { name: 'Emoji Stealer', fn: () => require('./modules/steal.js')(client, app) },
+    { name: 'Welcome System', fn: () => require('./modules/welcome.js')(client, app) },
+    { name: 'Goodbye System', fn: () => require('./modules/goodbye.js')(client, app) },
+    { name: 'Server Backup Engine', fn: () => require('./modules/backupEngine.js')(client, app) },
+    { name: 'Role Manager', fn: () => require('./modules/roleManager.js')(client, app) },
+    { name: 'Anti-Abuse', fn: () => require('./modules/antiAbuse.js')(client, app) },
+    { name: 'Random Chest Drops', fn: () => require('./modules/chestDrop.js')(client, app) },
+    { name: 'Autorole & Sticky Roles', fn: () => require('./modules/autorole.js')(client, app) },
+    { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
+    { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
+    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) }
+];
+
+function loadSlashCommands() {
+    const commandsPath = path.join(__dirname, 'commands');
+
+    if (!fs.existsSync(commandsPath)) {
+        console.warn('⚠️ No "commands" directory found.');
+        return;
+    }
+
+    const entries = fs.readdirSync(commandsPath);
+
+    for (const item of entries) {
+        const fullPath = path.join(commandsPath, item);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+            const commandFiles = fs.readdirSync(fullPath).filter(file => file.endsWith('.js'));
+            for (const file of commandFiles) {
+                const filePath = path.join(fullPath, file);
+                const command = require(filePath);
+                if (command?.data?.name) {
+                    client.commands.set(command.data.name, command);
+                }
+            }
+        } 
+        else if (item.endsWith('.js')) {
+            const command = require(fullPath);
+            if (command?.data?.name) {
+                client.commands.set(command.data.name, command);
+            }
+        }
+    }
+    console.log(`✅ Successfully loaded ${client.commands.size} slash command handlers into client.commands`);
+}
+
+async function startBot() {
+    if (!process.env.MONGO_URI || !process.env.TOKEN) {
+        console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
+        process.exit(1);
+    }
+    try {
+        await mongoose.connect(process.env.MONGO_URI);
+        console.log('🍃 Successfully connected to MongoDB Cloud!');
+
+        try {
+            const bumpModule = require('./modules/bumpEngine.js');
+            if (typeof bumpModule === 'function') {
+                bumpModule(client, app);
+                console.log('✅ Registered Directory API Endpoints with Express Web Server!');
+            }
+        } catch (e) {
+            console.error('⚠️ Could not load bumpEngine API routes:', e.message);
+        }
+
+        loadSlashCommands();
+
+        for (const mod of MODULE_INITIALIZERS) {
+            try {
+                mod.fn();
+                console.log(`✅ ${mod.name} Module Loaded`);
+            } catch (err) {
+                console.error(`❌ Error loading ${mod.name}:`, err.message);
+            }
+        }
+
+        await client.login(process.env.TOKEN);
+    } catch (error) {
+        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
+        process.exit(1);
+    }
+}
+
+const shutdownHandler = async (signal) => {
+    console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry...`);
+    try {
+        if (mongoose.connection.readyState === 1) await mongoose.connection.close();
+        if (client) client.destroy();
+        console.log("👋 Clean shutdown completed.");
+        process.exit(0);
+    } catch (err) {
+        console.error("Error during graceful shutdown:", err);
+        process.exit(1);
+    }
 };
 
-// ==========================================
-// EXPORTS (replaces masterChannelSystems.js)
-// ==========================================
-module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
-module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
-module.exports.executeFullGuildBackup = executeFullGuildBackup;
-module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
-module.exports.modMasterPayload = modMasterCommand.toJSON();
-module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
-module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
-module.exports.verifySetupPayload = verifySetupCommand.toJSON();
+process.on('SIGINT', () => shutdownHandler('SIGINT'));
+process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
+
+startBot();
