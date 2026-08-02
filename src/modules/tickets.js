@@ -74,7 +74,7 @@ module.exports = (client) => {
                 const guild = interaction.guild;
                 const user = interaction.user;
 
-                const existingChannel = guild.channels.cache.find(c => c.topic === user.id && c.name.startsWith('ticket-'));
+                const existingChannel = guild.channels.cache.find(c => c.topic === user.id && c.name.includes('ticket-'));
                 if (existingChannel) {
                     return interaction.reply({ content: `❌ You already have an open ticket in <#${existingChannel.id}>!`, ephemeral: true });
                 }
@@ -98,10 +98,10 @@ module.exports = (client) => {
                 const ticketEmbed = new EmbedBuilder()
                     .setColor('#00F2FE')
                     .setTitle(`🎫 Support Ticket | ${user.username}`)
-                    .setDescription(`Welcome <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
-                    .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
+                    .setDescription(`Hello <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
                     .setTimestamp();
 
+                // 📌 Added BOTH Claim Ticket and Close Ticket buttons to initial ping embed
                 const actionRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('sys_claim_ticket').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
                     new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
@@ -111,7 +111,7 @@ module.exports = (client) => {
                 await interaction.reply({ content: `✅ Ticket created: <#${ticketChannel.id}>`, ephemeral: true });
             }
 
-            // ✋ CLAIM TICKET
+            // ✋ CLAIM TICKET (STAFF ONLY)
             if (interaction.customId === 'sys_claim_ticket' || interaction.customId === 'claim_ticket') {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can claim tickets.', ephemeral: true });
@@ -134,7 +134,7 @@ module.exports = (client) => {
                 const claimedEmbed = new EmbedBuilder()
                     .setColor('#2ecc71')
                     .setTitle('✋ Ticket Claimed')
-                    .setDescription(`This ticket is now handled by <@${staffMember.id}>.`)
+                    .setDescription(`This ticket is now being handled by <@${staffMember.id}>.`)
                     .setTimestamp();
 
                 const updatedRow = new ActionRowBuilder().addComponents(
@@ -160,7 +160,7 @@ module.exports = (client) => {
                 const closedEmbed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔒 Ticket Closed')
-                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nUse the options below to save a transcript or delete this channel.`)
+                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nUse the options below to save a transcript or delete this channel immediately.`)
                     .setTimestamp();
 
                 const managementRow = new ActionRowBuilder().addComponents(
@@ -220,19 +220,17 @@ module.exports = (client) => {
                 }
             }
 
-            // 🗑️ DELETE TICKET
+            // 🗑️ DELETE TICKET (REMOVED 5 SECOND AUTOMATIC TIMER)
             if (interaction.customId === 'sys_delete_ticket' || interaction.customId === 'delete_ticket') {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can delete tickets.', ephemeral: true });
                 }
 
-                await interaction.reply('🗑️ Deleting ticket in **5 seconds**...');
-                setTimeout(() => {
-                    interaction.channel.delete().catch(() => {});
-                }, 5000);
+                // Immediate deletion without timer delay
+                await interaction.channel.delete().catch(() => {});
             }
 
-            // 📝 STAFF & PARTNER APPLICATIONS MODALS
+            // 📝 STAFF & PARTNER APPLICATIONS
             if (interaction.customId === 'sys_apply_staff' || interaction.customId === 'apply_staff' || interaction.customId === 'sys_apply_partner' || interaction.customId === 'apply_partner') {
                 const isStaffApp = interaction.customId.includes('staff');
                 const modal = new ModalBuilder()
@@ -268,8 +266,7 @@ module.exports = (client) => {
                     await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
                 }
 
-                await interaction.reply(`Application ${isAccepted ? '✅ accepted' : '❌ rejected'}. Deleting channel in **5 seconds**...`);
-                setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+                await interaction.channel.delete().catch(() => {});
             }
         }
 
