@@ -30,7 +30,7 @@ module.exports = (client) => {
         return isStaff(interaction.member) || isCreator;
     };
 
-    // Helper: Guarantees category exists and allows category header rendering on mobile
+    // Helper: Guarantees category exists and allows Category Header visibility for Discord Mobile
     async function getOrCreateTicketCategory(guild, name) {
         try {
             const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
@@ -64,7 +64,7 @@ module.exports = (client) => {
             }
             return cat;
         } catch (err) {
-            console.error(`❌ Category Error (${name}):`, err);
+            console.error(`❌ Category Creation Error (${name}):`, err);
             return null;
         }
     }
