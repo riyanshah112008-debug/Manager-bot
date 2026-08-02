@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 1 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -73,7 +73,7 @@ function getNextAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-// ⚡ UPGRADED: Sub-second high performance models chain
+// Preferred Active Models Fallback Chain
 const AI_MODELS = [
     'gemini-2.5-flash',
     'gemini-2.0-flash',
@@ -90,7 +90,6 @@ async function generateAIResponseWithRetry(prompt) {
 
     let lastError = null;
 
-    // Fast rotation across all available models & keys
     for (const modelName of AI_MODELS) {
         for (let attempt = 1; attempt <= 3; attempt++) {
             try {
@@ -108,10 +107,10 @@ async function generateAIResponseWithRetry(prompt) {
                 lastError = err;
                 const errStatus = err.status || err.statusCode || (err.message && err.message.includes('503') ? 503 : 0);
                 if ((errStatus === 429 || errStatus === 503 || errStatus === 404) && attempt < 3) {
-                    await sleep(attempt * 400); // ⚡ Fast backoff (400ms)
+                    await sleep(attempt * 400);
                     continue;
                 }
-                break; // Switch to next model immediately on hard error
+                break;
             }
         }
     }
@@ -119,7 +118,7 @@ async function generateAIResponseWithRetry(prompt) {
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 2 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
 // ==========================================
 async function executeFullGuildBackup(guild) {
     try {
@@ -189,7 +188,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     return channel;
 }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 3 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
 // ==========================================
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -278,7 +277,7 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 4 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
 // ==========================================
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
@@ -298,14 +297,14 @@ const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setD
 const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
 
 module.exports = (client) => {
-    // 🛡️ FAIL-SAFE PREVENT MULTIPLE REGISTRATIONS ON THE SAME CLIENT
+    // 🛡️ FAIL-SAFE: PREVENT DUPLICATE EVENT REGISTRATIONS ON THE SAME CLIENT
     if (client.starryEngineInitialized) {
         console.log('⚠️ Starry Engine already initialized. Skipping duplicate registration.');
         return;
     }
     client.starryEngineInitialized = true;
 
-    console.log('🚀 Supreme Starry Unified Engine Active (Single Pipeline & Merged Master System Capabilities)');
+    console.log('🚀 Supreme Starry Unified Engine Active (Single Dispatcher Pipeline & Infinite Social Buttons)');
 
     start60sChannelTelemetryLoop(client);
 
@@ -356,13 +355,68 @@ module.exports = (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 5 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
 // ==========================================
-    // UI & Slash Command Listener
+    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS - NO EXPIRATION EVER)
     client.on('interactionCreate', async (interaction) => {
+        if (!interaction.guild) return;
+
+        // 1. PERMANENT INFINITE-TIME SOCIAL ACTION BUTTON HANDLER (PAT BACK, HUG BACK, KISS BACK, BITE BACK, CUDDLE BACK, etc.)
+        if (interaction.isButton() && interaction.customId.startsWith('social_')) {
+            const parts = interaction.customId.split('_'); // Format: social_<actionType>_<targetUserId>
+            const actionType = parts[1] || 'pat';
+            let targetUserId = parts[2] && parts[2] !== 'back' ? parts[2] : null;
+
+            // Fallback: Parse target from original embed description if present
+            if (!targetUserId && interaction.message.embeds.length > 0) {
+                const desc = interaction.message.embeds[0].description || '';
+                const match = desc.match(/<@!?(\d+)>/);
+                if (match) targetUserId = match[1];
+            }
+
+            // Fallback: Default to message author if no explicit target ID
+            if (!targetUserId && interaction.message.author) {
+                targetUserId = interaction.message.author.id;
+            }
+
+            // Infinite-time GIF Repository for All Social Commands
+            const actionGifs = {
+                pat: 'https://media.tenor.com/E6f13T34EwAAAAAC/anime-pat.gif',
+                hug: 'https://media.tenor.com/gg15582f3cAAAAAC/hug-anime.gif',
+                kiss: 'https://media.tenor.com/v4P2p1aP9xAAAAAC/anime-kiss.gif',
+                bite: 'https://media.tenor.com/39_X38I5ZqAAAAAC/anime-bite.gif',
+                cuddle: 'https://media.tenor.com/6Xz9sV5b-W0AAAAC/cuddle-anime.gif',
+                slap: 'https://media.tenor.com/Ws6vh1xRGAEAAAAC/anime-slap.gif',
+                tickle: 'https://media.tenor.com/AInAIs2aF3AAAAAC/anime-tickle.gif',
+                poke: 'https://media.tenor.com/1OInG6sX0x8AAAAC/anime-poke.gif',
+                lick: 'https://media.tenor.com/0V4f6I5xP3UAAAAC/anime-lick.gif',
+                handhold: 'https://media.tenor.com/kCZ9z7aG6b4AAAAC/anime-handhold.gif'
+            };
+
+            const gifUrl = actionGifs[actionType.toLowerCase()] || actionGifs['pat'];
+            const formattedAction = actionType.charAt(0).toUpperCase() + actionType.slice(1);
+
+            const replyEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setDescription(`✨ <@${interaction.user.id}> ${actionType}ted back ${targetUserId ? `<@${targetUserId}>` : 'everyone'}! ❤️`)
+                .setImage(gifUrl)
+                .setTimestamp();
+
+            // Permanent Infinite-Time Reciprocal Button
+            const reciprocalRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`social_${actionType.toLowerCase()}_${interaction.user.id}`)
+                    .setLabel(`${formattedAction} back`)
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('⭐')
+            );
+
+            return interaction.reply({ embeds: [replyEmbed], components: [reciprocalRow] }).catch(() => {});
+        }
+
+        // 2. DJ MUSIC PLAYER BUTTON HANDLER
         if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
             const guild = interaction.guild;
-            if (!guild) return;
             const member = interaction.member;
             const voiceChannel = member?.voice?.channel;
             const player = client.manager ? client.manager.getPlayer(guild.id) : null;
@@ -384,6 +438,7 @@ module.exports = (client) => {
             return;
         }
 
+        // 3. SLASH COMMAND ROUTER
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setup-starry') {
                 if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
@@ -417,7 +472,9 @@ module.exports = (client) => {
             .replace(/\s+/g, ' ')
             .trim();
     }
-
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// ==========================================
     async function handleAutoModPing(message) {
         if (!message.guild || message.author.bot || !message.member) return false;
         const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
@@ -460,15 +517,46 @@ module.exports = (client) => {
         }
         return false;
     }
-// ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 6 OF 7)
-// ==========================================
+
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
         const botMember = message.guild.members.me;
 
-        // 1. BULK DELETE CHANNELS IN A CATEGORY
+        // 1. FAST LOCAL ROLE ASSIGNMENT (e.g. "Assign @Admin to @toxicwaste", "Starry give role @Admin to @toxicwaste")
+        const roleAssignRegex = /(?:assign|give|add)\s+(?:role\s+)?<@&(\d+)>\s+(?:to\s+)?<@!?(\d+)>/i;
+        const roleAssignMatch = message.content.match(roleAssignRegex);
+
+        if (roleAssignMatch) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles) || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                await message.reply("❌ You or I lack **Manage Roles** permission.");
+                return true;
+            }
+
+            const targetRoleId = roleAssignMatch[1];
+            const targetUserId = roleAssignMatch[2];
+
+            const role = message.guild.roles.cache.get(targetRoleId);
+            const targetMember = await message.guild.members.fetch(targetUserId).catch(() => null);
+
+            if (!role) { await message.reply("❌ Role not found on this server."); return true; }
+            if (!targetMember) { await message.reply("❌ User not found in this server."); return true; }
+
+            if (role.position >= botMember.roles.highest.position) {
+                await message.reply(`❌ I cannot assign **${role.name}** because it is equal to or higher than my highest role!`);
+                return true;
+            }
+
+            try {
+                await targetMember.roles.add(role);
+                await message.reply(`✅ Successfully assigned role **${role.name}** to <@${targetMember.id}>!`);
+            } catch (err) {
+                await message.reply(`❌ Failed to assign role: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // 2. BULK DELETE CHANNELS IN A CATEGORY
         const bulkDelRegex = /(?:delete|remove|purge)\s+(?:all\s+)?(?:the\s+)?channels\s+in\s+(.+)$/i;
         const bulkMatch = message.content.match(bulkDelRegex);
 
@@ -479,10 +567,7 @@ module.exports = (client) => {
             }
 
             let rawSearch = bulkMatch[1].trim();
-            if (rawSearch.toLowerCase().endsWith('category')) {
-                rawSearch = rawSearch.slice(0, -8).trim();
-            }
-
+            if (rawSearch.toLowerCase().endsWith('category')) rawSearch = rawSearch.slice(0, -8).trim();
             const cleanSearch = cleanCategoryName(rawSearch);
 
             const targetCategory = message.guild.channels.cache.find(c => {
@@ -493,7 +578,7 @@ module.exports = (client) => {
 
             if (!targetCategory) {
                 await message.reply(`❌ Could not find category matching **"${rawSearch}"**.`);
-                return true; // Stop execution locally, DO NOT fall back to Gemini AI!
+                return true;
             }
 
             const childChannels = message.guild.channels.cache.filter(c => c.parentId === targetCategory.id);
@@ -507,7 +592,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 2. DELETE CATEGORY DIRECTLY
+        // 3. DELETE CATEGORY DIRECTLY
         const delCatRegex = /(?:delete|remove)\s+(?:the\s+)?category\s+(.+)$/i;
         const delCatMatch = message.content.match(delCatRegex);
 
@@ -537,64 +622,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 3. VOICE CHANNEL CREATION
-        const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
-        const voiceMatch = message.content.match(voiceChanRegex);
-
-        if (voiceMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-            const vName = voiceMatch[1].trim();
-            try {
-                const vChan = await message.guild.channels.create({ name: vName, type: ChannelType.GuildVoice });
-                await message.reply(`🔊 Successfully created voice channel **${vChan.name}**!`);
-            } catch (err) {
-                await message.reply(`❌ Failed to create voice channel: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        // 4. TEXT CHANNEL CREATION
-        const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
-        const textMatch = message.content.match(textChanRegex);
-
-        if (textMatch && !text.includes('voice') && !text.includes('role') && !text.includes('category')) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-            const cName = textMatch[1].trim().toLowerCase().replace(/\s+/g, '-');
-            try {
-                const tChan = await message.guild.channels.create({ name: cName, type: ChannelType.GuildText });
-                await message.reply(`✨ Successfully created text channel <#${tChan.id}>!`);
-            } catch (err) {
-                await message.reply(`❌ Failed to create text channel: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        // 5. CREATE CATEGORY
-        const createCatRegex = /(?:create|make|add)\s+(?:a\s+)?category\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
-        const catMatch = message.content.match(createCatRegex);
-
-        if (catMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-            const catName = catMatch[1].trim();
-            try {
-                const newCat = await message.guild.channels.create({ name: catName, type: ChannelType.GuildCategory });
-                await message.reply(`📁 Successfully created category **${newCat.name}**!`);
-            } catch (err) {
-                await message.reply(`❌ Failed to create category: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        // 6. PURGE MESSAGES
+        // 4. PURGE MESSAGES
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -615,7 +643,7 @@ module.exports = (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME UNIFIED ENGINE (PART 7 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // ==========================================
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         let isImageRequest = isImagine;
@@ -656,9 +684,9 @@ module.exports = (client) => {
                 const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
                 
                 await message.reply({ content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] }).catch(() => {});
-                await replyMsg.delete().catch(() => {});
+                if (replyMsg) await replyMsg.delete().catch(() => {});
             } catch (error) { 
-                await replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
+                if (replyMsg) await replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
             }
             return true;
         }
@@ -670,15 +698,15 @@ module.exports = (client) => {
 
         try {
             const prompt = `[SYSTEM INSTRUCTION]
-You are ${displayName}, an all-in-one Discord AI companion and server administrator.
+You are ${displayName}, an advanced all-in-one Discord AI companion and server administrator.
 
 YOUR FULL CAPABILITIES INCLUDE:
-1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command (e.g. "draw a penguin", "create an image of...").
-2. 🎵 Music & DJ Controls: Playing high-quality audio, track control (pause, skip, loop, volume), and DJ channel management.
-3. 🔢 Counting & Mini-Games: Managing counting channels, chest drops, and server activity tracking.
+1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command.
+2. 🎵 Music & DJ Controls: Playing high-quality audio, track control (pause, skip, loop, volume), and VC locks.
+3. 🌐 Translator & Multilingual Engine: Auto-translating text between languages, detecting language, and multilingual support.
 4. 🛡️ Autonomous Moderation & Security: Kicking, banning, unbanning, timing out users, clearing messages, mass-ping AutoMod, and security logging.
 5. 📁 Channel & Category Management: Dynamically creating, deleting, and organizing text/voice channels and categories.
-6. 🎭 Role Management: Creating roles, assigning roles, and managing permissions.
+6. 🎭 Role Management: Creating roles, assigning/removing roles from members, and managing permissions.
 
 COMMAND SPECIFICATION PROTOCOL:
 If the user asks you to perform a server management action, embed the appropriate tag anywhere in your output:
@@ -690,7 +718,7 @@ If the user asks you to perform a server management action, embed the appropriat
   * Create Category: [CMD:CREATECATEGORY|NAME:category_name]
   * Delete Category: [CMD:DELETECATEGORY|NAME:category_name]
 
-When asked about your features, list ALL of your capabilities (Image Generation, Music, Counting, Moderation, Channels, and Roles) in a clean bulleted format. Always acknowledge requests warmly, clearly, and concisely.
+When asked about your features, list ALL 6 of your capabilities (Image Generation, Music, Translator, Moderation, Channels/Categories, and Roles) in a clean bulleted format. Always acknowledge requests warmly, clearly, and concisely.
 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
@@ -707,6 +735,8 @@ ${message.author.username} says: ${message.content}`;
                 const getParam = (key) => (params.find(p => p.toUpperCase().startsWith(key)) || '').split(':')[1]?.trim() || '';
 
                 if (action === 'CREATEROLE') { functionName = 'create_role'; args.roleName = getParam('NAME') || getParam('ROLE'); }
+                else if (action === 'GIVEROLE') { functionName = 'give_role'; args.userId = getParam('USER_ID') || getParam('ID'); args.roleId = getParam('ROLE_ID') || getParam('ROLE'); }
+                else if (action === 'REMOVEROLE') { functionName = 'remove_role'; args.userId = getParam('USER_ID') || getParam('ID'); args.roleId = getParam('ROLE_ID') || getParam('ROLE'); }
                 else if (action === 'CLEAR') { functionName = 'clear_messages'; args.amount = parseInt(getParam('AMOUNT')) || 10; }
                 else if (action === 'TIMEOUT') { functionName = 'timeout_member'; args.userId = getParam('ID'); args.minutes = parseInt(getParam('MINUTES')) || 2; args.reason = getParam('REASON') || "AI Moderation"; }
                 else if (action === 'UNTIMEOUT') { functionName = 'untimeout_member'; args.userId = getParam('ID'); }
@@ -717,11 +747,40 @@ ${message.author.username} says: ${message.content}`;
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
-
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
+// ==========================================
             if (functionName && message.guild) {
                 const botMember = message.guild.members.me;
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
 
+                // --- 1. GIVE ROLE ACTION ---
+                if (functionName === "give_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
+                    const tId = (args.userId || '').replace(/\D/g, '');
+                    const rId = (args.roleId || '').replace(/\D/g, '');
+                    const tMember = await message.guild.members.fetch(tId).catch(() => null);
+                    const role = message.guild.roles.cache.get(rId) || message.guild.roles.cache.find(r => r.name.toLowerCase() === args.roleId?.toLowerCase());
+
+                    if (tMember && role && role.position < botMember.roles.highest.position) {
+                        await tMember.roles.add(role).catch(() => null);
+                        await message.reply(`✅ Assigned role **${role.name}** to <@${tMember.id}>!`);
+                    }
+                }
+
+                // --- 2. REMOVE ROLE ACTION ---
+                if (functionName === "remove_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
+                    const tId = (args.userId || '').replace(/\D/g, '');
+                    const rId = (args.roleId || '').replace(/\D/g, '');
+                    const tMember = await message.guild.members.fetch(tId).catch(() => null);
+                    const role = message.guild.roles.cache.get(rId) || message.guild.roles.cache.find(r => r.name.toLowerCase() === args.roleId?.toLowerCase());
+
+                    if (tMember && role && role.position < botMember.roles.highest.position) {
+                        await tMember.roles.remove(role).catch(() => null);
+                        await message.reply(`🗑️ Removed role **${role.name}** from <@${tMember.id}>.`);
+                    }
+                }
+
+                // --- 3. CREATE CHANNEL ---
                 if (functionName === "create_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     let parentCategory = null;
                     if (args.category) {
@@ -737,6 +796,7 @@ ${message.author.username} says: ${message.content}`;
                     if (createdCh) await message.reply(`✨ Successfully created channel <#${createdCh.id}>!`);
                 }
 
+                // --- 4. DELETE CHANNEL ---
                 if (functionName === "delete_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     const cleanName = (args.name || '').replace(/[<#>]/g, '').trim().toLowerCase();
                     const targetCh = message.guild.channels.cache.find(c => c.id === cleanName || c.name.toLowerCase() === cleanName);
