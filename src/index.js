@@ -481,7 +481,7 @@ client.on(Events.InteractionCreate, async interaction => {
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
             'automod', 'mod', 'moderate', 'verify-setup',
             'bump', 'bump-setup', 'autobump', 'set-listing',
-            'ticketsetup', 'applysetup'
+            'ticketsetup', 'applysetup','setupcount','countstats','countreset'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
