@@ -15,7 +15,6 @@ const {
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
 module.exports = (client) => {
-    // Helper: Check if member is Staff/Admin
     const isStaff = (member) => {
         if (!member) return false;
         return member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
@@ -23,45 +22,13 @@ module.exports = (client) => {
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
 
-    // Helper: Check if member is Staff OR the Ticket Creator
-    const canManageTicket = (interaction) => {
-        const topic = interaction.channel.topic || '';
-        const isCreator = topic.includes(interaction.user.id);
-        return isStaff(interaction.member) || isCreator;
-    };
-
-    // Helper: Ensures categories exist and are visible so child channels nest cleanly
     async function getOrCreateTicketCategory(guild, name) {
-        await guild.channels.fetch().catch(() => {});
         let cat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === name.toLowerCase());
-        let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
-
-        // Allow @everyone to view category header so Discord nests private channels inside it
-        const categoryPermissions = [
-            { 
-                id: guild.roles.everyone.id, 
-                allow: [PermissionsBitField.Flags.ViewChannel], 
-                deny: [PermissionsBitField.Flags.SendMessages] 
-            },
-            { 
-                id: client.user.id, 
-                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.SendMessages] 
-            },
-            ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
-        ];
-
         if (!cat) {
             cat = await guild.channels.create({
                 name: name,
-                type: ChannelType.GuildCategory,
-                permissionOverwrites: categoryPermissions
+                type: ChannelType.GuildCategory
             }).catch(() => null);
-        } else {
-            // Fix existing category permissions on the fly
-            await cat.permissionOverwrites.edit(guild.roles.everyone.id, {
-                ViewChannel: true,
-                SendMessages: false
-            }).catch(() => {});
         }
         return cat;
     }
@@ -129,13 +96,23 @@ module.exports = (client) => {
                     const user = interaction.user;
 
                     const openedCategory = await getOrCreateTicketCategory(guild, 'OPENED TICKETS');
+                    const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
+
+                    // 🛡️ FIX: IGNORE CLOSED TICKETS WHEN CHECKING FOR ACTIVE TICKETS
+                    const existingChannel = guild.channels.cache.find(c => 
+                        c.topic === user.id && 
+                        c.parentId !== closedCategory?.id &&
+                        !c.name.startsWith('closed-')
+                    );
+
+                    if (existingChannel) {
+                        return interaction.editReply({ content: `❌ You already have an active ticket in <#${existingChannel.id}>!` });
+                    }
+
                     let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
-                    const ticketNum = Math.floor(1000 + Math.random() * 9000);
-                    const cleanUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
-
                     const ticketChannel = await guild.channels.create({
-                        name: `ticket-${cleanUsername}-${ticketNum}`,
+                        name: `ticket-${user.username.toLowerCase()}`,
                         type: ChannelType.GuildText,
                         topic: user.id,
                         parent: openedCategory ? openedCategory.id : null,
@@ -147,14 +124,9 @@ module.exports = (client) => {
                         ]
                     });
 
-                    // Explicitly bind channel to category
-                    if (openedCategory) {
-                        await ticketChannel.setParent(openedCategory.id, { lockPermissions: false }).catch(() => {});
-                    }
-
                     const ticketEmbed = new EmbedBuilder()
                         .setColor('#00F2FE')
-                        .setTitle(`🎫 Support Ticket #${ticketNum} | ${user.username}`)
+                        .setTitle(`🎫 Support Ticket | ${user.username}`)
                         .setDescription(`Hello <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
                         .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
                         .setTimestamp();
@@ -165,16 +137,16 @@ module.exports = (client) => {
                     );
 
                     await ticketChannel.send({ content: `<@${user.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [actionRow] });
-                    return interaction.editReply({ content: `✅ Ticket created in **OPENED TICKETS**: <#${ticketChannel.id}>` });
+                    return interaction.editReply({ content: `✅ Ticket created: <#${ticketChannel.id}>` });
                 } catch (err) {
                     console.error('Error creating ticket:', err);
                     if (interaction.deferred || interaction.replied) {
-                        return interaction.editReply({ content: '❌ Failed to create ticket due to missing permissions.' }).catch(() => {});
+                        return interaction.editReply({ content: '❌ Failed to create ticket.' }).catch(() => {});
                     }
                 }
             }
 
-            // ✋ CLAIM TICKET (STAFF ONLY)
+            // ✋ CLAIM TICKET
             if (['sys_claim_ticket', 'claim_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can claim tickets.', flags: [EPHEMERAL_FLAG] });
@@ -210,12 +182,8 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🔒 CLOSE TICKET (STAFF + TICKET CREATOR)
+            // 🔒 CLOSE TICKET
             if (['sys_close_ticket', 'close_ticket'].includes(customId)) {
-                if (!canManageTicket(interaction)) {
-                    return interaction.reply({ content: '❌ Only staff or the ticket creator can close this ticket.', flags: [EPHEMERAL_FLAG] });
-                }
-
                 await interaction.deferUpdate().catch(() => {});
 
                 const channel = interaction.channel;
@@ -224,8 +192,11 @@ module.exports = (client) => {
 
                 const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
                 if (closedCategory) {
-                    await channel.setParent(closedCategory.id, { lockPermissions: false }).catch(() => {});
+                    await channel.setParent(closedCategory.id).catch(() => {});
                 }
+
+                // 🛡️ FIX: CLEAR TOPIC UPON CLOSING SO USER CAN OPEN NEW TICKETS LATER
+                await channel.setTopic(`closed-${ticketOwnerId || ''}`).catch(() => {});
 
                 if (ticketOwnerId) {
                     await channel.permissionOverwrites.edit(ticketOwnerId, { SendMessages: false }).catch(() => {});
@@ -234,7 +205,7 @@ module.exports = (client) => {
                 const closedEmbed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔒 Ticket Closed')
-                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel manually.`)
+                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel.`)
                     .setTimestamp();
 
                 const managementRow = new ActionRowBuilder().addComponents(
@@ -246,12 +217,8 @@ module.exports = (client) => {
                 return;
             }
 
-            // 📝 SAVE TRANSCRIPT (STAFF + TICKET CREATOR)
+            // 📝 SAVE TRANSCRIPT
             if (['sys_transcript_ticket', 'transcript_ticket'].includes(customId)) {
-                if (!canManageTicket(interaction)) {
-                    return interaction.reply({ content: '❌ Only staff or the ticket creator can save the transcript.', flags: [EPHEMERAL_FLAG] });
-                }
-
                 await interaction.deferReply();
 
                 try {
@@ -300,7 +267,7 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🗑️ DELETE TICKET (STAFF ONLY)
+            // 🗑️ DELETE TICKET
             if (['sys_delete_ticket', 'delete_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can delete tickets.', flags: [EPHEMERAL_FLAG] });
@@ -400,3 +367,4 @@ module.exports = (client) => {
         }
     });
 };
+                
