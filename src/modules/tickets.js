@@ -85,7 +85,7 @@ module.exports = (client) => {
         if (interaction.isButton()) {
             const customId = interaction.customId;
 
-            // 📩 CREATE TICKET
+            // 📩 CREATE TICKET (UNLIMITED MULTIPLE TICKETS ALLOWED)
             if (['sys_create_ticket', 'create_ticket'].includes(customId)) {
                 try {
                     if (!interaction.deferred && !interaction.replied) {
@@ -95,16 +95,15 @@ module.exports = (client) => {
                     const guild = interaction.guild;
                     const user = interaction.user;
 
-                    const existingChannel = guild.channels.cache.find(c => c.topic === user.id && c.name.includes('ticket-'));
-                    if (existingChannel) {
-                        return interaction.editReply({ content: `❌ You already have an open ticket in <#${existingChannel.id}>!` });
-                    }
-
                     const openedCategory = await getOrCreateTicketCategory(guild, 'OPENED TICKETS');
                     let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
+                    // Generate a unique 4-digit ticket ID so multiple open tickets are distinct
+                    const ticketNum = Math.floor(1000 + Math.random() * 9000);
+                    const cleanUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+
                     const ticketChannel = await guild.channels.create({
-                        name: `ticket-${user.username.toLowerCase()}`,
+                        name: `ticket-${cleanUsername}-${ticketNum}`,
                         type: ChannelType.GuildText,
                         topic: user.id,
                         parent: openedCategory ? openedCategory.id : null,
@@ -118,7 +117,7 @@ module.exports = (client) => {
 
                     const ticketEmbed = new EmbedBuilder()
                         .setColor('#00F2FE')
-                        .setTitle(`🎫 Support Ticket | ${user.username}`)
+                        .setTitle(`🎫 Support Ticket #${ticketNum} | ${user.username}`)
                         .setDescription(`Hello <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
                         .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
                         .setTimestamp();
