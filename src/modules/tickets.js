@@ -15,6 +15,7 @@ const {
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
 module.exports = (client) => {
+    // Helper: Check if member is Staff/Admin
     const isStaff = (member) => {
         if (!member) return false;
         return member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
@@ -22,15 +23,50 @@ module.exports = (client) => {
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
 
+    // Helper: Check if member is Staff OR the Ticket Creator
+    const canManageTicket = (interaction) => {
+        const topic = interaction.channel.topic || '';
+        const isCreator = topic.includes(interaction.user.id);
+        return isStaff(interaction.member) || isCreator;
+    };
+
+    // Helper: Guarantees category exists and allows category header rendering on mobile
     async function getOrCreateTicketCategory(guild, name) {
-        let cat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === name.toLowerCase());
-        if (!cat) {
-            cat = await guild.channels.create({
-                name: name,
-                type: ChannelType.GuildCategory
-            }).catch(() => null);
+        try {
+            const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+            let cat = channels.find(c => c && c.type === ChannelType.GuildCategory && c.name.toUpperCase() === name.toUpperCase());
+            let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
+
+            const categoryPermissions = [
+                { 
+                    id: guild.roles.everyone.id, 
+                    allow: [PermissionsBitField.Flags.ViewChannel], 
+                    deny: [PermissionsBitField.Flags.SendMessages] 
+                },
+                { 
+                    id: client.user.id, 
+                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.SendMessages] 
+                },
+                ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
+            ];
+
+            if (!cat) {
+                cat = await guild.channels.create({
+                    name: name.toUpperCase(),
+                    type: ChannelType.GuildCategory,
+                    permissionOverwrites: categoryPermissions
+                });
+            } else {
+                await cat.permissionOverwrites.edit(guild.roles.everyone.id, {
+                    ViewChannel: true,
+                    SendMessages: false
+                }).catch(() => {});
+            }
+            return cat;
+        } catch (err) {
+            console.error(`❌ Category Error (${name}):`, err);
+            return null;
         }
-        return cat;
     }
 
     client.on('interactionCreate', async (interaction) => {
@@ -78,7 +114,6 @@ module.exports = (client) => {
                 return interaction.channel.send({ embeds: [embed], components: [buttons] });
             }
         }
-
         // ==========================================
         // 2. BUTTON INTERACTIONS
         // ==========================================
@@ -96,37 +131,59 @@ module.exports = (client) => {
                     const user = interaction.user;
 
                     const openedCategory = await getOrCreateTicketCategory(guild, 'OPENED TICKETS');
-                    const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
-
-                    // 🛡️ FIX: IGNORE CLOSED TICKETS WHEN CHECKING FOR ACTIVE TICKETS
-                    const existingChannel = guild.channels.cache.find(c => 
-                        c.topic === user.id && 
-                        c.parentId !== closedCategory?.id &&
-                        !c.name.startsWith('closed-')
-                    );
-
-                    if (existingChannel) {
-                        return interaction.editReply({ content: `❌ You already have an active ticket in <#${existingChannel.id}>!` });
-                    }
-
                     let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
+                    const ticketNum = Math.floor(1000 + Math.random() * 9000);
+                    const cleanUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+
                     const ticketChannel = await guild.channels.create({
-                        name: `ticket-${user.username.toLowerCase()}`,
+                        name: `ticket-${cleanUsername}-${ticketNum}`,
                         type: ChannelType.GuildText,
                         topic: user.id,
-                        parent: openedCategory ? openedCategory.id : null,
+                        parent: openedCategory ? openedCategory.id : undefined,
                         permissionOverwrites: [
-                            { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                            { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] },
-                            { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels] },
-                            ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
+                            { 
+                                id: guild.roles.everyone.id, 
+                                deny: [PermissionsBitField.Flags.ViewChannel] 
+                            },
+                            { 
+                                id: user.id, 
+                                allow: [
+                                    PermissionsBitField.Flags.ViewChannel, 
+                                    PermissionsBitField.Flags.SendMessages, 
+                                    PermissionsBitField.Flags.ReadMessageHistory,
+                                    PermissionsBitField.Flags.AttachFiles,
+                                    PermissionsBitField.Flags.EmbedLinks
+                                ] 
+                            },
+                            { 
+                                id: client.user.id, 
+                                allow: [
+                                    PermissionsBitField.Flags.ViewChannel, 
+                                    PermissionsBitField.Flags.SendMessages, 
+                                    PermissionsBitField.Flags.ManageChannels,
+                                    PermissionsBitField.Flags.ReadMessageHistory
+                                ] 
+                            },
+                            ...(staffRole ? [{ 
+                                id: staffRole.id, 
+                                allow: [
+                                    PermissionsBitField.Flags.ViewChannel, 
+                                    PermissionsBitField.Flags.SendMessages,
+                                    PermissionsBitField.Flags.ReadMessageHistory
+                                ] 
+                            }] : [])
                         ]
                     });
 
+                    // Force Category Parent Binding
+                    if (openedCategory) {
+                        await ticketChannel.setParent(openedCategory.id, { lockPermissions: false }).catch(() => {});
+                    }
+
                     const ticketEmbed = new EmbedBuilder()
                         .setColor('#00F2FE')
-                        .setTitle(`🎫 Support Ticket | ${user.username}`)
+                        .setTitle(`🎫 Support Ticket #${ticketNum} | ${user.username}`)
                         .setDescription(`Hello <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
                         .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
                         .setTimestamp();
@@ -137,16 +194,16 @@ module.exports = (client) => {
                     );
 
                     await ticketChannel.send({ content: `<@${user.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [actionRow] });
-                    return interaction.editReply({ content: `✅ Ticket created: <#${ticketChannel.id}>` });
+                    return interaction.editReply({ content: `✅ Ticket created in **OPENED TICKETS**: <#${ticketChannel.id}>` });
                 } catch (err) {
                     console.error('Error creating ticket:', err);
                     if (interaction.deferred || interaction.replied) {
-                        return interaction.editReply({ content: '❌ Failed to create ticket.' }).catch(() => {});
+                        return interaction.editReply({ content: '❌ Failed to create ticket due to missing permissions.' }).catch(() => {});
                     }
                 }
             }
 
-            // ✋ CLAIM TICKET
+            // ✋ CLAIM TICKET (STAFF ONLY)
             if (['sys_claim_ticket', 'claim_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can claim tickets.', flags: [EPHEMERAL_FLAG] });
@@ -182,8 +239,12 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🔒 CLOSE TICKET
+            // 🔒 CLOSE TICKET (STAFF + TICKET CREATOR)
             if (['sys_close_ticket', 'close_ticket'].includes(customId)) {
+                if (!canManageTicket(interaction)) {
+                    return interaction.reply({ content: '❌ Only staff or the ticket creator can close this ticket.', flags: [EPHEMERAL_FLAG] });
+                }
+
                 await interaction.deferUpdate().catch(() => {});
 
                 const channel = interaction.channel;
@@ -192,11 +253,8 @@ module.exports = (client) => {
 
                 const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
                 if (closedCategory) {
-                    await channel.setParent(closedCategory.id).catch(() => {});
+                    await channel.setParent(closedCategory.id, { lockPermissions: false }).catch(() => {});
                 }
-
-                // 🛡️ FIX: CLEAR TOPIC UPON CLOSING SO USER CAN OPEN NEW TICKETS LATER
-                await channel.setTopic(`closed-${ticketOwnerId || ''}`).catch(() => {});
 
                 if (ticketOwnerId) {
                     await channel.permissionOverwrites.edit(ticketOwnerId, { SendMessages: false }).catch(() => {});
@@ -205,7 +263,7 @@ module.exports = (client) => {
                 const closedEmbed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔒 Ticket Closed')
-                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel.`)
+                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel manually.`)
                     .setTimestamp();
 
                 const managementRow = new ActionRowBuilder().addComponents(
@@ -217,8 +275,12 @@ module.exports = (client) => {
                 return;
             }
 
-            // 📝 SAVE TRANSCRIPT
+            // 📝 SAVE TRANSCRIPT (STAFF + TICKET CREATOR)
             if (['sys_transcript_ticket', 'transcript_ticket'].includes(customId)) {
+                if (!canManageTicket(interaction)) {
+                    return interaction.reply({ content: '❌ Only staff or the ticket creator can save the transcript.', flags: [EPHEMERAL_FLAG] });
+                }
+
                 await interaction.deferReply();
 
                 try {
@@ -267,7 +329,7 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🗑️ DELETE TICKET
+            // 🗑️ DELETE TICKET (STAFF ONLY)
             if (['sys_delete_ticket', 'delete_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can delete tickets.', flags: [EPHEMERAL_FLAG] });
@@ -367,4 +429,3 @@ module.exports = (client) => {
         }
     });
 };
-                
