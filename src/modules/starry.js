@@ -306,7 +306,7 @@ const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDes
 const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
 const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
 
-module.exports = (client) => {
+module.exports = async (client) => {
     // 🛡️ FAIL-SAFE: PREVENT DUPLICATE EVENT REGISTRATIONS ON THE SAME CLIENT
     if (client.starryEngineInitialized) {
         console.log('⚠️ Starry Engine already initialized. Skipping duplicate registration.');
@@ -418,7 +418,7 @@ module.exports = (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
     
-    // ==========================================
+// ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
 // File Path: modules/starry.js
 // ==========================================
