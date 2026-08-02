@@ -22,12 +22,22 @@ module.exports = (client) => {
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
 
+    // 🛡️ Enhanced Helper: Guarantees category exists with proper permissions
     async function getOrCreateTicketCategory(guild, name) {
+        // Fetch channels from Discord API to prevent cache misses
+        await guild.channels.fetch().catch(() => {});
         let cat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === name.toLowerCase());
+        
         if (!cat) {
+            let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
             cat = await guild.channels.create({
                 name: name,
-                type: ChannelType.GuildCategory
+                type: ChannelType.GuildCategory,
+                permissionOverwrites: [
+                    { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.SendMessages] },
+                    ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
+                ]
             }).catch(() => null);
         }
         return cat;
@@ -85,7 +95,7 @@ module.exports = (client) => {
         if (interaction.isButton()) {
             const customId = interaction.customId;
 
-            // 📩 CREATE TICKET (UNLIMITED MULTIPLE TICKETS ALLOWED)
+            // 📩 CREATE TICKET
             if (['sys_create_ticket', 'create_ticket'].includes(customId)) {
                 try {
                     if (!interaction.deferred && !interaction.replied) {
@@ -98,7 +108,6 @@ module.exports = (client) => {
                     const openedCategory = await getOrCreateTicketCategory(guild, 'OPENED TICKETS');
                     let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
-                    // Generate a unique 4-digit ticket ID so multiple open tickets are distinct
                     const ticketNum = Math.floor(1000 + Math.random() * 9000);
                     const cleanUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -115,6 +124,11 @@ module.exports = (client) => {
                         ]
                     });
 
+                    // Force parent category binding if not assigned automatically
+                    if (openedCategory && ticketChannel.parentId !== openedCategory.id) {
+                        await ticketChannel.setParent(openedCategory.id, { lockPermissions: false }).catch(() => {});
+                    }
+
                     const ticketEmbed = new EmbedBuilder()
                         .setColor('#00F2FE')
                         .setTitle(`🎫 Support Ticket #${ticketNum} | ${user.username}`)
@@ -128,11 +142,11 @@ module.exports = (client) => {
                     );
 
                     await ticketChannel.send({ content: `<@${user.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [actionRow] });
-                    return interaction.editReply({ content: `✅ Ticket created: <#${ticketChannel.id}>` });
+                    return interaction.editReply({ content: `✅ Ticket created in **OPENED TICKETS**: <#${ticketChannel.id}>` });
                 } catch (err) {
                     console.error('Error creating ticket:', err);
                     if (interaction.deferred || interaction.replied) {
-                        return interaction.editReply({ content: '❌ Failed to create ticket.' }).catch(() => {});
+                        return interaction.editReply({ content: '❌ Failed to create ticket due to missing permissions.' }).catch(() => {});
                     }
                 }
             }
@@ -173,7 +187,7 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🔒 CLOSE TICKET
+            // 🔒 CLOSE TICKET (MOVES TO CLOSED TICKETS CATEGORY)
             if (['sys_close_ticket', 'close_ticket'].includes(customId)) {
                 await interaction.deferUpdate().catch(() => {});
 
@@ -183,7 +197,7 @@ module.exports = (client) => {
 
                 const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
                 if (closedCategory) {
-                    await channel.setParent(closedCategory.id).catch(() => {});
+                    await channel.setParent(closedCategory.id, { lockPermissions: false }).catch(() => {});
                 }
 
                 if (ticketOwnerId) {
@@ -193,7 +207,7 @@ module.exports = (client) => {
                 const closedEmbed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔒 Ticket Closed')
-                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel.`)
+                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel manually.`)
                     .setTimestamp();
 
                 const managementRow = new ActionRowBuilder().addComponents(
