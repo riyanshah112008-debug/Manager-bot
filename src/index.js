@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (COMPLETE)
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (COMPLETE UPGRADED)
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
@@ -29,8 +29,18 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-const bumpEngine = require('./modules/bumpEngine');
-const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
+// Safely Require Bump Engine & Model
+let bumpEngine = null;
+let ServerListing = null;
+try {
+    bumpEngine = require('./modules/bumpEngine');
+    ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
+} catch (e) {
+    try {
+        bumpEngine = require('../modules/bumpEngine');
+        ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
+    } catch (err) {}
+}
 
 const app = express();
 const port = process.env.PORT || 10000;
@@ -212,7 +222,7 @@ app.post('/verify', async (req, res) => {
     }
 });
 
-// 🎵 LAVALINK NODES (ORIGINAL CONFIGURATION)
+// 🎵 LAVALINK NODES (ORIGINAL CONFIGURATION PRESERVED EXACTLY)
 const Nodes = [
     {
         name: 'Main-Node-Lavasearch',
@@ -419,11 +429,19 @@ client.once(Events.ClientReady, async () => {
         console.error('❌ Lavalink Initialization Failed:', lavalinkErr.message);
     }
 
+    // 🚀 FLEXIBLE MULTI-DIRECTORY COMMAND DEPLOYER
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        const deploy = require('./deploy-commands.js');
+        let deploy = null;
+        try { deploy = require('../deploy-commands.js'); } catch (e1) {
+            try { deploy = require('./deploy-commands.js'); } catch (e2) {
+                try { deploy = require('../../deploy-commands.js'); } catch (e3) {}
+            }
+        }
         if (deploy && typeof deploy.deployCommands === 'function') {
             await deploy.deployCommands();
+        } else {
+            console.warn("⚠️ Could not locate deploy-commands.js module.");
         }
     } catch (err) {
         console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
@@ -456,18 +474,20 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
-   if (interaction.isChatInputCommand()) {
+    // 🛡️ COMPLETE MODULE HANDLED BYPASS LIST
+    if (interaction.isChatInputCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
             'automod', 'mod', 'moderate', 'verify-setup',
             'bump', 'bump-setup', 'autobump', 'set-listing',
-            'ticketsetup', 'applysetup' // 👈 Add these two
+            'ticketsetup', 'applysetup'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
         }
     }
+
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         const customId = interaction.customId;
         if (!customId.startsWith('dj_') && !customId.startsWith('music_')) return;
@@ -546,7 +566,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// 🧩 MODULE INITIALIZERS (Duplicates Removed)
+// 🧩 MODULE INITIALIZERS (SAFE ASYNC LOADER)
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
@@ -557,7 +577,11 @@ const MODULE_INITIALIZERS = [
     { name: 'Starry Protocol', fn: () => require('./modules/starry.js')(client, app) },
     { name: 'Boost Tracker', fn: () => require('./modules/boostTracker.js')(client, app) },
     { name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
-    { name: 'Support Tickets', fn: () => require('./modules/tickets.js')(client, app) },
+    { name: 'Support Tickets', fn: () => {
+        try { return require('./modules/tickets.js')(client, app); } catch (e) {
+            return require('./modules/ticket.js')(client, app);
+        }
+    }},
     { name: 'Admin Help Text Trigger', fn: () => require('./modules/ahelpText.js')(client, app) },
     { name: 'Tracker', fn: () => require('./modules/tracker.js')(client, app) },
     { name: 'Sus Account Detector', fn: () => require('./modules/susAccount.js')(client, app) },
@@ -643,7 +667,7 @@ async function startBot() {
 
         for (const mod of MODULE_INITIALIZERS) {
             try {
-                mod.fn();
+                await Promise.resolve(mod.fn());
                 console.log(`✅ ${mod.name} Module Loaded`);
             } catch (err) {
                 console.error(`❌ Error loading ${mod.name}:`, err.message);
