@@ -12,12 +12,25 @@ const {
 } = require('discord.js');
 
 module.exports = (client) => {
+    // Helper: Check if member is Staff or Admin
     const isStaff = (member) => {
         if (!member) return false;
         return member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
                member.permissions.has(PermissionsBitField.Flags.Administrator) ||
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
+
+    // Helper: Get or Create Ticket Categories
+    async function getOrCreateTicketCategory(guild, name) {
+        let cat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === name.toLowerCase());
+        if (!cat) {
+            cat = await guild.channels.create({
+                name: name,
+                type: ChannelType.GuildCategory
+            }).catch(() => null);
+        }
+        return cat;
+    }
 
     client.on('interactionCreate', async (interaction) => {
         // ==========================================
@@ -79,14 +92,15 @@ module.exports = (client) => {
                     return interaction.reply({ content: `❌ You already have an open ticket in <#${existingChannel.id}>!`, ephemeral: true });
                 }
 
-                let supportCategory = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('support'));
+                // Automatically get or create the "OPENED TICKETS" category
+                const openedCategory = await getOrCreateTicketCategory(guild, 'OPENED TICKETS');
                 let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
                 const ticketChannel = await guild.channels.create({
                     name: `ticket-${user.username.toLowerCase()}`,
                     type: ChannelType.GuildText,
                     topic: user.id,
-                    parent: supportCategory ? supportCategory.id : null,
+                    parent: openedCategory ? openedCategory.id : null,
                     permissionOverwrites: [
                         { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                         { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.AttachFiles] },
@@ -99,9 +113,10 @@ module.exports = (client) => {
                     .setColor('#00F2FE')
                     .setTitle(`🎫 Support Ticket | ${user.username}`)
                     .setDescription(`Hello <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
+                    .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
                     .setTimestamp();
 
-                // 📌 Added BOTH Claim Ticket and Close Ticket buttons to initial ping embed
+                // Initial embed includes both Claim and Close buttons for staff/users
                 const actionRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('sys_claim_ticket').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
                     new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
@@ -146,12 +161,19 @@ module.exports = (client) => {
                 await channel.send({ embeds: [claimedEmbed] });
             }
 
-            // 🔒 CLOSE TICKET
+            // 🔒 CLOSE TICKET (MOVES TO CLOSED TICKETS CATEGORY)
             if (interaction.customId === 'sys_close_ticket' || interaction.customId === 'close_ticket') {
                 await interaction.deferUpdate().catch(() => {});
 
                 const channel = interaction.channel;
+                const guild = interaction.guild;
                 const ticketOwnerId = channel.topic;
+
+                // Move channel to "CLOSED TICKETS" category
+                const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
+                if (closedCategory) {
+                    await channel.setParent(closedCategory.id).catch(() => {});
+                }
 
                 if (ticketOwnerId) {
                     await channel.permissionOverwrites.edit(ticketOwnerId, { SendMessages: false }).catch(() => {});
@@ -160,7 +182,7 @@ module.exports = (client) => {
                 const closedEmbed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔒 Ticket Closed')
-                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nUse the options below to save a transcript or delete this channel immediately.`)
+                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel manually.`)
                     .setTimestamp();
 
                 const managementRow = new ActionRowBuilder().addComponents(
@@ -220,13 +242,13 @@ module.exports = (client) => {
                 }
             }
 
-            // 🗑️ DELETE TICKET (REMOVED 5 SECOND AUTOMATIC TIMER)
+            // 🗑️ MANUALLY DELETE TICKET (NO AUTOMATIC TIMERS)
             if (interaction.customId === 'sys_delete_ticket' || interaction.customId === 'delete_ticket') {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can delete tickets.', ephemeral: true });
                 }
 
-                // Immediate deletion without timer delay
+                // Deletes channel immediately upon click without delays
                 await interaction.channel.delete().catch(() => {});
             }
 
