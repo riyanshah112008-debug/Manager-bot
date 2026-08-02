@@ -287,6 +287,7 @@ function start60sChannelTelemetryLoop(client) {
 }
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
+// File Path: modules/starry.js
 // ==========================================
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
@@ -313,9 +314,62 @@ module.exports = (client) => {
     }
     client.starryEngineInitialized = true;
 
-    console.log('🚀 Supreme Starry Unified Engine Active (Single Dispatcher Pipeline & Infinite Social Buttons)');
+    console.log('🚀 Supreme Starry Unified Engine Active (Single Dispatcher Pipeline & Join/Leave Audit Logger)');
 
     start60sChannelTelemetryLoop(client);
+
+    // 🟢 AUTOMATIC MEMBER JOIN LOGGING ENGINE
+    client.on('guildMemberAdd', async (member) => {
+        try {
+            const guild = member.guild;
+            const logChannel = client.getLogChannel(guild, 'access') ||
+                               guild.channels.cache.find(c => ['logs-access', 'logs-members', 'join-logs', 'member-logs'].includes(c.name.toLowerCase()));
+            if (!logChannel) return;
+
+            const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24));
+            const joinEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setAuthor({ name: '🟢 Member Joined', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`Welcome <@${member.id}> (**${member.user.tag}**) to **${guild.name}**!`)
+                .addFields(
+                    { name: '👤 User Mention', value: `<@${member.id}>`, inline: true },
+                    { name: '🆔 User ID', value: `\`${member.id}\``, inline: true },
+                    { name: '📅 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R> (${accountAgeDays} days old)`, inline: false },
+                    { name: '📊 Total Members', value: `\`${guild.memberCount}\``, inline: true }
+                )
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setTimestamp();
+
+            await logChannel.send({ embeds: [joinEmbed] }).catch(() => {});
+        } catch (err) {
+            console.error('guildMemberAdd Log Error:', err);
+        }
+    });
+
+    // 🔴 AUTOMATIC MEMBER LEAVE LOGGING ENGINE
+    client.on('guildMemberRemove', async (member) => {
+        try {
+            const guild = member.guild;
+            const logChannel = client.getLogChannel(guild, 'access') ||
+                               guild.channels.cache.find(c => ['logs-access', 'logs-members', 'leave-logs', 'member-logs'].includes(c.name.toLowerCase()));
+            if (!logChannel) return;
+
+            const leaveEmbed = new EmbedBuilder()
+                .setColor('#ED4245')
+                .setAuthor({ name: '🔴 Member Left', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`<@${member.id}> (**${member.user.tag}**) has left **${guild.name}**.`)
+                .addFields(
+                    { name: '🆔 User ID', value: `\`${member.id}\``, inline: true },
+                    { name: '📊 Remaining Members', value: `\`${guild.memberCount}\``, inline: true }
+                )
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setTimestamp();
+
+            await logChannel.send({ embeds: [leaveEmbed] }).catch(() => {});
+        } catch (err) {
+            console.error('guildMemberRemove Log Error:', err);
+        }
+    });
 
     client.isOwner = (userId) => {
         const defaultOwners = ['1465049039153135639', '1257676837249617971'];
@@ -362,50 +416,9 @@ module.exports = (client) => {
             .setTimestamp();
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
-        // 3. SLASH COMMAND ROUTER FOR TICKETS & SETUP
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'ticketsetup') {
-                if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                    return interaction.reply({ content: '❌ You lack permissions to set up the ticket panel.', ephemeral: true });
-                }
-
-                const embed = new EmbedBuilder()
-                    .setColor('#00F2FE')
-                    .setTitle('🎫 Support & Application Portal')
-                    .setDescription('• **Open Support Ticket:** Opens a private communication channel with staff.\n• **Apply for Staff:** Opens an interactive form to apply for moderator positions.')
-                    .setFooter({ text: 'Starry Support Engine' });
-
-                const buttons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
-                    new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
-                );
-
-                await interaction.reply({ content: '✅ Ticket system panel created!', ephemeral: true });
-                return interaction.channel.send({ embeds: [embed], components: [buttons] });
-            }
-
-            if (interaction.commandName === 'applysetup') {
-                if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                    return interaction.reply({ content: '❌ You lack permissions to set up the application panel.', ephemeral: true });
-                }
-
-                const embed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle('📋 Server Applications')
-                    .setDescription('We are looking for new staff and partners!\n\nChoose an option below to apply.')
-                    .setFooter({ text: 'Starry Application Engine' });
-
-                const buttons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('🛡️ Apply for Staff').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('sys_apply_partner').setLabel('🤝 Request Partnership').setStyle(ButtonStyle.Success)
-                );
-
-                await interaction.reply({ content: '✅ Application Dashboard created!', ephemeral: true });
-                return interaction.channel.send({ embeds: [embed], components: [buttons] });
-            }
-        }
     };
-// ==========================================
+    
+    // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
 // File Path: modules/starry.js
 // ==========================================
@@ -747,6 +760,7 @@ module.exports = (client) => {
     }
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// File Path: modules/starry.js
 // ==========================================
     async function handleAutoModPing(message) {
         if (!message.guild || message.author.bot || !message.member) return false;
@@ -791,7 +805,7 @@ module.exports = (client) => {
         return false;
     }
 
-    // ⚡ INSTANT LOCAL PRE-PARSERS (<50ms Execution - Zero AI Calls)
+    // ⚡ INSTANT LOCAL PRE-PARSERS (<10ms Execution)
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
@@ -800,6 +814,18 @@ module.exports = (client) => {
 
         // Clean bot trigger prefixes/mentions
         const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '').trim();
+
+        // 🟢 INSTANT GREETING RESPONSE (<10ms)
+        const isGreeting = cleanText === '' || ['hi', 'hello', 'hey', 'yo', 'sup', 'hola', 'starry'].includes(cleanText);
+        if (isGreeting) {
+            const responses = [
+                `Hello <@${message.author.id}>! ✨ How can I assist you today?`,
+                `Hey <@${message.author.id}>! I'm online and ready. What's on your mind? 🌟`,
+                `Hi <@${message.author.id}>! Need help with commands, music, or moderation? Just ask! 🚀`
+            ];
+            await message.reply(responses[Math.floor(Math.random() * responses.length)]);
+            return true;
+        }
 
         // 0. UPGRADED .PREMIUM SUITE DISPLAY COMMAND
         if (text === '.premium' || text === 'starry premium' || text === 'jarvis premium') {
@@ -826,7 +852,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 1. INSTANT VOICE CHANNEL CREATION (e.g. "Starry create a voice channel named music")
+        // 1. INSTANT VOICE CHANNEL CREATION
         const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?(.+)$/i;
         const voiceMatch = cleanText.match(voiceChanRegex);
 
@@ -845,7 +871,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 2. INSTANT TEXT CHANNEL CREATION (e.g. "Starry create a text channel named music")
+        // 2. INSTANT TEXT CHANNEL CREATION
         const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
         const textMatch = cleanText.match(textChanRegex);
 
@@ -972,7 +998,8 @@ module.exports = (client) => {
 
         return false;
     }
-    // ==========================================
+
+// ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // ==========================================
     // 🎨 STRICT POLLINATIONS IMAGE PARSER (Requires explicit art/drawing keywords)
