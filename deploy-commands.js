@@ -116,6 +116,21 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
+    // ==========================================
+    // 📊 SINGLE LEVELING SLASH COMMAND
+    // ==========================================
+    new SlashCommandBuilder()
+        .setName('enableleveling')
+        .setDescription('⚙️ Enable leveling system and select log channel')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('Select channel for level-up notifications')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(false)
+        )
+        .toJSON()
+
     // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS
     new SlashCommandBuilder()
         .setName('ticketsetup')
