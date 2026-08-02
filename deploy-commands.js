@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 1 OF 2)
 // ==========================================
 require('dotenv').config();
 const { 
@@ -105,7 +105,7 @@ const commands = [
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
     { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
-    
+
     // MUSIC COMMANDS
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
     { name: 'pause', description: 'Pause the currently playing song' },
@@ -116,9 +116,18 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
-    // ==========================================
+    // 🔍 WHOIS USER LOOKUP COMMAND
+    new SlashCommandBuilder()
+        .setName('whois')
+        .setDescription('🔍 Lookup detailed information and permissions for a user')
+        .addUserOption(option => 
+            option.setName('target')
+                .setDescription('Select the member you want to look up')
+                .setRequired(false)
+        )
+        .toJSON(),
+
     // 📊 SINGLE LEVELING SLASH COMMAND
-    // ==========================================
     new SlashCommandBuilder()
         .setName('enableleveling')
         .setDescription('⚙️ Enable leveling system and select log channel')
@@ -129,7 +138,7 @@ const commands = [
                 .addChannelTypes(ChannelType.GuildText)
                 .setRequired(false)
         )
-        .toJSON()
+        .toJSON(),
 
     // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS
     new SlashCommandBuilder()
@@ -148,7 +157,9 @@ const commands = [
 if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
-
+// ==========================================
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 2 OF 2)
+// ==========================================
 commands.push(
     new SlashCommandBuilder()
         .setName('giveaway')
@@ -222,14 +233,14 @@ async function deployCommands() {
             throw new Error('🛑 Could not parse CLIENT_ID from TOKEN.');
         }
     }
-    
+
     const rest = new REST({ version: '10' }).setToken(token);
 
     try {
         console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally across all servers...`);
-        
+
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
-        
+
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
         console.log(`⏳ Global commands sync across Discord can take up to 1 hour. Restart your Discord app to check local client status.`);
 
