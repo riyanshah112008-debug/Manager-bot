@@ -246,7 +246,6 @@ async function provisionMasterServerStructure(interaction) {
     const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
     await createNonDuplicatingActiveChannel(guild, { name: 'verify-here', parent: supportCat.id, moduleType: 'verification', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
-
     // 5. ADMIN & STAFF HQ CATEGORY
     const staffCat = await getOrCreateCategory(guild, '👑 ADMIN & STAFF HQ', [hideEveryone, staffFullControl, botFullControl]);
     await createNonDuplicatingActiveChannel(guild, { name: 'owners-chat', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
@@ -363,6 +362,48 @@ module.exports = (client) => {
             .setTimestamp();
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
+        // 3. SLASH COMMAND ROUTER FOR TICKETS & SETUP
+        if (interaction.isChatInputCommand()) {
+            if (interaction.commandName === 'ticketsetup') {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                    return interaction.reply({ content: '❌ You lack permissions to set up the ticket panel.', ephemeral: true });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setColor('#00F2FE')
+                    .setTitle('🎫 Support & Application Portal')
+                    .setDescription('• **Open Support Ticket:** Opens a private communication channel with staff.\n• **Apply for Staff:** Opens an interactive form to apply for moderator positions.')
+                    .setFooter({ text: 'Starry Support Engine' });
+
+                const buttons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
+                    new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
+                );
+
+                await interaction.reply({ content: '✅ Ticket system panel created!', ephemeral: true });
+                return interaction.channel.send({ embeds: [embed], components: [buttons] });
+            }
+
+            if (interaction.commandName === 'applysetup') {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                    return interaction.reply({ content: '❌ You lack permissions to set up the application panel.', ephemeral: true });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('📋 Server Applications')
+                    .setDescription('We are looking for new staff and partners!\n\nChoose an option below to apply.')
+                    .setFooter({ text: 'Starry Application Engine' });
+
+                const buttons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('🛡️ Apply for Staff').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('sys_apply_partner').setLabel('🤝 Request Partnership').setStyle(ButtonStyle.Success)
+                );
+
+                await interaction.reply({ content: '✅ Application Dashboard created!', ephemeral: true });
+                return interaction.channel.send({ embeds: [embed], components: [buttons] });
+            }
+        }
     };
   // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
