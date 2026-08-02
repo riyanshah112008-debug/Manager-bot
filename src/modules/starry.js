@@ -1,6 +1,6 @@
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
-// File Path: src/modules/starry.js
+// File Path: modules/starry.js
 // ==========================================
 const { 
     PermissionFlagsBits, 
@@ -24,7 +24,7 @@ const path = require('path');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Safely Require Mongoose Models (Relative to src/modules/)
+// Safely Require Mongoose Models (Relative to modules/)
 let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote, CountGuild;
 try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {}
 try { ChestChannel = mongoose.models.ChestChannel || require('../models/ChestChannel'); } catch (e) {}
@@ -371,7 +371,7 @@ module.exports = (client) => {
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
-        // 1. PERMANENT INFINITE-TIME SOCIAL ACTION BUTTON HANDLER (PAT BACK, HUG BACK, KISS BACK, BITE BACK, CUDDLE BACK, etc.)
+        // 1. PERMANENT INFINITE-TIME SOCIAL ACTION BUTTON HANDLER
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_'); // Format: social_<actionType>_<targetUserId>
             const actionType = parts[1] || 'pat';
@@ -476,7 +476,7 @@ module.exports = (client) => {
         if (!str) return '';
         return str
             .toLowerCase()
-            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
             .replace(/&/g, 'and')
             .replace(/[^a-z0-9\s]/g, '')
             .replace(/\s+/g, ' ')
@@ -528,65 +528,33 @@ module.exports = (client) => {
         return false;
     }
 
+    // ⚡ INSTANT LOCAL PRE-PARSERS (<50ms Execution - Zero AI Calls)
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
         const botMember = message.guild.members.me;
+        const displayName = client.user.username;
+
+        // Clean bot trigger prefixes/mentions
+        const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '').trim();
 
         // 0. UPGRADED .PREMIUM SUITE DISPLAY COMMAND
         if (text === '.premium' || text === 'starry premium' || text === 'jarvis premium') {
-            const displayName = client.user.username;
             const premiumEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setAuthor({ name: `${displayName} Protocol | Premium Suite`, iconURL: client.user.displayAvatarURL() })
                 .setTitle('💎 Starry Premium Features & Capabilities')
                 .setDescription('Below is the complete overview of all high-tier, automated, and AI-powered features active on this server:')
                 .addFields(
-                    { 
-                        name: '⚡ 1. High-Speed Gemini Multi-Model AI Engine', 
-                        value: '• Sub-second response priority via Gemini 2.5 Flash & 2.0 Flash.\n• Dynamic multi-key API rotation with automatic failover.\n• Natural language parsing for moderation, channels, and roles.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🎨 2. High-Res Flux AI Image Generator', 
-                        value: '• Instant art generation using the Flux model (`.imagine <prompt>` or `Starry draw...`).\n• Unique seed randomization with zero queue delays.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '♾️ 3. Infinite-Time Social Action Buttons', 
-                        value: '• Permanent reciprocal buttons (`Pat back`, `Hug back`, `Kiss back`, `Cuddle`, `Bite`, `Slap`).\n• Stateless execution—buttons never expire, even months or years later!', 
-                        inline: false 
-                    },
-                    { 
-                        name: '💎 4. Premium Branded Moderation DMs', 
-                        value: '• Rich, color-coded DM notices sent to offenders upon Ban, Kick, or Timeout.\n• Includes official Case IDs, moderator tags, reason blocks, and timestamps.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🌐 5. Multilingual Translation & Auto-Detect Engine', 
-                        value: '• Dynamic multi-language translation and language detection across text channels.\n• Enables seamless global community communication.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '⚡ 6. Instant Local Admin Actions (<50ms)', 
-                        value: '• Zero AI rate-limit risk for administrative commands.\n• Bulk category purges, role assignments, voice/text channel creation, and message clearing.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🎵 7. Lavalink Audio Filters & Autoplay Engine', 
-                        value: '• Related track autoplay recommendations when the queue ends.\n• Audio filters: Bassboost, 8D Audio, Nightcore, Vaporwave, Tremolo, Vibrato, Karaoke.', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🛡️ 8. Master Server Infrastructure & Telemetry', 
-                        value: '• Autonomous layout deployment (`/setup-starry`) with 6 categories & 22 security channels.\n• Real-time 60-second telemetry monitor (`#server-status-monitor`).\n• Emergency Nuke & Purge protocol (`/emergency-nuke`).', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🔢 9. Smart Counting Game & High-Score Engine', 
-                        value: '• Interactive counting channel setup (`/setupcount` or `.setupcount`).\n• Smart Math Solver (evaluates expressions like `5+5`).\n• Live streak tracker, server high scores (`/countstats`), and milestone alerts.', 
-                        inline: false 
-                    }
+                    { name: '⚡ 1. High-Speed Gemini Multi-Model AI Engine', value: '• Sub-second response priority via Gemini 2.5 Flash & 2.0 Flash.\n• Dynamic multi-key API rotation with automatic failover.', inline: false },
+                    { name: '🎨 2. High-Res Flux AI Image Generator', value: '• Instant art generation using the Flux model (`.imagine <prompt>` or `Starry draw...`).', inline: false },
+                    { name: '♾️ 3. Infinite-Time Social Action Buttons', value: '• Permanent reciprocal buttons (`Pat back`, `Hug back`, `Kiss back`, `Cuddle`, `Bite`, `Slap`).', inline: false },
+                    { name: '💎 4. Premium Branded Moderation DMs', value: '• Rich, color-coded DM notices sent to offenders upon Ban, Kick, or Timeout.', inline: false },
+                    { name: '🌐 5. Multilingual Translation Engine', value: '• Dynamic multi-language translation and language detection across text channels.', inline: false },
+                    { name: '⚡ 6. Instant Local Admin Actions (<50ms)', value: '• Zero AI rate-limit risk for administrative channel/role management.', inline: false },
+                    { name: '🎵 7. Lavalink Audio Filters & Autoplay Engine', value: '• Related track autoplay recommendations and live DJ audio filters.', inline: false },
+                    { name: '🛡️ 8. Master Server Infrastructure & Telemetry', value: '• Autonomous layout deployment (`/setup-starry`) & 60s monitor.', inline: false },
+                    { name: '🔢 9. Smart Counting Game & High-Score Engine', value: '• Interactive counting channel setup (`/setupcount`) & math solver.', inline: false }
                 )
                 .setFooter({ text: 'Starry Master System • Premium Tier Active', iconURL: client.user.displayAvatarURL() })
                 .setTimestamp();
@@ -595,7 +563,64 @@ module.exports = (client) => {
             return true;
         }
 
-        // 1. FAST LOCAL ROLE ASSIGNMENT
+        // 1. INSTANT VOICE CHANNEL CREATION (e.g. "Starry create a voice channel named music")
+        const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?(.+)$/i;
+        const voiceMatch = cleanText.match(voiceChanRegex);
+
+        if (voiceMatch) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
+            }
+            const vName = voiceMatch[1].trim();
+            try {
+                const vChan = await message.guild.channels.create({ name: vName, type: ChannelType.GuildVoice });
+                await message.reply(`🔊 Successfully created voice channel **${vChan.name}**!`);
+            } catch (err) {
+                await message.reply(`❌ Failed to create voice channel: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // 2. INSTANT TEXT CHANNEL CREATION (e.g. "Starry create a text channel named music")
+        const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
+        const textMatch = cleanText.match(textChanRegex);
+
+        if (textMatch && !cleanText.includes('voice') && !cleanText.includes('role') && !cleanText.includes('category')) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
+            }
+            const cName = textMatch[1].trim().toLowerCase().replace(/\s+/g, '-');
+            try {
+                const tChan = await message.guild.channels.create({ name: cName, type: ChannelType.GuildText });
+                await message.reply(`✨ Successfully created text channel <#${tChan.id}>!`);
+            } catch (err) {
+                await message.reply(`❌ Failed to create text channel: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // 3. CATEGORY CREATION
+        const createCatRegex = /(?:create|make|add)\s+(?:a\s+)?category\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
+        const catMatch = cleanText.match(createCatRegex);
+
+        if (catMatch) {
+            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                await message.reply("❌ You or I lack **Manage Channels** permission.");
+                return true;
+            }
+            const catName = catMatch[1].trim();
+            try {
+                const newCat = await message.guild.channels.create({ name: catName, type: ChannelType.GuildCategory });
+                await message.reply(`📁 Successfully created category **${newCat.name}**!`);
+            } catch (err) {
+                await message.reply(`❌ Failed to create category: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // 4. FAST LOCAL ROLE ASSIGNMENT
         const roleAssignRegex = /(?:assign|give|add)\s+(?:role\s+)?<@&(\d+)>\s+(?:to\s+)?<@!?(\d+)>/i;
         const roleAssignMatch = message.content.match(roleAssignRegex);
 
@@ -628,7 +653,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 2. BULK DELETE CHANNELS IN A CATEGORY
+        // 5. BULK DELETE CHANNELS IN A CATEGORY
         const bulkDelRegex = /(?:delete|remove|purge)\s+(?:all\s+)?(?:the\s+)?channels\s+in\s+(.+)$/i;
         const bulkMatch = message.content.match(bulkDelRegex);
 
@@ -664,37 +689,7 @@ module.exports = (client) => {
             return true;
         }
 
-        // 3. DELETE CATEGORY DIRECTLY
-        const delCatRegex = /(?:delete|remove)\s+(?:the\s+)?category\s+(.+)$/i;
-        const delCatMatch = message.content.match(delCatRegex);
-
-        if (delCatMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-
-            const rawSearch = delCatMatch[1].trim();
-            const cleanSearch = cleanCategoryName(rawSearch);
-
-            const targetCategory = message.guild.channels.cache.find(c => {
-                if (c.type !== ChannelType.GuildCategory) return false;
-                const cleanCatName = cleanCategoryName(c.name);
-                return cleanCatName === cleanSearch || cleanCatName.includes(cleanSearch);
-            });
-
-            if (!targetCategory) {
-                await message.reply(`❌ Could not find category **"${rawSearch}"**.`);
-                return true;
-            }
-
-            const name = targetCategory.name;
-            await targetCategory.delete().catch(() => {});
-            await message.reply(`🗑️ Successfully deleted category **${name}**.`);
-            return true;
-        }
-
-        // 4. PURGE MESSAGES
+        // 6. PURGE MESSAGES
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -717,6 +712,7 @@ module.exports = (client) => {
     // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // ==========================================
+    // 🎨 STRICT POLLINATIONS IMAGE PARSER (Requires explicit art/drawing keywords)
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -725,9 +721,13 @@ module.exports = (client) => {
             imagePrompt = message.content.slice(9).trim();
         } else if (hasName || mentionsBot) {
             const rawText = message.content.toLowerCase();
-            const hasImageKeywords = /(?:create|generate|draw|make|paint|imagine|picture|photo|art|image)/i.test(rawText);
+            
+            // 🛡️ STRICT CHECK: Only trigger if explicitly asking for art/images!
+            // Generic words like "create" or "make" alone will NOT trigger image generation!
+            const hasExplicitImageKeywords = /\b(?:image|picture|photo|art|drawing|pic|illustration|avatar)s?\b/i.test(rawText) ||
+                                            /\b(?:draw|paint|imagine)\b/i.test(rawText);
 
-            if (hasImageKeywords) {
+            if (hasExplicitImageKeywords) {
                 let cleanPrompt = message.content
                     .replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '')
                     .trim();
