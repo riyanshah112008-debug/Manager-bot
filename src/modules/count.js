@@ -1,7 +1,12 @@
-const { PermissionsBitField, SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
+// ==========================================
+// 🔢 STARRY ADVANCED COUNTING ENGINE (modules/count.js)
+// ==========================================
+const { PermissionsBitField, SlashCommandBuilder, EmbedBuilder, ChannelType, MessageFlags } = require('discord.js');
 const mongoose = require('mongoose');
 
-// 🗄️ MONGODB SCHEMA (With High Scores & Settings)
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
+
+// MONGODB SCHEMA
 const CountSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     channelId: { type: String, required: true },
@@ -12,7 +17,7 @@ const CountSchema = new mongoose.Schema({
 
 const CountGuild = mongoose.models.CountGuild || mongoose.model('CountGuild', CountSchema);
 
-// Slash Command Payload for Global Registration
+// SLASH COMMAND PAYLOADS
 const countSetupPayload = new SlashCommandBuilder()
     .setName('setupcount')
     .setDescription('🔢 Configure the server counting game channel.')
@@ -22,37 +27,33 @@ const countSetupPayload = new SlashCommandBuilder()
             .setDescription('The text channel where members will count')
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(true)
-    )
-    .toJSON();
+    );
 
 const countStatsPayload = new SlashCommandBuilder()
     .setName('countstats')
-    .setDescription('📊 View the current counting game statistics and high score.')
-    .toJSON();
+    .setDescription('📊 View the current counting game statistics and high score.');
 
 module.exports = (client) => {
     const PREFIX = '.';
     const countCache = new Map();
 
-    // Fetch database into memory immediately on load
+    // Load Database into Memory Cache
     (async () => {
         try {
-            const data = await CountGuild.find();
+            const data = await CountGuild.find().lean();
             data.forEach(g => countCache.set(g.guildId, {
                 channelId: g.channelId,
                 currentNumber: g.currentNumber,
                 highScore: g.highScore || 0,
                 lastUser: g.lastUser
             }));
-            console.log('✅ Counting Game Module Loaded & Upgraded (MongoDB Synced)');
+            console.log('✅ Counting Game Engine Active (MongoDB Synced & Cached)');
         } catch (err) {
-            console.error('❌ Failed to load counting data:', err);
+            console.error('❌ Failed to load counting data:', err.message);
         }
     })();
 
-    // ==========================================
-    // 1. SLASH COMMAND ROUTER (/setupcount & /countstats)
-    // ==========================================
+    // 1. SLASH COMMAND INTERACTION ROUTER
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
@@ -61,25 +62,32 @@ module.exports = (client) => {
             const existing = countCache.get(interaction.guild.id);
             const highScore = existing ? existing.highScore : 0;
             const newData = { channelId: channel.id, currentNumber: 1, highScore: highScore, lastUser: null };
-            
+
             countCache.set(interaction.guild.id, newData);
             await CountGuild.findOneAndUpdate({ guildId: interaction.guild.id }, newData, { upsert: true });
 
-            await interaction.reply({ content: `✅ <#${channel.id}> is now configured as the Counting Game channel! Start by typing \`1\`.`, ephemeral: true }).catch(() => {});
-            await channel.send('🔢 **Counting Game Started!** The next number is **1**.');
+            await interaction.reply({ content: `✅ <#${channel.id}> is now configured as the Counting Game channel! Start by typing \`1\`.`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            
+            const startEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('🔢 Counting Game Started!')
+                .setDescription('Rules:\n1. Count up starting from **1**.\n2. You cannot count two numbers in a row!\n3. Math expressions (e.g. `5+5`) are allowed.\n\nNext Number: **1**')
+                .setFooter({ text: 'Starry Counting Engine' });
+
+            await channel.send({ embeds: [startEmbed] }).catch(() => {});
         }
 
         if (interaction.commandName === 'countstats') {
             const guildData = countCache.get(interaction.guild.id);
             if (!guildData) {
-                return interaction.reply({ content: '❌ The counting game has not been set up in this server yet! Use `/setupcount`.', ephemeral: true }).catch(() => {});
+                return interaction.reply({ content: '❌ The counting game has not been set up in this server yet! Use `/setupcount`.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
 
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle('📊 Counting Game Statistics')
                 .addFields(
-                    { name: '🔢 Current Number', value: `\`${guildData.currentNumber}\``, inline: true },
+                    { name: '🔢 Current Target Number', value: `\`${guildData.currentNumber}\``, inline: true },
                     { name: '🏆 Server High Score', value: `\`${guildData.highScore}\``, inline: true },
                     { name: '💬 Counting Channel', value: `<#${guildData.channelId}>`, inline: false }
                 )
@@ -90,30 +98,41 @@ module.exports = (client) => {
         }
     });
 
-    // ==========================================
-    // 2. MESSAGE LISTENER & ADVANCED GAME ENGINE
-    // ==========================================
+    // 2. MESSAGE LISTENER & MATH EVALUATION ENGINE
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        // Prefix Command (.setupcount #channel)
+        // Prefix Command (.setupcount / .countstats)
         if (message.content.toLowerCase().startsWith(PREFIX + 'setupcount')) {
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-            
+
             const channel = message.mentions.channels.first() || message.channel;
             const existing = countCache.get(message.guild.id);
             const highScore = existing ? existing.highScore : 0;
             const newData = { channelId: channel.id, currentNumber: 1, highScore: highScore, lastUser: null };
-            
+
             countCache.set(message.guild.id, newData);
             await CountGuild.findOneAndUpdate({ guildId: message.guild.id }, newData, { upsert: true });
 
-            await message.reply(`✅ <#${channel.id}> is now the Counting Game channel! Start by typing \`1\`.`).catch(() => {});
-            
-            if (channel.id !== message.channel.id) {
-                await channel.send('🔢 **Counting Game Started!** The next number is **1**.');
-            }
+            await message.reply(`✅ <#${channel.id}> is now configured as the Counting Game channel! Start by typing \`1\`.`).catch(() => {});
             return;
+        }
+
+        if (message.content.toLowerCase() === PREFIX + 'countstats') {
+            const guildData = countCache.get(message.guild.id);
+            if (!guildData) return message.reply('❌ Counting game not configured. Use `.setupcount` or `/setupcount`.');
+
+            const embed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setTitle('📊 Counting Game Statistics')
+                .addFields(
+                    { name: '🔢 Current Target Number', value: `\`${guildData.currentNumber}\``, inline: true },
+                    { name: '🏆 Server High Score', value: `\`${guildData.highScore}\``, inline: true },
+                    { name: '💬 Channel', value: `<#${guildData.channelId}>`, inline: false }
+                )
+                .setFooter({ text: 'Starry Counting Engine' });
+
+            return message.reply({ embeds: [embed] }).catch(() => {});
         }
 
         const guildData = countCache.get(message.guild.id);
@@ -122,11 +141,10 @@ module.exports = (client) => {
 
         const expectedNumber = guildData.currentNumber;
         const msgText = message.content.trim();
-        
-        // 🧠 Smart Math Solver Support (e.g., users can type "5+5" for 10)
+
+        // Safe Math Evaluator
         let typedNumber = NaN;
         try {
-            // Safety check: only allow digits, basic math symbols (+, -, *, /) and parentheses
             if (/^[\d+\-*/().\s]+$/.test(msgText)) {
                 typedNumber = Math.floor(eval(msgText));
             }
@@ -135,58 +153,58 @@ module.exports = (client) => {
         }
 
         if (isNaN(typedNumber)) {
-            // Non-numeric message in counting channel — delete silently to keep clean
+            // Silently remove non-numeric chatter to keep channel clean
             return message.delete().catch(() => {});
         }
 
         if (typedNumber === expectedNumber && message.author.id !== guildData.lastUser) {
-            // ✅ CORRECT NUMBER
+            // ✅ CORRECT COUNT
             message.react('✅').catch(() => {});
-            
+
             guildData.currentNumber++;
             guildData.lastUser = message.author.id;
 
             // Check & Update High Score
-            if (guildData.currentNumber - 1 > guildData.highScore) {
-                guildData.highScore = guildData.currentNumber - 1;
-                if (guildData.highScore % 25 === 0 && guildData.highScore > 0) {
-                    message.channel.send(`🎉 **New Milestone Reached!** This server has hit a counting streak of **${guildData.highScore}**! 🚀`).catch(() => {});
-                }
+            const currentStreak = guildData.currentNumber - 1;
+            if (currentStreak > guildData.highScore) {
+                guildData.highScore = currentStreak;
+            }
+
+            if (currentStreak % 25 === 0 && currentStreak > 0) {
+                message.channel.send(`🎉 **New Milestone Reached!** This server hit a counting streak of **${currentStreak}**! 🚀`).catch(() => {});
             }
 
             countCache.set(message.guild.id, guildData);
-            
-            // Background DB Sync
+
             CountGuild.updateOne(
                 { guildId: message.guild.id }, 
                 { currentNumber: guildData.currentNumber, highScore: guildData.highScore, lastUser: guildData.lastUser }
             ).catch(() => {});
 
         } else {
-            // ❌ WRONG NUMBER OR SAME USER TWICE
+            // ❌ WRONG NUMBER OR SAME USER REPEAT
             message.react('❌').catch(() => {});
-            
+
             const reason = message.author.id === guildData.lastUser 
-                ? "You can't count two numbers in a row!" 
-                : `You ruined the streak! The next number was supposed to be **${expectedNumber}**!`;
+                ? "You cannot count two numbers in a row!" 
+                : `Incorrect number! Expected **${expectedNumber}**.`;
 
             const previousScore = guildData.currentNumber - 1;
 
             const embed = new EmbedBuilder()
                 .setColor('#ED4245')
                 .setTitle('🚨 STREAK RUINED!')
-                .setDescription(`Ruined by <@${message.author.id}>\n**Reason:** ${reason}\n\n📉 **Streak Reached:** \`${previousScore}\`\n🏆 **Personal Best (High Score):** \`${guildData.highScore}\``)
-                .setFooter({ text: 'The count has been reset to 1. Start again!' })
+                .setDescription(`Ruined by <@${message.author.id}>\n**Reason:** ${reason}\n\n📉 **Streak Reached:** \`${previousScore}\`\n🏆 **Server Record (High Score):** \`${guildData.highScore}\``)
+                .setFooter({ text: 'Count reset to 1. Start again with 1!' })
                 .setTimestamp();
 
             await message.channel.send({ embeds: [embed] });
-            setTimeout(() => message.delete().catch(() => {}), 2000);
-            
-            // Reset Streak in Memory & DB
+
+            // Reset streak
             guildData.currentNumber = 1;
             guildData.lastUser = null;
             countCache.set(message.guild.id, guildData);
-            
+
             CountGuild.updateOne(
                 { guildId: message.guild.id }, 
                 { currentNumber: 1, lastUser: null }
@@ -195,5 +213,4 @@ module.exports = (client) => {
     });
 };
 
-// Export payloads so deploy-commands.js can read them globally
 module.exports.countSlashCommands = [countSetupPayload, countStatsPayload];
