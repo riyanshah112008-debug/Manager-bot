@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1 OF 2)
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (COMPLETE)
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
@@ -400,9 +400,7 @@ client.manager.on('playerEmpty', async player => {
 
     if (channel) channel.send('📭 The queue has ended.');
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2 OF 2)
-// ==========================================
+
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
 client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
@@ -423,7 +421,7 @@ client.once(Events.ClientReady, async () => {
 
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
-        const deploy = require('../deploy-commands.js');
+        const deploy = require('./deploy-commands.js');
         if (deploy && typeof deploy.deployCommands === 'function') {
             await deploy.deployCommands();
         }
@@ -463,7 +461,8 @@ client.on(Events.InteractionCreate, async interaction => {
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
             'automod', 'mod', 'moderate', 'verify-setup',
-            'bump', 'bump-setup', 'autobump', 'set-listing'
+            'bump', 'bump-setup', 'autobump', 'set-listing',
+            'ticketsetup', 'applysetup' // 👈 Added here so modules handle them
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
@@ -676,4 +675,3 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
-                                                                                                                                
