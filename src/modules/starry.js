@@ -29,7 +29,8 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-const bumpEngine = require('./modules/bumpEngine');
+const bumpEngine = require('./bumpEngine');
+
 const ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
 
 const app = express();
