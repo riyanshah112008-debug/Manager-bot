@@ -15,6 +15,18 @@ const MANAGE_ROLES = PermissionFlagsBits.ManageRoles.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
+// Helper to safely require modules with path fallback
+function safeRequire(paths) {
+    for (const p of paths) {
+        try {
+            return require(p);
+        } catch (e) {
+            // Continue to next path candidate
+        }
+    }
+    return null;
+}
+
 // 1. BUILD AUTOROLE COMMAND DEFINITION
 const autoroleOptions = [
     { name: 'sticky_roles', type: 5, required: false, description: 'Enable or disable restoring previous roles on rejoin' }
@@ -34,76 +46,57 @@ const autoroleCommandDef = {
 // 2. SAFELY IMPORT ALL MODULE PAYLOADS
 let masterPayloads = [];
 
-// Master Systems Payloads
-try {
-    const masterModule = require('./src/modules/masterChannelSystems');
-    if (masterModule) {
-        if (masterModule.modMasterPayload) masterPayloads.push(masterModule.modMasterPayload);
-        if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
-        if (masterModule.moderateMasterPayload) masterPayloads.push(masterModule.moderateMasterPayload);
-        if (masterModule.verifySetupPayload) masterPayloads.push(masterModule.verifySetupPayload);
-        if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload);
-        if (masterModule.emergencyLockdownPayload) masterPayloads.push(masterModule.emergencyLockdownPayload);
-        if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
-        if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
-        if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
-    }
-} catch (err) {
-    console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
+// Master Systems Payloads (Starry Module)
+const masterModule = safeRequire(['./src/modules/starry', './modules/starry', './src/modules/masterChannelSystems', './modules/masterChannelSystems']);
+if (masterModule) {
+    if (masterModule.modMasterPayload) masterPayloads.push(masterModule.modMasterPayload);
+    if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
+    if (masterModule.moderateMasterPayload) masterPayloads.push(masterModule.moderateMasterPayload);
+    if (masterModule.verifySetupPayload) masterPayloads.push(masterModule.verifySetupPayload);
+    if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload);
+    if (masterModule.emergencyLockdownPayload) masterPayloads.push(masterModule.emergencyLockdownPayload);
+    if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
+    if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
+    if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
 }
 
 // Tracker Payload
-try {
-    const trackerModule = require('./src/modules/tracker');
-    if (trackerModule && trackerModule.data) {
-        masterPayloads.push(trackerModule.data.toJSON());
-    }
-} catch (err) {
-    console.warn('⚠️ Could not load tracker module payload:', err.message);
+const trackerModule = safeRequire(['./src/modules/tracker', './modules/tracker']);
+if (trackerModule && trackerModule.data) {
+    masterPayloads.push(trackerModule.data.toJSON());
 }
 
 // Counting Module
-try {
-    const countModule = require('./src/modules/count');
-    if (countModule && countModule.countSlashCommands) {
-        masterPayloads.push(...countModule.countSlashCommands);
-    }
-} catch (err) {
-    console.warn('⚠️ Could not load count module payloads:', err.message);
+const countModule = safeRequire(['./src/modules/count', './modules/count']);
+if (countModule && countModule.countSlashCommands) {
+    masterPayloads.push(...countModule.countSlashCommands);
 }
 
 // AFK Command Payload
-try {
-    let afkModule = null;
-    try { afkModule = require('./src/modules/afk'); } catch (e) { afkModule = require('./modules/afk'); }
-    if (afkModule && afkModule.afkPayload) masterPayloads.push(afkModule.afkPayload);
-} catch (err) {
-    console.warn('⚠️ Could not load AFK module payload:', err.message);
+const afkModule = safeRequire(['./src/modules/afk', './modules/afk']);
+if (afkModule && afkModule.afkPayload) {
+    masterPayloads.push(afkModule.afkPayload);
 }
 
 // Bump Engine Payloads
-try {
-    let bumpModule = null;
-    try { bumpModule = require('./src/modules/bumpEngine'); } catch (e) { bumpModule = require('./modules/bumpEngine'); }
-    if (bumpModule && bumpModule.bumpSlashCommands) masterPayloads.push(...bumpModule.bumpSlashCommands);
-} catch (err) {
-    console.warn('⚠️ Could not load bumpEngine payloads:', err.message);
+const bumpModule = safeRequire(['./src/modules/bumpEngine', './modules/bumpEngine']);
+if (bumpModule && bumpModule.bumpSlashCommands) {
+    masterPayloads.push(...bumpModule.bumpSlashCommands);
 }
 
 // Backup Engine Payload
-try {
-    const backupModule = require('./src/modules/serverBackupManager');
-    if (backupModule && backupModule.backupCommandPayload) {
-        masterPayloads.push(backupModule.backupCommandPayload);
-    }
-} catch (err) {
-    try {
-        const altBackupModule = require('./src/modules/backupEngine');
-        if (altBackupModule && altBackupModule.backupCommandPayload) {
-            masterPayloads.push(altBackupModule.backupCommandPayload);
-        }
-    } catch (e) {}
+const backupModule = safeRequire([
+    './src/modules/serverBackupManager', 
+    './modules/serverBackupManager', 
+    './src/modules/backupEngine', 
+    './modules/backupEngine'
+]);
+if (backupModule && backupModule.backupCommandPayload) {
+    masterPayloads.push(backupModule.backupCommandPayload);
 }
+
+// Social Command Payload
+const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
 
 const commands = [
     ...masterPayloads,
@@ -137,10 +130,9 @@ const commands = [
         .toJSON()
 ];
 
-try {
-    const { socialCommandPayload } = require('./src/modules/socialActions');
-    if (socialCommandPayload) commands.push(socialCommandPayload);
-} catch (err) {}
+if (socialModule && socialModule.socialCommandPayload) {
+    commands.push(socialModule.socialCommandPayload);
+}
 
 commands.push(
     new SlashCommandBuilder()
@@ -209,7 +201,9 @@ async function deployCommands() {
     if (!token) throw new Error('🛑 CRITICAL: DISCORD_TOKEN, BOT_TOKEN, or TOKEN environment variable must be set.');
 
     if (!clientId) {
-        try { clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8'); } catch (e) {
+        try { 
+            clientId = Buffer.from(token.split('.')[0], 'base64').toString('utf-8'); 
+        } catch (e) {
             throw new Error('🛑 Could not parse CLIENT_ID from TOKEN.');
         }
     }
