@@ -1,13 +1,14 @@
 // ==========================================
 // 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 1 OF 2)
 // ==========================================
-require('dotenv').config();
 const { 
     REST, 
     Routes, 
     PermissionFlagsBits, 
     SlashCommandBuilder, 
-    ChannelType 
+    ChannelType,
+    ApplicationIntegrationType,
+    InteractionContextType
 } = require('discord.js');
 
 const ADMIN = PermissionFlagsBits.Administrator.toString();
@@ -116,16 +117,26 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
-    // 🔍 WHOIS USER LOOKUP COMMAND
+        // 🔍 GLOBAL USER APP WHOIS COMMAND (Usable Everywhere)
     new SlashCommandBuilder()
         .setName('whois')
         .setDescription('🔍 Lookup detailed information and permissions for a user')
+        .setIntegrationTypes(
+            ApplicationIntegrationType.GuildInstall, 
+            ApplicationIntegrationType.UserInstall
+        )
+        .setContexts(
+            InteractionContextType.Guild, 
+            InteractionContextType.BotDM, 
+            InteractionContextType.PrivateChannel
+        )
         .addUserOption(option => 
             option.setName('target')
                 .setDescription('Select the member you want to look up')
                 .setRequired(false)
         )
         .toJSON(),
+
 
     // 📊 SINGLE LEVELING SLASH COMMAND
     new SlashCommandBuilder()
