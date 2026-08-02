@@ -24,7 +24,7 @@ const path = require('path');
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 // Safely Require Mongoose Models
-let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote;
+let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote, CountGuild;
 try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {}
 try { ChestChannel = mongoose.models.ChestChannel || require('../models/ChestChannel'); } catch (e) {}
 try { BoostChannel = mongoose.models.BoostChannel || require('../models/BoostChannel'); } catch (e) {}
@@ -42,6 +42,15 @@ const masterSecuritySchema = new mongoose.Schema({
     userInfractions: { type: Map, of: Number, default: {} }
 });
 MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+
+const CountSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    channelId: { type: String, required: true },
+    currentNumber: { type: Number, default: 1 },
+    highScore: { type: Number, default: 0 },
+    lastUser: { type: String, default: null }
+});
+CountGuild = mongoose.models.CountGuild || mongoose.model('CountGuild', CountSchema);
 
 // SQLite Protection Database
 const protectDb = new Database('protect.db');
@@ -523,7 +532,69 @@ module.exports = (client) => {
         const text = message.content.toLowerCase().trim();
         const botMember = message.guild.members.me;
 
-        // 1. FAST LOCAL ROLE ASSIGNMENT (e.g. "Assign @Admin to @toxicwaste", "Starry give role @Admin to @toxicwaste")
+        // 0. UPGRADED .PREMIUM SUITE DISPLAY COMMAND
+        if (text === '.premium' || text === 'starry premium' || text === 'jarvis premium') {
+            const displayName = client.user.username;
+            const premiumEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setAuthor({ name: `${displayName} Protocol | Premium Suite`, iconURL: client.user.displayAvatarURL() })
+                .setTitle('💎 Starry Premium Features & Capabilities')
+                .setDescription('Below is the complete overview of all high-tier, automated, and AI-powered features active on this server:')
+                .addFields(
+                    { 
+                        name: '⚡ 1. High-Speed Gemini Multi-Model AI Engine', 
+                        value: '• Sub-second response priority via Gemini 2.5 Flash & 2.0 Flash.\n• Dynamic multi-key API rotation with automatic failover.\n• Natural language parsing for moderation, channels, and roles.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🎨 2. High-Res Flux AI Image Generator', 
+                        value: '• Instant art generation using the Flux model (`.imagine <prompt>` or `Starry draw...`).\n• Unique seed randomization with zero queue delays.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '♾️ 3. Infinite-Time Social Action Buttons', 
+                        value: '• Permanent reciprocal buttons (`Pat back`, `Hug back`, `Kiss back`, `Cuddle`, `Bite`, `Slap`).\n• Stateless execution—buttons never expire, even months or years later!', 
+                        inline: false 
+                    },
+                    { 
+                        name: '💎 4. Premium Branded Moderation DMs', 
+                        value: '• Rich, color-coded DM notices sent to offenders upon Ban, Kick, or Timeout.\n• Includes official Case IDs, moderator tags, reason blocks, and timestamps.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🌐 5. Multilingual Translation & Auto-Detect Engine', 
+                        value: '• Dynamic multi-language translation and language detection across text channels.\n• Enables seamless global community communication.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '⚡ 6. Instant Local Admin Actions (<50ms)', 
+                        value: '• Zero AI rate-limit risk for administrative commands.\n• Bulk category purges, role assignments, voice/text channel creation, and message clearing.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🎵 7. Lavalink Audio Filters & Autoplay Engine', 
+                        value: '• Related track autoplay recommendations when the queue ends.\n• Audio filters: Bassboost, 8D Audio, Nightcore, Vaporwave, Tremolo, Vibrato, Karaoke.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🛡️ 8. Master Server Infrastructure & Telemetry', 
+                        value: '• Autonomous layout deployment (`/setup-starry`) with 6 categories & 22 security channels.\n• Real-time 60-second telemetry monitor (`#server-status-monitor`).\n• Emergency Nuke & Purge protocol (`/emergency-nuke`).', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🔢 9. Smart Counting Game & High-Score Engine', 
+                        value: '• Interactive counting channel setup (`/setupcount` or `.setupcount`).\n• Smart Math Solver (evaluates expressions like `5+5`).\n• Live streak tracker, server high scores (`/countstats`), and milestone alerts.', 
+                        inline: false 
+                    }
+                )
+                .setFooter({ text: 'Starry Master System • Premium Tier Active', iconURL: client.user.displayAvatarURL() })
+                .setTimestamp();
+
+            await message.reply({ embeds: [premiumEmbed] });
+            return true;
+        }
+
+        // 1. FAST LOCAL ROLE ASSIGNMENT
         const roleAssignRegex = /(?:assign|give|add)\s+(?:role\s+)?<@&(\d+)>\s+(?:to\s+)?<@!?(\d+)>/i;
         const roleAssignMatch = message.content.match(roleAssignRegex);
 
@@ -701,12 +772,13 @@ module.exports = (client) => {
 You are ${displayName}, an advanced all-in-one Discord AI companion and server administrator.
 
 YOUR FULL CAPABILITIES INCLUDE:
-1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command.
+1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command (`.imagine` or `Starry draw...`).
 2. 🎵 Music & DJ Controls: Playing high-quality audio, track control (pause, skip, loop, volume), and VC locks.
 3. 🌐 Translator & Multilingual Engine: Auto-translating text between languages, detecting language, and multilingual support.
-4. 🛡️ Autonomous Moderation & Security: Kicking, banning, unbanning, timing out users, clearing messages, mass-ping AutoMod, and security logging.
-5. 📁 Channel & Category Management: Dynamically creating, deleting, and organizing text/voice channels and categories.
-6. 🎭 Role Management: Creating roles, assigning/removing roles from members, and managing permissions.
+4. 🔢 Smart Counting Game & High Scores: Managing server counting channels (`/setupcount` or `.setupcount`), evaluating math expressions (e.g. `5+5`), tracking streaks, and displaying stats (`/countstats`).
+5. 🛡️ Autonomous Moderation & Security: Kicking, banning, unbanning, timing out users, clearing messages, mass-ping AutoMod, and security logging.
+6. 📁 Channel & Category Management: Dynamically creating, deleting, and organizing text/voice channels and categories.
+7. 🎭 Role Management: Creating roles, assigning/removing roles from members, and managing permissions.
 
 COMMAND SPECIFICATION PROTOCOL:
 If the user asks you to perform a server management action, embed the appropriate tag anywhere in your output:
@@ -718,7 +790,7 @@ If the user asks you to perform a server management action, embed the appropriat
   * Create Category: [CMD:CREATECATEGORY|NAME:category_name]
   * Delete Category: [CMD:DELETECATEGORY|NAME:category_name]
 
-When asked about your features, list ALL 6 of your capabilities (Image Generation, Music, Translator, Moderation, Channels/Categories, and Roles) in a clean bulleted format. Always acknowledge requests warmly, clearly, and concisely.
+When asked about your features, list ALL 7 of your capabilities (Image Generation, Music, Translator, Counting Game, Moderation, Channels/Categories, and Roles) in a clean bulleted format. Always acknowledge requests warmly, clearly, and concisely.
 
 [USER MESSAGE]
 ${message.author.username} says: ${message.content}`;
