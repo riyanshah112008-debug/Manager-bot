@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1/6)
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 1 OF 2)
 // ==========================================
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
@@ -128,9 +128,7 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2/6)
-// ==========================================
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -213,9 +211,8 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 3/6)
-// ==========================================
+
+// 🎵 LAVALINK NODES (ORIGINAL CONFIGURATION)
 const Nodes = [
     {
         name: 'Main-Node-Lavasearch',
@@ -282,7 +279,6 @@ client.manager.shoukaku.on('disconnect', (name, count) => {
 });
 
 client.manager.on('playerStart', async (player, track) => {
-    // 📻 Save current track in memory so autoplay engine knows what to recommend next
     player.data.set('previousTrack', track);
 
     const channel = client.channels.cache.get(player.textId);
@@ -370,7 +366,6 @@ client.manager.on('playerException', (player) => {
     } catch (e) {}
 });
 
-// 📻 UPGRADED AUTOPLAY PLAYEREMPTY ENGINE
 client.manager.on('playerEmpty', async player => {
     const channel = client.channels.cache.get(player.textId);
     const isAutoplay = player.data.get('autoplay');
@@ -383,7 +378,6 @@ client.manager.on('playerEmpty', async player => {
                     await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
                 }
 
-                // Search YouTube Mix / Related Recommendations
                 const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
                 let result = await client.manager.search(searchQuery, { requester: previousTrack.requester });
 
@@ -407,7 +401,7 @@ client.manager.on('playerEmpty', async player => {
     if (channel) channel.send('📭 The queue has ended.');
 });
 // ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 4/6)
+// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 2 OF 2)
 // ==========================================
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -460,9 +454,7 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 5/6)
-// ==========================================
+
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
 
@@ -555,9 +547,8 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-// ==========================================
-// 🛡️ STARRY MASTER ENGINE - INDEX.JS (PART 6/6)
-// ==========================================
+
+// 🧩 MODULE INITIALIZERS (Duplicates Removed)
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
@@ -594,8 +585,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Autorole & Sticky Roles', fn: () => require('./modules/autorole.js')(client, app) },
     { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
     { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
-    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
-    { name: 'Master Channel Systems', fn: () => require('./modules/masterChannelSystems.js')(client, app) }
+    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) }
 ];
 
 function loadSlashCommands() {
@@ -686,3 +676,4 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
+                                                                                                                                
