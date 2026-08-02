@@ -364,32 +364,31 @@ module.exports = (client) => {
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
-    // ==========================================
+  // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
 // ==========================================
-    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS - NO EXPIRATION EVER)
+    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS & ACTIVE PANELS)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
-        // 1. PERMANENT INFINITE-TIME SOCIAL ACTION BUTTON HANDLER
+        // ----------------------------------------------------
+        // 1. PERMANENT INFINITE-TIME SOCIAL ACTION BUTTONS
+        // ----------------------------------------------------
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_'); // Format: social_<actionType>_<targetUserId>
             const actionType = parts[1] || 'pat';
             let targetUserId = parts[2] && parts[2] !== 'back' ? parts[2] : null;
 
-            // Fallback: Parse target from original embed description if present
             if (!targetUserId && interaction.message.embeds.length > 0) {
                 const desc = interaction.message.embeds[0].description || '';
                 const match = desc.match(/<@!?(\d+)>/);
                 if (match) targetUserId = match[1];
             }
 
-            // Fallback: Default to message author if no explicit target ID
             if (!targetUserId && interaction.message.author) {
                 targetUserId = interaction.message.author.id;
             }
 
-            // Infinite-time GIF Repository for All Social Commands
             const actionGifs = {
                 pat: 'https://media.tenor.com/E6f13T34EwAAAAAC/anime-pat.gif',
                 hug: 'https://media.tenor.com/gg15582f3cAAAAAC/hug-anime.gif',
@@ -412,7 +411,6 @@ module.exports = (client) => {
                 .setImage(gifUrl)
                 .setTimestamp();
 
-            // Permanent Infinite-Time Reciprocal Button
             const reciprocalRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`social_${actionType.toLowerCase()}_${interaction.user.id}`)
@@ -424,7 +422,146 @@ module.exports = (client) => {
             return interaction.reply({ embeds: [replyEmbed], components: [reciprocalRow] }).catch(() => {});
         }
 
-        // 2. DJ MUSIC PLAYER BUTTON HANDLER
+        // ----------------------------------------------------
+        // 2. SUPPORT TICKET CREATOR (sys_create_ticket)
+        // ----------------------------------------------------
+        if (interaction.isButton() && interaction.customId === 'sys_create_ticket') {
+            try {
+                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+                const guild = interaction.guild;
+                const member = interaction.member;
+
+                let existingCh = guild.channels.cache.find(c => c.name === `ticket-${member.user.username.toLowerCase()}`);
+                if (existingCh) {
+                    return interaction.editReply({ content: `❌ You already have an open support ticket in <#${existingCh.id}>!` });
+                }
+
+                let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
+                let supportCategory = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('support'));
+
+                const ticketChannel = await guild.channels.create({
+                    name: `ticket-${member.user.username.toLowerCase()}`,
+                    type: ChannelType.GuildText,
+                    parent: supportCategory ? supportCategory.id : null,
+                    permissionOverwrites: [
+                        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                        { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] },
+                        { id: guild.members.me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] },
+                        ...(staffRole ? [{ id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : [])
+                    ]
+                });
+
+                const ticketEmbed = new EmbedBuilder()
+                    .setColor('#00F2FE')
+                    .setTitle(`🎫 Support Ticket | ${member.user.username}`)
+                    .setDescription(`Hello <@${member.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
+                    .setTimestamp();
+
+                const closeRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+                );
+
+                await ticketChannel.send({ content: `<@${member.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [closeRow] });
+                return interaction.editReply({ content: `✅ Ticket created successfully! Head over to <#${ticketChannel.id}>.` });
+            } catch (err) {
+                console.error('Ticket Creation Error:', err);
+                if (!interaction.replied && !interaction.deferred) {
+                    return interaction.reply({ content: '❌ Failed to create ticket due to missing bot permissions.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                } else {
+                    return interaction.editReply({ content: '❌ Failed to create ticket due to missing bot permissions.' }).catch(() => {});
+                }
+            }
+        }
+
+        // ----------------------------------------------------
+        // 3. STAFF APPLICATION MODAL FORM (sys_apply_staff)
+        // ----------------------------------------------------
+        if (interaction.isButton() && interaction.customId === 'sys_apply_staff') {
+            const modal = new ModalBuilder()
+                .setCustomId('sys_staff_modal')
+                .setTitle('📝 Staff Application Form');
+
+            const ageInput = new TextInputBuilder()
+                .setCustomId('app_age')
+                .setLabel('How old are you?')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
+
+            const expInput = new TextInputBuilder()
+                .setCustomId('app_exp')
+                .setLabel('Prior Staff/Moderation Experience?')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true);
+
+            const reasonInput = new TextInputBuilder()
+                .setCustomId('app_reason')
+                .setLabel('Why do you want to join our team?')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(ageInput),
+                new ActionRowBuilder().addComponents(expInput),
+                new ActionRowBuilder().addComponents(reasonInput)
+            );
+
+            return interaction.showModal(modal).catch(() => {});
+        }
+
+        // Staff Application Modal Submission Handler
+        if (interaction.isModalSubmit() && interaction.customId === 'sys_staff_modal') {
+            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            const age = interaction.fields.getTextInputValue('app_age');
+            const exp = interaction.fields.getTextInputValue('app_exp');
+            const reason = interaction.fields.getTextInputValue('app_reason');
+
+            const logChannel = client.getLogChannel ? client.getLogChannel(interaction.guild, 'moderate') : interaction.guild.channels.cache.find(c => c.name.includes('log'));
+
+            const appEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle(`📝 New Staff Application | ${interaction.user.username}`)
+                .addFields(
+                    { name: '👤 Applicant', value: `<@${interaction.user.id}> (\`${interaction.user.id}\`)`, inline: true },
+                    { name: '🎂 Age', value: age, inline: true },
+                    { name: '📜 Experience', value: exp, inline: false },
+                    { name: '💡 Reason', value: reason, inline: false }
+                )
+                .setTimestamp();
+
+            if (logChannel) await logChannel.send({ embeds: [appEmbed] }).catch(() => {});
+            return interaction.editReply({ content: '✅ Your staff application has been submitted to management for review!' });
+        }
+
+        // ----------------------------------------------------
+        // 4. CLOSE SUPPORT TICKET BUTTON
+        // ----------------------------------------------------
+        if (interaction.isButton() && interaction.customId === 'sys_close_ticket') {
+            await interaction.reply('🔒 Closing this ticket in 5 seconds...').catch(() => {});
+            setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 5. WEB VERIFICATION LINK GENERATOR BUTTON
+        // ----------------------------------------------------
+        if (interaction.isButton() && interaction.customId.startsWith('verify_role_')) {
+            const roleId = interaction.customId.split('verify_role_')[1];
+            const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId: roleId });
+
+            const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`;
+            const verifyUrl = `${hostUrl}/verify?token=${token}`;
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setLabel('Verify Human Access').setStyle(ButtonStyle.Link).setURL(verifyUrl).setEmoji('🌐')
+            );
+
+            return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        }
+
+        // ----------------------------------------------------
+        // 6. DJ MUSIC PLAYER BUTTON HANDLER
+        // ----------------------------------------------------
         if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
             const guild = interaction.guild;
             const member = interaction.member;
@@ -448,7 +585,9 @@ module.exports = (client) => {
             return;
         }
 
-        // 3. SLASH COMMAND ROUTER
+        // ----------------------------------------------------
+        // 7. SLASH COMMAND ROUTER
+        // ----------------------------------------------------
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setup-starry') {
                 if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
@@ -476,13 +615,13 @@ module.exports = (client) => {
         if (!str) return '';
         return str
             .toLowerCase()
-            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
             .replace(/&/g, 'and')
             .replace(/[^a-z0-9\s]/g, '')
             .replace(/\s+/g, ' ')
             .trim();
     }
-    // ==========================================
+// ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
 // ==========================================
     async function handleAutoModPing(message) {
