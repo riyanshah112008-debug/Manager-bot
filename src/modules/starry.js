@@ -405,8 +405,9 @@ module.exports = (client) => {
             }
         }
     };
-  // ==========================================
+// ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
+// File Path: modules/starry.js
 // ==========================================
     // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS & ACTIVE PANELS)
     client.on('interactionCreate', async (interaction) => {
@@ -466,24 +467,30 @@ module.exports = (client) => {
         // ----------------------------------------------------
         // 2. SUPPORT TICKET CREATOR (sys_create_ticket)
         // ----------------------------------------------------
-        if (interaction.isButton() && interaction.customId === 'sys_create_ticket') {
+        if (interaction.isButton() && (interaction.customId === 'sys_create_ticket' || interaction.customId === 'create_ticket')) {
             try {
                 await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
                 const guild = interaction.guild;
                 const member = interaction.member;
 
-                let existingCh = guild.channels.cache.find(c => c.name === `ticket-${member.user.username.toLowerCase()}`);
+                let existingCh = guild.channels.cache.find(c => c.topic === member.id && c.name.includes('ticket-'));
                 if (existingCh) {
                     return interaction.editReply({ content: `❌ You already have an open support ticket in <#${existingCh.id}>!` });
                 }
 
+                // Get or create "OPENED TICKETS" category
+                let openedCategory = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'opened tickets');
+                if (!openedCategory) {
+                    openedCategory = await guild.channels.create({ name: 'OPENED TICKETS', type: ChannelType.GuildCategory }).catch(() => null);
+                }
+
                 let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
-                let supportCategory = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('support'));
 
                 const ticketChannel = await guild.channels.create({
                     name: `ticket-${member.user.username.toLowerCase()}`,
                     type: ChannelType.GuildText,
-                    parent: supportCategory ? supportCategory.id : null,
+                    topic: member.id,
+                    parent: openedCategory ? openedCategory.id : null,
                     permissionOverwrites: [
                         { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
                         { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] },
@@ -496,13 +503,16 @@ module.exports = (client) => {
                     .setColor('#00F2FE')
                     .setTitle(`🎫 Support Ticket | ${member.user.username}`)
                     .setDescription(`Hello <@${member.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
+                    .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
                     .setTimestamp();
 
-                const closeRow = new ActionRowBuilder().addComponents(
+                // 📌 INCLUDES BOTH CLAIM AND CLOSE BUTTONS!
+                const actionRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('sys_claim_ticket').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
                     new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
                 );
 
-                await ticketChannel.send({ content: `<@${member.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [closeRow] });
+                await ticketChannel.send({ content: `<@${member.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [actionRow] });
                 return interaction.editReply({ content: `✅ Ticket created successfully! Head over to <#${ticketChannel.id}>.` });
             } catch (err) {
                 console.error('Ticket Creation Error:', err);
@@ -515,9 +525,143 @@ module.exports = (client) => {
         }
 
         // ----------------------------------------------------
-        // 3. STAFF APPLICATION MODAL FORM (sys_apply_staff)
+        // 3. CLAIM TICKET BUTTON (sys_claim_ticket)
         // ----------------------------------------------------
-        if (interaction.isButton() && interaction.customId === 'sys_apply_staff') {
+        if (interaction.isButton() && (interaction.customId === 'sys_claim_ticket' || interaction.customId === 'claim_ticket')) {
+            await interaction.deferUpdate().catch(() => {});
+
+            const channel = interaction.channel;
+            const staffMember = interaction.user;
+
+            const cleanName = channel.name.replace('ticket-', '').replace('claimed-', '');
+            await channel.setName(`claimed-${cleanName}`).catch(() => {});
+
+            await channel.permissionOverwrites.edit(staffMember.id, {
+                ViewChannel: true,
+                SendMessages: true,
+                ManageChannels: true
+            }).catch(() => {});
+
+            const claimedEmbed = new EmbedBuilder()
+                .setColor('#2ecc71')
+                .setTitle('✋ Ticket Claimed')
+                .setDescription(`This ticket is now being handled by <@${staffMember.id}>.`)
+                .setTimestamp();
+
+            const updatedRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('sys_claim_ticket').setLabel(`Claimed by ${staffMember.username}`).setStyle(ButtonStyle.Secondary).setDisabled(true).setEmoji('✅'),
+                new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+            );
+
+            await interaction.editReply({ components: [updatedRow] }).catch(() => {});
+            await channel.send({ embeds: [claimedEmbed] }).catch(() => {});
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 4. CLOSE SUPPORT TICKET BUTTON (sys_close_ticket)
+        // ----------------------------------------------------
+        if (interaction.isButton() && (interaction.customId === 'sys_close_ticket' || interaction.customId === 'close_ticket')) {
+            await interaction.deferUpdate().catch(() => {});
+
+            const channel = interaction.channel;
+            const guild = interaction.guild;
+            const ticketOwnerId = channel.topic;
+
+            // Move channel to "CLOSED TICKETS" category
+            let closedCategory = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'closed tickets');
+            if (!closedCategory) {
+                closedCategory = await guild.channels.create({ name: 'CLOSED TICKETS', type: ChannelType.GuildCategory }).catch(() => null);
+            }
+            if (closedCategory) {
+                await channel.setParent(closedCategory.id).catch(() => {});
+            }
+
+            if (ticketOwnerId) {
+                await channel.permissionOverwrites.edit(ticketOwnerId, { SendMessages: false }).catch(() => {});
+            }
+
+            const closedEmbed = new EmbedBuilder()
+                .setColor('#ED4245')
+                .setTitle('🔒 Ticket Closed')
+                .setDescription(`Ticket closed by <@${interaction.user.id}>.\nMoved to **CLOSED TICKETS**. Use the options below to save a transcript or delete this channel manually.`)
+                .setTimestamp();
+
+            const managementRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('sys_transcript_ticket').setLabel('Save Transcript').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+                new ButtonBuilder().setCustomId('sys_delete_ticket').setLabel('Delete Ticket').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+            );
+
+            // 🛑 REMOVED AUTOMATIC 5-SECOND DELETION TIMER!
+            await channel.send({ embeds: [closedEmbed], components: [managementRow] });
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 5. SAVE TRANSCRIPT (sys_transcript_ticket)
+        // ----------------------------------------------------
+        if (interaction.isButton() && (interaction.customId === 'sys_transcript_ticket' || interaction.customId === 'transcript_ticket')) {
+            await interaction.deferReply();
+
+            try {
+                const channel = interaction.channel;
+                const messages = await channel.messages.fetch({ limit: 100 });
+                
+                let transcriptContent = `==================================================\n`;
+                transcriptContent += `TICKET TRANSCRIPT: #${channel.name}\n`;
+                transcriptContent += `SERVER: ${interaction.guild.name}\n`;
+                transcriptContent += `GENERATED BY: ${interaction.user.tag} (${interaction.user.id})\n`;
+                transcriptContent += `DATE: ${new Date().toLocaleString()}\n`;
+                transcriptContent += `==================================================\n\n`;
+
+                const sortedMessages = Array.from(messages.values()).reverse();
+
+                for (const msg of sortedMessages) {
+                    const time = new Date(msg.createdTimestamp).toLocaleString();
+                    const author = `${msg.author.tag} (${msg.author.id})`;
+                    let content = msg.content || '[No Text Content]';
+
+                    if (msg.attachments.size > 0) {
+                        const attachments = msg.attachments.map(a => a.url).join(', ');
+                        content += ` [Attachments: ${attachments}]`;
+                    }
+
+                    if (msg.embeds.length > 0) {
+                        content += ` [Embedded Message Content]`;
+                    }
+
+                    transcriptContent += `[${time}] ${author}:\n${content}\n--------------------------------------------------\n`;
+                }
+
+                const { AttachmentBuilder } = require('discord.js');
+                const attachment = new AttachmentBuilder(Buffer.from(transcriptContent, 'utf-8'), { name: `transcript-${channel.name}.txt` });
+
+                const transcriptEmbed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle('📝 Ticket Transcript Generated')
+                    .setDescription(`Transcript saved for **#${channel.name}**.`)
+                    .setTimestamp();
+
+                await interaction.editReply({ embeds: [transcriptEmbed], files: [attachment] });
+            } catch (err) {
+                console.error('Transcript Error:', err);
+                await interaction.editReply({ content: '❌ Failed to generate transcript.' });
+            }
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 6. DELETE TICKET (sys_delete_ticket)
+        // ----------------------------------------------------
+        if (interaction.isButton() && (interaction.customId === 'sys_delete_ticket' || interaction.customId === 'delete_ticket')) {
+            await interaction.channel.delete().catch(() => {});
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 7. STAFF APPLICATION MODAL FORM (sys_apply_staff)
+        // ----------------------------------------------------
+        if (interaction.isButton() && (interaction.customId === 'sys_apply_staff' || interaction.customId === 'apply_staff')) {
             const modal = new ModalBuilder()
                 .setCustomId('sys_staff_modal')
                 .setTitle('📝 Staff Application Form');
@@ -574,16 +718,7 @@ module.exports = (client) => {
         }
 
         // ----------------------------------------------------
-        // 4. CLOSE SUPPORT TICKET BUTTON
-        // ----------------------------------------------------
-        if (interaction.isButton() && interaction.customId === 'sys_close_ticket') {
-            await interaction.reply('🔒 Closing this ticket in 5 seconds...').catch(() => {});
-            setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
-            return;
-        }
-
-        // ----------------------------------------------------
-        // 5. WEB VERIFICATION LINK GENERATOR BUTTON
+        // 8. WEB VERIFICATION LINK GENERATOR BUTTON
         // ----------------------------------------------------
         if (interaction.isButton() && interaction.customId.startsWith('verify_role_')) {
             const roleId = interaction.customId.split('verify_role_')[1];
@@ -600,6 +735,68 @@ module.exports = (client) => {
             return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
+        // ----------------------------------------------------
+        // 9. DJ MUSIC PLAYER BUTTON HANDLER
+        // ----------------------------------------------------
+        if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
+            const guild = interaction.guild;
+            const member = interaction.member;
+            const voiceChannel = member?.voice?.channel;
+            const player = client.manager ? client.manager.getPlayer(guild.id) : null;
+
+            if (!voiceChannel) return interaction.reply({ content: '❌ Connect to a voice channel first!', flags: [EPHEMERAL_FLAG] });
+            if (!player) return interaction.reply({ content: '❌ No active player in this server!', flags: [EPHEMERAL_FLAG] });
+
+            await interaction.deferUpdate().catch(() => {});
+            try {
+                if (interaction.customId === 'music_pause') player.pause(!player.paused);
+                else if (interaction.customId === 'music_skip') player.skip();
+                else if (interaction.customId === 'music_stop') player.destroy();
+                else if (interaction.customId === 'music_loop') player.setLoop(player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none');
+                else if (interaction.customId === 'dj_vol_down') player.setVolume(Math.max(10, player.volume - 10));
+                else if (interaction.customId === 'dj_vol_up') player.setVolume(Math.min(100, player.volume + 10));
+                else if (interaction.customId === 'dj_lock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
+                else if (interaction.customId === 'dj_unlock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: true });
+            } catch (err) {}
+            return;
+        }
+
+        // ----------------------------------------------------
+        // 10. SLASH COMMAND ROUTER
+        // ----------------------------------------------------
+        if (interaction.isChatInputCommand()) {
+            if (interaction.commandName === 'setup-starry') {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
+                const result = await provisionMasterServerStructure(interaction);
+                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
+                return interaction.editReply({ embeds: [embed] });
+            }
+
+            if (interaction.commandName === 'emergency-nuke') {
+                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                const targetScope = interaction.options.getString('target', true);
+                if (targetScope === 'channel') {
+                    const channel = interaction.options.getChannel('channel') || interaction.channel;
+                    const pos = channel.position;
+                    const newCh = await channel.clone();
+                    await channel.delete().catch(() => {});
+                    await newCh.setPosition(pos).catch(() => {});
+                    return newCh.send({ content: '⚡ **EMERGENCY NUKE:** Channel purged and recreated.' });
+                }
+            }
+        }
+    });
+
+    function cleanCategoryName(str) {
+        if (!str) return '';
+        return str
+            .toLowerCase()
+            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+            .replace(/&/g, 'and')
+            .replace(/[^a-z0-9\s]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
         // ----------------------------------------------------
         // 6. DJ MUSIC PLAYER BUTTON HANDLER
         // ----------------------------------------------------
