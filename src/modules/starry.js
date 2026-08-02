@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (COMPLETE UNIFIED FILE)
 // File Path: modules/starry.js
 // ==========================================
 const { 
@@ -24,9 +24,11 @@ const path = require('path');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Safely Require Mongoose Models (Relative to modules/)
+// Safely Require Mongoose Models
 let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote, CountGuild;
-try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {}
+try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {
+    try { ServerSettings = mongoose.models.ServerSettings || require('./models/ServerSettings'); } catch (err) {}
+}
 try { ChestChannel = mongoose.models.ChestChannel || require('../models/ChestChannel'); } catch (e) {}
 try { BoostChannel = mongoose.models.BoostChannel || require('../models/BoostChannel'); } catch (e) {}
 
@@ -127,9 +129,7 @@ async function generateAIResponseWithRetry(prompt) {
 
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
-// ==========================================
+
 async function executeFullGuildBackup(guild) {
     try {
         const allRoles = await guild.roles.fetch();
@@ -197,9 +197,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
     return channel;
 }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
-// ==========================================
+
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
     const botMember = guild.members.me;
@@ -246,6 +244,7 @@ async function provisionMasterServerStructure(interaction) {
     const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
     await createNonDuplicatingActiveChannel(guild, { name: 'verify-here', parent: supportCat.id, moduleType: 'verification', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
+
     // 5. ADMIN & STAFF HQ CATEGORY
     const staffCat = await getOrCreateCategory(guild, '👑 ADMIN & STAFF HQ', [hideEveryone, staffFullControl, botFullControl]);
     await createNonDuplicatingActiveChannel(guild, { name: 'owners-chat', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
@@ -285,10 +284,7 @@ function start60sChannelTelemetryLoop(client) {
         });
     }, 60000);
 }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
-// File Path: modules/starry.js
-// ==========================================
+
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
@@ -417,12 +413,8 @@ module.exports = async (client) => {
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
-    
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
-// File Path: modules/starry.js
-// ==========================================
-    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER
+
+    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
@@ -549,219 +541,7 @@ module.exports = async (client) => {
             .replace(/\s+/g, ' ')
             .trim();
     }
-        // ----------------------------------------------------
-        // 6. DELETE TICKET (sys_delete_ticket)
-        // ----------------------------------------------------
-        if (interaction.isButton() && (interaction.customId === 'sys_delete_ticket' || interaction.customId === 'delete_ticket')) {
-            await interaction.channel.delete().catch(() => {});
-            return;
-        }
 
-        // ----------------------------------------------------
-        // 7. STAFF APPLICATION MODAL FORM (sys_apply_staff)
-        // ----------------------------------------------------
-        if (interaction.isButton() && (interaction.customId === 'sys_apply_staff' || interaction.customId === 'apply_staff')) {
-            const modal = new ModalBuilder()
-                .setCustomId('sys_staff_modal')
-                .setTitle('📝 Staff Application Form');
-
-            const ageInput = new TextInputBuilder()
-                .setCustomId('app_age')
-                .setLabel('How old are you?')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true);
-
-            const expInput = new TextInputBuilder()
-                .setCustomId('app_exp')
-                .setLabel('Prior Staff/Moderation Experience?')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-
-            const reasonInput = new TextInputBuilder()
-                .setCustomId('app_reason')
-                .setLabel('Why do you want to join our team?')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(ageInput),
-                new ActionRowBuilder().addComponents(expInput),
-                new ActionRowBuilder().addComponents(reasonInput)
-            );
-
-            return interaction.showModal(modal).catch(() => {});
-        }
-
-        // Staff Application Modal Submission Handler
-        if (interaction.isModalSubmit() && interaction.customId === 'sys_staff_modal') {
-            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
-            const age = interaction.fields.getTextInputValue('app_age');
-            const exp = interaction.fields.getTextInputValue('app_exp');
-            const reason = interaction.fields.getTextInputValue('app_reason');
-
-            const logChannel = client.getLogChannel ? client.getLogChannel(interaction.guild, 'moderate') : interaction.guild.channels.cache.find(c => c.name.includes('log'));
-
-            const appEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setTitle(`📝 New Staff Application | ${interaction.user.username}`)
-                .addFields(
-                    { name: '👤 Applicant', value: `<@${interaction.user.id}> (\`${interaction.user.id}\`)`, inline: true },
-                    { name: '🎂 Age', value: age, inline: true },
-                    { name: '📜 Experience', value: exp, inline: false },
-                    { name: '💡 Reason', value: reason, inline: false }
-                )
-                .setTimestamp();
-
-            if (logChannel) await logChannel.send({ embeds: [appEmbed] }).catch(() => {});
-            return interaction.editReply({ content: '✅ Your staff application has been submitted to management for review!' });
-        }
-
-        // ----------------------------------------------------
-        // 8. WEB VERIFICATION LINK GENERATOR BUTTON
-        // ----------------------------------------------------
-        if (interaction.isButton() && interaction.customId.startsWith('verify_role_')) {
-            const roleId = interaction.customId.split('verify_role_')[1];
-            const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-            client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId: roleId });
-
-            const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`;
-            const verifyUrl = `${hostUrl}/verify?token=${token}`;
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setLabel('Verify Human Access').setStyle(ButtonStyle.Link).setURL(verifyUrl).setEmoji('🌐')
-            );
-
-            return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
-        }
-
-        // ----------------------------------------------------
-        // 9. DJ MUSIC PLAYER BUTTON HANDLER
-        // ----------------------------------------------------
-        if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
-            const guild = interaction.guild;
-            const member = interaction.member;
-            const voiceChannel = member?.voice?.channel;
-            const player = client.manager ? client.manager.getPlayer(guild.id) : null;
-
-            if (!voiceChannel) return interaction.reply({ content: '❌ Connect to a voice channel first!', flags: [EPHEMERAL_FLAG] });
-            if (!player) return interaction.reply({ content: '❌ No active player in this server!', flags: [EPHEMERAL_FLAG] });
-
-            await interaction.deferUpdate().catch(() => {});
-            try {
-                if (interaction.customId === 'music_pause') player.pause(!player.paused);
-                else if (interaction.customId === 'music_skip') player.skip();
-                else if (interaction.customId === 'music_stop') player.destroy();
-                else if (interaction.customId === 'music_loop') player.setLoop(player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none');
-                else if (interaction.customId === 'dj_vol_down') player.setVolume(Math.max(10, player.volume - 10));
-                else if (interaction.customId === 'dj_vol_up') player.setVolume(Math.min(100, player.volume + 10));
-                else if (interaction.customId === 'dj_lock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                else if (interaction.customId === 'dj_unlock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: true });
-            } catch (err) {}
-            return;
-        }
-
-        // ----------------------------------------------------
-        // 10. SLASH COMMAND ROUTER
-        // ----------------------------------------------------
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'setup-starry') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
-                const result = await provisionMasterServerStructure(interaction);
-                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
-                return interaction.editReply({ embeds: [embed] });
-            }
-
-            if (interaction.commandName === 'emergency-nuke') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
-                const targetScope = interaction.options.getString('target', true);
-                if (targetScope === 'channel') {
-                    const channel = interaction.options.getChannel('channel') || interaction.channel;
-                    const pos = channel.position;
-                    const newCh = await channel.clone();
-                    await channel.delete().catch(() => {});
-                    await newCh.setPosition(pos).catch(() => {});
-                    return newCh.send({ content: '⚡ **EMERGENCY NUKE:** Channel purged and recreated.' });
-                }
-            }
-        }
-    });
-
-    function cleanCategoryName(str) {
-        if (!str) return '';
-        return str
-            .toLowerCase()
-            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-            .replace(/&/g, 'and')
-            .replace(/[^a-z0-9\s]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-        // ----------------------------------------------------
-        // 6. DJ MUSIC PLAYER BUTTON HANDLER
-        // ----------------------------------------------------
-        if (interaction.isButton() && ['music_pause', 'music_skip', 'music_stop', 'music_loop', 'dj_vol_down', 'dj_vol_up', 'dj_lock', 'dj_unlock'].includes(interaction.customId)) {
-            const guild = interaction.guild;
-            const member = interaction.member;
-            const voiceChannel = member?.voice?.channel;
-            const player = client.manager ? client.manager.getPlayer(guild.id) : null;
-
-            if (!voiceChannel) return interaction.reply({ content: '❌ Connect to a voice channel first!', flags: [EPHEMERAL_FLAG] });
-            if (!player) return interaction.reply({ content: '❌ No active player in this server!', flags: [EPHEMERAL_FLAG] });
-
-            await interaction.deferUpdate().catch(() => {});
-            try {
-                if (interaction.customId === 'music_pause') player.pause(!player.paused);
-                else if (interaction.customId === 'music_skip') player.skip();
-                else if (interaction.customId === 'music_stop') player.destroy();
-                else if (interaction.customId === 'music_loop') player.setLoop(player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none');
-                else if (interaction.customId === 'dj_vol_down') player.setVolume(Math.max(10, player.volume - 10));
-                else if (interaction.customId === 'dj_vol_up') player.setVolume(Math.min(100, player.volume + 10));
-                else if (interaction.customId === 'dj_lock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                else if (interaction.customId === 'dj_unlock') await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: true });
-            } catch (err) {}
-            return;
-        }
-
-        // ----------------------------------------------------
-        // 7. SLASH COMMAND ROUTER
-        // ----------------------------------------------------
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'setup-starry') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
-                const result = await provisionMasterServerStructure(interaction);
-                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
-                return interaction.editReply({ embeds: [embed] });
-            }
-
-            if (interaction.commandName === 'emergency-nuke') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
-                const targetScope = interaction.options.getString('target', true);
-                if (targetScope === 'channel') {
-                    const channel = interaction.options.getChannel('channel') || interaction.channel;
-                    const pos = channel.position;
-                    const newCh = await channel.clone();
-                    await channel.delete().catch(() => {});
-                    await newCh.setPosition(pos).catch(() => {});
-                    return newCh.send({ content: '⚡ **EMERGENCY NUKE:** Channel purged and recreated.' });
-                }
-            }
-        }
-    });
-
-    function cleanCategoryName(str) {
-        if (!str) return '';
-        return str
-            .toLowerCase()
-            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-            .replace(/&/g, 'and')
-            .replace(/[^a-z0-9\s]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
-// File Path: modules/starry.js
-// ==========================================
     async function handleAutoModPing(message) {
         if (!message.guild || message.author.bot || !message.member) return false;
         const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
@@ -999,10 +779,7 @@ module.exports = async (client) => {
         return false;
     }
 
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
-// ==========================================
-    // 🎨 STRICT POLLINATIONS IMAGE PARSER (Requires explicit art/drawing keywords)
+    // 🎨 STRICT POLLINATIONS IMAGE PARSER
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -1013,7 +790,6 @@ module.exports = async (client) => {
             const rawText = message.content.toLowerCase();
             
             // 🛡️ STRICT CHECK: Only trigger if explicitly asking for art/images!
-            // Generic words like "create" or "make" alone will NOT trigger image generation!
             const hasExplicitImageKeywords = /\b(?:image|picture|photo|art|drawing|pic|illustration|avatar)s?\b/i.test(rawText) ||
                                             /\b(?:draw|paint|imagine)\b/i.test(rawText);
 
@@ -1110,14 +886,11 @@ ${message.author.username} says: ${message.content}`;
 
                 replyText = replyText.replace(cmdMatch[0], '').trim();
             }
-            // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
-// ==========================================
+
             if (functionName && message.guild) {
                 const botMember = message.guild.members.me;
                 const hasPerm = (perm) => message.member && message.member.permissions.has(perm) && botMember.permissions.has(perm);
 
-                // --- 1. GIVE ROLE ACTION ---
                 if (functionName === "give_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
                     const tId = (args.userId || '').replace(/\D/g, '');
                     const rId = (args.roleId || '').replace(/\D/g, '');
@@ -1130,7 +903,6 @@ ${message.author.username} says: ${message.content}`;
                     }
                 }
 
-                // --- 2. REMOVE ROLE ACTION ---
                 if (functionName === "remove_role" && hasPerm(PermissionFlagsBits.ManageRoles)) {
                     const tId = (args.userId || '').replace(/\D/g, '');
                     const rId = (args.roleId || '').replace(/\D/g, '');
@@ -1143,7 +915,6 @@ ${message.author.username} says: ${message.content}`;
                     }
                 }
 
-                // --- 3. CREATE CHANNEL ---
                 if (functionName === "create_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     let parentCategory = null;
                     if (args.category) {
@@ -1159,7 +930,6 @@ ${message.author.username} says: ${message.content}`;
                     if (createdCh) await message.reply(`✨ Successfully created channel <#${createdCh.id}>!`);
                 }
 
-                // --- 4. DELETE CHANNEL ---
                 if (functionName === "delete_channel" && hasPerm(PermissionFlagsBits.ManageChannels)) {
                     const cleanName = (args.name || '').replace(/[<#>]/g, '').trim().toLowerCase();
                     const targetCh = message.guild.channels.cache.find(c => c.id === cleanName || c.name.toLowerCase() === cleanName);
@@ -1222,7 +992,7 @@ ${message.author.username} says: ${message.content}`;
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // 3. Fast Local Pre-Parsers (<50ms Execution - Zero AI Calls)
+        // 3. Fast Local Pre-Parsers (<10ms Execution - Zero AI Calls)
         const localHandled = await handleLocalActions(client, message);
         if (localHandled) return; 
 
@@ -1236,7 +1006,7 @@ ${message.author.username} says: ${message.content}`;
 };
 
 // ==========================================
-// EXPORTS (replaces masterChannelSystems.js)
+// EXPORTS
 // ==========================================
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
