@@ -15,7 +15,7 @@ const {
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
 module.exports = (client) => {
-    // Helper: Check if member is Staff/Admin
+    // Helper: Strict Staff Check (Admin, Manage Channels, or Staff roles)
     const isStaff = (member) => {
         if (!member) return false;
         return member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
@@ -23,14 +23,7 @@ module.exports = (client) => {
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
 
-    // Helper: Check if member is Staff OR the Ticket Creator
-    const canManageTicket = (interaction) => {
-        const topic = interaction.channel.topic || '';
-        const isCreator = topic.includes(interaction.user.id);
-        return isStaff(interaction.member) || isCreator;
-    };
-
-    // Helper: Guarantees category exists and allows Category Header visibility for Discord Mobile
+    // Helper: Ensures categories exist with proper Mobile visibility
     async function getOrCreateTicketCategory(guild, name) {
         try {
             const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
@@ -176,7 +169,6 @@ module.exports = (client) => {
                         ]
                     });
 
-                    // Force Category Parent Binding
                     if (openedCategory) {
                         await ticketChannel.setParent(openedCategory.id, { lockPermissions: false }).catch(() => {});
                     }
@@ -239,23 +231,33 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🔒 CLOSE TICKET (STAFF + TICKET CREATOR)
+            // 🔒 CLOSE TICKET (STRICTLY STAFF ONLY & PREVENTS DUPLICATE CLOSES)
             if (['sys_close_ticket', 'close_ticket'].includes(customId)) {
-                if (!canManageTicket(interaction)) {
-                    return interaction.reply({ content: '❌ Only staff or the ticket creator can close this ticket.', flags: [EPHEMERAL_FLAG] });
+                // 1. Strictly restrict closing to Staff Members
+                if (!isStaff(interaction.member)) {
+                    return interaction.reply({ content: '❌ Only staff members can close support tickets.', flags: [EPHEMERAL_FLAG] });
+                }
+
+                const channel = interaction.channel;
+                const guild = interaction.guild;
+
+                // 2. Prevent duplicate closes if channel is already closed
+                if (channel.parent?.name.toUpperCase() === 'CLOSED TICKETS' || channel.name.startsWith('closed-')) {
+                    return interaction.reply({ content: '❌ This ticket is already closed!', flags: [EPHEMERAL_FLAG] });
                 }
 
                 await interaction.deferUpdate().catch(() => {});
 
-                const channel = interaction.channel;
-                const guild = interaction.guild;
                 const ticketOwnerId = channel.topic;
+                const cleanName = channel.name.replace('ticket-', '').replace('claimed-', '');
+                await channel.setName(`closed-${cleanName}`).catch(() => {});
 
                 const closedCategory = await getOrCreateTicketCategory(guild, 'CLOSED TICKETS');
                 if (closedCategory) {
                     await channel.setParent(closedCategory.id, { lockPermissions: false }).catch(() => {});
                 }
 
+                // Revoke send messages permission for ticket owner
                 if (ticketOwnerId) {
                     await channel.permissionOverwrites.edit(ticketOwnerId, { SendMessages: false }).catch(() => {});
                 }
@@ -275,12 +277,8 @@ module.exports = (client) => {
                 return;
             }
 
-            // 📝 SAVE TRANSCRIPT (STAFF + TICKET CREATOR)
+            // 📝 SAVE TRANSCRIPT (STAFF OR TICKET OWNER)
             if (['sys_transcript_ticket', 'transcript_ticket'].includes(customId)) {
-                if (!canManageTicket(interaction)) {
-                    return interaction.reply({ content: '❌ Only staff or the ticket creator can save the transcript.', flags: [EPHEMERAL_FLAG] });
-                }
-
                 await interaction.deferReply();
 
                 try {
