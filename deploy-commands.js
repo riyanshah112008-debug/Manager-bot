@@ -47,7 +47,6 @@ try {
         if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
         if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
         if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
-    
     }
 } catch (err) {
     console.warn('⚠️ Could not load masterChannelSystems payloads:', err.message);
@@ -62,10 +61,10 @@ try {
 } catch (err) {
     console.warn('⚠️ Could not load tracker module payload:', err.message);
 }
-// COUNTING 
-// Inside deploy-commands.js
+
+// Counting Module
 try {
-    const countModule = require('./src/modules/count'); // or './modules/count'
+    const countModule = require('./src/modules/count');
     if (countModule && countModule.countSlashCommands) {
         masterPayloads.push(...countModule.countSlashCommands);
     }
@@ -73,14 +72,11 @@ try {
     console.warn('⚠️ Could not load count module payloads:', err.message);
 }
 
-// AFK Command Payload with Subcommands (/afk set, clear, list, status)
+// AFK Command Payload
 try {
     let afkModule = null;
     try { afkModule = require('./src/modules/afk'); } catch (e) { afkModule = require('./modules/afk'); }
-    
-    if (afkModule && afkModule.afkPayload) {
-        masterPayloads.push(afkModule.afkPayload);
-    }
+    if (afkModule && afkModule.afkPayload) masterPayloads.push(afkModule.afkPayload);
 } catch (err) {
     console.warn('⚠️ Could not load AFK module payload:', err.message);
 }
@@ -89,10 +85,7 @@ try {
 try {
     let bumpModule = null;
     try { bumpModule = require('./src/modules/bumpEngine'); } catch (e) { bumpModule = require('./modules/bumpEngine'); }
-    
-    if (bumpModule && bumpModule.bumpSlashCommands) {
-        masterPayloads.push(...bumpModule.bumpSlashCommands);
-    }
+    if (bumpModule && bumpModule.bumpSlashCommands) masterPayloads.push(...bumpModule.bumpSlashCommands);
 } catch (err) {
     console.warn('⚠️ Could not load bumpEngine payloads:', err.message);
 }
@@ -115,12 +108,12 @@ try {
 const commands = [
     ...masterPayloads,
 
-    // TELEMETRY
+    // TELEMETRY & VOICE
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
-
-    // MUSIC & VOICE AI ENGINE
     { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
+    
+    // MUSIC COMMANDS
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
     { name: 'pause', description: 'Pause the currently playing song' },
     { name: 'resume', description: 'Resume the paused song' },
@@ -128,7 +121,20 @@ const commands = [
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View and interactively manage the current music queue' },
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' }
+    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
+
+    // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS (ADDED GLOBALLY)
+    new SlashCommandBuilder()
+        .setName('ticketsetup')
+        .setDescription('🎫 Create the support ticket panel in this channel')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('applysetup')
+        .setDescription('📋 Create the staff & partner application panel in this channel')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .toJSON()
 ];
 
 try {
