@@ -123,7 +123,7 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
-    // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS (ADDED GLOBALLY)
+    // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS
     new SlashCommandBuilder()
         .setName('ticketsetup')
         .setDescription('🎫 Create the support ticket panel in this channel')
