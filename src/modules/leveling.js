@@ -49,6 +49,25 @@ function formatVcTime(minutes) {
     return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
 }
 
+// 🚀 UPGRADED SUPREME LEVEL-UP EMBED BUILDER
+function buildLevelUpEmbed(user, newLevel, newXp, guild) {
+    const nextLevelXp = xpForNextLevel(newLevel);
+
+    return new EmbedBuilder()
+        .setColor('#FFD700')
+        .setAuthor({ name: '🎉 LEVEL UP UNLOCKED!', iconURL: user.displayAvatarURL({ dynamic: true }) })
+        .setTitle(`✨ Congratulations ${user.username}!`)
+        .setDescription(`Your active participation in **${guild.name}** has paid off! You have leveled up!`)
+        .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 256 }))
+        .addFields(
+            { name: '⭐ New Level', value: `\`\`\`ansi\n\u001b[1;36mLevel ${newLevel}\u001b[0m\n\`\`\``, inline: true },
+            { name: '📊 Total XP', value: `\`\`\`ansi\n\u001b[1;33m${newXp.toLocaleString()} XP\u001b[0m\n\`\`\``, inline: true },
+            { name: '🎯 Next Target', value: `\`\`\`ansi\n\u001b[1;32m${Math.round(nextLevelXp).toLocaleString()} XP\u001b[0m\n\`\`\``, inline: true }
+        )
+        .setFooter({ text: `${guild.name} • Leveling System`, iconURL: guild.iconURL({ dynamic: true }) })
+        .setTimestamp();
+}
+
 // Build Rank Embed
 async function buildRankEmbed(targetUser, userData, guild) {
     const nextLevelXp = xpForNextLevel(userData.level);
@@ -166,7 +185,7 @@ module.exports = (client) => {
         }
     });
 
-    // 2. MESSAGE TRACKING & TRIGGER/PREFIX COMMANDS
+    // 2. MESSAGE TRACKING & TRIGGER COMMANDS
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.guild) return;
 
@@ -174,7 +193,6 @@ module.exports = (client) => {
         const guildId = message.guild.id;
         const rawContent = message.content.toLowerCase().trim();
 
-        // Check Prefix or Bot Trigger Word (e.g. "starry rank" or ".rank")
         const isPrefix = rawContent.startsWith(PREFIX);
         const isTrigger = rawContent.startsWith('starry ') || rawContent.startsWith('jarvis ') || message.mentions.has(client.user?.id);
 
@@ -205,7 +223,7 @@ module.exports = (client) => {
                 return message.reply(data).catch(() => {});
             }
 
-            // Admin Trigger Commands (.addxp, .removexp, .resetlevel, .enableleveling)
+            // Admin Commands (.enableleveling, .addxp, .removexp, .resetlevel)
             if (message.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 if (command === 'enableleveling') {
                     const targetChan = message.mentions.channels.first();
@@ -214,9 +232,17 @@ module.exports = (client) => {
                     await LevelSettings.findOneAndUpdate({ guildId }, { enabled: true, logChannelId: logId }, { upsert: true });
                     settingsCache.set(guildId, { enabled: true, logChannelId: logId });
 
-                    let msg = `⚙️ Leveling system has been **ENABLED ✅** for this server!`;
-                    if (targetChan) msg += ` Level-Up announcements set to <#${targetChan.id}>.`;
-                    return message.reply(msg);
+                    // Generate Sample Preview Embed
+                    const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
+
+                    let msg = `⚙️ **Leveling System Enabled!**\nShowing a preview of the level-up announcement embed below:`;
+                    if (targetChan) {
+                        msg += `\n📌 **Announcements Channel:** <#${targetChan.id}>`;
+                        // Send sample message to log channel
+                        targetChan.send({ content: `🧪 **[Leveling System Setup Test]**`, embeds: [previewEmbed] }).catch(() => {});
+                    }
+
+                    return message.reply({ content: msg, embeds: [previewEmbed] });
                 }
 
                 if (command === 'addxp') {
@@ -296,28 +322,26 @@ module.exports = (client) => {
                 logChannel = client.getLogChannel(message.guild, 'misc');
             }
 
-            if (logChannel) {
-                const levelUpEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setAuthor({ name: 'Level Up!', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                    .setDescription(`🎉 Congratulations <@${userId}>! You advanced to **Level ${newLevel}**!`)
-                    .setTimestamp();
+            const levelUpEmbed = buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild);
 
+            if (logChannel) {
                 logChannel.send({ 
                     content: `<@${userId}>`, 
                     embeds: [levelUpEmbed],
                     allowedMentions: { users: [userId] }
                 }).catch(() => {});
             } else {
-                message.react('⭐').catch(() => {});
+                message.reply({ content: `🎉 **Level Up!**`, embeds: [levelUpEmbed] }).catch(() => {
+                    message.react('⭐').catch(() => {});
+                });
             }
         }
     });
     // ==========================================
-    // 3. SLASH COMMAND & BUTTON INTERACTION ROUTER
+    // 3. SLASH COMMAND SETUP WITH LIVE PREVIEW
     // ==========================================
     client.on('interactionCreate', async interaction => {
-        // Leaderboard Tab Buttons
+        // Leaderboard Tab Switching Buttons
         if (interaction.isButton() && interaction.customId.startsWith('lb_')) {
             const type = interaction.customId.split('_')[1]; 
             const data = await buildLeaderboardData(interaction.guildId, interaction.guild, type);
@@ -326,7 +350,7 @@ module.exports = (client) => {
 
         if (!interaction.isChatInputCommand()) return;
 
-        // SINGLE SLASH COMMAND: /enableleveling
+        // /enableleveling
         if (interaction.commandName === 'enableleveling') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: '❌ Admin permissions required.', flags: [EPHEMERAL_FLAG] });
@@ -343,14 +367,21 @@ module.exports = (client) => {
 
             settingsCache.set(interaction.guildId, { enabled: true, logChannelId });
 
-            let replyMsg = `⚙️ Leveling system has been **ENABLED ✅** for this server!`;
+            // Generate Sample Preview Embed
+            const sampleEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild);
+
+            let setupMessage = `⚙️ **Leveling System Enabled!**\nBelow is a sample preview of the Level-Up embed:`;
+
             if (channel) {
-                replyMsg += ` All Level-Up announcements will be sent to <#${channel.id}>.`;
-            } else {
-                replyMsg += ` Level-Up announcements will use default server log channels.`;
+                setupMessage += `\n📌 Announcements target: <#${channel.id}>`;
+                // Send a test preview embed directly into the selected log channel
+                channel.send({ 
+                    content: `🧪 **[Leveling System Setup Test]** Here is how level-up cards will look in this channel:`, 
+                    embeds: [sampleEmbed] 
+                }).catch(() => {});
             }
 
-            return interaction.reply({ content: replyMsg, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.reply({ content: setupMessage, embeds: [sampleEmbed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
     });
 };
