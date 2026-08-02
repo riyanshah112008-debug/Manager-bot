@@ -15,6 +15,7 @@ const {
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
 module.exports = (client) => {
+    // Helper: Check if member is Staff/Admin
     const isStaff = (member) => {
         if (!member) return false;
         return member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
@@ -22,23 +23,45 @@ module.exports = (client) => {
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
 
-    // 🛡️ Enhanced Helper: Guarantees category exists with proper permissions
+    // Helper: Check if member is Staff OR the Ticket Creator
+    const canManageTicket = (interaction) => {
+        const topic = interaction.channel.topic || '';
+        const isCreator = topic.includes(interaction.user.id);
+        return isStaff(interaction.member) || isCreator;
+    };
+
+    // Helper: Ensures categories exist and are visible so child channels nest cleanly
     async function getOrCreateTicketCategory(guild, name) {
-        // Fetch channels from Discord API to prevent cache misses
         await guild.channels.fetch().catch(() => {});
         let cat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === name.toLowerCase());
-        
+        let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
+
+        // Allow @everyone to view category header so Discord nests private channels inside it
+        const categoryPermissions = [
+            { 
+                id: guild.roles.everyone.id, 
+                allow: [PermissionsBitField.Flags.ViewChannel], 
+                deny: [PermissionsBitField.Flags.SendMessages] 
+            },
+            { 
+                id: client.user.id, 
+                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.SendMessages] 
+            },
+            ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
+        ];
+
         if (!cat) {
-            let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
             cat = await guild.channels.create({
                 name: name,
                 type: ChannelType.GuildCategory,
-                permissionOverwrites: [
-                    { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.SendMessages] },
-                    ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
-                ]
+                permissionOverwrites: categoryPermissions
             }).catch(() => null);
+        } else {
+            // Fix existing category permissions on the fly
+            await cat.permissionOverwrites.edit(guild.roles.everyone.id, {
+                ViewChannel: true,
+                SendMessages: false
+            }).catch(() => {});
         }
         return cat;
     }
@@ -124,8 +147,8 @@ module.exports = (client) => {
                         ]
                     });
 
-                    // Force parent category binding if not assigned automatically
-                    if (openedCategory && ticketChannel.parentId !== openedCategory.id) {
+                    // Explicitly bind channel to category
+                    if (openedCategory) {
                         await ticketChannel.setParent(openedCategory.id, { lockPermissions: false }).catch(() => {});
                     }
 
@@ -151,7 +174,7 @@ module.exports = (client) => {
                 }
             }
 
-            // ✋ CLAIM TICKET
+            // ✋ CLAIM TICKET (STAFF ONLY)
             if (['sys_claim_ticket', 'claim_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can claim tickets.', flags: [EPHEMERAL_FLAG] });
@@ -187,8 +210,12 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🔒 CLOSE TICKET (MOVES TO CLOSED TICKETS CATEGORY)
+            // 🔒 CLOSE TICKET (STAFF + TICKET CREATOR)
             if (['sys_close_ticket', 'close_ticket'].includes(customId)) {
+                if (!canManageTicket(interaction)) {
+                    return interaction.reply({ content: '❌ Only staff or the ticket creator can close this ticket.', flags: [EPHEMERAL_FLAG] });
+                }
+
                 await interaction.deferUpdate().catch(() => {});
 
                 const channel = interaction.channel;
@@ -219,8 +246,12 @@ module.exports = (client) => {
                 return;
             }
 
-            // 📝 SAVE TRANSCRIPT
+            // 📝 SAVE TRANSCRIPT (STAFF + TICKET CREATOR)
             if (['sys_transcript_ticket', 'transcript_ticket'].includes(customId)) {
+                if (!canManageTicket(interaction)) {
+                    return interaction.reply({ content: '❌ Only staff or the ticket creator can save the transcript.', flags: [EPHEMERAL_FLAG] });
+                }
+
                 await interaction.deferReply();
 
                 try {
@@ -269,7 +300,7 @@ module.exports = (client) => {
                 return;
             }
 
-            // 🗑️ DELETE TICKET
+            // 🗑️ DELETE TICKET (STAFF ONLY)
             if (['sys_delete_ticket', 'delete_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can delete tickets.', flags: [EPHEMERAL_FLAG] });
