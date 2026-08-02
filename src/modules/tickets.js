@@ -12,7 +12,6 @@ const {
 } = require('discord.js');
 
 module.exports = (client) => {
-    // Helper: Check if member is Staff or Admin
     const isStaff = (member) => {
         if (!member) return false;
         return member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
@@ -22,7 +21,7 @@ module.exports = (client) => {
 
     client.on('interactionCreate', async (interaction) => {
         // ==========================================
-        // 1. SLASH COMMANDS SETUP
+        // 1. SLASH COMMANDS SETUP (/ticketsetup & /applysetup)
         // ==========================================
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'ticketsetup') {
@@ -33,19 +32,15 @@ module.exports = (client) => {
                 const embed = new EmbedBuilder()
                     .setColor('#00F2FE')
                     .setTitle('🎫 Support & Application Portal')
-                    .setDescription('Need assistance or want to join our team? Click a button below to get started!')
-                    .addFields(
-                        { name: '📩 Support Ticket', value: 'Opens a private channel with server staff.', inline: false },
-                        { name: '📝 Staff Application', value: 'Opens an interactive application form.', inline: false }
-                    )
-                    .setFooter({ text: 'Starry Ticket Engine • Select an option below' });
+                    .setDescription('• **Open Support Ticket:** Opens a private communication channel with staff.\n• **Apply for Staff:** Opens an interactive form to apply for moderator positions.')
+                    .setFooter({ text: 'Starry Support Engine' });
 
                 const buttons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
-                    new ButtonBuilder().setCustomId('apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
+                    new ButtonBuilder().setCustomId('sys_create_ticket').setLabel('Open Support Ticket').setStyle(ButtonStyle.Primary).setEmoji('📩'),
+                    new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setStyle(ButtonStyle.Success).setEmoji('📝')
                 );
 
-                await interaction.reply({ content: '✅ Ticket setup panel created!', ephemeral: true });
+                await interaction.reply({ content: '✅ Ticket system panel created!', ephemeral: true });
                 await interaction.channel.send({ embeds: [embed], components: [buttons] });
             }
 
@@ -61,8 +56,8 @@ module.exports = (client) => {
                     .setFooter({ text: 'Starry Application Engine' });
 
                 const buttons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('apply_staff').setLabel('🛡️ Apply for Staff').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('apply_partner').setLabel('🤝 Request Partnership').setStyle(ButtonStyle.Success)
+                    new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('🛡️ Apply for Staff').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('sys_apply_partner').setLabel('🤝 Request Partnership').setStyle(ButtonStyle.Success)
                 );
 
                 await interaction.reply({ content: '✅ Application Dashboard created!', ephemeral: true });
@@ -74,21 +69,11 @@ module.exports = (client) => {
         // 2. BUTTON INTERACTIONS
         // ==========================================
         if (interaction.isButton()) {
-            // Premium Check Fail-Safe
-            if (['create_ticket', 'apply_staff', 'apply_partner'].includes(interaction.customId)) {
-                if (client.isPremium && typeof client.isPremium === 'function' && !client.isPremium(interaction.guildId)) {
-                    return interaction.reply({ content: '❌ **Tickets/Applications are a Premium feature!** Use `.premium` to upgrade.', ephemeral: true });
-                }
-            }
-
-            // --------------------------------------
             // 📩 CREATE TICKET
-            // --------------------------------------
-            if (interaction.customId === 'create_ticket') {
+            if (interaction.customId === 'sys_create_ticket' || interaction.customId === 'create_ticket') {
                 const guild = interaction.guild;
                 const user = interaction.user;
 
-                // Check for existing open ticket
                 const existingChannel = guild.channels.cache.find(c => c.topic === user.id && c.name.startsWith('ticket-'));
                 if (existingChannel) {
                     return interaction.reply({ content: `❌ You already have an open ticket in <#${existingChannel.id}>!`, ephemeral: true });
@@ -112,24 +97,22 @@ module.exports = (client) => {
 
                 const ticketEmbed = new EmbedBuilder()
                     .setColor('#00F2FE')
-                    .setTitle(`🎫 Ticket Opened | ${user.username}`)
-                    .setDescription(`Welcome <@${user.id}>! Please explain your issue in detail below.\n\nOur staff team will assist you shortly.`)
+                    .setTitle(`🎫 Support Ticket | ${user.username}`)
+                    .setDescription(`Welcome <@${user.id}>! Staff has been notified and will assist you shortly.\n\nPlease describe your issue or inquiry in detail below.`)
                     .addFields({ name: '📌 Status', value: '`UNCLAIMED 🟡`', inline: true })
                     .setTimestamp();
 
                 const actionRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('claim_ticket').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
-                    new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+                    new ButtonBuilder().setCustomId('sys_claim_ticket').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('✋'),
+                    new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
                 );
 
                 await ticketChannel.send({ content: `<@${user.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [actionRow] });
                 await interaction.reply({ content: `✅ Ticket created: <#${ticketChannel.id}>`, ephemeral: true });
             }
 
-            // --------------------------------------
-            // ✋ CLAIM TICKET (STAFF ONLY)
-            // --------------------------------------
-            if (interaction.customId === 'claim_ticket') {
+            // ✋ CLAIM TICKET
+            if (interaction.customId === 'sys_claim_ticket' || interaction.customId === 'claim_ticket') {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can claim tickets.', ephemeral: true });
                 }
@@ -139,11 +122,9 @@ module.exports = (client) => {
                 const channel = interaction.channel;
                 const staffMember = interaction.user;
 
-                // Rename channel to claimed
                 const cleanName = channel.name.replace('ticket-', '').replace('claimed-', '');
                 await channel.setName(`claimed-${cleanName}`).catch(() => {});
 
-                // Grant explicit Manage Channels permission to claiming staff member
                 await channel.permissionOverwrites.edit(staffMember.id, {
                     ViewChannel: true,
                     SendMessages: true,
@@ -157,28 +138,21 @@ module.exports = (client) => {
                     .setTimestamp();
 
                 const updatedRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('claim_ticket').setLabel(`Claimed by ${staffMember.username}`).setStyle(ButtonStyle.Secondary).setDisabled(true).setEmoji('✅'),
-                    new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+                    new ButtonBuilder().setCustomId('sys_claim_ticket').setLabel(`Claimed by ${staffMember.username}`).setStyle(ButtonStyle.Secondary).setDisabled(true).setEmoji('✅'),
+                    new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
                 );
 
                 await interaction.editReply({ components: [updatedRow] });
                 await channel.send({ embeds: [claimedEmbed] });
             }
 
-            // --------------------------------------
             // 🔒 CLOSE TICKET
-            // --------------------------------------
-            if (interaction.customId === 'close_ticket') {
-                if (!isStaff(interaction.member) && interaction.user.id !== interaction.channel.topic) {
-                    return interaction.reply({ content: '❌ Only staff or the ticket owner can close this ticket.', ephemeral: true });
-                }
-
-                await interaction.deferUpdate();
+            if (interaction.customId === 'sys_close_ticket' || interaction.customId === 'close_ticket') {
+                await interaction.deferUpdate().catch(() => {});
 
                 const channel = interaction.channel;
                 const ticketOwnerId = channel.topic;
 
-                // Revoke send permissions for ticket opener
                 if (ticketOwnerId) {
                     await channel.permissionOverwrites.edit(ticketOwnerId, { SendMessages: false }).catch(() => {});
                 }
@@ -186,22 +160,19 @@ module.exports = (client) => {
                 const closedEmbed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔒 Ticket Closed')
-                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nUse the options below to generate a transcript or delete this ticket.`)
+                    .setDescription(`Ticket closed by <@${interaction.user.id}>.\nUse the options below to save a transcript or delete this channel.`)
                     .setTimestamp();
 
                 const managementRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('transcript_ticket').setLabel('Save Transcript').setStyle(ButtonStyle.Primary).setEmoji('📝'),
-                    new ButtonBuilder().setCustomId('delete_ticket').setLabel('Delete Ticket').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+                    new ButtonBuilder().setCustomId('sys_transcript_ticket').setLabel('Save Transcript').setStyle(ButtonStyle.Primary).setEmoji('📝'),
+                    new ButtonBuilder().setCustomId('sys_delete_ticket').setLabel('Delete Ticket').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
                 );
 
-                await interaction.editReply({ components: [] });
                 await channel.send({ embeds: [closedEmbed], components: [managementRow] });
             }
 
-            // --------------------------------------
-            // 📝 GENERATE TRANSCRIPT
-            // --------------------------------------
-            if (interaction.customId === 'transcript_ticket') {
+            // 📝 SAVE TRANSCRIPT
+            if (interaction.customId === 'sys_transcript_ticket' || interaction.customId === 'transcript_ticket') {
                 await interaction.deferReply();
 
                 try {
@@ -249,10 +220,8 @@ module.exports = (client) => {
                 }
             }
 
-            // --------------------------------------
-            // 🗑️ MANUALLY DELETE TICKET
-            // --------------------------------------
-            if (interaction.customId === 'delete_ticket') {
+            // 🗑️ DELETE TICKET
+            if (interaction.customId === 'sys_delete_ticket' || interaction.customId === 'delete_ticket') {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Only staff members can delete tickets.', ephemeral: true });
                 }
@@ -263,11 +232,9 @@ module.exports = (client) => {
                 }, 5000);
             }
 
-            // --------------------------------------
-            // 📝 APPLICATIONS MODALS LAUNCH
-            // --------------------------------------
-            if (interaction.customId === 'apply_staff' || interaction.customId === 'apply_partner') {
-                const isStaffApp = interaction.customId === 'apply_staff';
+            // 📝 STAFF & PARTNER APPLICATIONS MODALS
+            if (interaction.customId === 'sys_apply_staff' || interaction.customId === 'apply_staff' || interaction.customId === 'sys_apply_partner' || interaction.customId === 'apply_partner') {
+                const isStaffApp = interaction.customId.includes('staff');
                 const modal = new ModalBuilder()
                     .setCustomId(isStaffApp ? 'modal_staff' : 'modal_partner')
                     .setTitle(isStaffApp ? '🛡️ Staff Application' : '🤝 Partnership Application');
@@ -281,9 +248,7 @@ module.exports = (client) => {
                 await interaction.showModal(modal);
             }
 
-            // --------------------------------------
             // ✅ / ❌ ACCEPT OR REJECT APPLICATION
-            // --------------------------------------
             if (['app_accept', 'app_reject'].includes(interaction.customId)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ Staff permissions required.', ephemeral: true });
