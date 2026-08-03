@@ -1,5 +1,6 @@
 // ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (COMPLETE REPAIRED)
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 1 OF 4)
+// File Path: deploy-commands.js
 // ==========================================
 const { 
     REST, 
@@ -18,13 +19,13 @@ const MANAGE_ROLES = PermissionFlagsBits.ManageRoles.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
 
-// Helper to safely require modules with path fallback
+// Helper to safely require modules across relative path variants
 function safeRequire(paths) {
     for (const p of paths) {
         try {
             return require(p);
         } catch (e) {
-            // Continue to next path candidate
+            // Continue candidate search
         }
     }
     return null;
@@ -80,6 +81,48 @@ const afkModule = safeRequire(['./src/modules/afk', './modules/afk']);
 if (afkModule && afkModule.afkPayload) {
     masterPayloads.push(afkModule.afkPayload);
 }
+
+// Bump Engine Payloads
+const bumpModule = safeRequire(['./src/modules/bumpEngine', './modules/bumpEngine']);
+if (bumpModule && bumpModule.bumpSlashCommands) {
+    masterPayloads.push(...bumpModule.bumpSlashCommands);
+}
+
+// Backup Engine Payload
+const backupModule = safeRequire([
+    './src/modules/serverBackupManager', 
+    './modules/serverBackupManager', 
+    './src/modules/backupEngine', 
+    './modules/backupEngine'
+]);
+if (backupModule && backupModule.backupCommandPayload) {
+    masterPayloads.push(backupModule.backupCommandPayload);
+}
+// ==========================================
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 2 OF 4)
+// File Path: deploy-commands.js
+// ==========================================
+
+const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
+
+const commands = [
+    ...masterPayloads,
+
+    // TELEMETRY & VOICE
+    { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
+    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
+    { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
+
+    // MUSIC COMMANDS
+    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
+    { name: 'pause', description: 'Pause the currently playing song' },
+    { name: 'resume', description: 'Resume the paused song' },
+    { name: 'skip', description: 'Skip the current song' },
+    { name: 'stop', description: 'Stop the music and clear the queue' },
+    { name: 'queue', description: 'View and interactively manage the current music queue' },
+    { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
+    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
+
     // 🌟 SETUP WELCOME COMMAND
     new SlashCommandBuilder()
         .setName('setupwelcome')
@@ -105,44 +148,6 @@ if (afkModule && afkModule.afkPayload) {
         )
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
-
-// Bump Engine Payloads
-const bumpModule = safeRequire(['./src/modules/bumpEngine', './modules/bumpEngine']);
-if (bumpModule && bumpModule.bumpSlashCommands) {
-    masterPayloads.push(...bumpModule.bumpSlashCommands);
-}
-
-// Backup Engine Payload
-const backupModule = safeRequire([
-    './src/modules/serverBackupManager', 
-    './modules/serverBackupManager', 
-    './src/modules/backupEngine', 
-    './modules/backupEngine'
-]);
-if (backupModule && backupModule.backupCommandPayload) {
-    masterPayloads.push(backupModule.backupCommandPayload);
-}
-
-// Social Command Payload
-const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
-
-const commands = [
-    ...masterPayloads,
-
-    // TELEMETRY & VOICE
-    { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
-    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
-    { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
-
-    // MUSIC COMMANDS
-    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
-    { name: 'pause', description: 'Pause the currently playing song' },
-    { name: 'resume', description: 'Resume the paused song' },
-    { name: 'skip', description: 'Skip the current song' },
-    { name: 'stop', description: 'Stop the music and clear the queue' },
-    { name: 'queue', description: 'View and interactively manage the current music queue' },
-    { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
     // 🔍 GLOBAL USER APP WHOIS COMMAND
     new SlashCommandBuilder()
@@ -224,6 +229,10 @@ const commands = [
         )
         .toJSON()
 ];
+// ==========================================
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 3 OF 4)
+// File Path: deploy-commands.js
+// ==========================================
 
 if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
@@ -281,6 +290,10 @@ commands.push(
     { name: 'ping', description: 'Check bot latency' },
     { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] }
 );
+// ==========================================
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 4 OF 4)
+// File Path: deploy-commands.js
+// ==========================================
 
 // 3. STRICT DEDUPLICATION ENGINE
 const commandMap = new Map();
