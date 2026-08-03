@@ -600,7 +600,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8 - UPGRADED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -777,7 +777,7 @@ module.exports = async (client) => {
             return true;
         }
 
-        // 6. PURGE MESSAGES WITH AUTOMATIC LOGGING
+        // 6. PURGE MESSAGES WITH AUTOMATIC AUDIT LOGGING
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -796,7 +796,7 @@ module.exports = async (client) => {
             const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`);
             setTimeout(() => sent.delete().catch(() => {}), 3500);
 
-            // Audit Log Audit Entry for Purge
+            // Audit Log Entry for Purge
             const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
             if (logChannel) {
                 const purgeEmbed = new EmbedBuilder()
@@ -817,7 +817,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8 - UPGRADED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -843,7 +843,7 @@ module.exports = async (client) => {
         const rawContent = message.content;
         const lowerContent = rawContent.toLowerCase();
 
-        // Check trigger: bot mention OR "starry" text
+        // Check Trigger: @Starry mention OR "starry" text
         const mentionsBot = message.mentions.has(client.user.id);
         const hasTriggerWord = lowerContent.includes('starry');
         if (!mentionsBot && !hasTriggerWord) return false;
@@ -883,7 +883,7 @@ module.exports = async (client) => {
                 }
 
                 if (botMember && targetMember.roles.highest.position >= botMember.roles.highest.position) {
-                    await message.reply(`❌ I cannot moderate **${targetUser.username}** because their highest role is equal to or higher than my bot role!`);
+                    await message.reply(`❌ I cannot moderate **${targetUser.username}** because their highest role is equal to or higher than my bot role in Server Settings!`);
                     return true;
                 }
             }
@@ -918,13 +918,13 @@ module.exports = async (client) => {
                 const embed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('⏰ Member Timed Out')
-                    .setDescription(`**Target:** ${targetMember} (\`${targetMember.user.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}`)
+                    .setDescription(`**Target:** ${targetMember} (\`${targetUser.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}`)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
 
                 await message.reply({ embeds: [embed] });
 
-                // Log entry
+                // Dispatch to Audit Log
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
                 if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
@@ -959,6 +959,9 @@ module.exports = async (client) => {
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
                 await message.reply({ embeds: [embed] });
+                
+                const logChannel = client.getLogChannel(message.guild, 'moderate');
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
@@ -977,6 +980,9 @@ module.exports = async (client) => {
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
                 await message.reply({ embeds: [embed] });
+
+                const logChannel = client.getLogChannel(message.guild, 'moderate');
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
@@ -1040,7 +1046,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8 - UPGRADED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
