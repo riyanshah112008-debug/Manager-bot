@@ -235,11 +235,27 @@ app.post('/verify', async (req, res) => {
 });
 
 // ==========================================
-// 🎵 UPDATED HIGH-SPEED LAVALINK NODES (WITH JIRAYU)
+// 🎵 VERIFIED JIRAYU & SERENETIA LAVALINK NODES
 // ==========================================
 const Nodes = [
     {
-        name: 'Node-1-Jirayu-Primary',
+        name: 'Node-1-Jirayu-SSL',
+        url: 'lavalink.jirayu.net:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 15,
+        retryDelay: 2000
+    },
+    {
+        name: 'Node-2-Serenetia-v4-SSL',
+        url: 'lavalinkv4.serenetia.com:443',
+        auth: 'https://seretia.link/discord',
+        secure: true,
+        retryAmount: 15,
+        retryDelay: 2000
+    },
+    {
+        name: 'Node-3-Jirayu-NonSSL',
         url: 'lavalink.jirayu.net:13592',
         auth: 'youshallnotpass',
         secure: false,
@@ -247,33 +263,17 @@ const Nodes = [
         retryDelay: 2000
     },
     {
-        name: 'Node-2-TriniumHost',
-        url: 'lavalink.triniumhost.com:4333',
-        auth: 'free',
-        secure: false,
-        retryAmount: 15,
-        retryDelay: 2000
-    },
-    {
-        name: 'Node-3-NyxBot-SG',
+        name: 'Node-4-NyxBot-SG',
         url: 'sg1-nodelink.nyxbot.app:3000',
         auth: 'nyxbot.app/support',
         secure: false,
-        retryAmount: 15,
-        retryDelay: 2000
-    },
-    {
-        name: 'Node-4-Darren-SSL',
-        url: 'lava.darrennathanael.com:443',
-        auth: 'youshallnotpass',
-        secure: true,
         retryAmount: 15,
         retryDelay: 2000
     }
 ];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "soundcloud", // ⚡ SoundCloud prevents YouTube IP rate-limit timeouts
+    defaultSearchEngine: "youtube",
     searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
     plugins: [
         new KazagumoSpotify({ 
@@ -282,7 +282,7 @@ client.manager = new Kazagumo({
             playlistPageLimit: 2, 
             albumPageLimit: 1, 
             searchMarket: 'IN', 
-            searchPrefix: 'scsearch:' 
+            searchPrefix: 'ytsearch:' 
         })
     ],
     send: (guildId, payload) => {
@@ -293,7 +293,7 @@ client.manager = new Kazagumo({
     voiceConnectionTimeout: 15000,
     linkInitializers: true,
     reconnectTries: 15,
-    restTimeout: 8000, // Reduced REST timeout for instant failovers
+    restTimeout: 10000,
     frameBufferDuration: 5000,
     trimVoicePacket: true
 });
