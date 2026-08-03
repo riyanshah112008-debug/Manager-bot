@@ -22,35 +22,19 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 
-// Safe Native Package Loading
 let createCanvas, loadImage;
 try {
     const canvasPkg = require('canvas');
     createCanvas = canvasPkg.createCanvas;
     loadImage = canvasPkg.loadImage;
-} catch (e) {
-    console.warn('⚠️ Canvas package not available. Goodbye banners will use rich embed fallbacks.');
-}
+} catch (e) {}
 
 let Database;
 try {
     Database = require('better-sqlite3');
-} catch (e) {
-    console.warn('⚠️ better-sqlite3 not available. Local DB protection bypassed.');
-}
+} catch (e) {}
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
-
-// ==========================================
-// 1. MONGOOSE SCHEMAS & MODELS
-// ==========================================
-let ServerSettings, ChestChannel, BoostChannel, MasterSecurity, PolicyVote, CountGuild;
-
-try { ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings'); } catch (e) {
-    try { ServerSettings = mongoose.models.ServerSettings || require('./models/ServerSettings'); } catch (err) {}
-}
-try { ChestChannel = mongoose.models.ChestChannel || require('../models/ChestChannel'); } catch (e) {}
-try { BoostChannel = mongoose.models.BoostChannel || require('../models/BoostChannel'); } catch (e) {}
 
 const welcomeSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -64,54 +48,14 @@ const goodbyeSchema = new mongoose.Schema({
 });
 const GoodbyeSettings = mongoose.models.GoodbyeSettings || mongoose.model('GoodbyeSettings', goodbyeSchema);
 
-const PolicyVoteSchema = new mongoose.Schema({
-    guildId: String, messageId: String, title: String, description: String,
-    yesVotes: { type: Array, default: [] }, noVotes: { type: Array, default: [] }, createdAt: { type: Date, default: Date.now }
-});
-PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
-
 const masterSecuritySchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
     modules: { wick: { type: Boolean, default: true }, beemo: { type: Boolean, default: true }, altdentifier: { type: Boolean, default: false }, dyno_carl: { type: Boolean, default: true } },
     userInfractions: { type: Map, of: Number, default: {} }
 });
-MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
 
-const CountSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    channelId: { type: String, required: true },
-    currentNumber: { type: Number, default: 1 },
-    highScore: { type: Number, default: 0 },
-    lastUser: { type: String, default: null }
-});
-CountGuild = mongoose.models.CountGuild || mongoose.model('CountGuild', CountSchema);
-
-// SQLite Protection Store Initialization
-if (Database) {
-    try {
-        const protectDb = new Database('protect.db');
-        protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
-    } catch (e) {}
-}
-
-const securityCache = new Map();
-const blacklistedUsers = new Set();
-
-async function getSecurityConfig(guildId) {
-    if (securityCache.has(guildId)) return securityCache.get(guildId);
-    let config = await MasterSecurity.findOne({ guildId }).lean();
-    if (!config) {
-        config = { guildId, autoKick: false, autoBan: false, ownerBypass: true, modules: { wick: true, beemo: true, altdentifier: false, dyno_carl: true }, userInfractions: new Map() };
-        await MasterSecurity.create(config).catch(() => {});
-    }
-    securityCache.set(guildId, config);
-    return config;
-}
-
-// ==========================================
-// 2. GEMINI MULTI-KEY AI ENGINE
-// ==========================================
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
@@ -127,7 +71,7 @@ const AI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', '
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function generateAIResponseWithRetry(prompt) {
-    if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY environment variable.');
+    if (apiKeys.length === 0) throw new Error('Missing GEMINI_API_KEY.');
     let lastError = null;
 
     for (const modelName of AI_MODELS) {
@@ -141,8 +85,7 @@ async function generateAIResponseWithRetry(prompt) {
                 }
             } catch (err) {
                 lastError = err;
-                const errStatus = err.status || err.statusCode || (err.message && err.message.includes('503') ? 503 : 0);
-                if ((errStatus === 429 || errStatus === 503 || errStatus === 404) && attempt < 3) {
+                if ((err.status === 429 || err.status === 503) && attempt < 3) {
                     await sleep(attempt * 400);
                     continue;
                 }
@@ -150,7 +93,7 @@ async function generateAIResponseWithRetry(prompt) {
             }
         }
     }
-    throw lastError || new Error('AI Engine temporarily unreachable.');
+    throw lastError || new Error('AI Engine unreachable.');
 }
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
@@ -207,9 +150,9 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
         }
 
         if (components.length > 0) {
-            await channel.send({ embeds: [embed], components }).catch(() => null);
+            await channel.send({ embeds: [embed], components }).catch(err => console.error('Panel Send Error:', err.message));
         } else if (embed.data.title) {
-            await channel.send({ embeds: [embed] }).catch(() => null);
+            await channel.send({ embeds: [embed] }).catch(err => console.error('Panel Send Error:', err.message));
         }
     }
 }
@@ -245,13 +188,11 @@ async function provisionMasterServerStructure(interaction) {
     const staffFullControl = { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] };
     const botFullControl = { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] };
 
-    // 1. SECURITY & GOVERNANCE CATEGORY
     const govCat = await getOrCreateCategory(guild, '🛡️ SECURITY & GOVERNANCE', [showEveryone, botFullControl]);
     await createNonDuplicatingActiveChannel(guild, { name: 'rules-and-info', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'announcements', parent: govCat.id, permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'server-status-monitor', parent: govCat.id, moduleType: 'status_monitor', permissionOverwrites: [showEveryone, botFullControl] }, verifiedRole);
 
-    // 2. INCIDENT & AUDIT LOGS CATEGORY
     const sysCat = await getOrCreateCategory(guild, '🚨 INCIDENT & SECURITY LOGS', [hideEveryone, staffFullControl, botFullControl]);
     const sysChannels = [
         { name: 'logs-access', moduleType: 'log_access' }, 
@@ -265,23 +206,19 @@ async function provisionMasterServerStructure(interaction) {
         await createNonDuplicatingActiveChannel(guild, { name: item.name, parent: sysCat.id, moduleType: item.moduleType, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     }
 
-    // 3. AUTOMATED TRACKERS CATEGORY
     const trackerCat = await getOrCreateCategory(guild, '📡 AUTOMATED TRACKERS', [hideEveryone, staffFullControl, botFullControl]);
     await createNonDuplicatingActiveChannel(guild, { name: 'sus-account-tracker', parent: trackerCat.id, moduleType: 'sus_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'inactivity-tracker', parent: trackerCat.id, moduleType: 'inactivity_tracker', permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'chest-drops', parent: trackerCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
 
-    // 4. SUPPORT & APPLICATIONS CATEGORY
     const supportCat = await getOrCreateCategory(guild, '🎫 SUPPORT & APPLICATIONS');
     await createNonDuplicatingActiveChannel(guild, { name: 'verify-here', parent: supportCat.id, moduleType: 'verification', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] }, { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'open-a-ticket', parent: supportCat.id, moduleType: 'tickets', permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
 
-    // 5. ADMIN & STAFF HQ CATEGORY
     const staffCat = await getOrCreateCategory(guild, '👑 ADMIN & STAFF HQ', [hideEveryone, staffFullControl, botFullControl]);
     await createNonDuplicatingActiveChannel(guild, { name: 'owners-chat', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'staff-discussion', parent: staffCat.id, permissionOverwrites: [hideEveryone, staffFullControl, botFullControl] }, verifiedRole);
 
-    // 6. COMMUNITY PROTOCOL CATEGORY
     const commCat = await getOrCreateCategory(guild, '📊 COMMUNITY PROTOCOL', [hideEveryone, showVerified, botFullControl]);
     await createNonDuplicatingActiveChannel(guild, { name: 'general-chat', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
     await createNonDuplicatingActiveChannel(guild, { name: 'bot-commands', parent: commCat.id, permissionOverwrites: [hideEveryone, showVerified, botFullControl] }, verifiedRole);
@@ -320,58 +257,35 @@ const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption(o =>
-        o.setName('target')
-            .setDescription('Select whether to nuke this channel or the entire server')
-            .setRequired(true)
-            .addChoices({ name: 'Channel (Purge & Recreate)', value: 'channel' }, { name: 'Server (Reset All Channels & Non-Essential Roles)', value: 'server' })
-    )
-    .addChannelOption(o => o.setName('channel').setDescription('Target channel').addChannelTypes(ChannelType.GuildText).setRequired(false));
-
-const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)));
-const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('status').setDescription('Status'));
-const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
-const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
+    .addStringOption(o => o.setName('target').setDescription('Target scope').setRequired(true).addChoices({ name: 'Channel', value: 'channel' }, { name: 'Server', value: 'server' }));
+const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Setup verification').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
 module.exports = async (client) => {
-    if (client.starryEngineInitialized) {
-        console.log('⚠️ Starry Engine already initialized. Skipping duplicate registration.');
-        return;
-    }
+    if (client.starryEngineInitialized) return;
     client.starryEngineInitialized = true;
 
-    console.log('🚀 Supreme Starry Master AI & Moderation Engine Loaded Successfully!');
+    console.log('🚀 Starry Aesthetic Engine Active (Welcome/Goodbye Gifs, Mod, Logs)');
 
     start60sChannelTelemetryLoop(client);
-
-    client.isOwner = (userId) => {
-        const defaultOwners = ['1465049039153135639', '1257676837249617971'];
-        const envOwners = (process.env.OWNER_ID || '').split(',').map(id => id.trim()).filter(id => id.length > 0);
-        return [...new Set([...defaultOwners, ...envOwners])].includes(userId);
-    };
 
     client.getLogChannel = (guild, logType = 'misc') => {
         if (!guild || !guild.channels) return null;
         const typeMap = {
             'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
-            'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs', 'automod-logs'],
-            'messages': ['logs-messages', 'message-logs', 'chat-logs'],
-            'voice': ['logs-voice', 'voice-logs', 'vc-logs'],
-            'channels': ['logs-channels', 'channel-logs'],
-            'members': ['logs-members', 'member-logs', 'user-logs'],
-            'roles': ['logs-roles', 'role-logs'],
-            'misc': ['logs-misc', 'bot-logs']
+            'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
+            'messages': ['logs-messages', 'message-logs', 'chat-logs']
         };
-
         const targetNames = typeMap[logType.toLowerCase()] || typeMap['access'];
-        let channel = guild.channels.cache.find(c => c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-        if (channel) return channel;
-
-        return guild.channels.cache.find(c => c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'system-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+        let ch = guild.channels.cache.find(c => c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+        if (ch) return ch;
+        return guild.channels.cache.find(c => c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
     };
 
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
@@ -381,14 +295,13 @@ module.exports = async (client) => {
 
         const modEmbed = new EmbedBuilder()
             .setColor(embedColor)
-            .setAuthor({ name: `${guild.name} | Security & Moderation Notice`, iconURL: guild.iconURL({ dynamic: true }) })
+            .setAuthor({ name: `${guild.name} | Security Notice`, iconURL: guild.iconURL({ dynamic: true }) })
             .setTitle(`🛡️ Moderation Discipline: ${actionType.toUpperCase()}`)
-            .setDescription(`Hello **${member.user.username}**, you received a moderation discipline in **${guild.name}**.`)
+            .setDescription(`Hello **${member.user.username}**, you received a moderation action in **${guild.name}**.`)
             .addFields(
                 { name: '👤 Moderator', value: `\`${moderator.user ? moderator.user.username : 'Starry System'}\``, inline: true },
                 { name: '🛡️ Action', value: `\`${actionType.toUpperCase()}\``, inline: true },
                 { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
-                { name: '⏳ Duration', value: `\`${duration || 'Permanent / Instant'}\``, inline: true },
                 { name: '📝 Reason', value: `>>> ${reason || 'No reason provided.'}`, inline: false }
             )
             .setTimestamp();
@@ -396,26 +309,19 @@ module.exports = async (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
 
-    // 🟢 MEMBER JOIN LISTENER (WELCOME CARD + AUDIT LOG)
+    // 🌟 AESTHETIC MEMBER JOIN LISTENER (WELCOME GIFS)
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
 
         const accessLog = client.getLogChannel(member.guild, 'access');
         if (accessLog) {
-            const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24));
             const joinEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setAuthor({ name: '🟢 Member Joined', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`Welcome <@${member.id}> (**${member.user.tag}**) to **${member.guild.name}**!`)
-                .addFields(
-                    { name: '👤 User Mention', value: `<@${member.id}>`, inline: true },
-                    { name: '🆔 User ID', value: `\`${member.id}\``, inline: true },
-                    { name: '📅 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R> (${accountAgeDays} days old)`, inline: false },
-                    { name: '📊 Total Members', value: `\`${member.guild.memberCount}\``, inline: true }
-                )
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setColor('#FF73FA')
+                .setAuthor({ name: '🌸 New Member Arrival', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`✨ Welcome <@${member.id}> to **${member.guild.name}**! We are thrilled to have you here. 💖`)
+                .setImage('https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
                 .setTimestamp();
-            await accessLog.send({ embeds: [joinEmbed] }).catch(() => {});
+            await accessLog.send({ embeds: [joinEmbed] }).catch(err => console.error('Join Log Error:', err.message));
         }
 
         try {
@@ -425,36 +331,35 @@ module.exports = async (client) => {
             if (!welcomeCh) return;
 
             const welcomeEmbed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setTitle(`✨ Welcome to ${member.guild.name} ✨`)
-                .setDescription(`Hello <@${member.id}>, we are so glad you joined the server! Read the rules and enjoy your stay.`)
+                .setColor('#FF73FA')
+                .setTitle(`✨ WELCOME TO ${member.guild.name.toUpperCase()} ✨`)
+                .setDescription(`💖 Hello <@${member.id}>! Welcome aboard! Make yourself at home, check out the community rules, and enjoy your wonderful stay here. ✨`)
                 .addFields(
-                    { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!`, inline: true },
-                    { name: '📆 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                    { name: '🌸 Member Milestone', value: `You are our stellar member **#${member.guild.memberCount}**! 🎉`, inline: false },
+                    { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
                 )
+                .setImage('https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
                 .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-                .setFooter({ text: `Enjoy your stay in ${member.guild.name}!` })
+                .setFooter({ text: `✨ Starry Aesthetic Welcome System • Enjoy your journey! ✨` })
                 .setTimestamp();
 
-            await welcomeCh.send({ content: `Hey <@${member.id}>! 👋`, embeds: [welcomeEmbed] }).catch(() => {});
-        } catch (err) {}
+            await welcomeCh.send({ content: `💫 Hey <@${member.id}>! We've been expecting you! 🥂`, embeds: [welcomeEmbed] }).catch(err => console.error('Welcome Send Error:', err.message));
+        } catch (err) {
+            console.error('Welcome Event Error:', err.message);
+        }
     });
 
-    // 🔴 MEMBER LEAVE LISTENER (GOODBYE BANNER + AUDIT LOG)
+    // 👋 AESTHETIC MEMBER LEAVE LISTENER (GOODBYE GIFS)
     client.on('guildMemberRemove', async (member) => {
         const accessLog = client.getLogChannel(member.guild, 'access');
         if (accessLog) {
             const leaveEmbed = new EmbedBuilder()
                 .setColor('#ED4245')
-                .setAuthor({ name: '🔴 Member Left', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`<@${member.id}> (**${member.user.tag}**) has left **${member.guild.name}**.`)
-                .addFields(
-                    { name: '🆔 User ID', value: `\`${member.id}\``, inline: true },
-                    { name: '📊 Remaining Members', value: `\`${member.guild.memberCount}\``, inline: true }
-                )
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setAuthor({ name: '🥀 Member Departure', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`💫 **${member.user.tag}** has fluttered away from **${member.guild.name}**.`)
+                .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
                 .setTimestamp();
-            await accessLog.send({ embeds: [leaveEmbed] }).catch(() => {});
+            await accessLog.send({ embeds: [leaveEmbed] }).catch(err => console.error('Leave Log Error:', err.message));
         }
 
         try {
@@ -463,44 +368,20 @@ module.exports = async (client) => {
             const goodbyeCh = member.guild.channels.cache.get(config.channelId);
             if (!goodbyeCh) return;
 
-            const bgPath = path.join(__dirname, 'goodbye_bg.png');
-            if (createCanvas && fs.existsSync(bgPath)) {
-                const canvas = createCanvas(1024, 450);
-                const ctx = canvas.getContext('2d');
-                const background = await loadImage(bgPath);
-                ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+            const goodbyeEmbed = new EmbedBuilder()
+                .setColor('#7289DA')
+                .setTitle(`🥀 FAREWELL, TRAVELER 🥀`)
+                .setDescription(`👋 **${member.user.tag}** has departed from **${member.guild.name}**. We wish you the absolute best on your future adventures! 🌠`)
+                .addFields({ name: '📊 Server Census', value: `We are now down to **${member.guild.memberCount}** members.`, inline: false })
+                .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
+                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+                .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Safe travels!` })
+                .setTimestamp();
 
-                ctx.font = '36px sans-serif';
-                ctx.fillStyle = '#ffffff';
-                ctx.textAlign = 'center';
-                ctx.fillText(member.user.username, 512, 380);
-
-                ctx.beginPath();
-                ctx.arc(512, 140, 90, 0, Math.PI * 2, true);
-                ctx.closePath();
-                ctx.clip();
-
-                const avatar = await loadImage(member.user.displayAvatarURL({ extension: 'png', size: 256 }));
-                ctx.drawImage(avatar, 422, 50, 180, 180);
-
-                const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'goodbye-image.png' });
-                const embed = new EmbedBuilder()
-                    .setColor('#2b2d31')
-                    .setTitle('👋 Someone left...')
-                    .setDescription(`**${member.user.tag}** has left the server. We are now down to **${member.guild.memberCount}** members.`)
-                    .setImage('attachment://goodbye-image.png');
-
-                await goodbyeCh.send({ embeds: [embed], files: [attachment] }).catch(() => {});
-            } else {
-                const fallbackEmbed = new EmbedBuilder()
-                    .setColor('#2b2d31')
-                    .setTitle('👋 Someone left...')
-                    .setDescription(`**${member.user.tag}** has left the server. We are now down to **${member.guild.memberCount}** members.`)
-                    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
-
-                await goodbyeCh.send({ embeds: [fallbackEmbed] }).catch(() => {});
-            }
-        } catch (err) {}
+            await goodbyeCh.send({ content: `🕊️ Goodbye **${member.user.username}**! Until we meet again...`, embeds: [goodbyeEmbed] }).catch(err => console.error('Goodbye Send Error:', err.message));
+        } catch (err) {
+            console.error('Goodbye Event Error:', err.message);
+        }
     });
 
     // 🗑️ MESSAGE DELETE & BULK PURGE AUDIT LOGGERS
@@ -522,7 +403,7 @@ module.exports = async (client) => {
                 )
                 .setTimestamp();
 
-            await logChannel.send({ embeds: [deleteEmbed] }).catch(() => {});
+            await logChannel.send({ embeds: [deleteEmbed] }).catch(err => console.error('Delete Log Send Error:', err.message));
         } catch (err) {}
     });
 
@@ -543,19 +424,17 @@ module.exports = async (client) => {
                 )
                 .setTimestamp();
 
-            await logChannel.send({ embeds: [bulkEmbed] }).catch(() => {});
+            await logChannel.send({ embeds: [bulkEmbed] }).catch(err => console.error('Bulk Delete Log Send Error:', err.message));
         } catch (err) {}
     });
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8 - REPAIRED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
-    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (BUTTONS & SLASH COMMANDS)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
-        // 1. Social Action Buttons
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_');
             const actionType = parts[1] || 'pat';
@@ -600,7 +479,6 @@ module.exports = async (client) => {
             return interaction.reply({ embeds: [replyEmbed], components: [reciprocalRow] }).catch(() => {});
         }
 
-        // 2. Web Verification Link Button
         if (interaction.isButton() && interaction.customId.startsWith('verify_role_')) {
             const roleId = interaction.customId.split('verify_role_')[1];
             const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -617,7 +495,6 @@ module.exports = async (client) => {
             return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
-        // 3. Slash Command Router
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setup-starry') {
                 if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
@@ -639,6 +516,7 @@ module.exports = async (client) => {
                 }
             }
 
+            // 🌟 AESTHETIC SETUP WELCOME WITH LIVE PREVIEW
             if (interaction.commandName === 'setupwelcome') {
                 if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                     return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [EPHEMERAL_FLAG] });
@@ -647,18 +525,23 @@ module.exports = async (client) => {
                 await WelcomeSettings.findOneAndUpdate({ guildId: interaction.guildId }, { channelId: channel.id }, { upsert: true });
 
                 const previewEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle(`✨ Welcome to ${interaction.guild.name} ✨`)
-                    .setDescription(`Hello ${interaction.user}, welcome! Read the rules and enjoy your stay.`)
-                    .addFields({ name: '👤 Member Count', value: `You are member **#${interaction.guild.memberCount}**!`, inline: true })
+                    .setColor('#FF73FA')
+                    .setTitle(`✨ WELCOME TO ${interaction.guild.name.toUpperCase()} ✨`)
+                    .setDescription(`💖 Hello ${interaction.user}! Welcome aboard! Make yourself at home, check out the community rules, and enjoy your wonderful stay here. ✨`)
+                    .addFields(
+                        { name: '🌸 Member Milestone', value: `You are our stellar member **#${interaction.guild.memberCount}**! 🎉`, inline: false },
+                        { name: '✨ Account Created', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true }
+                    )
+                    .setImage('https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
                     .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
-                    .setFooter({ text: `Starry Welcome System • Preview Mode` })
+                    .setFooter({ text: `✨ Starry Aesthetic Welcome System • Setup Preview Mode ✨` })
                     .setTimestamp();
 
-                await channel.send({ content: `Hey ${interaction.user}! 👋 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
-                return interaction.reply({ content: `✅ **Success!** Welcome messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
+                await channel.send({ content: `💫 Hey ${interaction.user}! We've been expecting you! 🥂 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(err => console.error('Welcome Preview Error:', err.message));
+                return interaction.reply({ content: `✅ **Success!** Aesthetic welcome messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
             }
 
+            // 👋 AESTHETIC SETUP GOODBYE WITH LIVE PREVIEW
             if (interaction.commandName === 'setupgoodbye') {
                 if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                     return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [EPHEMERAL_FLAG] });
@@ -666,7 +549,18 @@ module.exports = async (client) => {
                 const channel = interaction.options.getChannel('channel', true);
                 await GoodbyeSettings.findOneAndUpdate({ guildId: interaction.guildId }, { channelId: channel.id }, { upsert: true });
 
-                return interaction.reply({ content: `✅ **Success!** Goodbye messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
+                const previewEmbed = new EmbedBuilder()
+                    .setColor('#7289DA')
+                    .setTitle(`🥀 FAREWELL, TRAVELER (Preview) 🥀`)
+                    .setDescription(`👋 **${interaction.user.tag}** has departed from **${interaction.guild.name}**. We wish you the absolute best on your future adventures! 🌠`)
+                    .addFields({ name: '📊 Server Census', value: `We are now down to **${interaction.guild.memberCount}** members.`, inline: false })
+                    .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
+                    .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+                    .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Setup Preview Mode` })
+                    .setTimestamp();
+
+                await channel.send({ content: `🕊️ Goodbye **${interaction.user.username}**! Until we meet again... *(Setup Preview)*`, embeds: [previewEmbed] }).catch(err => console.error('Goodbye Preview Error:', err.message));
+                return interaction.reply({ content: `✅ **Success!** Aesthetic goodbye messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
             }
         }
     });
@@ -681,7 +575,7 @@ module.exports = async (client) => {
             .trim();
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8 - REPAIRED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -727,7 +621,6 @@ module.exports = async (client) => {
         return false;
     }
 
-    // ⚡ INSTANT LOCAL PRE-PARSERS (<10ms Execution)
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
@@ -736,7 +629,6 @@ module.exports = async (client) => {
 
         const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '').trim();
 
-        // Greeting
         const isGreeting = cleanText === '' || ['hi', 'hello', 'hey', 'yo', 'sup', 'hola', 'starry'].includes(cleanText);
         if (isGreeting) {
             const responses = [
@@ -748,7 +640,6 @@ module.exports = async (client) => {
             return true;
         }
 
-        // Premium Suite Overview
         if (text === '.premium' || text === 'starry premium' || text === 'jarvis premium') {
             const premiumEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
@@ -769,48 +660,13 @@ module.exports = async (client) => {
             return true;
         }
 
-        // Channel Creation (Text & Voice)
-        const voiceChanRegex = /(?:create|make|add)\s+(?:a\s+)?voice\s+channel\s+(?:named\s+)?(.+)$/i;
-        const voiceMatch = cleanText.match(voiceChanRegex);
-        if (voiceMatch) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember?.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-            try {
-                const vChan = await message.guild.channels.create({ name: voiceMatch[1].trim(), type: ChannelType.GuildVoice });
-                await message.reply(`🔊 Successfully created voice channel **${vChan.name}**!`);
-            } catch (err) {
-                await message.reply(`❌ Failed to create voice channel: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        const textChanRegex = /(?:create|make|add)\s+(?:a\s+)?(?:text\s+)?channel\s+(?:named\s+)?([a-zA-Z0-9_\-\s]+)$/i;
-        const textMatch = cleanText.match(textChanRegex);
-        if (textMatch && !cleanText.includes('voice') && !cleanText.includes('role') && !cleanText.includes('category')) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels) || !botMember?.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                await message.reply("❌ You or I lack **Manage Channels** permission.");
-                return true;
-            }
-            try {
-                const cName = textMatch[1].trim().toLowerCase().replace(/\s+/g, '-');
-                const tChan = await message.guild.channels.create({ name: cName, type: ChannelType.GuildText });
-                await message.reply(`✨ Successfully created text channel <#${tChan.id}>!`);
-            } catch (err) {
-                await message.reply(`❌ Failed to create text channel: \`${err.message}\``);
-            }
-            return true;
-        }
-
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8 - REPAIRED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
-    // 🛡️ SMART NATURAL LANGUAGE TEXT MODERATION & PURGE ENGINE
     async function handleSmartModeration(client, message) {
         if (!message.guild || message.author.bot) return false;
 
@@ -832,28 +688,30 @@ module.exports = async (client) => {
         const executor = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
         const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
 
-        // 🧹 A. PURGE / CLEAR MESSAGES HANDLER
+        // 🧹 PURGE HANDLER WITH LOGGING
         if (isPurge) {
             if (!executor || !executor.permissions.has(PermissionFlagsBits.ManageMessages)) {
                 await message.reply('❌ You need **Manage Messages** permissions to purge.');
                 return true;
             }
             if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                await message.reply('❌ I need **Manage Messages** permission to purge messages!');
+                await message.reply('❌ I need **Manage Messages** permission in Server Settings to purge!');
                 return true;
             }
 
             const numberMatch = lowerContent.match(/\b\d+\b/);
             const count = numberMatch ? parseInt(numberMatch[0]) : 5;
-            const deleteCount = Math.min(count, 99) + 1; // +1 to delete trigger command
+            const deleteCount = Math.min(count, 99) + 1;
 
-            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(() => null);
+            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(err => {
+                console.error('Purge BulkDelete Error:', err.message);
+                return null;
+            });
             const actualDeletedCount = deleted ? Math.max(0, deleted.size - 1) : count;
 
             const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`).catch(() => null);
             if (sent) setTimeout(() => sent.delete().catch(() => {}), 3500);
 
-            // Dispatch to Audit Log
             const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
             if (logChannel) {
                 const purgeEmbed = new EmbedBuilder()
@@ -865,12 +723,12 @@ module.exports = async (client) => {
                         { name: '📊 Amount Deleted', value: `\`${actualDeletedCount}\` messages`, inline: true }
                     )
                     .setTimestamp();
-                await logChannel.send({ embeds: [purgeEmbed] }).catch(() => {});
+                await logChannel.send({ embeds: [purgeEmbed] }).catch(err => console.error('Purge Log Error:', err.message));
             }
             return true;
         }
 
-        // 🛡️ B. MEMBER MODERATION (TIMEOUT / KICK / BAN)
+        // 🛡️ MEMBER MODERATION (TIMEOUT / KICK / BAN)
         try {
             let targetUser = message.mentions.users.filter(u => u.id !== client.user.id).first();
             if (!targetUser) {
@@ -879,7 +737,7 @@ module.exports = async (client) => {
             }
 
             if (!targetUser) {
-                await message.reply('❌ Please mention a valid user to moderate (e.g. `Starry mute @user 1m for saying n word`).');
+                await message.reply('❌ Please mention a valid user to moderate (e.g. `Starry mute @user 1m for spam`).');
                 return true;
             }
 
@@ -892,7 +750,7 @@ module.exports = async (client) => {
                 }
 
                 if (botMember && targetMember.roles.highest.position >= botMember.roles.highest.position) {
-                    await message.reply(`❌ I cannot moderate **${targetUser.username}** because their highest role is equal to or higher than my bot role in Server Settings! Move my Starry role higher.`);
+                    await message.reply(`❌ I cannot moderate **${targetUser.username}** because their highest role is equal to or higher than my bot role! Move my Starry role higher.`);
                     return true;
                 }
             }
@@ -946,7 +804,7 @@ module.exports = async (client) => {
                 await message.reply({ embeds: [embed] });
 
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(err => console.error('Mod Log Error:', err.message));
                 return true;
             }
 
@@ -982,7 +840,7 @@ module.exports = async (client) => {
                 await message.reply({ embeds: [embed] });
 
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(err => console.error('Kick Log Error:', err.message));
                 return true;
             }
 
@@ -1007,7 +865,7 @@ module.exports = async (client) => {
                 await message.reply({ embeds: [embed] });
 
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(err => console.error('Ban Log Error:', err.message));
                 return true;
             }
 
@@ -1020,11 +878,10 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8 - REPAIRED)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
-    // 🎨 STRICT POLLINATIONS IMAGE PARSER
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         let isImageRequest = isImagine;
         let imagePrompt = "";
@@ -1074,7 +931,6 @@ module.exports = async (client) => {
         return false;
     }
 
-    // 🤖 CONVERSATIONAL GEMINI ENGINE
     async function handleConversationalGemini(client, message, displayName) {
         await message.channel.sendTyping().catch(() => {});
 
@@ -1110,23 +966,15 @@ ${message.author.username} says: ${message.content}`;
         }
     }
 
-    // ==========================================
-    // 5. UNIFIED DISPATCHER PIPELINE
-    // ==========================================
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
-        // 1. AutoMod Ping Check
         if (await handleAutoModPing(message)) return;
-
-        // 2. Developer CLI Commands (.dev, .sysinfo, .eval)
         if (await handleDevCLI(client, message)) return;
 
-        // 3. Smart Natural Language & Mention Moderation Parser
         const modHandled = await handleSmartModeration(client, message);
         if (modHandled) return;
 
-        // Trigger Word Check
         let triggerWord = 'starry';
         let displayName = 'Starry'; 
 
@@ -1152,22 +1000,16 @@ ${message.author.username} says: ${message.content}`;
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // 4. Fast Local Pre-Parsers (<10ms Execution)
         const localHandled = await handleLocalActions(client, message);
         if (localHandled) return; 
 
-        // 5. Pollinations AI Media Generation
         const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
         if (imageHandled) return;
 
-        // 6. Conversational Gemini AI Engine
         await handleConversationalGemini(client, message, displayName);
     });
 };
 
-// ==========================================
-// EXPORTS
-// ==========================================
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.executeFullGuildBackup = executeFullGuildBackup;
