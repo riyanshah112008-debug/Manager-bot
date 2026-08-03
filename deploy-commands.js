@@ -6,9 +6,11 @@ const {
     Routes, 
     PermissionFlagsBits, 
     SlashCommandBuilder, 
-    ChannelType,
-    ApplicationIntegrationType,
-    InteractionContextType
+    ContextMenuCommandBuilder,    // 👈 Must be imported
+    ApplicationCommandType,       // 👈 Must be imported
+    ApplicationIntegrationType,   // 👈 Must be imported
+    InteractionContextType,       // 👈 Must be imported
+    ChannelType 
 } = require('discord.js');
 
 const ADMIN = PermissionFlagsBits.Administrator.toString();
