@@ -232,24 +232,37 @@ module.exports = (client) => {
         }
     });
     // ==========================================
-    // 💬 4. MESSAGE AUDIT LOGS & BULK DELETE TRANSCRIPTS
+    // 💬 4. MESSAGE AUDIT LOGS (INCLUDES SELF-PURGE)
     // ==========================================
 
-    // SINGLE MESSAGE DELETE
+    // SINGLE MESSAGE DELETE (User & Self-Purge/Bot Messages)
     client.on(Events.MessageDelete, async (message) => {
-        if (!message.guild || message.author?.bot) return;
+        if (!message.guild) return;
 
         const logChannel = await resolveLogChannel(message.guild, 'messages');
         if (!logChannel) return;
 
+        // Prevent logging deletions happening inside the log channel itself
+        if (message.channel.id === logChannel.id) return;
+
+        const isBotMessage = message.author?.bot;
+        const authorTag = message.author 
+            ? `${message.author.tag} ${isBotMessage ? '🤖 [Bot/Self-Purge]' : ''}` 
+            : 'Unknown Author (Uncached)';
+        
+        const authorAvatar = message.author 
+            ? message.author.displayAvatarURL({ dynamic: true }) 
+            : message.guild.iconURL({ dynamic: true });
+
         const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setAuthor({ name: message.author?.tag || 'Unknown User', iconURL: message.author?.displayAvatarURL({ dynamic: true }) })
-            .setTitle(`🗑️ Message Deleted in #${message.channel.name}`)
-            .setDescription(message.content ? message.content : '*[No text content / Attachment only]*')
+            .setColor(isBotMessage ? '#7289DA' : '#ED4245')
+            .setAuthor({ name: authorTag, iconURL: authorAvatar })
+            .setTitle(isBotMessage ? `🤖 Self-Purge / Bot Message Deleted in #${message.channel.name}` : `🗑️ Message Deleted in #${message.channel.name}`)
+            .setDescription(message.content ? message.content : '*[No text content / Attachment or Embed only]*')
             .addFields(
                 { name: 'Channel', value: `${message.channel}`, inline: true },
-                { name: 'Author', value: `${message.author || 'Unknown'}`, inline: true }
+                { name: 'Author', value: message.author ? `${message.author}` : '`Unknown`', inline: true },
+                { name: 'Type', value: isBotMessage ? '`🤖 Bot / Self-Purge`' : '`👤 User Message`', inline: true }
             )
             .setFooter({ text: `User ID: ${message.author?.id || 'N/A'} | Message ID: ${message.id}` })
             .setTimestamp();
@@ -293,13 +306,16 @@ module.exports = (client) => {
         const logChannel = await resolveLogChannel(channel.guild, 'messages');
         if (!logChannel) return;
 
+        // Prevent logging if purge occurred inside the log channel
+        if (channel.id === logChannel.id) return;
+
         const sortedMessages = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
         // Fetch Audit Log to identify who triggered the purge
         let executorTag = 'Unknown Staff / Bot Command';
         let executorMention = '`Unknown`';
         try {
-            await new Promise(r => setTimeout(r, 1000)); // Brief pause to allow audit log sync
+            await new Promise(r => setTimeout(r, 1000));
             const fetchedLogs = await channel.guild.fetchAuditLogs({
                 limit: 1,
                 type: AuditLogEvent.MessageBulkDelete
@@ -326,8 +342,8 @@ module.exports = (client) => {
         // Append Each Deleted Message to Transcript
         sortedMessages.forEach((msg, index) => {
             const timeStr = new Date(msg.createdTimestamp).toUTCString();
-            const authorTag = msg.author ? `${msg.author.tag} (ID: ${msg.author.id})` : 'Unknown Author';
-            const contentStr = msg.content ? msg.content : '[No Text Content]';
+            const authorTag = msg.author ? `${msg.author.tag} (ID: ${msg.author.id}) ${msg.author.bot ? '[BOT]' : '[USER]'}` : 'Unknown Author';
+            const contentStr = msg.content ? msg.content : '[No Text Content / Attachment or Embed Only]';
 
             transcriptText += `----------------------------------------------------------------------------------------------------\n`;
             transcriptText += `[${String(index + 1).padStart(2, '0')}] MSG ID: ${msg.id} | TIME: ${timeStr}\n`;
@@ -353,7 +369,7 @@ module.exports = (client) => {
         const purgeEmbed = new EmbedBuilder()
             .setColor('#ED4245')
             .setTitle(`🧹 Bulk Messages Deleted / Purged in #${channel.name}`)
-            .setDescription(`A total of **${sortedMessages.length}** messages were purged from <#${channel.id}>. Full details have been compiled into the attached transcript file.`)
+            .setDescription(`A total of **${sortedMessages.length}** messages (including user and self-purged bot messages) were purged from <#${channel.id}>.\nFull details have been compiled into the attached transcript file.`)
             .addFields(
                 { name: '📍 Channel', value: `${channel} (\`#${channel.name}\`)`, inline: true },
                 { name: '👤 Triggered By', value: executorMention, inline: true },
