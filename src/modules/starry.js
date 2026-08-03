@@ -817,7 +817,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8 - WITH DM NOTIFICATIONS)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -896,6 +896,8 @@ module.exports = async (client) => {
                 reason = rawContent.substring(rawContent.toLowerCase().indexOf('reason:') + 7).trim();
             }
 
+            const caseId = Math.floor(Math.random() * 90000) + 10000;
+
             // A. TIMEOUT / MUTE
             if (isTimeout && !isUntimeout) {
                 if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -914,11 +916,14 @@ module.exports = async (client) => {
                 const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000); // Default 10m
                 const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?[0] || '10m';
 
+                // 📩 Send Premium DM Notice to User
+                await client.sendPremiumModDM(targetMember, executor, 'Timeout', reason, durationStr, message.guild, caseId);
+
                 await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
                 const embed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('⏰ Member Timed Out')
-                    .setDescription(`**Target:** ${targetMember} (\`${targetUser.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}`)
+                    .setDescription(`**Target:** ${targetMember} (\`${targetUser.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}\n**Case ID:** \`#${caseId}\``)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
 
@@ -951,11 +956,14 @@ module.exports = async (client) => {
                 }
                 if (!targetMember) return true;
 
+                // 📩 Send Premium DM Notice to User before kick
+                await client.sendPremiumModDM(targetMember, executor, 'Kick', reason, null, message.guild, caseId);
+
                 await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
                 const embed = new EmbedBuilder()
                     .setColor('#DA373C')
                     .setTitle('🚪 Member Kicked')
-                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}`)
+                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}\n**Case ID:** \`#${caseId}\``)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
                 await message.reply({ embeds: [embed] });
@@ -972,11 +980,16 @@ module.exports = async (client) => {
                     return true;
                 }
 
+                // 📩 Send Premium DM Notice to User before ban
+                if (targetMember) {
+                    await client.sendPremiumModDM(targetMember, executor, 'Ban', reason, null, message.guild, caseId);
+                }
+
                 await message.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${message.author.tag}` });
                 const embed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔨 Member Banned')
-                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}`)
+                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}\n**Case ID:** \`#${caseId}\``)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
                 await message.reply({ embeds: [embed] });
@@ -1045,6 +1058,7 @@ module.exports = async (client) => {
         }
         return false;
     }
+
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
 // File Path: modules/starry.js
