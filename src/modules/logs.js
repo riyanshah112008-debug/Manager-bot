@@ -1,5 +1,6 @@
 // ==========================================
-// 1. TOP-LEVEL IMPORTS & MONGOOSE SCHEMA
+// 📜 STARRY SUPREME AUDIT LOG ENGINE (PART 1 OF 2)
+// File Path: logs.js
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -11,6 +12,7 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 
+// 🗄️ MONGOOSE LOG SETTINGS SCHEMA
 const logSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     logChannel: { type: String, default: null }
@@ -29,7 +31,7 @@ const setLogsCommand = new SlashCommandBuilder()
 
 module.exports = (client) => {
 
-    // Smart Channel Resolver: Uses client.getLogChannel if available, else DB fallback
+    // Smart Channel Resolver: Uses client.getLogChannel if available, else MongoDB fallback
     async function resolveLogChannel(guild, type = 'misc') {
         if (!guild) return null;
 
@@ -53,7 +55,7 @@ module.exports = (client) => {
 
     async function handleSetLogs(interaction) {
         try {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [6] }); // Ephemeral flag fix
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [6] });
         } catch (e) { return; }
 
         const channel = interaction.options.getChannel('channel', true);
@@ -171,60 +173,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 💬 3. MESSAGE AUDIT LOGS
-    // ==========================================
-
-    client.on(Events.MessageDelete, async (message) => {
-        if (!message.guild || message.author?.bot) return;
-
-        const logChannel = await resolveLogChannel(message.guild, 'messages');
-        if (!logChannel) return;
-
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-            .setTitle(`🗑️ Message Deleted in #${message.channel.name}`)
-            .setDescription(message.content ? message.content : '*[No text content / Attachment only]*')
-            .addFields(
-                { name: 'Channel', value: `${message.channel}`, inline: true },
-                { name: 'Author', value: `${message.author}`, inline: true }
-            )
-            .setFooter({ text: `User ID: ${message.author.id} | Message ID: ${message.id}` })
-            .setTimestamp();
-
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
-        if (newMessage.partial) {
-            try { await newMessage.fetch(); } catch (e) { return; }
-        }
-
-        if (!newMessage.guild || newMessage.author?.bot) return;
-        if (oldMessage.content === newMessage.content) return;
-
-        const logChannel = await resolveLogChannel(newMessage.guild, 'messages');
-        if (!logChannel) return;
-
-        const beforeText = oldMessage.partial || !oldMessage.content 
-            ? '*[Unknown / Message sent while bot was offline]*' 
-            : oldMessage.content;
-
-        const afterText = newMessage.content || '*[Empty]*';
-
-        const embed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setAuthor({ name: newMessage.author.tag, iconURL: newMessage.author.displayAvatarURL({ dynamic: true }) })
-            .setTitle(`✏️ Message Edited in #${newMessage.channel.name}`)
-            .setDescription(`**Before:**\n${beforeText}\n\n**After:**\n${afterText}\n\n[Jump to Message](${newMessage.url})`)
-            .setFooter({ text: `User ID: ${newMessage.author.id}` })
-            .setTimestamp();
-
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    // ==========================================
-    // 🎙️ 4. VOICE CHANNEL AUDIT LOGS
+    // 🎙️ 3. VOICE CHANNEL AUDIT LOGS
     // ==========================================
     client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         const guild = newState.guild || oldState.guild;
@@ -281,6 +230,142 @@ module.exports = (client) => {
 
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
+    });
+    // ==========================================
+    // 💬 4. MESSAGE AUDIT LOGS & BULK DELETE TRANSCRIPTS
+    // ==========================================
+
+    // SINGLE MESSAGE DELETE
+    client.on(Events.MessageDelete, async (message) => {
+        if (!message.guild || message.author?.bot) return;
+
+        const logChannel = await resolveLogChannel(message.guild, 'messages');
+        if (!logChannel) return;
+
+        const embed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setAuthor({ name: message.author?.tag || 'Unknown User', iconURL: message.author?.displayAvatarURL({ dynamic: true }) })
+            .setTitle(`🗑️ Message Deleted in #${message.channel.name}`)
+            .setDescription(message.content ? message.content : '*[No text content / Attachment only]*')
+            .addFields(
+                { name: 'Channel', value: `${message.channel}`, inline: true },
+                { name: 'Author', value: `${message.author || 'Unknown'}`, inline: true }
+            )
+            .setFooter({ text: `User ID: ${message.author?.id || 'N/A'} | Message ID: ${message.id}` })
+            .setTimestamp();
+
+        await logChannel.send({ embeds: [embed] }).catch(() => {});
+    });
+
+    // MESSAGE EDIT LOGS
+    client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
+        if (newMessage.partial) {
+            try { await newMessage.fetch(); } catch (e) { return; }
+        }
+
+        if (!newMessage.guild || newMessage.author?.bot) return;
+        if (oldMessage.content === newMessage.content) return;
+
+        const logChannel = await resolveLogChannel(newMessage.guild, 'messages');
+        if (!logChannel) return;
+
+        const beforeText = oldMessage.partial || !oldMessage.content 
+            ? '*[Unknown / Message sent while bot was offline]*' 
+            : oldMessage.content;
+
+        const afterText = newMessage.content || '*[Empty]*';
+
+        const embed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setAuthor({ name: newMessage.author.tag, iconURL: newMessage.author.displayAvatarURL({ dynamic: true }) })
+            .setTitle(`✏️ Message Edited in #${newMessage.channel.name}`)
+            .setDescription(`**Before:**\n${beforeText}\n\n**After:**\n${afterText}\n\n[Jump to Message](${newMessage.url})`)
+            .setFooter({ text: `User ID: ${newMessage.author.id}` })
+            .setTimestamp();
+
+        await logChannel.send({ embeds: [embed] }).catch(() => {});
+    });
+
+    // 🧹 SUPREME BULK DELETE / PURGE TRANSCRIPT ENGINE
+    client.on(Events.MessageDeleteBulk, async (messages, channel) => {
+        if (!channel || !channel.guild) return;
+
+        const logChannel = await resolveLogChannel(channel.guild, 'messages');
+        if (!logChannel) return;
+
+        const sortedMessages = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+        // Fetch Audit Log to identify who triggered the purge
+        let executorTag = 'Unknown Staff / Bot Command';
+        let executorMention = '`Unknown`';
+        try {
+            await new Promise(r => setTimeout(r, 1000)); // Brief pause to allow audit log sync
+            const fetchedLogs = await channel.guild.fetchAuditLogs({
+                limit: 1,
+                type: AuditLogEvent.MessageBulkDelete
+            }).catch(() => null);
+
+            const bulkLog = fetchedLogs?.entries.first();
+            if (bulkLog && (Date.now() - bulkLog.createdTimestamp) < 15000) {
+                executorTag = `${bulkLog.executor.tag} (${bulkLog.executor.id})`;
+                executorMention = `<@${bulkLog.executor.id}> (\`${bulkLog.executor.tag}\`)`;
+            }
+        } catch (e) {}
+
+        // Format Professional Text Transcript Header
+        let transcriptText = `====================================================================================================\n`;
+        transcriptText += `                           STARRY SUPREME AUDIT LOG - PURGE TRANSCRIPT                             \n`;
+        transcriptText += `====================================================================================================\n`;
+        transcriptText += `Server         : ${channel.guild.name} (ID: ${channel.guild.id})\n`;
+        transcriptText += `Channel        : #${channel.name} (ID: ${channel.id})\n`;
+        transcriptText += `Purged Count   : ${sortedMessages.length} Messages\n`;
+        transcriptText += `Triggered By   : ${executorTag}\n`;
+        transcriptText += `Generated At   : ${new Date().toUTCString()}\n`;
+        transcriptText += `====================================================================================================\n\n`;
+
+        // Append Each Deleted Message to Transcript
+        sortedMessages.forEach((msg, index) => {
+            const timeStr = new Date(msg.createdTimestamp).toUTCString();
+            const authorTag = msg.author ? `${msg.author.tag} (ID: ${msg.author.id})` : 'Unknown Author';
+            const contentStr = msg.content ? msg.content : '[No Text Content]';
+
+            transcriptText += `----------------------------------------------------------------------------------------------------\n`;
+            transcriptText += `[${String(index + 1).padStart(2, '0')}] MSG ID: ${msg.id} | TIME: ${timeStr}\n`;
+            transcriptText += `AUTHOR : ${authorTag}\n`;
+            transcriptText += `CONTENT:\n${contentStr}\n`;
+
+            if (msg.attachments && msg.attachments.size > 0) {
+                const attachmentUrls = msg.attachments.map(a => a.url).join('\n         ');
+                transcriptText += `ATTACHMENTS:\n         ${attachmentUrls}\n`;
+            }
+
+            if (msg.embeds && msg.embeds.length > 0) {
+                transcriptText += `EMBEDS : [${msg.embeds.length} Embedded Card(s) Present]\n`;
+            }
+            transcriptText += `----------------------------------------------------------------------------------------------------\n\n`;
+        });
+
+        const transcriptBuffer = Buffer.from(transcriptText, 'utf-8');
+        const transcriptFile = new AttachmentBuilder(transcriptBuffer, { 
+            name: `${channel.guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_PurgeLog_${channel.name}_${Date.now()}.txt` 
+        });
+
+        const purgeEmbed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle(`🧹 Bulk Messages Deleted / Purged in #${channel.name}`)
+            .setDescription(`A total of **${sortedMessages.length}** messages were purged from <#${channel.id}>. Full details have been compiled into the attached transcript file.`)
+            .addFields(
+                { name: '📍 Channel', value: `${channel} (\`#${channel.name}\`)`, inline: true },
+                { name: '👤 Triggered By', value: executorMention, inline: true },
+                { name: '📊 Total Messages', value: `\`${sortedMessages.length}\` Messages`, inline: true }
+            )
+            .setFooter({ text: `Channel ID: ${channel.id}` })
+            .setTimestamp();
+
+        await logChannel.send({ 
+            embeds: [purgeEmbed], 
+            files: [transcriptFile] 
+        }).catch(console.error);
     });
 
     // ==========================================
@@ -505,76 +590,7 @@ module.exports = (client) => {
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    // ==========================================
-    // 🧹 BULK DELETE / PURGE TRANSCRIPT LOGGER
-    // ==========================================
-    client.on(Events.MessageDeleteBulk, async (messages, channel) => {
-        if (!channel.guild) return;
+};
 
-        const logChannel = await resolveLogChannel(channel.guild, 'messages');
-        if (!logChannel) return;
-
-        const sortedMessages = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-
-        let transcriptText = `==================================================\n`;
-        transcriptText += `📜 STARRY BULK DELETE / PURGE TRANSCRIPT LOG\n`;
-        transcriptText += `Server: ${channel.guild.name} (${channel.guild.id})\n`;
-        transcriptText += `Channel: #${channel.name} (${channel.id})\n`;
-        transcriptText += `Total Messages Deleted: ${sortedMessages.length}\n`;
-        transcriptText += `Date: ${new Date().toISOString()}\n`;
-        transcriptText += `==================================================\n\n`;
-
-        sortedMessages.forEach((msg, index) => {
-            const timeStr = new Date(msg.createdTimestamp).toLocaleString();
-            const authorTag = msg.author ? `${msg.author.tag} (${msg.author.id})` : 'Unknown User';
-            const contentStr = msg.content ? msg.content : '[Attachment/Embed Only]';
-            
-            let attachmentsStr = '';
-            if (msg.attachments && msg.attachments.size > 0) {
-                attachmentsStr = ` [Attachments: ${msg.attachments.map(a => a.url).join(', ')}]`;
-            }
-
-            transcriptText += `[${index + 1}] [${timeStr}] ${authorTag}:\n${contentStr}${attachmentsStr}\n\n`;
-        });
-
-        const transcriptBuffer = Buffer.from(transcriptText, 'utf-8');
-        const transcriptFile = new AttachmentBuilder(transcriptBuffer, { 
-            name: `purge_transcript_${channel.name}_${Date.now()}.txt` 
-        });
-
-        let executor = 'Unknown (Bot / Self / Expired Audit Log)';
-        try {
-            const fetchedLogs = await channel.guild.fetchAuditLogs({
-                limit: 1,
-                type: AuditLogEvent.MessageBulkDelete
-            }).catch(() => null);
-
-            const bulkLog = fetchedLogs?.entries.first();
-            if (bulkLog && (Date.now() - bulkLog.createdTimestamp) < 10000) {
-                executor = `${bulkLog.executor} (\`${bulkLog.executor.tag}\`)`;
-            }
-        } catch (e) {}
-
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle(`🧹 Bulk Messages Deleted in #${channel.name}`)
-            .setDescription(`**${sortedMessages.length}** messages were bulk deleted / purged.\nSee the attached text transcript file for full deleted message logs.`)
-            .addFields(
-                { name: '📍 Channel', value: `${channel} (\`#${channel.name}\`)`, inline: true },
-                { name: '👤 Triggered By', value: executor, inline: true },
-                { name: '📊 Message Count', value: `\`${sortedMessages.length}\` Messages`, inline: true }
-            )
-            .setFooter({ text: `Channel ID: ${channel.id}` })
-            .setTimestamp();
-
-        await logChannel.send({ 
-            embeds: [embed], 
-            files: [transcriptFile] 
-        }).catch(console.error);
-    });
-
-}; // <-- Properly closes module.exports wrapper function
-
-// Export models and command definitions safely outside wrapper
 module.exports.LogSettings = LogSettings;
 module.exports.setLogsData = setLogsCommand;
