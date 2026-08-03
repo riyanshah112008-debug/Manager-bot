@@ -48,12 +48,6 @@ const goodbyeSchema = new mongoose.Schema({
 });
 const GoodbyeSettings = mongoose.models.GoodbyeSettings || mongoose.model('GoodbyeSettings', goodbyeSchema);
 
-const PolicyVoteSchema = new mongoose.Schema({
-    guildId: String, messageId: String, title: String, description: String,
-    yesVotes: { type: Array, default: [] }, noVotes: { type: Array, default: [] }, createdAt: { type: Date, default: Date.now }
-});
-const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
-
 const masterSecuritySchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
@@ -61,16 +55,6 @@ const masterSecuritySchema = new mongoose.Schema({
     userInfractions: { type: Map, of: Number, default: {} }
 });
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
-
-if (Database) {
-    try {
-        const protectDb = new Database('protect.db');
-        protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
-    } catch (e) {}
-}
-
-const securityCache = new Map();
-const blacklistedUsers = new Set();
 
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -166,9 +150,9 @@ async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
         }
 
         if (components.length > 0) {
-            await channel.send({ embeds: [embed], components }).catch(err => console.error('Panel Send Error:', err.message));
+            await channel.send({ embeds: [embed], components }).catch(() => {});
         } else if (embed.data.title) {
-            await channel.send({ embeds: [embed] }).catch(err => console.error('Panel Send Error:', err.message));
+            await channel.send({ embeds: [embed] }).catch(() => {});
         }
     }
 }
@@ -325,7 +309,6 @@ module.exports = async (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
 
-    // 🌟 AESTHETIC MEMBER JOIN LISTENER (WELCOME GIFS)
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
 
@@ -337,7 +320,7 @@ module.exports = async (client) => {
                 .setDescription(`✨ Welcome <@${member.id}> to **${member.guild.name}**! We are thrilled to have you here. 💖`)
                 .setImage('https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
                 .setTimestamp();
-            await accessLog.send({ embeds: [joinEmbed] }).catch(err => console.error('Join Log Error:', err.message));
+            await accessLog.send({ embeds: [joinEmbed] }).catch(() => {});
         }
 
         try {
@@ -359,13 +342,10 @@ module.exports = async (client) => {
                 .setFooter({ text: `✨ Starry Aesthetic Welcome System • Enjoy your journey! ✨` })
                 .setTimestamp();
 
-            await welcomeCh.send({ content: `💫 Hey <@${member.id}>! We've been expecting you! 🥂`, embeds: [welcomeEmbed] }).catch(err => console.error('Welcome Send Error:', err.message));
-        } catch (err) {
-            console.error('Welcome Event Error:', err.message);
-        }
+            await welcomeCh.send({ content: `💫 Hey <@${member.id}>! We've been expecting you! 🥂`, embeds: [welcomeEmbed] }).catch(() => {});
+        } catch (err) {}
     });
 
-    // 👋 AESTHETIC MEMBER LEAVE LISTENER (GOODBYE GIFS)
     client.on('guildMemberRemove', async (member) => {
         const accessLog = client.getLogChannel(member.guild, 'access');
         if (accessLog) {
@@ -375,7 +355,7 @@ module.exports = async (client) => {
                 .setDescription(`💫 **${member.user.tag}** has fluttered away from **${member.guild.name}**.`)
                 .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
                 .setTimestamp();
-            await accessLog.send({ embeds: [leaveEmbed] }).catch(err => console.error('Leave Log Error:', err.message));
+            await accessLog.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
 
         try {
@@ -394,13 +374,10 @@ module.exports = async (client) => {
                 .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Safe travels!` })
                 .setTimestamp();
 
-            await goodbyeCh.send({ content: `🕊️ Goodbye **${member.user.username}**! Until we meet again...`, embeds: [goodbyeEmbed] }).catch(err => console.error('Goodbye Send Error:', err.message));
-        } catch (err) {
-            console.error('Goodbye Event Error:', err.message);
-        }
+            await goodbyeCh.send({ content: `🕊️ Goodbye **${member.user.username}**! Until we meet again...`, embeds: [goodbyeEmbed] }).catch(() => {});
+        } catch (err) {}
     });
 
-    // 🗑️ MESSAGE DELETE & BULK PURGE AUDIT LOGGERS
     client.on('messageDelete', async (message) => {
         try {
             if (!message.guild || message.partial) return;
@@ -419,7 +396,7 @@ module.exports = async (client) => {
                 )
                 .setTimestamp();
 
-            await logChannel.send({ embeds: [deleteEmbed] }).catch(err => console.error('Delete Log Send Error:', err.message));
+            await logChannel.send({ embeds: [deleteEmbed] }).catch(() => {});
         } catch (err) {}
     });
 
@@ -440,7 +417,7 @@ module.exports = async (client) => {
                 )
                 .setTimestamp();
 
-            await logChannel.send({ embeds: [bulkEmbed] }).catch(err => console.error('Bulk Delete Log Send Error:', err.message));
+            await logChannel.send({ embeds: [bulkEmbed] }).catch(() => {});
         } catch (err) {}
     });
 // ==========================================
@@ -532,7 +509,6 @@ module.exports = async (client) => {
                 }
             }
 
-            // 🌟 AESTHETIC SETUP WELCOME WITH LIVE PREVIEW
             if (interaction.commandName === 'setupwelcome') {
                 if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                     return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [EPHEMERAL_FLAG] });
@@ -553,11 +529,10 @@ module.exports = async (client) => {
                     .setFooter({ text: `✨ Starry Aesthetic Welcome System • Setup Preview Mode ✨` })
                     .setTimestamp();
 
-                await channel.send({ content: `💫 Hey ${interaction.user}! We've been expecting you! 🥂 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(err => console.error('Welcome Preview Error:', err.message));
+                await channel.send({ content: `💫 Hey ${interaction.user}! We've been expecting you! 🥂 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
                 return interaction.reply({ content: `✅ **Success!** Aesthetic welcome messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
             }
 
-            // 👋 AESTHETIC SETUP GOODBYE WITH LIVE PREVIEW
             if (interaction.commandName === 'setupgoodbye') {
                 if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                     return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [EPHEMERAL_FLAG] });
@@ -575,7 +550,7 @@ module.exports = async (client) => {
                     .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Setup Preview Mode` })
                     .setTimestamp();
 
-                await channel.send({ content: `🕊️ Goodbye **${interaction.user.username}**! Until we meet again... *(Setup Preview)*`, embeds: [previewEmbed] }).catch(err => console.error('Goodbye Preview Error:', err.message));
+                await channel.send({ content: `🕊️ Goodbye **${interaction.user.username}**! Until we meet again... *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
                 return interaction.reply({ content: `✅ **Success!** Aesthetic goodbye messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
             }
         }
@@ -703,7 +678,6 @@ module.exports = async (client) => {
         const executor = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
         const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
 
-        // 🧹 PURGE HANDLER
         if (isPurge) {
             if (!executor || !executor.permissions.has(PermissionFlagsBits.ManageMessages)) {
                 await message.reply('❌ You need **Manage Messages** permissions to purge.');
@@ -718,10 +692,7 @@ module.exports = async (client) => {
             const count = numberMatch ? parseInt(numberMatch[0]) : 5;
             const deleteCount = Math.min(count, 99) + 1;
 
-            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(err => {
-                console.error('Purge BulkDelete Error:', err.message);
-                return null;
-            });
+            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(() => null);
             const actualDeletedCount = deleted ? Math.max(0, deleted.size - 1) : count;
 
             const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`).catch(() => null);
@@ -738,12 +709,11 @@ module.exports = async (client) => {
                         { name: '📊 Amount Deleted', value: `\`${actualDeletedCount}\` messages`, inline: true }
                     )
                     .setTimestamp();
-                await logChannel.send({ embeds: [purgeEmbed] }).catch(err => console.error('Purge Log Error:', err.message));
+                await logChannel.send({ embeds: [purgeEmbed] }).catch(() => {});
             }
             return true;
         }
 
-        // 🛡️ MEMBER MODERATION
         try {
             let targetUser = message.mentions.users.filter(u => u.id !== client.user.id).first();
             if (!targetUser) {
@@ -819,7 +789,7 @@ module.exports = async (client) => {
                 await message.reply({ embeds: [embed] });
 
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(err => console.error('Mod Log Error:', err.message));
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
@@ -855,7 +825,7 @@ module.exports = async (client) => {
                 await message.reply({ embeds: [embed] });
 
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(err => console.error('Kick Log Error:', err.message));
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
@@ -880,7 +850,7 @@ module.exports = async (client) => {
                 await message.reply({ embeds: [embed] });
 
                 const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(err => console.error('Ban Log Error:', err.message));
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
@@ -981,9 +951,6 @@ ${message.author.username} says: ${message.content}`;
         }
     }
 
-    // ==========================================
-    // 5. DYNAMIC TRIGGER PIPELINE
-    // ==========================================
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
