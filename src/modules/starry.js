@@ -600,7 +600,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8 - UPGRADED)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -608,7 +608,7 @@ module.exports = async (client) => {
     async function handleLocalActions(client, message) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
-        const botMember = message.guild.members.me;
+        const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
         const displayName = client.user.username;
 
         // Clean bot trigger prefixes/mentions
@@ -777,7 +777,7 @@ module.exports = async (client) => {
             return true;
         }
 
-        // 6. PURGE MESSAGES
+        // 6. PURGE MESSAGES WITH AUTOMATIC LOGGING
         const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
         const clearMatch = message.content.match(clearRegex);
 
@@ -789,16 +789,35 @@ module.exports = async (client) => {
             const count = parseInt(clearMatch[1]);
             if (count <= 0) { await message.reply('❌ Specify a valid message count.'); return true; }
             const deleteCount = Math.min(count, 99) + 1;
-            await message.channel.bulkDelete(deleteCount, true).catch(() => {});
-            const sent = await message.channel.send(`🧹 Successfully cleared ${count} messages!`);
+            
+            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(() => null);
+            const actualDeletedCount = deleted ? Math.max(0, deleted.size - 1) : count;
+
+            const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`);
             setTimeout(() => sent.delete().catch(() => {}), 3500);
+
+            // Audit Log Audit Entry for Purge
+            const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
+            if (logChannel) {
+                const purgeEmbed = new EmbedBuilder()
+                    .setColor('#FEE75C')
+                    .setAuthor({ name: '🧹 Channel Messages Purged', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                    .addFields(
+                        { name: '👤 Moderator', value: `${message.author} (\`${message.author.tag}\`)`, inline: true },
+                        { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
+                        { name: '📊 Amount Deleted', value: `\`${actualDeletedCount}\` messages`, inline: true }
+                    )
+                    .setTimestamp();
+                await logChannel.send({ embeds: [purgeEmbed] }).catch(() => {});
+            }
+
             return true;
         }
 
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8 - UPGRADED)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -824,7 +843,7 @@ module.exports = async (client) => {
         const rawContent = message.content;
         const lowerContent = rawContent.toLowerCase();
 
-        // Check if message pings bot OR mentions trigger word "starry"
+        // Check trigger: bot mention OR "starry" text
         const mentionsBot = message.mentions.has(client.user.id);
         const hasTriggerWord = lowerContent.includes('starry');
         if (!mentionsBot && !hasTriggerWord) return false;
@@ -837,46 +856,64 @@ module.exports = async (client) => {
 
         if (!isTimeout && !isUntimeout && !isKick && !isBan) return false;
 
-        // Fetch Target User (excluding the bot itself)
-        const targetMember = message.mentions.members.filter(m => m.id !== client.user.id).first();
-        if (!targetMember) {
-            await message.reply('❌ Please mention a valid user to moderate (e.g. `Starry timeout @user 2m for abusive words`).');
-            return true;
-        }
+        try {
+            // Robust Member Fetching (handles uncached users + raw IDs)
+            let targetUser = message.mentions.users.filter(u => u.id !== client.user.id).first();
+            if (!targetUser) {
+                const idMatch = rawContent.match(/\b\d{17,19}\b/);
+                if (idMatch) targetUser = await client.users.fetch(idMatch[0]).catch(() => null);
+            }
 
-        const botMember = message.guild.members.me;
-        const executor = message.member;
-
-        // Role Hierarchy Checks
-        if (targetMember.roles.highest.position >= executor.roles.highest.position && message.author.id !== message.guild.ownerId) {
-            await message.reply('❌ You cannot moderate this user because their role is equal to or higher than yours!');
-            return true;
-        }
-
-        if (targetMember.roles.highest.position >= botMember.roles.highest.position) {
-            await message.reply('❌ I cannot moderate this user because their role is higher than or equal to my highest role!');
-            return true;
-        }
-
-        // Parse Reason
-        let reason = 'No reason provided';
-        if (lowerContent.includes('for ')) {
-            reason = rawContent.substring(rawContent.toLowerCase().indexOf('for ') + 4).trim();
-        } else if (lowerContent.includes('reason:')) {
-            reason = rawContent.substring(rawContent.toLowerCase().indexOf('reason:') + 7).trim();
-        }
-
-        // A. TIMEOUT / MUTE
-        if (isTimeout && !isUntimeout) {
-            if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-                await message.reply('❌ Missing `Moderate Members` permission.');
+            if (!targetUser) {
+                await message.reply('❌ Please mention a valid user to moderate (e.g. `Starry mute @user 1m for saying n word`).');
                 return true;
             }
 
-            const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000); // Default 10m
-            const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?[0] || '10m';
+            const targetMember = await message.guild.members.fetch(targetUser.id).catch(() => null);
+            const executor = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+            const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
 
-            try {
+            if (!executor) return false;
+
+            // Role Hierarchy Checks
+            if (targetMember) {
+                if (targetMember.roles.highest.position >= executor.roles.highest.position && message.author.id !== message.guild.ownerId) {
+                    await message.reply(`❌ You cannot moderate **${targetUser.username}** because their highest role is equal to or higher than yours!`);
+                    return true;
+                }
+
+                if (botMember && targetMember.roles.highest.position >= botMember.roles.highest.position) {
+                    await message.reply(`❌ I cannot moderate **${targetUser.username}** because their highest role is equal to or higher than my bot role!`);
+                    return true;
+                }
+            }
+
+            // Parse Reason
+            let reason = 'No reason provided';
+            if (lowerContent.includes('for ')) {
+                reason = rawContent.substring(rawContent.toLowerCase().indexOf('for ') + 4).trim();
+            } else if (lowerContent.includes('reason:')) {
+                reason = rawContent.substring(rawContent.toLowerCase().indexOf('reason:') + 7).trim();
+            }
+
+            // A. TIMEOUT / MUTE
+            if (isTimeout && !isUntimeout) {
+                if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                    await message.reply('❌ You need the `Moderate Members` permission to timeout users.');
+                    return true;
+                }
+                if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                    await message.reply('❌ I need the `Moderate Members` permission to execute timeouts.');
+                    return true;
+                }
+                if (!targetMember) {
+                    await message.reply('❌ That user is not currently in this server!');
+                    return true;
+                }
+
+                const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000); // Default 10m
+                const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?[0] || '10m';
+
                 await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
                 const embed = new EmbedBuilder()
                     .setColor('#ED4245')
@@ -884,67 +921,68 @@ module.exports = async (client) => {
                     .setDescription(`**Target:** ${targetMember} (\`${targetMember.user.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}`)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
-                await message.reply({ embeds: [embed] });
-            } catch (err) {
-                await message.reply(`❌ Failed to timeout member: \`${err.message}\``);
-            }
-            return true;
-        }
 
-        // B. UNTIMEOUT / UNMUTE
-        if (isUntimeout) {
-            if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-                await message.reply('❌ Missing `Moderate Members` permission.');
+                await message.reply({ embeds: [embed] });
+
+                // Log entry
+                const logChannel = client.getLogChannel(message.guild, 'moderate');
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
-            try {
+
+            // B. UNTIMEOUT / UNMUTE
+            if (isUntimeout) {
+                if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                    await message.reply('❌ You need the `Moderate Members` permission.');
+                    return true;
+                }
+                if (!targetMember) return true;
+
                 await targetMember.timeout(null, `Untimed out by ${message.author.tag}`);
                 await message.reply(`✅ Successfully removed timeout for ${targetMember}.`);
-            } catch (err) {
-                await message.reply(`❌ Failed to remove timeout: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        // C. KICK
-        if (isKick) {
-            if (!executor.permissions.has(PermissionFlagsBits.KickMembers) || !botMember.permissions.has(PermissionFlagsBits.KickMembers)) {
-                await message.reply('❌ Missing `Kick Members` permission.');
                 return true;
             }
-            try {
+
+            // C. KICK
+            if (isKick) {
+                if (!executor.permissions.has(PermissionFlagsBits.KickMembers) || !botMember?.permissions.has(PermissionFlagsBits.KickMembers)) {
+                    await message.reply('❌ Missing `Kick Members` permission.');
+                    return true;
+                }
+                if (!targetMember) return true;
+
                 await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
                 const embed = new EmbedBuilder()
                     .setColor('#DA373C')
                     .setTitle('🚪 Member Kicked')
-                    .setDescription(`**Target:** \`${targetMember.user.tag}\`\n**Reason:** ${reason}`)
+                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}`)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
                 await message.reply({ embeds: [embed] });
-            } catch (err) {
-                await message.reply(`❌ Failed to kick member: \`${err.message}\``);
-            }
-            return true;
-        }
-
-        // D. BAN
-        if (isBan) {
-            if (!executor.permissions.has(PermissionFlagsBits.BanMembers) || !botMember.permissions.has(PermissionFlagsBits.BanMembers)) {
-                await message.reply('❌ Missing `Ban Members` permission.');
                 return true;
             }
-            try {
-                await targetMember.ban({ reason: `${reason} | Executed by ${message.author.tag}` });
+
+            // D. BAN
+            if (isBan) {
+                if (!executor.permissions.has(PermissionFlagsBits.BanMembers) || !botMember?.permissions.has(PermissionFlagsBits.BanMembers)) {
+                    await message.reply('❌ Missing `Ban Members` permission.');
+                    return true;
+                }
+
+                await message.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${message.author.tag}` });
                 const embed = new EmbedBuilder()
                     .setColor('#ED4245')
                     .setTitle('🔨 Member Banned')
-                    .setDescription(`**Target:** \`${targetMember.user.tag}\`\n**Reason:** ${reason}`)
+                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}`)
                     .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
                     .setTimestamp();
                 await message.reply({ embeds: [embed] });
-            } catch (err) {
-                await message.reply(`❌ Failed to ban member: \`${err.message}\``);
+                return true;
             }
+
+        } catch (err) {
+            console.error('❌ Smart Moderation Execution Error:', err);
+            await message.reply(`❌ Moderation action failed: \`${err.message}\``).catch(() => {});
             return true;
         }
 
@@ -1002,7 +1040,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8 - UPGRADED)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -1124,10 +1162,59 @@ ${message.author.username} says: ${message.content}`;
             }
 
         } catch (error) {
-            // SILENT ERROR LOGGING: Prevents channel spam on API failure/high volume
             console.error('Conversational Engine Error:', error.message || error);
         }
     }
+
+    // 🗑️ GLOBAL AUTOMATIC MESSAGE DELETE AUDIT LOGGERS
+    client.on('messageDelete', async (message) => {
+        try {
+            if (!message.guild || message.partial) return;
+            const logChannel = client.getLogChannel(message.guild, 'messages');
+            if (!logChannel || logChannel.id === message.channel.id) return;
+
+            const author = message.author ? `${message.author} (\`${message.author.tag}\`)` : 'Unknown User';
+            const authorIcon = message.author ? message.author.displayAvatarURL({ dynamic: true }) : message.guild.iconURL({ dynamic: true });
+
+            const deleteEmbed = new EmbedBuilder()
+                .setColor('#ED4245')
+                .setAuthor({ name: '🗑️ Message Deleted', iconURL: authorIcon })
+                .setDescription(`A message by ${author} was deleted in <#${message.channel.id}>.`)
+                .addFields(
+                    { name: '📝 Message Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or contains attachments/embeds]*', inline: false },
+                    { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
+                    { name: '🆔 Message ID', value: `\`${message.id}\``, inline: true }
+                )
+                .setTimestamp();
+
+            await logChannel.send({ embeds: [deleteEmbed] }).catch(() => {});
+        } catch (err) {
+            console.error('MessageDelete Log Error:', err);
+        }
+    });
+
+    client.on('messageDeleteBulk', async (messages) => {
+        try {
+            const firstMsg = messages.first();
+            if (!firstMsg || !firstMsg.guild) return;
+            const logChannel = client.getLogChannel(firstMsg.guild, 'messages') || client.getLogChannel(firstMsg.guild, 'moderate');
+            if (!logChannel) return;
+
+            const bulkEmbed = new EmbedBuilder()
+                .setColor('#FEE75C')
+                .setAuthor({ name: '🧹 Bulk Message Delete (Purge)', iconURL: firstMsg.guild.iconURL({ dynamic: true }) })
+                .setDescription(`**${messages.size} messages** were purged/deleted in <#${firstMsg.channel.id}>.`)
+                .addFields(
+                    { name: '📺 Channel', value: `<#${firstMsg.channel.id}>`, inline: true },
+                    { name: '📊 Total Messages Deleted', value: `\`${messages.size}\``, inline: true }
+                )
+                .setTimestamp();
+
+            await logChannel.send({ embeds: [bulkEmbed] }).catch(() => {});
+        } catch (err) {
+            console.error('MessageDeleteBulk Log Error:', err);
+        }
+    });
 
     // ==========================================
     // 🌐 SINGLE UNIFIED MESSAGE DISPATCHER PIPELINE
