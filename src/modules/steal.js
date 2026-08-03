@@ -1,5 +1,5 @@
 // ==========================================
-// 📥 GLOBAL EMOJI & STICKER STEALER MODULE
+// 📥 GLOBAL EMOJI & STICKER STEALER MODULE (PART 1 OF 2)
 // File Path: modules/steal.js
 // ==========================================
 const { 
@@ -21,7 +21,7 @@ module.exports = (client) => {
         // 1. External / DM Context Check
         if (!guild) {
             return replyFunction({ 
-                content: '❌ **Cannot add emoji here:** You must run this command inside a server where the Starry bot is present to upload stolen emojis/stickers!', 
+                content: '❌ **Cannot upload emoji here:** You must run this command inside a server where Starry is present to upload stolen emojis/stickers!', 
                 flags: [EPHEMERAL_FLAG] 
             });
         }
@@ -118,17 +118,16 @@ module.exports = (client) => {
             }
         });
     };
-
-    // Prefix Trigger (.steal)
+    // Prefix Trigger (.steal) - Works in servers where bot is present
     client.on('messageCreate', async message => {
         if (message.author.bot || !message.content.startsWith(PREFIX + 'steal')) return;
         const target = message.reference ? await message.channel.messages.fetch(message.reference.messageId).catch(() => message) : message;
         await runStealUI(target.content + message.content, target.stickers, message.member, message.guild, (p) => message.reply(p), message.author);
     });
 
-    // Interaction Listener (Slash & Message Context Menu Commands)
+    // Interaction Listener (Slash Command & Context Menu) - Works EVERYWHERE via User App!
     client.on('interactionCreate', async interaction => {
-        // Message Context Menu: "Steal Emojis"
+        // Message Context Menu: Long press message -> Apps -> "Steal Emojis"
         if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Steal Emojis') {
             await runStealUI(
                 interaction.targetMessage.content, 
