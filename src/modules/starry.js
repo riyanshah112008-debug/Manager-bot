@@ -547,7 +547,7 @@ module.exports = async (client) => {
         } catch (err) {}
     });
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8 - REPAIRED)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -681,7 +681,7 @@ module.exports = async (client) => {
             .trim();
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8 - REPAIRED)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -803,50 +803,14 @@ module.exports = async (client) => {
             return true;
         }
 
-        // Fast Message Purge
-        const clearRegex = /(?:clear|purge|delete)\s+(\d+)\s*(?:messages)?$/i;
-        const clearMatch = message.content.match(clearRegex);
-
-        if (clearMatch && !text.includes('channel') && !text.includes('category')) {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) || !botMember?.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                await message.reply('❌ Missing **Manage Messages** permissions.');
-                return true;
-            }
-            const count = parseInt(clearMatch[1]);
-            if (count <= 0) { await message.reply('❌ Specify a valid message count.'); return true; }
-            const deleteCount = Math.min(count, 99) + 1;
-            
-            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(() => null);
-            const actualDeletedCount = deleted ? Math.max(0, deleted.size - 1) : count;
-
-            const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`);
-            setTimeout(() => sent.delete().catch(() => {}), 3500);
-
-            const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
-            if (logChannel) {
-                const purgeEmbed = new EmbedBuilder()
-                    .setColor('#FEE75C')
-                    .setAuthor({ name: '🧹 Channel Messages Purged', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                    .addFields(
-                        { name: '👤 Moderator', value: `${message.author} (\`${message.author.tag}\`)`, inline: true },
-                        { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
-                        { name: '📊 Amount Deleted', value: `\`${actualDeletedCount}\` messages`, inline: true }
-                    )
-                    .setTimestamp();
-                await logChannel.send({ embeds: [purgeEmbed] }).catch(() => {});
-            }
-
-            return true;
-        }
-
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8 - REPAIRED)
 // File Path: modules/starry.js
 // ==========================================
 
-    // 🛡️ SMART NATURAL LANGUAGE TEXT MODERATION ENGINE
+    // 🛡️ SMART NATURAL LANGUAGE TEXT MODERATION & PURGE ENGINE
     async function handleSmartModeration(client, message) {
         if (!message.guild || message.author.bot) return false;
 
@@ -861,9 +825,52 @@ module.exports = async (client) => {
         const isUntimeout = lowerContent.includes('untimeout') || lowerContent.includes('unmute');
         const isKick = lowerContent.includes('kick');
         const isBan = lowerContent.includes('ban');
+        const isPurge = lowerContent.includes('purge') || lowerContent.includes('clear') || lowerContent.includes('clean');
 
-        if (!isTimeout && !isUntimeout && !isKick && !isBan) return false;
+        if (!isTimeout && !isUntimeout && !isKick && !isBan && !isPurge) return false;
 
+        const executor = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+        const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
+
+        // 🧹 A. PURGE / CLEAR MESSAGES HANDLER
+        if (isPurge) {
+            if (!executor || !executor.permissions.has(PermissionFlagsBits.ManageMessages)) {
+                await message.reply('❌ You need **Manage Messages** permissions to purge.');
+                return true;
+            }
+            if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
+                await message.reply('❌ I need **Manage Messages** permission to purge messages!');
+                return true;
+            }
+
+            const numberMatch = lowerContent.match(/\b\d+\b/);
+            const count = numberMatch ? parseInt(numberMatch[0]) : 5;
+            const deleteCount = Math.min(count, 99) + 1; // +1 to delete trigger command
+
+            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(() => null);
+            const actualDeletedCount = deleted ? Math.max(0, deleted.size - 1) : count;
+
+            const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`).catch(() => null);
+            if (sent) setTimeout(() => sent.delete().catch(() => {}), 3500);
+
+            // Dispatch to Audit Log
+            const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
+            if (logChannel) {
+                const purgeEmbed = new EmbedBuilder()
+                    .setColor('#FEE75C')
+                    .setAuthor({ name: '🧹 Channel Messages Purged', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                    .addFields(
+                        { name: '👤 Moderator', value: `${message.author} (\`${message.author.tag}\`)`, inline: true },
+                        { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
+                        { name: '📊 Amount Deleted', value: `\`${actualDeletedCount}\` messages`, inline: true }
+                    )
+                    .setTimestamp();
+                await logChannel.send({ embeds: [purgeEmbed] }).catch(() => {});
+            }
+            return true;
+        }
+
+        // 🛡️ B. MEMBER MODERATION (TIMEOUT / KICK / BAN)
         try {
             let targetUser = message.mentions.users.filter(u => u.id !== client.user.id).first();
             if (!targetUser) {
@@ -877,10 +884,6 @@ module.exports = async (client) => {
             }
 
             const targetMember = await message.guild.members.fetch(targetUser.id).catch(() => null);
-            const executor = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
-            const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
-
-            if (!executor) return false;
 
             if (targetMember) {
                 if (targetMember.roles.highest.position >= executor.roles.highest.position && message.author.id !== message.guild.ownerId) {
@@ -1017,7 +1020,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8 - REPAIRED)
 // File Path: modules/starry.js
 // ==========================================
 
