@@ -48,6 +48,12 @@ const goodbyeSchema = new mongoose.Schema({
 });
 const GoodbyeSettings = mongoose.models.GoodbyeSettings || mongoose.model('GoodbyeSettings', goodbyeSchema);
 
+const PolicyVoteSchema = new mongoose.Schema({
+    guildId: String, messageId: String, title: String, description: String,
+    yesVotes: { type: Array, default: [] }, noVotes: { type: Array, default: [] }, createdAt: { type: Date, default: Date.now }
+});
+const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
+
 const masterSecuritySchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
@@ -55,6 +61,16 @@ const masterSecuritySchema = new mongoose.Schema({
     userInfractions: { type: Map, of: Number, default: {} }
 });
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+
+if (Database) {
+    try {
+        const protectDb = new Database('protect.db');
+        protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
+    } catch (e) {}
+}
+
+const securityCache = new Map();
+const blacklistedUsers = new Set();
 
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -621,15 +637,14 @@ module.exports = async (client) => {
         return false;
     }
 
-    async function handleLocalActions(client, message) {
+    async function handleLocalActions(client, message, triggerWord, displayName) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
         const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
-        const displayName = client.user.username;
 
-        const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '').trim();
+        const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|${triggerWord})\\s*`, 'i'), '').trim();
 
-        const isGreeting = cleanText === '' || ['hi', 'hello', 'hey', 'yo', 'sup', 'hola', 'starry'].includes(cleanText);
+        const isGreeting = cleanText === '' || ['hi', 'hello', 'hey', 'yo', 'sup', 'hola', triggerWord].includes(cleanText);
         if (isGreeting) {
             const responses = [
                 `Hello <@${message.author.id}>! ✨ How can I assist you today?`,
@@ -640,7 +655,7 @@ module.exports = async (client) => {
             return true;
         }
 
-        if (text === '.premium' || text === 'starry premium' || text === 'jarvis premium') {
+        if (text === '.premium' || text === `${triggerWord} premium` || text === 'jarvis premium') {
             const premiumEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setAuthor({ name: `${displayName} Protocol | Premium Suite`, iconURL: client.user.displayAvatarURL() })
@@ -667,14 +682,14 @@ module.exports = async (client) => {
 // File Path: modules/starry.js
 // ==========================================
 
-    async function handleSmartModeration(client, message) {
+    async function handleSmartModeration(client, message, triggerWord = 'starry') {
         if (!message.guild || message.author.bot) return false;
 
         const rawContent = message.content;
         const lowerContent = rawContent.toLowerCase();
 
         const mentionsBot = message.mentions.has(client.user.id);
-        const hasTriggerWord = lowerContent.includes('starry');
+        const hasTriggerWord = lowerContent.includes(triggerWord) || lowerContent.includes('jarvis');
         if (!mentionsBot && !hasTriggerWord) return false;
 
         const isTimeout = lowerContent.includes('timeout') || lowerContent.includes('mute');
@@ -688,7 +703,7 @@ module.exports = async (client) => {
         const executor = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
         const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
 
-        // 🧹 PURGE HANDLER WITH LOGGING
+        // 🧹 PURGE HANDLER
         if (isPurge) {
             if (!executor || !executor.permissions.has(PermissionFlagsBits.ManageMessages)) {
                 await message.reply('❌ You need **Manage Messages** permissions to purge.');
@@ -728,7 +743,7 @@ module.exports = async (client) => {
             return true;
         }
 
-        // 🛡️ MEMBER MODERATION (TIMEOUT / KICK / BAN)
+        // 🛡️ MEMBER MODERATION
         try {
             let targetUser = message.mentions.users.filter(u => u.id !== client.user.id).first();
             if (!targetUser) {
@@ -966,14 +981,11 @@ ${message.author.username} says: ${message.content}`;
         }
     }
 
+    // ==========================================
+    // 5. DYNAMIC TRIGGER PIPELINE
+    // ==========================================
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
-
-        if (await handleAutoModPing(message)) return;
-        if (await handleDevCLI(client, message)) return;
-
-        const modHandled = await handleSmartModeration(client, message);
-        if (modHandled) return;
 
         let triggerWord = 'starry';
         let displayName = 'Starry'; 
@@ -986,6 +998,12 @@ ${message.author.username} says: ${message.content}`;
                 displayName = settings.triggerWord;
             }
         } catch (err) {}
+
+        if (await handleAutoModPing(message)) return;
+        if (await handleDevCLI(client, message)) return;
+
+        const modHandled = await handleSmartModeration(client, message, triggerWord);
+        if (modHandled) return;
 
         const text = message.content.toLowerCase().trim();
         const isImagine = text.startsWith('.imagine ');
@@ -1000,7 +1018,7 @@ ${message.author.username} says: ${message.content}`;
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        const localHandled = await handleLocalActions(client, message);
+        const localHandled = await handleLocalActions(client, message, triggerWord, displayName);
         if (localHandled) return; 
 
         const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
