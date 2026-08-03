@@ -164,6 +164,41 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .toJSON()
 ];
+// ==========================================
+    // 📥 GLOBAL EMOJI & STICKER STEALER COMMANDS
+    // ==========================================
+    new SlashCommandBuilder()
+        .setName('steal')
+        .setDescription('📥 Steal emojis or stickers from text or messages')
+        .setIntegrationTypes(
+            ApplicationIntegrationType.GuildInstall, 
+            ApplicationIntegrationType.UserInstall
+        )
+        .setContexts(
+            InteractionContextType.Guild, 
+            InteractionContextType.BotDM, 
+            InteractionContextType.PrivateChannel
+        )
+        .addStringOption(option => 
+            option.setName('emojis')
+                .setDescription('Paste emojis or text containing emojis to steal')
+                .setRequired(true)
+        )
+        .toJSON(),
+
+    new ContextMenuCommandBuilder()
+        .setName('Steal Emojis')
+        .setType(ApplicationCommandType.Message)
+        .setIntegrationTypes(
+            ApplicationIntegrationType.GuildInstall, 
+            ApplicationIntegrationType.UserInstall
+        )
+        .setContexts(
+            InteractionContextType.Guild, 
+            InteractionContextType.BotDM, 
+            InteractionContextType.PrivateChannel
+        )
+        .toJSON(),
 
 if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
