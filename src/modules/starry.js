@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (COMPLETE UNIFIED FILE)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 const { 
@@ -129,6 +129,10 @@ async function generateAIResponseWithRetry(prompt) {
 
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
 async function executeFullGuildBackup(guild) {
     try {
@@ -197,6 +201,10 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
     return channel;
 }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -301,9 +309,12 @@ const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription
 const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('status').setDescription('Status'));
 const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
 const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
 module.exports = async (client) => {
-    // 🛡️ FAIL-SAFE: PREVENT DUPLICATE EVENT REGISTRATIONS ON THE SAME CLIENT
     if (client.starryEngineInitialized) {
         console.log('⚠️ Starry Engine already initialized. Skipping duplicate registration.');
         return;
@@ -413,6 +424,10 @@ module.exports = async (client) => {
 
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
     // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (INFINITE TIME BUTTONS)
     client.on('interactionCreate', async (interaction) => {
@@ -584,6 +599,10 @@ module.exports = async (client) => {
         }
         return false;
     }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
     // ⚡ INSTANT LOCAL PRE-PARSERS (<10ms Execution)
     async function handleLocalActions(client, message) {
@@ -778,6 +797,159 @@ module.exports = async (client) => {
 
         return false;
     }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
+// File Path: modules/starry.js
+// ==========================================
+
+    // Duration Parser Helper (e.g. 30s, 2m, 1h, 1d)
+    function parseDuration(text) {
+        const match = text.match(/(\d+)\s*(s|m|h|d)/i);
+        if (!match) return null;
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+        switch (unit) {
+            case 's': return value * 1000;
+            case 'm': return value * 60 * 1000;
+            case 'h': return value * 60 * 60 * 1000;
+            case 'd': return value * 24 * 60 * 60 * 1000;
+            default: return null;
+        }
+    }
+
+    // 🛡️ SMART NATURAL LANGUAGE & MENTION MODERATION ENGINE
+    async function handleSmartModeration(client, message) {
+        if (!message.guild || message.author.bot) return false;
+
+        const rawContent = message.content;
+        const lowerContent = rawContent.toLowerCase();
+
+        // Check if message pings bot OR mentions trigger word "starry"
+        const mentionsBot = message.mentions.has(client.user.id);
+        const hasTriggerWord = lowerContent.includes('starry');
+        if (!mentionsBot && !hasTriggerWord) return false;
+
+        // Check Moderation Intent Keywords
+        const isTimeout = lowerContent.includes('timeout') || lowerContent.includes('mute');
+        const isUntimeout = lowerContent.includes('untimeout') || lowerContent.includes('unmute');
+        const isKick = lowerContent.includes('kick');
+        const isBan = lowerContent.includes('ban');
+
+        if (!isTimeout && !isUntimeout && !isKick && !isBan) return false;
+
+        // Fetch Target User (excluding the bot itself)
+        const targetMember = message.mentions.members.filter(m => m.id !== client.user.id).first();
+        if (!targetMember) {
+            await message.reply('❌ Please mention a valid user to moderate (e.g. `Starry timeout @user 2m for abusive words`).');
+            return true;
+        }
+
+        const botMember = message.guild.members.me;
+        const executor = message.member;
+
+        // Role Hierarchy Checks
+        if (targetMember.roles.highest.position >= executor.roles.highest.position && message.author.id !== message.guild.ownerId) {
+            await message.reply('❌ You cannot moderate this user because their role is equal to or higher than yours!');
+            return true;
+        }
+
+        if (targetMember.roles.highest.position >= botMember.roles.highest.position) {
+            await message.reply('❌ I cannot moderate this user because their role is higher than or equal to my highest role!');
+            return true;
+        }
+
+        // Parse Reason
+        let reason = 'No reason provided';
+        if (lowerContent.includes('for ')) {
+            reason = rawContent.substring(rawContent.toLowerCase().indexOf('for ') + 4).trim();
+        } else if (lowerContent.includes('reason:')) {
+            reason = rawContent.substring(rawContent.toLowerCase().indexOf('reason:') + 7).trim();
+        }
+
+        // A. TIMEOUT / MUTE
+        if (isTimeout && !isUntimeout) {
+            if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                await message.reply('❌ Missing `Moderate Members` permission.');
+                return true;
+            }
+
+            const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000); // Default 10m
+            const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?[0] || '10m';
+
+            try {
+                await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
+                const embed = new EmbedBuilder()
+                    .setColor('#ED4245')
+                    .setTitle('⏰ Member Timed Out')
+                    .setDescription(`**Target:** ${targetMember} (\`${targetMember.user.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}`)
+                    .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+                    .setTimestamp();
+                await message.reply({ embeds: [embed] });
+            } catch (err) {
+                await message.reply(`❌ Failed to timeout member: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // B. UNTIMEOUT / UNMUTE
+        if (isUntimeout) {
+            if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                await message.reply('❌ Missing `Moderate Members` permission.');
+                return true;
+            }
+            try {
+                await targetMember.timeout(null, `Untimed out by ${message.author.tag}`);
+                await message.reply(`✅ Successfully removed timeout for ${targetMember}.`);
+            } catch (err) {
+                await message.reply(`❌ Failed to remove timeout: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // C. KICK
+        if (isKick) {
+            if (!executor.permissions.has(PermissionFlagsBits.KickMembers) || !botMember.permissions.has(PermissionFlagsBits.KickMembers)) {
+                await message.reply('❌ Missing `Kick Members` permission.');
+                return true;
+            }
+            try {
+                await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
+                const embed = new EmbedBuilder()
+                    .setColor('#DA373C')
+                    .setTitle('🚪 Member Kicked')
+                    .setDescription(`**Target:** \`${targetMember.user.tag}\`\n**Reason:** ${reason}`)
+                    .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+                    .setTimestamp();
+                await message.reply({ embeds: [embed] });
+            } catch (err) {
+                await message.reply(`❌ Failed to kick member: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        // D. BAN
+        if (isBan) {
+            if (!executor.permissions.has(PermissionFlagsBits.BanMembers) || !botMember.permissions.has(PermissionFlagsBits.BanMembers)) {
+                await message.reply('❌ Missing `Ban Members` permission.');
+                return true;
+            }
+            try {
+                await targetMember.ban({ reason: `${reason} | Executed by ${message.author.tag}` });
+                const embed = new EmbedBuilder()
+                    .setColor('#ED4245')
+                    .setTitle('🔨 Member Banned')
+                    .setDescription(`**Target:** \`${targetMember.user.tag}\`\n**Reason:** ${reason}`)
+                    .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+                    .setTimestamp();
+                await message.reply({ embeds: [embed] });
+            } catch (err) {
+                await message.reply(`❌ Failed to ban member: \`${err.message}\``);
+            }
+            return true;
+        }
+
+        return false;
+    }
 
     // 🎨 STRICT POLLINATIONS IMAGE PARSER
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
@@ -789,7 +961,6 @@ module.exports = async (client) => {
         } else if (hasName || mentionsBot) {
             const rawText = message.content.toLowerCase();
             
-            // 🛡️ STRICT CHECK: Only trigger if explicitly asking for art/images!
             const hasExplicitImageKeywords = /\b(?:image|picture|photo|art|drawing|pic|illustration|avatar)s?\b/i.test(rawText) ||
                                             /\b(?:draw|paint|imagine)\b/i.test(rawText);
 
@@ -830,6 +1001,10 @@ module.exports = async (client) => {
         }
         return false;
     }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
     async function handleConversationalGemini(client, message, displayName) {
         await message.channel.sendTyping().catch(() => {});
@@ -949,8 +1124,8 @@ ${message.author.username} says: ${message.content}`;
             }
 
         } catch (error) {
-            console.error('Conversational Engine Error:', error);
-            return message.reply(`⚡ I'm experiencing an unusually high volume of requests. Please resend your prompt!`).catch(() => {});
+            // SILENT ERROR LOGGING: Prevents channel spam on API failure/high volume
+            console.error('Conversational Engine Error:', error.message || error);
         }
     }
 
@@ -965,6 +1140,10 @@ ${message.author.username} says: ${message.content}`;
 
         // 2. Developer CLI Commands (.dev, .sysinfo, .eval)
         if (await handleDevCLI(client, message)) return;
+
+        // 3. Smart Natural Language & Mention Moderation Parser
+        const modHandled = await handleSmartModeration(client, message);
+        if (modHandled) return;
 
         // Trigger Word Check
         let triggerWord = 'starry';
@@ -992,15 +1171,15 @@ ${message.author.username} says: ${message.content}`;
 
         if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
 
-        // 3. Fast Local Pre-Parsers (<10ms Execution - Zero AI Calls)
+        // 4. Fast Local Pre-Parsers (<10ms Execution - Zero AI Calls)
         const localHandled = await handleLocalActions(client, message);
         if (localHandled) return; 
 
-        // 4. Pollinations AI Media Generation
+        // 5. Pollinations AI Media Generation
         const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
         if (imageHandled) return;
 
-        // 5. Conversational Gemini AI Engine (General Chat Only)
+        // 6. Conversational Gemini AI Engine (General Chat Only)
         await handleConversationalGemini(client, message, displayName);
     });
 };
