@@ -1,8 +1,20 @@
 // ==========================================
 // 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (COMPLETE UPGRADED)
 // ==========================================
-process.env.FFMPEG_PATH = require('ffmpeg-static');
 
+// 🔧 Polyfill for older / 32-bit Node.js versions (Fixes Promise.withResolvers error)
+if (!Promise.withResolvers) {
+    Promise.withResolvers = function () {
+        let resolve, reject;
+        const promise = new Promise((res, rej) => {
+            resolve = res;
+            reject = rej;
+        });
+        return { promise, resolve, reject };
+    };
+}
+
+process.env.FFMPEG_PATH = require('ffmpeg-static');
 const { 
     Client, 
     GatewayIntentBits, 
