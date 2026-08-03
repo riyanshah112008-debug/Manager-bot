@@ -1,8 +1,8 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (COMPLETE UPGRADED)
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (UPGRADED & FIXED)
 // ==========================================
 
-// 🔧 Polyfill for older / 32-bit Node.js versions (Fixes Promise.withResolvers error)
+// 🔧 Polyfill for older / 32-bit Node.js versions
 if (!Promise.withResolvers) {
     Promise.withResolvers = function () {
         let resolve, reject;
@@ -234,7 +234,7 @@ app.post('/verify', async (req, res) => {
     }
 });
 
-// 🎵 LAVALINK NODES (ORIGINAL CONFIGURATION PRESERVED EXACTLY)
+// 🎵 LAVALINK NODES
 const Nodes = [
     {
         name: 'Main-Node-Lavasearch',
@@ -484,16 +484,17 @@ client.on(Events.MessageCreate, async message => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu()) return;
+    if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isContextMenuCommand()) return;
 
-    // 🛡️ COMPLETE MODULE HANDLED BYPASS LIST
-    if (interaction.isChatInputCommand()) {
+    // 🛡️ COMPLETE MODULE HANDLED BYPASS LIST (UPDATED FOR SLASH & CONTEXT MENU)
+    if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
             'emergency-nuke', 'emergency-lockdown', 'emergency-secure', 'emergency-unban',
             'automod', 'mod', 'moderate', 'verify-setup',
             'bump', 'bump-setup', 'autobump', 'set-listing',
-            'ticketsetup', 'applysetup','setupcount','countstats','countreset','steal'
+            'ticketsetup', 'applysetup', 'setupcount', 'countstats', 'countreset',
+            'whois', 'steal', 'Steal Emojis'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
@@ -578,7 +579,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// 🧩 MODULE INITIALIZERS (SAFE ASYNC LOADER)
+// 🧩 MODULE INITIALIZERS
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
