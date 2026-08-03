@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 const { 
@@ -96,7 +96,7 @@ async function generateAIResponseWithRetry(prompt) {
     throw lastError || new Error('AI Engine unreachable.');
 }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -168,7 +168,7 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     return channel;
 }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -263,7 +263,7 @@ const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDes
 const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Setup verification').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -377,51 +377,8 @@ module.exports = async (client) => {
             await goodbyeCh.send({ content: `🕊️ Goodbye **${member.user.username}**! Until we meet again...`, embeds: [goodbyeEmbed] }).catch(() => {});
         } catch (err) {}
     });
-
-    client.on('messageDelete', async (message) => {
-        try {
-            if (!message.guild || message.partial) return;
-            const logChannel = client.getLogChannel(message.guild, 'messages');
-            if (!logChannel || logChannel.id === message.channel.id) return;
-
-            const author = message.author ? `${message.author} (\`${message.author.tag}\`)` : 'Unknown User';
-            const deleteEmbed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setAuthor({ name: '🗑️ Message Deleted', iconURL: message.author?.displayAvatarURL({ dynamic: true }) || message.guild.iconURL({ dynamic: true }) })
-                .setDescription(`A message by ${author} was deleted in <#${message.channel.id}>.`)
-                .addFields(
-                    { name: '📝 Message Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or contains attachments/embeds]*', inline: false },
-                    { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
-                    { name: '🆔 Message ID', value: `\`${message.id}\``, inline: true }
-                )
-                .setTimestamp();
-
-            await logChannel.send({ embeds: [deleteEmbed] }).catch(() => {});
-        } catch (err) {}
-    });
-
-    client.on('messageDeleteBulk', async (messages) => {
-        try {
-            const firstMsg = messages.first();
-            if (!firstMsg || !firstMsg.guild) return;
-            const logChannel = client.getLogChannel(firstMsg.guild, 'messages') || client.getLogChannel(firstMsg.guild, 'moderate');
-            if (!logChannel) return;
-
-            const bulkEmbed = new EmbedBuilder()
-                .setColor('#FEE75C')
-                .setAuthor({ name: '🧹 Bulk Message Delete (Purge)', iconURL: firstMsg.guild.iconURL({ dynamic: true }) })
-                .setDescription(`**${messages.size} messages** were purged/deleted in <#${firstMsg.channel.id}>.`)
-                .addFields(
-                    { name: '📺 Channel', value: `<#${firstMsg.channel.id}>`, inline: true },
-                    { name: '📊 Total Messages Deleted', value: `\`${messages.size}\``, inline: true }
-                )
-                .setTimestamp();
-
-            await logChannel.send({ embeds: [bulkEmbed] }).catch(() => {});
-        } catch (err) {}
-    });
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -566,7 +523,7 @@ module.exports = async (client) => {
             .trim();
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -653,7 +610,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 7)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -862,10 +819,6 @@ module.exports = async (client) => {
 
         return false;
     }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
-// File Path: modules/starry.js
-// ==========================================
 
     async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
         let isImageRequest = isImagine;
