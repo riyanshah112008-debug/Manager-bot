@@ -1,10 +1,9 @@
 // ==========================================
-// 1. IMPORTS & MONGOOSE SCHEMA
+// 🌸 AESTHETIC WELCOME MODULE & SCHEMA
 // ==========================================
 const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 
-// MongoDB Schema for Welcome Channel Configuration
 const welcomeSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     channelId: { type: String, required: true }
@@ -12,27 +11,20 @@ const welcomeSchema = new mongoose.Schema({
 
 const WelcomeSettings = mongoose.models.WelcomeSettings || mongoose.model('WelcomeSettings', welcomeSchema);
 
-// Slash Command Schema Definition
 const setupWelcomeCommand = new SlashCommandBuilder()
     .setName('setupwelcome')
-    .setDescription('Set up the channel for automated server welcome messages')
+    .setDescription('✨ Set up the aesthetic channel for automated welcome cards')
     .addChannelOption(option => 
         option.setName('channel')
-            .setDescription('The text channel to send welcome cards in')
+            .setDescription('The text channel to send aesthetic welcome cards in')
             .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
-// ==========================================
-// 2. MAIN WELCOME MODULE FUNCTION
-// ==========================================
 const welcomeModule = (client) => {
-
-    // Register /setupwelcome command into client command collection
     if (client.commands && typeof client.commands.set === 'function') {
         client.commands.set('setupwelcome', { data: setupWelcomeCommand, execute: handleSetupWelcome });
     }
 
-    // --- Slash Command Handler ---
     async function handleSetupWelcome(interaction) {
         try {
             if (!interaction.deferred && !interaction.replied) {
@@ -53,29 +45,28 @@ const welcomeModule = (client) => {
         );
 
         const previewEmbed = new EmbedBuilder()
-            .setColor('#FFD700')
-            .setTitle(`✨ Welcome to ${interaction.guild.name} ✨`)
-            .setDescription(`Hello ${interaction.user}, we are so glad you joined the server! Be sure to read the rules and enjoy your stay.`)
+            .setColor('#FF73FA')
+            .setTitle(`🌸 ✨ WELCOME TO ${interaction.guild.name.toUpperCase()} ✨ 🌸`)
+            .setDescription(`💖 Hello ${interaction.user}, welcome aboard our magical server! Make yourself completely at home, check out our rules, and enjoy your wonderful stay here. ✨`)
             .addFields(
-                { name: '👤 Member Count', value: `You are member **#${interaction.guild.memberCount}**!`, inline: true },
-                { name: '📆 Account Created', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true }
+                { name: '🌸 Member Milestone', value: `You are our stellar member **#${interaction.guild.memberCount}**! 🎉`, inline: false },
+                { name: '✨ Account Created', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true }
             )
+            .setImage('https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
             .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
-            .setFooter({ text: `Starry Welcome System • Preview Mode` })
+            .setFooter({ text: `✨ Starry Aesthetic Welcome System • Setup Preview Mode ✨` })
             .setTimestamp();
 
-        await channel.send({ content: `Hey ${interaction.user}! 👋 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
+        await channel.send({ content: `💫 Hey ${interaction.user}! We've been expecting you! 🥂 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
 
-        return interaction.editReply({ content: `✅ **Success!** Welcome messages will now be sent to ${channel}!` });
+        return interaction.editReply({ content: `✅ **Success!** Aesthetic welcome cards will now be sent to ${channel}!` });
     }
 
-    // --- Interaction Router ---
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'setupwelcome') await handleSetupWelcome(interaction);
     });
 
-    // --- Member Join Listener ---
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
 
@@ -86,19 +77,20 @@ const welcomeModule = (client) => {
             const channel = member.guild.channels.cache.get(config.channelId);
             if (!channel) return;
 
-            const embed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setTitle(`✨ Welcome to ${member.guild.name} ✨`)
-                .setDescription(`Hello <@${member.id}>, we are so glad you joined the server! Be sure to read the rules and enjoy your stay.`)
+            const aestheticEmbed = new EmbedBuilder()
+                .setColor('#FF73FA')
+                .setTitle(`✨ WELCOME TO ${member.guild.name.toUpperCase()} ✨`)
+                .setDescription(`💖 Hello <@${member.id}>! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟`)
                 .addFields(
-                    { name: '👤 Member Count', value: `You are member **#${member.guild.memberCount}**!`, inline: true },
-                    { name: '📆 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                    { name: '🌸 Community Milestone', value: `You are our precious member **#${member.guild.memberCount}**! 🎉`, inline: false },
+                    { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
                 )
+                .setImage('https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
                 .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-                .setFooter({ text: `Enjoy your stay in ${member.guild.name}!` })
+                .setFooter({ text: `✨ Enjoy your stellar journey in ${member.guild.name}! ✨` })
                 .setTimestamp();
 
-            await channel.send({ content: `Hey <@${member.id}>! 👋`, embeds: [embed] }).catch(() => {});
+            await channel.send({ content: `💫 Welcome <@${member.id}>! Grab a seat and enjoy your stay! 🥂`, embeds: [aestheticEmbed] }).catch(() => {});
         } catch (error) {
             console.error('[Welcome Engine Error]:', error);
         }
