@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (UPGRADED & FIXED)
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 1 OF 4)
 // ==========================================
 
 // 🔧 Polyfill for older / 32-bit Node.js versions
@@ -233,10 +233,10 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
+   // ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2 OF 4)
+// ==========================================
 
-// ==========================================
-// 🎵 HIGH-AVAILABILITY MULTI-NODE CLUSTER
-// ==========================================
 const Nodes = [
     {
         name: 'Node-1-Jirayu-Primary',
@@ -289,7 +289,7 @@ const Nodes = [
 ];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "spotify", // 🟢 Primary Search: Spotify
+    defaultSearchEngine: "spotify",
     searchFallbacks: { 
         spotify: "spsearch", 
         soundcloud: "scsearch", 
@@ -313,7 +313,7 @@ client.manager = new Kazagumo({
     voiceConnectionTimeout: 15000,
     linkInitializers: true,
     reconnectTries: 25,
-    restTimeout: 3500, // ⚡ 3.5s Fast Failover: Instantly switches nodes if one hangs
+    restTimeout: 3500,
     frameBufferDuration: 5000,
     trimVoicePacket: true
 });
@@ -470,7 +470,6 @@ client.once(Events.ClientReady, async () => {
         console.error('❌ Lavalink Initialization Failed:', lavalinkErr.message);
     }
 
-    // 🚀 FLEXIBLE MULTI-DIRECTORY COMMAND DEPLOYER
     try {
         console.log("🔄 Auto-deploying updated command payload to Discord...");
         let deploy = null;
@@ -488,6 +487,9 @@ client.once(Events.ClientReady, async () => {
         console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
     }
 });
+    // ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 3 OF 4)
+// ==========================================
 
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
@@ -515,7 +517,6 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isContextMenuCommand()) return;
 
-    // 🛡️ COMPLETE MODULE HANDLED BYPASS LIST (UPDATED FOR SLASH & CONTEXT MENU)
     if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
         const moduleHandledCommands = [
             'setup-starry', 'policy-vote', 'social', 'devpanel',
@@ -523,7 +524,8 @@ client.on(Events.InteractionCreate, async interaction => {
             'automod', 'mod', 'moderate', 'verify-setup',
             'bump', 'bump-setup', 'autobump', 'set-listing',
             'ticketsetup', 'applysetup', 'setupcount', 'countstats', 'countreset',
-            'whois', 'steal', 'Steal Emojis','setwelcome','setgoodbye'
+            'whois', 'steal', 'Steal Emojis', 'setwelcome', 'setgoodbye',
+            'setupwelcome', 'setupgoodbye'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
@@ -607,8 +609,10 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
+            // ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 4 OF 4)
+// ==========================================
 
-// 🧩 MODULE INITIALIZERS
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
@@ -740,3 +744,4 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
+                                                                       
