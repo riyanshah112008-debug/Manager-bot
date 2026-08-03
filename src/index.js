@@ -235,7 +235,7 @@ app.post('/verify', async (req, res) => {
 });
 
 // ==========================================
-// 🎵 VERIFIED MULTI-NODE LAVALINK POOL
+// 🎵 SPOTIFY-PRIMARY KAZAGUMO MUSIC ENGINE
 // ==========================================
 const Nodes = [
     {
@@ -281,16 +281,20 @@ const Nodes = [
 ];
 
 client.manager = new Kazagumo({
-    defaultSearchEngine: "soundcloud", // ⚡ SoundCloud prevents YouTube IP rate-limit timeouts
-    searchFallbacks: { soundcloud: "scsearch", youtube: "ytsearch" },
+    defaultSearchEngine: "spotify", // 🟢 Spotify set as Primary Search Engine
+    searchFallbacks: { 
+        spotify: "spsearch", 
+        soundcloud: "scsearch", 
+        youtube: "ytsearch" 
+    },
     plugins: [
         new KazagumoSpotify({ 
-            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
-            playlistPageLimit: 2, 
-            albumPageLimit: 1, 
+            clientId: process.env.SPOTIFY_CLIENT_ID, 
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET, 
+            playlistPageLimit: 5, 
+            albumPageLimit: 3, 
             searchMarket: 'IN', 
-            searchPrefix: 'scsearch:' 
+            searchPrefix: 'ytsearch:' // Matches Spotify tracks to audio streams via Lavalink
         })
     ],
     send: (guildId, payload) => {
@@ -298,10 +302,10 @@ client.manager = new Kazagumo({
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes, {
-    voiceConnectionTimeout: 12000,
+    voiceConnectionTimeout: 15000,
     linkInitializers: true,
     reconnectTries: 20,
-    restTimeout: 5000, // ⚡ 5-second fast failover forces immediate switch to next node
+    restTimeout: 8000,
     frameBufferDuration: 5000,
     trimVoicePacket: true
 });
