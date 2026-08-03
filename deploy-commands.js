@@ -1,15 +1,15 @@
 // ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 1 OF 2)
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (COMPLETE REPAIRED)
 // ==========================================
 const { 
     REST, 
     Routes, 
     PermissionFlagsBits, 
     SlashCommandBuilder, 
-    ContextMenuCommandBuilder,    // 👈 Must be imported
-    ApplicationCommandType,       // 👈 Must be imported
-    ApplicationIntegrationType,   // 👈 Must be imported
-    InteractionContextType,       // 👈 Must be imported
+    ContextMenuCommandBuilder,
+    ApplicationCommandType,
+    ApplicationIntegrationType,
+    InteractionContextType,
     ChannelType 
 } = require('discord.js');
 
@@ -119,7 +119,7 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
-        // 🔍 GLOBAL USER APP WHOIS COMMAND (Usable Everywhere)
+    // 🔍 GLOBAL USER APP WHOIS COMMAND
     new SlashCommandBuilder()
         .setName('whois')
         .setDescription('🔍 Lookup detailed information and permissions for a user')
@@ -138,7 +138,6 @@ const commands = [
                 .setRequired(false)
         )
         .toJSON(),
-
 
     // 📊 SINGLE LEVELING SLASH COMMAND
     new SlashCommandBuilder()
@@ -164,11 +163,9 @@ const commands = [
         .setName('applysetup')
         .setDescription('📋 Create the staff & partner application panel in this channel')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .toJSON()
-];
-// ==========================================
+        .toJSON(),
+
     // 📥 GLOBAL EMOJI & STICKER STEALER COMMANDS
-    // ==========================================
     new SlashCommandBuilder()
         .setName('steal')
         .setDescription('📥 Steal emojis or stickers from text or messages')
@@ -200,14 +197,14 @@ const commands = [
             InteractionContextType.BotDM, 
             InteractionContextType.PrivateChannel
         )
-        .toJSON(),
+        .toJSON()
+];
 
 if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
-// ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 2 OF 2)
-// ==========================================
+
+// 🚀 GIVEAWAY & UTILITY COMMANDS
 commands.push(
     new SlashCommandBuilder()
         .setName('giveaway')
