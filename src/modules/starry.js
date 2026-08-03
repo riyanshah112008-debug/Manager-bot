@@ -1,5 +1,5 @@
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 6)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 const { 
@@ -22,7 +22,7 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 
-// Safe Package Imports
+// Safe Native Package Loading
 let createCanvas, loadImage;
 try {
     const canvasPkg = require('canvas');
@@ -87,7 +87,7 @@ const CountSchema = new mongoose.Schema({
 });
 CountGuild = mongoose.models.CountGuild || mongoose.model('CountGuild', CountSchema);
 
-// SQLite Protection Database
+// SQLite Protection Store Initialization
 if (Database) {
     try {
         const protectDb = new Database('protect.db');
@@ -153,7 +153,7 @@ async function generateAIResponseWithRetry(prompt) {
     throw lastError || new Error('AI Engine temporarily unreachable.');
 }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 6)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -224,6 +224,10 @@ async function createNonDuplicatingActiveChannel(guild, options, verifiedRole) {
     await deployActiveModulePanel(channel, options.moduleType, verifiedRole);
     return channel;
 }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
 async function provisionMasterServerStructure(interaction) {
     const guild = interaction.guild;
@@ -329,7 +333,7 @@ const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDes
 const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
 const verifySetupCommand = new SlashCommandBuilder().setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText).setRequired(true)).addRoleOption(o => o.setName('role').setDescription('Role').setRequired(true));
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 3 OF 6)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -392,7 +396,7 @@ module.exports = async (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
 
-    // 🟢 MEMBER JOIN LISTENER (WELCOME + AUDIT LOG)
+    // 🟢 MEMBER JOIN LISTENER (WELCOME CARD + AUDIT LOG)
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
 
@@ -436,7 +440,7 @@ module.exports = async (client) => {
         } catch (err) {}
     });
 
-    // 🔴 MEMBER LEAVE LISTENER (GOODBYE + AUDIT LOG)
+    // 🔴 MEMBER LEAVE LISTENER (GOODBYE BANNER + AUDIT LOG)
     client.on('guildMemberRemove', async (member) => {
         const accessLog = client.getLogChannel(member.guild, 'access');
         if (accessLog) {
@@ -499,7 +503,7 @@ module.exports = async (client) => {
         } catch (err) {}
     });
 
-    // 🗑️ MESSAGE DELETE & PURGE AUDIT LOGGERS
+    // 🗑️ MESSAGE DELETE & BULK PURGE AUDIT LOGGERS
     client.on('messageDelete', async (message) => {
         try {
             if (!message.guild || message.partial) return;
@@ -543,15 +547,15 @@ module.exports = async (client) => {
         } catch (err) {}
     });
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 4 OF 6)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
-    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (BUTTONS, SLASH COMMANDS)
+    // 🌐 GLOBAL PERMANENT INTERACTION LISTENER (BUTTONS & SLASH COMMANDS)
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
-        // 1. Social Buttons
+        // 1. Social Action Buttons
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_');
             const actionType = parts[1] || 'pat';
@@ -596,7 +600,7 @@ module.exports = async (client) => {
             return interaction.reply({ embeds: [replyEmbed], components: [reciprocalRow] }).catch(() => {});
         }
 
-        // 2. Verification Link Button
+        // 2. Web Verification Link Button
         if (interaction.isButton() && interaction.customId.startsWith('verify_role_')) {
             const roleId = interaction.customId.split('verify_role_')[1];
             const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -676,6 +680,10 @@ module.exports = async (client) => {
             .replace(/\s+/g, ' ')
             .trim();
     }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 8)
+// File Path: modules/starry.js
+// ==========================================
 
     async function handleAutoModPing(message) {
         if (!message.guild || message.author.bot || !message.member) return false;
@@ -834,7 +842,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 6)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
@@ -1009,7 +1017,7 @@ module.exports = async (client) => {
         return false;
     }
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 6)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 8 OF 8)
 // File Path: modules/starry.js
 // ==========================================
 
