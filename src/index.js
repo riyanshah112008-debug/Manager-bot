@@ -235,55 +235,47 @@ app.post('/verify', async (req, res) => {
 });
 
 // ==========================================
-// 🎵 RESILIENT MULTI-NODE LAVALINK POOL
+// 🎵 VERIFIED MULTI-NODE LAVALINK POOL
 // ==========================================
 const Nodes = [
     {
-        name: 'Node-1-Horizxon-SG',
-        url: 'lava1.horizxon.studio:80',
-        auth: 'horizxon.studio',
-        secure: false,
-        retryAmount: 20,
-        retryDelay: 1500
-    },
-    {
-        name: 'Node-2-Horizxon-US',
-        url: 'lava2.horizxon.studio:80',
-        auth: 'horizxon.studio',
-        secure: false,
-        retryAmount: 20,
-        retryDelay: 1500
-    },
-    {
-        name: 'Node-3-AjieDev-v4',
-        url: 'lava-v4.ajieblogs.eu.org:443',
-        auth: 'https://dsc.gg/ajidevserver',
-        secure: true,
-        retryAmount: 20,
-        retryDelay: 1500
-    },
-    {
-        name: 'Node-4-NyxBot-SG',
-        url: 'sg1-nodelink.nyxbot.app:3000',
-        auth: 'nyxbot.app/support',
-        secure: false,
-        retryAmount: 20,
-        retryDelay: 1500
-    },
-    {
-        name: 'Node-5-TriniumHost',
-        url: 'lavalink.triniumhost.com:4333',
-        auth: 'free',
-        secure: false,
-        retryAmount: 20,
-        retryDelay: 1500
-    },
-    {
-        name: 'Node-6-Jirayu-v3',
+        name: 'Node-1-Jirayu',
         url: 'lavalink.jirayu.net:13592',
         auth: 'youshallnotpass',
         secure: false,
-        retryAmount: 20,
+        retryAmount: 15,
+        retryDelay: 1500
+    },
+    {
+        name: 'Node-2-NyxBot-SG',
+        url: 'sg1-nodelink.nyxbot.app:3000',
+        auth: 'nyxbot.app/support',
+        secure: false,
+        retryAmount: 15,
+        retryDelay: 1500
+    },
+    {
+        name: 'Node-3-TriniumHost',
+        url: 'lavalink.triniumhost.com:4333',
+        auth: 'free',
+        secure: false,
+        retryAmount: 15,
+        retryDelay: 1500
+    },
+    {
+        name: 'Node-4-Serenetia-v4',
+        url: 'lavalinkv4.serenetia.com:80',
+        auth: 'https://seretia.link/discord',
+        secure: false,
+        retryAmount: 15,
+        retryDelay: 1500
+    },
+    {
+        name: 'Node-5-G3V-UK',
+        url: 'lava.g3v.co.uk:9008',
+        auth: 'lavalinklol',
+        secure: false,
+        retryAmount: 15,
         retryDelay: 1500
     }
 ];
@@ -309,18 +301,17 @@ client.manager = new Kazagumo({
     voiceConnectionTimeout: 12000,
     linkInitializers: true,
     reconnectTries: 20,
-    restTimeout: 6000, // ⚡ 6-second timeout forces immediate failover to next online node
+    restTimeout: 5000, // ⚡ 5-second fast failover forces immediate switch to next node
     frameBufferDuration: 5000,
     trimVoicePacket: true
 });
 
-// Auto-failover logger
 client.manager.shoukaku.on('ready', (name) => {
-    console.log(`✅ [Lavalink Online] Active node: ${name}`);
+    console.log(`✅ [Lavalink Connected] Active node: ${name}`);
 });
 
 client.manager.shoukaku.on('error', (name, error) => {
-    console.warn(`⚠️ [Lavalink Stutter] ${name}: ${error.message || error}`);
+    console.warn(`⚠️ [Lavalink Notice] ${name}: ${error.message || error}`);
 });
 client.manager.shoukaku.on('disconnect', (name, count) => {
     console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Attempting auto-reconnect/failover... (Retry count: ${count})`);
