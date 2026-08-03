@@ -234,31 +234,41 @@ app.post('/verify', async (req, res) => {
     }
 });
 
-// 🎵 LAVALINK NODES
+// ==========================================
+// 🎵 UPDATED HIGH-UPTIME LAVALINK NODES
+// ==========================================
 const Nodes = [
     {
-        name: 'Main-Node-Lavasearch',
-        url: 'lava.darrennathanael.com:443',
+        name: 'Node-1-Main-SSL',
+        url: 'lavalink.lavalink.me:443',
         auth: 'youshallnotpass',
         secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
+        retryAmount: 15,
+        retryDelay: 2000
     },
     {
-        name: 'Node-Jirayu-Backup',
-        url: 'lavalink.jirayu.net:13592',
+        name: 'Node-2-Lexic-SSL',
+        url: 'lavalink.lexic.cc:443',
         auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 10,
-        retryDelay: 3000
+        secure: true,
+        retryAmount: 15,
+        retryDelay: 2000
     },
     {
-        name: 'Node-Serenetia-Backup',
+        name: 'Node-3-Ajiezy-SSL',
+        url: 'lava-v3.ajiezy.id:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 15,
+        retryDelay: 2000
+    },
+    {
+        name: 'Node-4-Serenetia-SSL',
         url: 'lavalink.serenetia.com:443',
         auth: 'youshallnotpass',
         secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
+        retryAmount: 15,
+        retryDelay: 2000
     }
 ];
 
@@ -280,14 +290,13 @@ client.manager = new Kazagumo({
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes, {
-    voiceConnectionTimeout: 30000,
+    voiceConnectionTimeout: 15000,
     linkInitializers: true,
-    reconnectTries: 10,
-    restTimeout: 15000,
+    reconnectTries: 15,
+    restTimeout: 10000,
     frameBufferDuration: 5000,
     trimVoicePacket: true
 });
-
 client.manager.shoukaku.on('ready', (name) => {
     console.log(`🎵 [Lavalink] Successfully connected & active on node: ${name}`);
 });
