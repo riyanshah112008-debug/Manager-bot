@@ -80,6 +80,31 @@ const afkModule = safeRequire(['./src/modules/afk', './modules/afk']);
 if (afkModule && afkModule.afkPayload) {
     masterPayloads.push(afkModule.afkPayload);
 }
+    // 🌟 SETUP WELCOME COMMAND
+    new SlashCommandBuilder()
+        .setName('setupwelcome')
+        .setDescription('Set up the channel for automated server welcome messages')
+        .addChannelOption(option => 
+            option.setName('channel')
+                .setDescription('The text channel to send welcome cards in')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(true)
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
+
+    // 👋 SETUP GOODBYE COMMAND
+    new SlashCommandBuilder()
+        .setName('setupgoodbye')
+        .setDescription('Set up the channel for automated server goodbye messages')
+        .addChannelOption(option => 
+            option.setName('channel')
+                .setDescription('The text channel to send goodbye cards in')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(true)
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
 
 // Bump Engine Payloads
 const bumpModule = safeRequire(['./src/modules/bumpEngine', './modules/bumpEngine']);
