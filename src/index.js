@@ -523,7 +523,7 @@ client.on(Events.InteractionCreate, async interaction => {
             'automod', 'mod', 'moderate', 'verify-setup',
             'bump', 'bump-setup', 'autobump', 'set-listing',
             'ticketsetup', 'applysetup', 'setupcount', 'countstats', 'countreset',
-            'whois', 'steal', 'Steal Emojis'
+            'whois', 'steal', 'Steal Emojis','setwelcome','setgoodbye'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
