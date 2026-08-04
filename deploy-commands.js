@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 1 OF 4)
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE
 // File Path: deploy-commands.js
 // ==========================================
 const { 
@@ -67,7 +67,7 @@ if (masterModule) {
 // Tracker Payload
 const trackerModule = safeRequire(['./src/modules/tracker', './modules/tracker']);
 if (trackerModule && trackerModule.data) {
-    masterPayloads.push(trackerModule.data.toJSON());
+    masterPayloads.push(trackerModule.data.toJSON ? trackerModule.data.toJSON() : trackerModule.data);
 }
 
 // Counting Module
@@ -98,10 +98,6 @@ const backupModule = safeRequire([
 if (backupModule && backupModule.backupCommandPayload) {
     masterPayloads.push(backupModule.backupCommandPayload);
 }
-// ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 2 OF 4)
-// File Path: deploy-commands.js
-// ==========================================
 
 const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
 
@@ -229,10 +225,6 @@ const commands = [
         )
         .toJSON()
 ];
-// ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 3 OF 4)
-// File Path: deploy-commands.js
-// ==========================================
 
 if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
@@ -278,10 +270,7 @@ commands.push(
     { name: 'setup-server', description: 'Automatically generates a professional server layout!', default_member_permissions: '8' },
     { name: 'modpanel', description: 'Open the interactive moderation dashboard', default_member_permissions: MODERATE_MEMBERS, options: [{ name: 'user', type: 6, required: true, description: 'User' }] },
     { name: 'devpanel', description: '💻 Open the interactive developer control panel' },
-    autoroleCommandDef
-);
-
-commands.push(
+    autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }, { name: 'title', type: 3, required: true, description: 'Title' }, { name: 'text', type: 3, required: true, description: 'Text' }] }] },
     { name: 'setlogs', description: 'Set server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
@@ -290,15 +279,14 @@ commands.push(
     { name: 'ping', description: 'Check bot latency' },
     { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] }
 );
-// ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 4 OF 4)
-// File Path: deploy-commands.js
-// ==========================================
 
 // 3. STRICT DEDUPLICATION ENGINE
 const commandMap = new Map();
 commands.forEach(cmd => { 
-    if (cmd && cmd.name) commandMap.set(cmd.name, cmd); 
+    if (cmd) {
+        const jsonCmd = typeof cmd.toJSON === 'function' ? cmd.toJSON() : cmd;
+        if (jsonCmd.name) commandMap.set(jsonCmd.name, jsonCmd);
+    }
 });
 const finalPayload = Array.from(commandMap.values());
 
@@ -337,3 +325,4 @@ async function deployCommands() {
 if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
 
 module.exports = { commands: finalPayload, deployCommands };
+                       
