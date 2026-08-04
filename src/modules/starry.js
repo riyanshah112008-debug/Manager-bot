@@ -35,6 +35,7 @@ try {
 } catch (e) {}
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
+const blacklistedUsers = new Set();
 
 const welcomeSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -62,6 +63,19 @@ const masterSecuritySchema = new mongoose.Schema({
     userInfractions: { type: Map, of: Number, default: {} }
 });
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+
+let ServerSettings;
+try {
+    ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
+} catch (e) {
+    const serverSettingsSchema = new mongoose.Schema({
+        guildId: { type: String, required: true, unique: true },
+        setupCompleted: { type: Boolean, default: false },
+        verifiedRoleId: { type: String, default: null },
+        triggerWord: { type: String, default: 'starry' }
+    });
+    ServerSettings = mongoose.models.ServerSettings || mongoose.model('ServerSettings', serverSettingsSchema);
+}
 
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
@@ -600,7 +614,10 @@ module.exports = async (client) => {
         const text = message.content.toLowerCase();
         if (!text.startsWith('.dev') && !text.startsWith('.sysinfo') && !text.startsWith('.eval ')) return false;
 
-        const isOwner = client.isOwner(message.author.id);
+        const isOwner = typeof client.isOwner === 'function' 
+            ? client.isOwner(message.author.id) 
+            : (process.env.OWNER_ID ? message.author.id === process.env.OWNER_ID : false);
+
         if (!isOwner) { await message.reply("❌ Access Denied.").catch(()=>{}); return true; }
 
         if (text === '.sysinfo') {
@@ -781,7 +798,7 @@ module.exports = async (client) => {
                 }
 
                 const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000);
-                const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?[0] || '10m';
+                const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?.[0] || '10m';
 
                 await client.sendPremiumModDM(targetMember, executor, 'Timeout', reason, durationStr, message.guild, caseId);
 
@@ -961,11 +978,12 @@ ${message.author.username} says: ${message.content}`;
         let displayName = 'Starry'; 
 
         try {
-            if (!ServerSettings) ServerSettings = require('../models/ServerSettings');
-            const settings = await ServerSettings.findOne({ guildId: message.guild.id });
-            if (settings && settings.triggerWord) {
-                triggerWord = settings.triggerWord.toLowerCase();
-                displayName = settings.triggerWord;
+            if (ServerSettings) {
+                const settings = await ServerSettings.findOne({ guildId: message.guild.id });
+                if (settings && settings.triggerWord) {
+                    triggerWord = settings.triggerWord.toLowerCase();
+                    displayName = settings.triggerWord;
+                }
             }
         } catch (err) {}
 
