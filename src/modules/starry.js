@@ -37,6 +37,18 @@ try {
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const blacklistedUsers = new Set();
 
+const DEFAULT_BAD_WORDS = [
+    'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'dick', 
+    'pussy', 'slut', 'whore', 'motherfucker', 'cock', 'nigger', 'faggot'
+];
+
+const badWordSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    enabled: { type: Boolean, default: true },
+    words: { type: [String], default: DEFAULT_BAD_WORDS }
+});
+const BadWordSettings = mongoose.models.BadWordSettings || mongoose.model('BadWordSettings', badWordSchema);
+
 const welcomeSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     channelId: { type: String, required: true }
@@ -120,6 +132,41 @@ async function generateAIResponseWithRetry(prompt) {
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 2 OF 7)
 // File Path: modules/starry.js
 // ==========================================
+
+async function getBadWordPanelEmbed(guild, client) {
+    let settings = await BadWordSettings.findOne({ guildId: guild.id });
+    if (!settings) {
+        settings = await BadWordSettings.create({ guildId: guild.id, enabled: true, words: DEFAULT_BAD_WORDS });
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(settings.enabled ? '#2ecc71' : '#ed4245')
+        .setAuthor({ name: `${guild.name} | Security Protocol`, iconURL: guild.iconURL({ dynamic: true }) })
+        .setTitle('🛡️ Bad Word Moderation Control Panel')
+        .setDescription(
+            `Configure automated cuss word detection, auto-deletion, and warning notices for **${guild.name}**.\n\n` +
+            `• **Engine Status:** ${settings.enabled ? '`ACTIVE 🟢`' : '`DISABLED 🔴`'}\n` +
+            `• **Total Filtered Words:** \`${settings.words.length}\` words\n` +
+            `• **Automated Enforcement:** Message Deletion + Public Warning + Direct DM Warning.`
+        )
+        .addFields({
+            name: '📜 Sample Active Words',
+            value: settings.words.length > 0 
+                ? `\`\`\`${settings.words.slice(0, 15).join(', ')}${settings.words.length > 15 ? '...' : ''}\`\`\``
+                : '*No words currently blacklisted.*'
+        })
+        .setFooter({ text: 'Use the buttons below to manage the bad word filter', iconURL: client.user.displayAvatarURL() })
+        .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('badword_add_btn').setLabel('Add Word(s)').setStyle(ButtonStyle.Success).setEmoji('➕'),
+        new ButtonBuilder().setCustomId('badword_remove_btn').setLabel('Remove Word(s)').setStyle(ButtonStyle.Danger).setEmoji('➖'),
+        new ButtonBuilder().setCustomId('badword_list_btn').setLabel('View Full List').setStyle(ButtonStyle.Secondary).setEmoji('📜'),
+        new ButtonBuilder().setCustomId('badword_toggle_btn').setLabel(settings.enabled ? 'Disable AutoMod' : 'Enable AutoMod').setStyle(settings.enabled ? ButtonStyle.Secondary : ButtonStyle.Primary)
+    );
+
+    return { embeds: [embed], components: [row] };
+}
 
 async function executeFullGuildBackup(guild) {
     try {
@@ -449,6 +496,120 @@ module.exports = async (client) => {
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
+        // BAD WORD AUTOMOD BUTTON INTERACTION HANDLERS
+        if (interaction.isButton() && interaction.customId.startsWith('badword_')) {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Only Administrators can manage this panel.', flags: [EPHEMERAL_FLAG] });
+            }
+
+            const guildId = interaction.guild.id;
+
+            if (interaction.customId === 'badword_toggle_btn') {
+                let settings = await BadWordSettings.findOne({ guildId });
+                if (!settings) {
+                    settings = await BadWordSettings.create({ guildId, enabled: true, words: DEFAULT_BAD_WORDS });
+                } else {
+                    settings.enabled = !settings.enabled;
+                    await settings.save();
+                }
+
+                const panel = await getBadWordPanelEmbed(interaction.guild, client);
+                return interaction.update(panel);
+            }
+
+            if (interaction.customId === 'badword_add_btn') {
+                const modal = new ModalBuilder()
+                    .setCustomId('badword_add_modal')
+                    .setTitle('Add Bad Words to Filter');
+
+                const input = new TextInputBuilder()
+                    .setCustomId('badwords_input')
+                    .setLabel('Words to Add (comma separated)')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('e.g. word1, word2, word3')
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'badword_remove_btn') {
+                const modal = new ModalBuilder()
+                    .setCustomId('badword_remove_modal')
+                    .setTitle('Remove Bad Words from Filter');
+
+                const input = new TextInputBuilder()
+                    .setCustomId('badwords_input')
+                    .setLabel('Words to Remove (comma separated)')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('e.g. word1, word2')
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'badword_list_btn') {
+                const settings = await BadWordSettings.findOne({ guildId });
+                const wordsList = settings?.words?.length ? settings.words.join(', ') : 'No bad words currently filtered.';
+
+                const listEmbed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle('📜 Complete Filtered Bad Words List')
+                    .setDescription(`\`\`\`${wordsList.slice(0, 3900)}\`\`\``)
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [listEmbed], flags: [EPHEMERAL_FLAG] });
+            }
+        }
+
+        // BAD WORD AUTOMOD MODAL SUBMISSION HANDLERS
+        if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'badword_add_modal') {
+                const inputWords = interaction.fields.getTextInputValue('badwords_input')
+                    .split(',')
+                    .map(w => w.trim().toLowerCase())
+                    .filter(w => w.length > 0);
+
+                let settings = await BadWordSettings.findOne({ guildId: interaction.guild.id });
+                if (!settings) {
+                    settings = new BadWordSettings({ guildId: interaction.guild.id, enabled: true, words: DEFAULT_BAD_WORDS });
+                }
+
+                const added = [];
+                for (const word of inputWords) {
+                    if (!settings.words.includes(word)) {
+                        settings.words.push(word);
+                        added.push(word);
+                    }
+                }
+
+                await settings.save();
+                await interaction.reply({ content: `✅ Added **${added.length}** new word(s) to the filter list!`, flags: [EPHEMERAL_FLAG] });
+
+                const panel = await getBadWordPanelEmbed(interaction.guild, client);
+                if (interaction.message) await interaction.message.edit(panel).catch(() => {});
+            }
+
+            if (interaction.customId === 'badword_remove_modal') {
+                const removeWords = interaction.fields.getTextInputValue('badwords_input')
+                    .split(',')
+                    .map(w => w.trim().toLowerCase())
+                    .filter(w => w.length > 0);
+
+                let settings = await BadWordSettings.findOne({ guildId: interaction.guild.id });
+                if (settings && settings.words) {
+                    settings.words = settings.words.filter(w => !removeWords.includes(w.toLowerCase()));
+                    await settings.save();
+                }
+
+                await interaction.reply({ content: `✅ Removed specified word(s) from the filter list!`, flags: [EPHEMERAL_FLAG] });
+
+                const panel = await getBadWordPanelEmbed(interaction.guild, client);
+                if (interaction.message) await interaction.message.edit(panel).catch(() => {});
+            }
+        }
+
         if (interaction.isButton() && interaction.customId.startsWith('social_')) {
             const parts = interaction.customId.split('_');
             const actionType = parts[1] || 'pat';
@@ -591,6 +752,95 @@ module.exports = async (client) => {
 // File Path: modules/starry.js
 // ==========================================
 
+    async function handleBadWordAutoMod(client, message) {
+        if (!message.guild || message.author.bot || !message.member) return false;
+
+        const text = message.content.trim();
+        const lowerText = text.toLowerCase();
+
+        // 1. Trigger Command: .badon
+        if (lowerText === '.badon') {
+            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await message.reply('❌ You need **Administrator** permissions to use `.badon`.');
+                return true;
+            }
+
+            let settings = await BadWordSettings.findOne({ guildId: message.guild.id });
+            if (!settings) {
+                settings = await BadWordSettings.create({ guildId: message.guild.id, enabled: true, words: DEFAULT_BAD_WORDS });
+            } else {
+                settings.enabled = true;
+                await settings.save();
+            }
+
+            const panel = await getBadWordPanelEmbed(message.guild, client);
+            await message.reply({ content: '✅ Bad word moderation is now **ENABLED**!', ...panel });
+            return true;
+        }
+
+        // 2. Trigger Command: .badoff
+        if (lowerText === '.badoff') {
+            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await message.reply('❌ You need **Administrator** permissions to use `.badoff`.');
+                return true;
+            }
+
+            await BadWordSettings.findOneAndUpdate(
+                { guildId: message.guild.id },
+                { enabled: false },
+                { upsert: true }
+            );
+
+            await message.reply('🛑 Bad word moderation has been **DISABLED**.');
+            return true;
+        }
+
+        // 3. AutoMod Bad Word Detection
+        if (message.member.permissions.has(PermissionFlagsBits.Administrator)) return false; // Bypass Admins
+
+        const settings = await BadWordSettings.findOne({ guildId: message.guild.id });
+        if (!settings || !settings.enabled || !settings.words || settings.words.length === 0) return false;
+
+        const cleanedContent = lowerText.replace(/[^a-z0-9\s]/gi, '');
+        const wordsInMsg = cleanedContent.split(/\s+/);
+
+        const detectedWord = settings.words.find(badWord => {
+            const bw = badWord.toLowerCase().trim();
+            if (!bw) return false;
+            return lowerText.includes(bw) || wordsInMsg.includes(bw);
+        });
+
+        if (detectedWord) {
+            await message.delete().catch(() => {});
+
+            const publicWarn = await message.channel.send(
+                `⚠️ <@${message.author.id}>, your message was removed because it contained bad/cuss words! Please keep the channel clean.`
+            ).catch(() => null);
+
+            if (publicWarn) {
+                setTimeout(() => publicWarn.delete().catch(() => {}), 6000);
+            }
+
+            const dmWarnEmbed = new EmbedBuilder()
+                .setColor('#ed4245')
+                .setAuthor({ name: `${message.guild.name} | Security Warning`, iconURL: message.guild.iconURL({ dynamic: true }) })
+                .setTitle('🛑 Language Warning Notice')
+                .setDescription(`Hello **${message.author.username}**, your message in **${message.guild.name}** was deleted for violating the server's bad word policy.`)
+                .addFields(
+                    { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
+                    { name: '⚠️ Detected Cuss Word', value: `\`${detectedWord}\``, inline: true },
+                    { name: '📝 Original Content', value: `\`\`\`${message.content.slice(0, 500)}\`\`\``, inline: false }
+                )
+                .setFooter({ text: 'Please refrain from using bad language in public channels.' })
+                .setTimestamp();
+
+            await message.author.send({ embeds: [dmWarnEmbed] }).catch(() => {});
+            return true;
+        }
+
+        return false;
+    }
+
     async function handleAutoModPing(message) {
         if (!message.guild || message.author.bot || !message.member) return false;
         const rawPingMatches = message.content.match(/<@!?\d+>|<@&\d+>|@everyone|@here/g) || [];
@@ -598,9 +848,9 @@ module.exports = async (client) => {
 
         if (totalPings >= 5) {
             const botMember = message.guild.members.me;
-            if (botMember.permissions.has(PermissionFlagsBits.ManageMessages)) await message.delete().catch(() => {});
+            if (botMember && botMember.permissions.has(PermissionFlagsBits.ManageMessages)) await message.delete().catch(() => {});
 
-            if (botMember.permissions.has(PermissionFlagsBits.ModerateMembers) && message.member.roles.highest.position < botMember.roles.highest.position && message.author.id !== message.guild.ownerId) {
+            if (botMember && botMember.permissions.has(PermissionFlagsBits.ModerateMembers) && message.member.roles.highest.position < botMember.roles.highest.position && message.author.id !== message.guild.ownerId) {
                 await message.member.timeout(10 * 60 * 1000, `Mass Ping AutoMod (${totalPings} pings)`).catch(() => {});
                 const warningMsg = await message.channel.send(`🛡️ **AutoMod:** <@${message.author.id}> was timed out for **10 minutes** due to Mass Mentioning!`).catch(() => null);
                 if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => {}), 6000);
@@ -987,6 +1237,7 @@ ${message.author.username} says: ${message.content}`;
             }
         } catch (err) {}
 
+        if (await handleBadWordAutoMod(client, message)) return;
         if (await handleAutoModPing(message)) return;
         if (await handleDevCLI(client, message)) return;
 
