@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 1 OF 4)
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 1 OF 6)
 // ==========================================
 
 // 🔧 Polyfill for older / 32-bit Node.js versions
@@ -170,6 +170,7 @@ client.commands = new Collection();
 client.prefixCommands = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
+client.vcLocks = new Map();
 
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
@@ -180,6 +181,7 @@ client.on('messageCreate', async (message) => {
 
     if (totalPings >= 5) {
         const botMember = message.guild.members.me;
+        if (!botMember) return;
 
         if (message.author.id === message.guild.ownerId) return;
         if (message.member.roles.highest.position >= botMember.roles.highest.position) return;
@@ -224,6 +226,7 @@ app.post('/verify', async (req, res) => {
     if (!data) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Token expired or invalid.</h1>');
     try {
         const guild = client.guilds.cache.get(data.guildId);
+        if (!guild) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Server not found.</h1>');
         const member = await guild.members.fetch(data.userId);
         await member.roles.add(data.roleId);
         client.verifyMap.delete(token); 
@@ -233,8 +236,8 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-   // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2 OF 4)
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2 OF 6)
 // ==========================================
 
 const Nodes = [
@@ -451,6 +454,9 @@ client.manager.on('playerEmpty', async player => {
 
     if (channel) channel.send('📭 The queue has ended.');
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 3 OF 6)
+// ==========================================
 
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -487,9 +493,6 @@ client.once(Events.ClientReady, async () => {
         console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
     }
 });
-    // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 3 OF 4)
-// ==========================================
 
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !message.guild) return;
@@ -513,6 +516,9 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 4 OF 6)
+// ==========================================
 
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isContextMenuCommand()) return;
@@ -609,8 +615,8 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-            // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 4 OF 4)
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 5 OF 6)
 // ==========================================
 
 const MODULE_INITIALIZERS = [
@@ -689,6 +695,9 @@ function loadSlashCommands() {
     }
     console.log(`✅ Successfully loaded ${client.commands.size} slash command handlers into client.commands`);
 }
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 6 OF 6)
+// ==========================================
 
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
@@ -744,4 +753,3 @@ process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
 
 startBot();
-                                                                       
