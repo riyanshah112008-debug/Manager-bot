@@ -321,7 +321,6 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 
-// UPGRADED EMERGENCY NUKE SLASH COMMAND DEFINITION
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
@@ -684,7 +683,7 @@ module.exports = async (client) => {
                 return interaction.editReply({ embeds: [embed] });
             }
 
-            // FULLY FIXED & ROBUST EMERGENCY NUKE HANDLER
+            // ACCURATE EMERGENCY NUKE HANDLER (PURGES ALL CHANNELS/ROLES EXCEPT COMMAND CHANNEL & MAIN SYSTEM ROLES)
             if (interaction.commandName === 'emergency-nuke') {
                 if (!interaction.deferred && !interaction.replied) {
                     await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
@@ -730,10 +729,46 @@ module.exports = async (client) => {
                     }
 
                     if (targetScope === 'server') {
-                        await interaction.editReply({ content: '⚡ **EMERGENCY SERVER RESET INITIATED:** Re-provisioning master server layout...' });
-                        const result = await provisionMasterServerStructure(interaction);
+                        await interaction.editReply({ content: '⚡ **EMERGENCY SERVER NUKE INITIATED:** Purging all channels and custom roles...' });
+
+                        const currentChannelId = interaction.channel.id;
+                        let channelsPurged = 0;
+                        let rolesPurged = 0;
+
+                        // 1. Delete ALL channels EXCEPT the channel where command was executed
+                        const allChannels = Array.from(interaction.guild.channels.cache.values());
+                        for (const ch of allChannels) {
+                            if (ch.id !== currentChannelId && ch.deletable) {
+                                await ch.delete('Emergency Server Nuke').catch(() => {});
+                                channelsPurged++;
+                            }
+                        }
+
+                        // 2. Delete ALL custom roles EXCEPT @everyone, bot-managed roles, and uneditable higher roles
+                        if (botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                            const allRoles = Array.from(interaction.guild.roles.cache.values());
+                            for (const role of allRoles) {
+                                if (
+                                    role.id !== interaction.guild.roles.everyone.id &&
+                                    !role.managed &&
+                                    role.position < botMember.roles.highest.position
+                                ) {
+                                    await role.delete('Emergency Server Nuke').catch(() => {});
+                                    rolesPurged++;
+                                }
+                            }
+                        }
+
+                        const serverNukeEmbed = new EmbedBuilder()
+                            .setColor('#ED4245')
+                            .setTitle('💥 FULL SERVER NUKE COMPLETED')
+                            .setDescription(`The server wipe has finished successfully!\n\n• **Channels Purged:** \`${channelsPurged}\`\n• **Roles Purged:** \`${rolesPurged}\`\n• **Surviving Channel:** <#${currentChannelId}>`)
+                            .setImage('https://media.tenor.com/g05_V107_9EAAAAC/explosion-nuke.gif')
+                            .setFooter({ text: `Executed by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+                            .setTimestamp();
+
                         return interaction.followUp({ 
-                            content: `⚡ **SERVER NUKE COMPLETE:** Rebuilt server layout with **${result.totalCategories} Categories** and **${result.totalChannels} Channels**!`, 
+                            embeds: [serverNukeEmbed], 
                             flags: [EPHEMERAL_FLAG] 
                         });
                     }
