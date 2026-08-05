@@ -272,7 +272,52 @@ commands.push(
     { name: 'devpanel', description: '💻 Open the interactive developer control panel' },
     autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
-    { name: 'rr', description: 'Manage reaction-role panels', default_member_permissions: ADMIN, options: [{ name: 'spawn', type: 1, description: 'Create panel', options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }, { name: 'title', type: 3, required: true, description: 'Title' }, { name: 'text', type: 3, required: true, description: 'Text' }] }] },
+    
+    // UPDATED FULL REACTION ROLES COMMAND (SUBCOMMANDS: spawn, add, remove, list)
+    {
+        name: 'rr',
+        description: 'Manage reaction-role panels',
+        default_member_permissions: ADMIN,
+        options: [
+            {
+                name: 'spawn',
+                type: 1,
+                description: 'Create a reaction role panel embed',
+                options: [
+                    { name: 'channel', type: 7, required: true, description: 'Target channel' },
+                    { name: 'title', type: 3, required: true, description: 'Embed title' },
+                    { name: 'text', type: 3, required: true, description: 'Embed description text' }
+                ]
+            },
+            {
+                name: 'add',
+                type: 1,
+                description: 'Attach a reaction role to an existing panel',
+                options: [
+                    { name: 'channel', type: 7, required: true, description: 'Channel containing the panel' },
+                    { name: 'message_id', type: 3, required: true, description: 'Message ID of the panel embed' },
+                    { name: 'role', type: 8, required: true, description: 'Role to grant on reaction' },
+                    { name: 'emoji', type: 3, required: true, description: 'Emoji to use for reaction' }
+                ]
+            },
+            {
+                name: 'remove',
+                type: 1,
+                description: 'Remove a reaction role from a panel',
+                options: [
+                    { name: 'channel', type: 7, required: true, description: 'Channel containing the panel' },
+                    { name: 'message_id', type: 3, required: true, description: 'Message ID of the panel embed' },
+                    { name: 'emoji', type: 3, required: true, description: 'Emoji to remove' }
+                ]
+            },
+            {
+                name: 'list',
+                type: 1,
+                description: 'List all active reaction roles in this server'
+            }
+        ]
+    },
+
     { name: 'setlogs', description: 'Set server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
     { name: 'setupvc', description: 'Configure join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel' }] },
     { name: 'help', description: 'Show bot command list' },
@@ -325,4 +370,4 @@ async function deployCommands() {
 if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
 
 module.exports = { commands: finalPayload, deployCommands };
-                       
+     
