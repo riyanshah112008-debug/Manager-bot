@@ -321,11 +321,17 @@ function start60sChannelTelemetryLoop(client) {
     }, 60000);
 }
 
+// UPGRADED EMERGENCY NUKE SLASH COMMAND DEFINITION
 const emergencyNukeCommand = new SlashCommandBuilder()
     .setName('emergency-nuke')
     .setDescription('⚡ Emergency Protocol: Purge channel or reset whole server')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption(o => o.setName('target').setDescription('Target scope').setRequired(true).addChoices({ name: 'Channel', value: 'channel' }, { name: 'Server', value: 'server' }));
+    .addStringOption(o => o.setName('target').setDescription('Target scope').setRequired(true).addChoices(
+        { name: 'Channel', value: 'channel' }, 
+        { name: 'Server', value: 'server' }
+    ))
+    .addChannelOption(o => o.setName('channel').setDescription('Specific channel to nuke (defaults to current channel)').setRequired(false));
+
 const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
@@ -678,16 +684,63 @@ module.exports = async (client) => {
                 return interaction.editReply({ embeds: [embed] });
             }
 
+            // FULLY FIXED & ROBUST EMERGENCY NUKE HANDLER
             if (interaction.commandName === 'emergency-nuke') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
-                const targetScope = interaction.options.getString('target', true);
-                if (targetScope === 'channel') {
-                    const channel = interaction.options.getChannel('channel') || interaction.channel;
-                    const pos = channel.position;
-                    const newCh = await channel.clone();
-                    await channel.delete().catch(() => {});
-                    await newCh.setPosition(pos).catch(() => {});
-                    return newCh.send({ content: '⚡ **EMERGENCY NUKE:** Channel purged and recreated.' });
+                if (!interaction.deferred && !interaction.replied) {
+                    await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
+
+                try {
+                    const targetScope = interaction.options.getString('target', true);
+                    const botMember = interaction.guild.members.me;
+
+                    if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                        return interaction.editReply({ content: '❌ **Permission Denied:** I need the **Manage Channels** permission to execute an emergency nuke!' });
+                    }
+
+                    if (targetScope === 'channel') {
+                        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+                        if (!targetChannel || !targetChannel.deletable) {
+                            return interaction.editReply({ content: '❌ **Error:** I cannot delete or nuke this channel. Check my role position and permissions.' });
+                        }
+
+                        const position = targetChannel.position;
+
+                        if (targetChannel.id !== interaction.channel.id) {
+                            await interaction.editReply({ content: `⚡ Nuking channel <#${targetChannel.id}>...` });
+                        }
+
+                        const newChannel = await targetChannel.clone({
+                            reason: `Emergency Nuke executed by ${interaction.user.tag}`
+                        });
+
+                        await newChannel.setPosition(position).catch(() => {});
+                        await targetChannel.delete(`Emergency Nuke executed by ${interaction.user.tag}`).catch(() => {});
+
+                        const nukeEmbed = new EmbedBuilder()
+                            .setColor('#ED4245')
+                            .setTitle('⚡ EMERGENCY NUKE EXECUTED')
+                            .setDescription('💥 This channel has been completely purged and recreated.')
+                            .setImage('https://media.tenor.com/g05_V107_9EAAAAC/explosion-nuke.gif')
+                            .setFooter({ text: `Executed by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+                            .setTimestamp();
+
+                        return newChannel.send({ embeds: [nukeEmbed] });
+                    }
+
+                    if (targetScope === 'server') {
+                        await interaction.editReply({ content: '⚡ **EMERGENCY SERVER RESET INITIATED:** Re-provisioning master server layout...' });
+                        const result = await provisionMasterServerStructure(interaction);
+                        return interaction.followUp({ 
+                            content: `⚡ **SERVER NUKE COMPLETE:** Rebuilt server layout with **${result.totalCategories} Categories** and **${result.totalChannels} Channels**!`, 
+                            flags: [EPHEMERAL_FLAG] 
+                        });
+                    }
+
+                } catch (err) {
+                    console.error('❌ Emergency Nuke Error:', err);
+                    return interaction.editReply({ content: `❌ **Nuke Failed:** \`${err.message}\`` }).catch(() => {});
                 }
             }
 
