@@ -99,6 +99,12 @@ if (backupModule && backupModule.backupCommandPayload) {
     masterPayloads.push(backupModule.backupCommandPayload);
 }
 
+// Confession Engine Payload
+const confessionModule = safeRequire(['./src/modules/confession', './modules/confession']);
+if (confessionModule && confessionModule.confessionSetupPayload) {
+    masterPayloads.push(confessionModule.confessionSetupPayload);
+}
+
 const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
 
 const commands = [
@@ -370,4 +376,3 @@ async function deployCommands() {
 if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
 
 module.exports = { commands: finalPayload, deployCommands };
-     
