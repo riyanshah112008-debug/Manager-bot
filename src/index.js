@@ -536,7 +536,7 @@ client.on(Events.InteractionCreate, async interaction => {
             'bump', 'bump-setup', 'autobump', 'set-listing',
             'ticketsetup', 'applysetup', 'setupcount', 'countstats', 'countreset',
             'whois', 'steal', 'Steal Emojis', 'setwelcome', 'setgoodbye',
-            'setupwelcome', 'setupgoodbye'
+            'setupwelcome', 'setupgoodbye','translate','clear'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
