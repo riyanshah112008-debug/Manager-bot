@@ -105,6 +105,13 @@ if (confessionModule && confessionModule.confessionSetupPayload) {
     masterPayloads.push(confessionModule.confessionSetupPayload);
 }
 
+// Translator Engine Payload
+const translatorModule = safeRequire(['./src/modules/translator', './modules/translator']);
+if (translatorModule) {
+    if (translatorModule.translatorPayload) masterPayloads.push(translatorModule.translatorPayload);
+    if (translatorModule.translateContextPayload) masterPayloads.push(translatorModule.translateContextPayload);
+}
+
 const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
 
 const commands = [
