@@ -21,6 +21,23 @@ const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 let confessionCounter = 1000;
 
+// --- SLASH COMMAND PAYLOADS ---
+const confessionSetupPayload = new SlashCommandBuilder()
+    .setName('confessionsetup')
+    .setDescription('🕯️ Deploy the aesthetic Anonymous Confession panel in this channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .toJSON();
+
+const confessPayload = new SlashCommandBuilder()
+    .setName('confess')
+    .setDescription('🕯️ Open the anonymous confession submission box')
+    .toJSON();
+
+const confessionPayload = new SlashCommandBuilder()
+    .setName('confession')
+    .setDescription('🕯️ Open the anonymous confession submission box')
+    .toJSON();
+
 function buildSetupEmbed() {
     return new EmbedBuilder()
         .setColor('#1A1A24')
@@ -94,24 +111,47 @@ function buildCardRow(confessionNum) {
     );
 }
 
-module.exports = function(client, app) {
-
-    const confessionSetupPayload = new SlashCommandBuilder()
-        .setName('confessionsetup')
-        .setDescription('🕯️ Deploy the aesthetic Anonymous Confession panel in this channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .toJSON();
-
+function confessionModule(client, app) {
     client.on(Events.InteractionCreate, async (interaction) => {
         try {
-            if (interaction.isChatInputCommand() && interaction.commandName === 'confessionsetup') {
-                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            if (interaction.isChatInputCommand()) {
+                if (interaction.commandName === 'confessionsetup') {
+                    await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+                    const embed = buildSetupEmbed();
+                    const row = buildPanelRow();
+                    await interaction.channel.send({ embeds: [embed], components: [row] });
+                    return interaction.editReply({ content: '✅ **Success:** Confession Panel deployed in this channel!' });
+                }
 
-                const embed = buildSetupEmbed();
-                const row = buildPanelRow();
+                if (interaction.commandName === 'confess' || interaction.commandName === 'confession') {
+                    const modal = new ModalBuilder()
+                        .setCustomId('confess_modal_submit')
+                        .setTitle('🕯️ Submit Anonymous Confession');
 
-                await interaction.channel.send({ embeds: [embed], components: [row] });
-                return interaction.editReply({ content: '✅ **Success:** Confession Panel deployed in this channel!' });
+                    const topicInput = new TextInputBuilder()
+                        .setCustomId('confess_input_topic')
+                        .setLabel('Subject / Topic (Optional)')
+                        .setPlaceholder('e.g. Late night thoughts, Crush, Secret hobby...')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(false)
+                        .setMaxLength(50);
+
+                    const textInput = new TextInputBuilder()
+                        .setCustomId('confess_input_text')
+                        .setLabel('Your Secret / Confession')
+                        .setPlaceholder('Write your confession here... Keep it respectful and within server rules.')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMinLength(10)
+                        .setMaxLength(1000);
+
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(topicInput),
+                        new ActionRowBuilder().addComponents(textInput)
+                    );
+
+                    return await interaction.showModal(modal);
+                }
             }
 
             if (interaction.isButton()) {
@@ -133,7 +173,7 @@ module.exports = function(client, app) {
                     const textInput = new TextInputBuilder()
                         .setCustomId('confess_input_text')
                         .setLabel('Your Secret / Confession')
-                        .setPlaceholder('Write your confession here... Keep it respectful and within server rules.')
+                        .setPlaceholder('Write your confession here...')
                         .setStyle(TextInputStyle.Paragraph)
                         .setRequired(true)
                         .setMinLength(10)
@@ -225,8 +265,11 @@ module.exports = function(client, app) {
     });
 
     console.log('🕯️ Confession Engine Module initialized.');
+}
 
-    return {
-        confessionSetupPayload
-    };
-};
+// Attach payloads so deploy-commands.js reads them!
+confessionModule.confessionSetupPayload = confessionSetupPayload;
+confessionModule.confessPayload = confessPayload;
+confessionModule.confessionPayload = confessionPayload;
+
+module.exports = confessionModule;
