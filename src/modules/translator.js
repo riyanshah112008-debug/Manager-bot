@@ -1,11 +1,51 @@
-const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
+// ==========================================
+// 🌐 STARRY SUPREME TRANSLATOR ENGINE
+// File Path: ./modules/translator.js
+// ==========================================
+
+const { 
+    EmbedBuilder, 
+    SlashCommandBuilder, 
+    ContextMenuCommandBuilder, 
+    ApplicationCommandType, 
+    ApplicationIntegrationType, 
+    InteractionContextType, 
+    ActionRowBuilder, 
+    StringSelectMenuBuilder, 
+    Events,
+    MessageFlags 
+} = require('discord.js');
+
+const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 const languageMap = {
-    'english': 'en', 'spanish': 'es', 'french': 'fr', 'german': 'de',
-    'italian': 'it', 'portuguese': 'pt', 'russian': 'ru', 'japanese': 'ja',
-    'korean': 'ko', 'chinese': 'zh-cn', 'hindi': 'hi', 'arabic': 'ar',
-    'dutch': 'nl', 'turkish': 'tr', 'polish': 'pl', 'ukrainian': 'uk',
-    'vietnamese': 'vi', 'thai': 'th', 'indonesian': 'id', 'tagalog': 'tl'
+    'english': 'en', 'en': 'en', '🇺🇸': 'en', '🇬🇧': 'en',
+    'spanish': 'es', 'es': 'es', '🇪🇸': 'es',
+    'french': 'fr', 'fr': 'fr', '🇫🇷': 'fr',
+    'german': 'de', 'de': 'de', '🇩🇪': 'de',
+    'italian': 'it', 'it': 'it', '🇮🇹': 'it',
+    'portuguese': 'pt', 'pt': 'pt', '🇧🇷': 'pt', '🇵🇹': 'pt',
+    'russian': 'ru', 'ru': 'ru', '🇷🇺': 'ru',
+    'japanese': 'ja', 'ja': 'ja', '🇯🇵': 'ja',
+    'korean': 'ko', 'ko': 'ko', '🇰🇷': 'ko',
+    'chinese': 'zh-cn', 'zh': 'zh-cn', 'cn': 'zh-cn', '🇨🇳': 'zh-cn',
+    'hindi': 'hi', 'hi': 'hi', '🇮🇳': 'hi',
+    'arabic': 'ar', 'ar': 'ar', '🇸🇦': 'ar',
+    'dutch': 'nl', 'nl': 'nl', '🇳🇱': 'nl',
+    'turkish': 'tr', 'tr': 'tr', '🇹🇷': 'tr',
+    'polish': 'pl', 'pl': 'pl', '🇵🇱': 'pl',
+    'ukrainian': 'uk', 'uk': 'uk', '🇺🇦': 'uk',
+    'vietnamese': 'vi', 'vi': 'vi', '🇻🇳': 'vi',
+    'thai': 'th', 'th': 'th', '🇹🇭': 'th',
+    'indonesian': 'id', 'id': 'id', '🇮🇩': 'id',
+    'tagalog': 'tl', 'tl': 'tl', '🇵🇭': 'tl'
+};
+
+const flagMap = {
+    'en': '🇺🇸', 'es': '🇪🇸', 'fr': '🇫🇷', 'de': '🇩🇪', 'it': '🇮🇹',
+    'pt': '🇵🇹', 'ru': '🇷🇺', 'ja': '🇯🇵', 'ko': '🇰🇷', 'zh-cn': '🇨🇳',
+    'hi': '🇮🇳', 'ar': '🇸🇦', 'nl': '🇳🇱', 'tr': '🇹🇷', 'pl': '🇵🇱',
+    'uk': '🇺🇦', 'vi': '🇻🇳', 'th': '🇹🇭', 'id': '🇮🇩', 'tl': '🇵🇭'
 };
 
 // ==========================================
@@ -18,16 +58,77 @@ async function translateText(text, targetLangCode) {
     
     const data = await response.json();
     const translatedText = data[0].map(item => item[0]).join('');
-    const sourceLang = data[2]; // Auto-detected original language
+    const sourceLang = data[2] || 'auto';
 
     return { translatedText, sourceLang };
 }
 
-module.exports = (client, app) => {
+function buildTranslationEmbed(text, translatedText, sourceLang, targetCode) {
+    const srcFlag = flagMap[sourceLang.toLowerCase()] || '🌐';
+    const tgtFlag = flagMap[targetCode.toLowerCase()] || '🌐';
+
+    return new EmbedBuilder()
+        .setColor('#5865F2')
+        .setAuthor({ 
+            name: 'STARRY NEURAL TRANSLATOR', 
+            iconURL: 'https://c.tenor.com/TgKK6YKNkm0AAAAi/verified-verificado.gif' 
+        })
+        .addFields(
+            { name: `${srcFlag} Original (${sourceLang.toUpperCase()})`, value: `\`\`\`\n${text.substring(0, 1000)}\n\`\`\``, inline: false },
+            { name: `${tgtFlag} Translated (${targetCode.toUpperCase()})`, value: `>>> ❝ *${translatedText.substring(0, 1000)}* ❞`, inline: false }
+        )
+        .setFooter({ text: 'Powered by Starry Neural Translation System', iconURL: 'https://cdn.discordapp.com/embed/avatars/0.png' })
+        .setTimestamp();
+}
+
+function buildLanguageSelector() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('translate_select_lang')
+            .setPlaceholder('Re-translate to another language...')
+            .addOptions([
+                { label: 'English', value: 'en', emoji: '🇺🇸' },
+                { label: 'Spanish', value: 'es', emoji: '🇪🇸' },
+                { label: 'French', value: 'fr', emoji: '🇫🇷' },
+                { label: 'German', value: 'de', emoji: '🇩🇪' },
+                { label: 'Japanese', value: 'ja', emoji: '🇯🇵' },
+                { label: 'Hindi', value: 'hi', emoji: '🇮🇳' },
+                { label: 'Chinese', value: 'zh-cn', emoji: '🇨🇳' },
+                { label: 'Russian', value: 'ru', emoji: '🇷🇺' }
+            ])
+    );
+}
+
+// Export payloads for REST deployment in deploy-commands.js
+const translatorPayload = new SlashCommandBuilder()
+    .setName('translate')
+    .setDescription('🌐 Translate text from any language into another')
+    .setIntegrationTypes(ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall)
+    .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel)
+    .addStringOption(option => 
+        option.setName('language')
+            .setDescription('Target language (e.g., english, es, japanese, hi)')
+            .setRequired(true)
+    )
+    .addStringOption(option => 
+        option.setName('text')
+            .setDescription('The text you want to translate')
+            .setRequired(true)
+    )
+    .toJSON();
+
+const translateContextPayload = new ContextMenuCommandBuilder()
+    .setName('Translate to English')
+    .setType(ApplicationCommandType.Message)
+    .setIntegrationTypes(ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall)
+    .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel)
+    .toJSON();
+
+module.exports = function(client, app) {
     const PREFIX = '.';
 
     // ==========================================
-    // 1. EXPRESS WEB API (Premium Locked)
+    // 1. EXPRESS WEB API ENDPOINT
     // ==========================================
     if (app) {
         app.get('/api/translate', async (req, res) => {
@@ -50,52 +151,76 @@ module.exports = (client, app) => {
         });
     }
 
-    // ==========================================
-    // 2. DYNAMIC SLASH COMMAND INJECTION
-    // ==========================================
-    // We inject this directly into client.commands so index.js finds it perfectly!
-    client.commands.set('translate', {
-        data: new SlashCommandBuilder()
-            .setName('translate')
-            .setDescription('🌐 Translate text from any language (Premium)')
-            .setContexts([0, 1, 2])
-            .setIntegrationTypes([0, 1])
-            .addStringOption(option => 
-                option.setName('language')
-                    .setDescription('Target language (e.g., english, es, ja)')
-                    .setRequired(true)
-            )
-            .addStringOption(option => 
-                option.setName('text')
-                    .setDescription('The text to translate')
-                    .setRequired(true)
-            ),
+    // Direct injection into client commands collection
+    if (client.commands) {
+        client.commands.set('translate', {
+            data: translatorPayload,
+            async execute(interaction) {
+                if (typeof client.isPremium === 'function' && !client.isPremium(interaction.guildId)) {
+                    return interaction.reply({ content: '❌ **Translator is a Premium feature!** Use `/activatepremium` to upgrade.', flags: [EPHEMERAL_FLAG] });
+                }
 
-        async execute(interaction) {
-            // 🔒 PREMIUM LOCK
-            if (typeof client.isPremium === 'function' && !client.isPremium(interaction.guildId)) {
-                return interaction.reply({ content: '❌ **Translator is a Premium feature!** Use `/premium` to upgrade.', ephemeral: true });
+                await interaction.deferReply();
+                const requestedLang = interaction.options.getString('language');
+                const text = interaction.options.getString('text');
+                const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
+
+                try {
+                    const result = await translateText(text, targetCode);
+                    const embed = buildTranslationEmbed(text, result.translatedText, result.sourceLang, targetCode);
+                    const selector = buildLanguageSelector();
+
+                    await interaction.editReply({ embeds: [embed], components: [selector] });
+                } catch (error) {
+                    await interaction.editReply(`❌ Translation Failed: \`Invalid language code or API timeout.\``);
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // 2. INTERACTION HANDLER (Slash, Apps Context Menu, Select Menu)
+    // ==========================================
+    client.on(Events.InteractionCreate, async (interaction) => {
+        try {
+            // A. CONTEXT MENU COMMAND: "Translate to English"
+            if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Translate to English') {
+                if (typeof client.isPremium === 'function' && interaction.guildId && !client.isPremium(interaction.guildId)) {
+                    return interaction.reply({ content: '❌ **Translator is a Premium feature!**', flags: [EPHEMERAL_FLAG] });
+                }
+
+                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+                const text = interaction.targetMessage.content;
+
+                if (!text || text.trim().length === 0) {
+                    return interaction.editReply('❌ The selected message contains no text to translate!');
+                }
+
+                const result = await translateText(text, 'en');
+                const embed = buildTranslationEmbed(text, result.translatedText, result.sourceLang, 'en');
+                return interaction.editReply({ embeds: [embed] });
             }
 
-            await interaction.deferReply();
-            const requestedLang = interaction.options.getString('language');
-            const text = interaction.options.getString('text');
-            const targetCode = languageMap[requestedLang.toLowerCase()] || requestedLang.toLowerCase();
+            // B. SELECT MENU RE-TRANSLATION
+            if (interaction.isStringSelectMenu() && interaction.customId === 'translate_select_lang') {
+                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
 
-            try {
-                const result = await translateText(text, targetCode);
-                const embed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setTitle('🌐 Starry Translator')
-                    .addFields(
-                        { name: `Original (${result.sourceLang})`, value: `\`\`\`\n${text}\n\`\`\``, inline: false },
-                        { name: `Translated (${targetCode})`, value: `\`\`\`\n${result.translatedText}\n\`\`\``, inline: false }
-                    )
-                    .setFooter({ text: 'Powered by Google Neural Machine Translation' });
+                const targetCode = interaction.values[0];
+                const originalField = interaction.message.embeds[0]?.fields[0]?.value;
+                const cleanText = originalField ? originalField.replace(/```\n?/g, '').trim() : null;
 
-                await interaction.editReply({ embeds: [embed] });
-            } catch (error) {
-                await interaction.editReply(`❌ Translation Failed: \`Invalid language code or API timeout.\``);
+                if (!cleanText) {
+                    return interaction.editReply('❌ Could not extract original text for re-translation.');
+                }
+
+                const result = await translateText(cleanText, targetCode);
+                const embed = buildTranslationEmbed(cleanText, result.translatedText, result.sourceLang, targetCode);
+                return interaction.editReply({ embeds: [embed] });
+            }
+        } catch (err) {
+            console.error('❌ Translator Interaction Error:', err);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '⚠️ Translation error occurred.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
         }
     });
@@ -103,22 +228,20 @@ module.exports = (client, app) => {
     // ==========================================
     // 3. PREFIX COMMAND (.translate)
     // ==========================================
-    client.on('messageCreate', async (message) => {
+    client.on(Events.MessageCreate, async (message) => {
         if (message.author.bot || !message.guild) return;
         if (!message.content.toLowerCase().startsWith(PREFIX + 'translate')) return;
 
-        // 🔒 PREMIUM LOCK
         if (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id)) {
-            return message.reply('❌ **Translator is a Premium feature!** Use `.premium` to upgrade.').catch(() => {});
+            return message.reply('❌ **Translator is a Premium feature!** Use `.activatepremium` to upgrade.').catch(() => {});
         }
 
         const args = message.content.slice(PREFIX.length + 9).trim().split(/ +/);
         const requestedLang = args.shift(); 
         let text = args.join(' '); 
 
-        if (!requestedLang) return message.reply('🔹 **Usage:** `.translate <language> <text>`\n*Tip: You can also reply to a message and type `.translate en`*');
+        if (!requestedLang) return message.reply('🔹 **Usage:** `.translate <language> <text>`\n*Tip: Reply to any message with `.translate en` to translate it!*');
         
-        // Auto-fetch text if replying to a message
         if (!text && message.reference) {
             const repliedMessage = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
             text = repliedMessage?.content;
@@ -131,16 +254,19 @@ module.exports = (client, app) => {
 
         try {
             const result = await translateText(text, targetCode);
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setTitle('🌐 Starry Translator')
-                .addFields(
-                    { name: `Original (${result.sourceLang})`, value: `\`\`\`\n${text.substring(0, 1000)}\n\`\`\``, inline: false },
-                    { name: `Translated (${targetCode})`, value: `\`\`\`\n${result.translatedText.substring(0, 1000)}\n\`\`\``, inline: false }
-                );
-            await waitMessage.edit({ content: null, embeds: [embed] });
+            const embed = buildTranslationEmbed(text, result.translatedText, result.sourceLang, targetCode);
+            const selector = buildLanguageSelector();
+
+            await waitMessage.edit({ content: null, embeds: [embed], components: [selector] });
         } catch (error) {
             await waitMessage.edit(`❌ Translation Failed: \`Invalid language code or API timeout.\``);
         }
     });
+
+    console.log('🌐 Translator Engine Module initialized.');
+
+    return {
+        translatorPayload,
+        translateContextPayload
+    };
 };
