@@ -320,7 +320,6 @@ client.manager = new Kazagumo({
     voiceConnectionTimeout: 15000,
     linkInitializers: true,
     nodeResolver: (nodes) => {
-        // DYNAMIC LEAST-LOAD NODE RESOLVER (Prevents "No node found" by picking connected node with lowest CPU load)
         const readyNodes = Array.from(nodes.values()).filter(node => node.state === 1);
         if (!readyNodes.length) return null;
         return readyNodes.reduce((prev, current) => {
@@ -536,7 +535,7 @@ client.on(Events.InteractionCreate, async interaction => {
             'bump', 'bump-setup', 'autobump', 'set-listing',
             'ticketsetup', 'applysetup', 'setupcount', 'countstats', 'countreset',
             'whois', 'steal', 'Steal Emojis', 'setwelcome', 'setgoodbye',
-            'setupwelcome', 'setupgoodbye','translate','clear'
+            'setupwelcome', 'setupgoodbye', 'translate', 'clear', 'confessionsetup'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
@@ -661,7 +660,8 @@ const MODULE_INITIALIZERS = [
     { name: 'Autorole & Sticky Roles', fn: () => require('./modules/autorole.js')(client, app) },
     { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
     { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
-    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) }
+    { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
+    { name: 'Anonymous Confession System', fn: () => require('./modules/confession.js')(client, app) }
 ];
 
 function loadSlashCommands() {
