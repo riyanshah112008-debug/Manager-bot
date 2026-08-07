@@ -240,54 +240,55 @@ app.post('/verify', async (req, res) => {
 // 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2 OF 6)
 // ==========================================
 
+// UPGRADED MULTI-NODE LAVALINK CLUSTER WITH ZERO-MUSIC-LOSS FAILOVER
 const Nodes = [
     {
         name: 'Node-1-Jirayu-Primary',
         url: 'lavalink.jirayu.net:13592',
         auth: 'youshallnotpass',
         secure: false,
-        retryAmount: 10,
-        retryDelay: 1000
+        retryAmount: 50,
+        retryDelay: 3000
     },
     {
         name: 'Node-2-NyxBot-SG',
         url: 'sg1-nodelink.nyxbot.app:3000',
         auth: 'nyxbot.app/support',
         secure: false,
-        retryAmount: 10,
-        retryDelay: 1000
+        retryAmount: 50,
+        retryDelay: 3000
     },
     {
         name: 'Node-3-AjieDev-v4',
         url: 'lava-v4.ajieblogs.eu.org:443',
         auth: 'https://dsc.gg/ajidevserver',
         secure: true,
-        retryAmount: 10,
-        retryDelay: 1000
+        retryAmount: 50,
+        retryDelay: 3000
     },
     {
-        name: 'Node-4-TriniumHost',
-        url: 'lavalink.triniumhost.com:4333',
-        auth: 'free',
-        secure: false,
-        retryAmount: 10,
-        retryDelay: 1000
+        name: 'Node-4-Lavalink-PPA',
+        url: 'lavalink.muy5.tech:443',
+        auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 50,
+        retryDelay: 3000
     },
     {
         name: 'Node-5-G3V-UK',
         url: 'lava.g3v.co.uk:9008',
         auth: 'lavalinklol',
         secure: false,
-        retryAmount: 10,
-        retryDelay: 1000
+        retryAmount: 50,
+        retryDelay: 3000
     },
     {
         name: 'Node-6-Serenetia-v4',
         url: 'lavalinkv4.serenetia.com:80',
         auth: 'https://seretia.link/discord',
         secure: false,
-        retryAmount: 10,
-        retryDelay: 1000
+        retryAmount: 50,
+        retryDelay: 3000
     }
 ];
 
@@ -313,23 +314,36 @@ client.manager = new Kazagumo({
         if (guild) guild.shard.send(payload);
     }
 }, new Connectors.DiscordJS(client), Nodes, {
+    moveOnDisconnect: true,
+    resume: true,
+    resumeTimeout: 60,
+    reconnectTries: 50,
+    reconnectInterval: 3000,
+    restTimeout: 10000,
     voiceConnectionTimeout: 15000,
     linkInitializers: true,
-    reconnectTries: 25,
-    restTimeout: 3500,
-    frameBufferDuration: 5000,
-    trimVoicePacket: true
+    nodeResolver: (nodes) => {
+        // DYNAMIC LEAST-LOAD NODE RESOLVER (Prevents "No node found" by picking connected node with lowest CPU load)
+        const readyNodes = Array.from(nodes.values()).filter(node => node.state === 1);
+        if (!readyNodes.length) return null;
+        return readyNodes.reduce((prev, current) => {
+            const prevLoad = prev.stats?.cpu?.lavalinkLoad || 0;
+            const currentLoad = current.stats?.cpu?.lavalinkLoad || 0;
+            return prevLoad < currentLoad ? prev : current;
+        });
+    }
 });
 
 client.manager.shoukaku.on('ready', (name) => {
-    console.log(`✅ [Lavalink Active] Switched to Node: ${name}`);
+    console.log(`✅ [Lavalink Active] Node Connected: ${name}`);
 });
 
 client.manager.shoukaku.on('error', (name, error) => {
-    console.warn(`⚠️ [Lavalink Failover] Node ${name} issue, routing to next node...`);
+    console.warn(`⚠️ [Lavalink Failover] Node [${name}] error, failover routing active...`);
 });
+
 client.manager.shoukaku.on('disconnect', (name, count) => {
-    console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Attempting auto-reconnect/failover... (Retry count: ${count})`);
+    console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Auto-migrating active players... (Retry: ${count})`);
 });
 
 client.manager.on('playerStart', async (player, track) => {
