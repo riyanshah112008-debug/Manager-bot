@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 1 OF 6)
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS
 // ==========================================
 
 // 🔧 Polyfill for older / 32-bit Node.js versions
@@ -236,9 +236,6 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2 OF 6)
-// ==========================================
 
 // UPGRADED MULTI-NODE LAVALINK CLUSTER WITH ZERO-MUSIC-LOSS FAILOVER
 const Nodes = [
@@ -468,9 +465,6 @@ client.manager.on('playerEmpty', async player => {
 
     if (channel) channel.send('📭 The queue has ended.');
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 3 OF 6)
-// ==========================================
 
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -530,9 +524,6 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 4 OF 6)
-// ==========================================
 
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isContextMenuCommand()) return;
@@ -629,9 +620,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 5 OF 6)
-// ==========================================
 
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
@@ -709,9 +697,6 @@ function loadSlashCommands() {
     }
     console.log(`✅ Successfully loaded ${client.commands.size} slash command handlers into client.commands`);
 }
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 6 OF 6)
-// ==========================================
 
 async function startBot() {
     if (!process.env.MONGO_URI || !process.env.TOKEN) {
