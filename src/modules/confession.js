@@ -13,26 +13,17 @@ const {
     TextInputStyle, 
     PermissionFlagsBits,
     SlashCommandBuilder,
-    ChannelType,
     Events,
     MessageFlags
 } = require('discord.js');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// In-memory counter (Replace with MongoDB model if persistence across restarts is needed)
 let confessionCounter = 1000;
 
-// ==========================================
-// 🎨 AESTHETIC EMBED BUILDERS
-// ==========================================
-
-/**
- * Builds the Main Setup Panel Embed
- */
 function buildSetupEmbed() {
     return new EmbedBuilder()
-        .setColor('#1A1A24') // Sleek Luxury Dark Obsidian
+        .setColor('#1A1A24')
         .setAuthor({ 
             name: 'STARRY CONFIDENTIAL PROTOCOL', 
             iconURL: 'https://cdn.discordapp.com/emojis/1083000000000000000.webp?quality=lossless' 
@@ -48,18 +39,15 @@ function buildSetupEmbed() {
             { name: '✨ How It Works', value: '1️⃣ Click **Submit Confession** below.\n2️⃣ Fill out your secret in the pop-up modal.\n3️⃣ Hit Send & view it live here!', inline: true },
             { name: '📜 Community Rules', value: '• No severe hate speech or doxxing\n• Respect Discord TOS\n• Keep it genuine & safe', inline: true }
         )
-        .setImage('https://i.ibb.co/sp2bTrrj/lingual-ezgif-com-resize.gif') // Aesthetic banner placeholder
+        .setImage('https://i.ibb.co/sp2bTrrj/lingual-ezgif-com-resize.gif')
         .setFooter({ text: 'Starry Anonymity Engine • Completely Encrypted', iconURL: 'https://cdn.discordapp.com/embed/avatars/0.png' });
 }
 
-/**
- * Builds the Classy Confession Card Embed
- */
 function buildConfessionCard(number, confessionText, topic = null) {
     const timestamp = Math.floor(Date.now() / 1000);
     
     const embed = new EmbedBuilder()
-        .setColor('#6C5CE7') // Elegant Deep Lavender / Midnight Purple Accent
+        .setColor('#6C5CE7')
         .setAuthor({ 
             name: `CONFESSION • #${number}`, 
             iconURL: 'https://c.tenor.com/TgKK6YKNkm0AAAAi/verified-verificado.gif' 
@@ -81,9 +69,6 @@ function buildConfessionCard(number, confessionText, topic = null) {
     return embed;
 }
 
-/**
- * Builds the Interactive Button Rows
- */
 function buildPanelRow() {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -109,22 +94,16 @@ function buildCardRow(confessionNum) {
     );
 }
 
-// ==========================================
-// 🚀 MODULE EXPORT (HOOKED TO INDEX.JS)
-// ==========================================
 module.exports = function(client, app) {
 
-    // --- 1. SLASH COMMAND DEFINITION FOR DEPLOYMENT ---
     const confessionSetupPayload = new SlashCommandBuilder()
         .setName('confessionsetup')
         .setDescription('🕯️ Deploy the aesthetic Anonymous Confession panel in this channel')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .toJSON();
 
-    // --- 2. INTERACTION EVENT LISTENER ---
     client.on(Events.InteractionCreate, async (interaction) => {
         try {
-            // A. HANDLE SLASH COMMAND /confessionsetup
             if (interaction.isChatInputCommand() && interaction.commandName === 'confessionsetup') {
                 await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
 
@@ -135,11 +114,9 @@ module.exports = function(client, app) {
                 return interaction.editReply({ content: '✅ **Success:** Confession Panel deployed in this channel!' });
             }
 
-            // B. HANDLE BUTTON INTERACTIONS
             if (interaction.isButton()) {
                 const { customId } = interaction;
 
-                // 1. OPEN CONFESSION MODAL
                 if (customId === 'confess_btn_open') {
                     const modal = new ModalBuilder()
                         .setCustomId('confess_modal_submit')
@@ -170,7 +147,6 @@ module.exports = function(client, app) {
                     return await interaction.showModal(modal);
                 }
 
-                // 2. REPLY TO CONFESSION
                 if (customId.startsWith('confess_btn_reply_')) {
                     const confessionNum = customId.split('_')[3];
                     const modal = new ModalBuilder()
@@ -189,7 +165,6 @@ module.exports = function(client, app) {
                     return await interaction.showModal(modal);
                 }
 
-                // 3. REPORT CONFESSION
                 if (customId.startsWith('confess_btn_report_')) {
                     const confessionNum = customId.split('_')[3];
                     return interaction.reply({
@@ -199,11 +174,9 @@ module.exports = function(client, app) {
                 }
             }
 
-            // C. HANDLE MODAL SUBMISSIONS
             if (interaction.isModalSubmit()) {
                 const { customId } = interaction;
 
-                // 1. SUBMIT CONFESSION MODAL
                 if (customId === 'confess_modal_submit') {
                     await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
 
@@ -216,7 +189,6 @@ module.exports = function(client, app) {
                     const embed = buildConfessionCard(currentNum, text, topic);
                     const row = buildCardRow(currentNum);
 
-                    // Send the confession card to the channel
                     await interaction.channel.send({ embeds: [embed], components: [row] });
 
                     return interaction.editReply({
@@ -224,7 +196,6 @@ module.exports = function(client, app) {
                     });
                 }
 
-                // 2. REPLY MODAL SUBMIT
                 if (customId.startsWith('confess_modal_reply_')) {
                     await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
 
@@ -232,7 +203,7 @@ module.exports = function(client, app) {
                     const replyText = interaction.fields.getTextInputValue('confess_input_reply');
 
                     const replyEmbed = new EmbedBuilder()
-                        .setColor('#A29BFE') // Soft Pastel Lavender
+                        .setColor('#A29BFE')
                         .setAuthor({ name: `ANONYMOUS REPLY • On Confession #${confessionNum}` })
                         .setDescription(`>>> 💬 *${replyText.trim()}*`)
                         .setFooter({ text: 'Starry Anonymous Reply System' })
