@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 1/7)
 // ==========================================
 
 // 🔧 Polyfill for older / 32-bit Node.js versions
@@ -139,6 +139,9 @@ app.get('/', (req, res) => {
     `;
     res.send(html);
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2/7)
+// ==========================================
 
 app.use(express.static(path.join(__dirname, '../')));
 
@@ -236,6 +239,9 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 3/7)
+// ==========================================
 
 // UPGRADED MULTI-NODE LAVALINK CLUSTER WITH ZERO-MUSIC-LOSS FAILOVER
 const Nodes = [
@@ -341,6 +347,9 @@ client.manager.shoukaku.on('error', (name, error) => {
 client.manager.shoukaku.on('disconnect', (name, count) => {
     console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Auto-migrating active players... (Retry: ${count})`);
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 4/7)
+// ==========================================
 
 client.manager.on('playerStart', async (player, track) => {
     player.data.set('previousTrack', track);
@@ -423,9 +432,10 @@ client.manager.on('playerStart', async (player, track) => {
     }
 });
 
+// FIXED: Changed player.queue.size to player.queue.length
 client.manager.on('playerException', (player) => {
     try {
-        if (player.queue.size > 0) player.skip();
+        if (player.queue.length > 0) player.skip();
         else player.destroy();
     } catch (e) {}
 });
@@ -464,6 +474,9 @@ client.manager.on('playerEmpty', async player => {
 
     if (channel) channel.send('📭 The queue has ended.');
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 5/7)
+// ==========================================
 
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -523,6 +536,9 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 6/7)
+// ==========================================
 
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isContextMenuCommand()) return;
@@ -619,6 +635,9 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
+// ==========================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 7/7)
+// ==========================================
 
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
