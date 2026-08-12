@@ -193,7 +193,7 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
 
 // ==========================================
 // 🛡️ WICK-STYLE LOG EMBED BUILDER
-// Standardized embed formatting matching Wick Bot layout
+// Guarantees Moderator Name, User Tags, IDs, Timestamps, and Case Numbers
 // ==========================================
 function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const embed = new EmbedBuilder()
@@ -413,7 +413,7 @@ module.exports = async (client) => {
 
     start60sChannelTelemetryLoop(client);
 
-    // Dynamic routing to specific log channels (Async with API Fetching)
+    // Dynamic routing to specific log channels (Cache + API Fetch Fallback)
     client.getLogChannel = async (guild, logType = 'misc') => {
         if (!guild) return null;
         const typeMap = {
@@ -426,11 +426,16 @@ module.exports = async (client) => {
         };
         const targetNames = typeMap[logType.toLowerCase()] || typeMap['access'];
 
+        // 1. Direct cache lookup first
+        let ch = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+        if (ch) return ch;
+
+        // 2. Fallback to fetching all channels via API
         try {
-            const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
-            let ch = channels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+            const fetchedChannels = await guild.channels.fetch();
+            ch = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
             if (ch) return ch;
-            return channels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+            return fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
         } catch (err) {
             console.error('❌ Log Channel Fetch Error:', err);
             return null;
@@ -842,11 +847,12 @@ module.exports = async (client) => {
 // File Path: modules/starry.js
 // ==========================================
 
+    // Single unified interaction router preventing double event binding
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
         // ==========================================
-        // 🛡️ MODPANEL SLASH COMMAND & INTERACTION DISPATCHERS
+        // 🛡️ MODPANEL SLASH COMMAND DISPATCHER
         // ==========================================
         if (interaction.isChatInputCommand() && interaction.commandName === 'modpanel') {
             const targetUser = interaction.options.getUser('target', true);
@@ -873,261 +879,241 @@ module.exports = async (client) => {
             return interaction.reply({ embeds: [panelEmbed], components: [actionRow], flags: [EPHEMERAL_FLAG] });
         }
 
-        // --- BUTTON CLICK HANDLERS FOR MODPANEL ---
-        if (interaction.isButton() && interaction.customId.startsWith('mp_')) {
-            const parts = interaction.customId.split('_');
-            const action = parts[1];
-            const targetId = parts[2];
+        // ==========================================
+        // 🔘 BUTTON CLICK HANDLERS (MODPANEL + BADWORD + SOCIAL + VERIFY)
+        // ==========================================
+        if (interaction.isButton()) {
+            // --- MODPANEL BUTTON ACTIONS ---
+            if (interaction.customId.startsWith('mp_')) {
+                const parts = interaction.customId.split('_');
+                const action = parts[1];
+                const targetId = parts[2];
 
-            if (action === 'warn') {
-                const modal = new ModalBuilder()
-                    .setCustomId(`md_warn_${targetId}`)
-                    .setTitle('Issue User Warning');
-                const reasonInput = new TextInputBuilder()
-                    .setCustomId('mod_reason')
-                    .setLabel('Reason for Warning')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Enter reason (e.g. Breaking rules, spamming)')
-                    .setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-                return interaction.showModal(modal);
+                if (action === 'warn') {
+                    const modal = new ModalBuilder().setCustomId(`md_warn_${targetId}`).setTitle('Issue User Warning');
+                    const reasonInput = new TextInputBuilder().setCustomId('mod_reason').setLabel('Reason for Warning').setStyle(TextInputStyle.Paragraph).setPlaceholder('Enter reason').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                    return interaction.showModal(modal);
+                }
+
+                if (action === 'timeout') {
+                    const modal = new ModalBuilder().setCustomId(`md_timeout_${targetId}`).setTitle('Timeout Member');
+                    const durInput = new TextInputBuilder().setCustomId('mod_duration').setLabel('Duration (e.g. 10m, 1h, 1d)').setStyle(TextInputStyle.Short).setPlaceholder('10m').setRequired(true);
+                    const reasonInput = new TextInputBuilder().setCustomId('mod_reason').setLabel('Reason for Timeout').setStyle(TextInputStyle.Paragraph).setPlaceholder('Enter reason').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(durInput), new ActionRowBuilder().addComponents(reasonInput));
+                    return interaction.showModal(modal);
+                }
+
+                if (action === 'kick') {
+                    const modal = new ModalBuilder().setCustomId(`md_kick_${targetId}`).setTitle('Kick Member');
+                    const reasonInput = new TextInputBuilder().setCustomId('mod_reason').setLabel('Reason for Kick').setStyle(TextInputStyle.Paragraph).setPlaceholder('Enter reason').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                    return interaction.showModal(modal);
+                }
+
+                if (action === 'ban') {
+                    const modal = new ModalBuilder().setCustomId(`md_ban_${targetId}`).setTitle('Ban Member');
+                    const reasonInput = new TextInputBuilder().setCustomId('mod_reason').setLabel('Reason for Ban').setStyle(TextInputStyle.Paragraph).setPlaceholder('Enter reason').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                    return interaction.showModal(modal);
+                }
             }
 
-            if (action === 'timeout') {
-                const modal = new ModalBuilder()
-                    .setCustomId(`md_timeout_${targetId}`)
-                    .setTitle('Timeout Member');
-                const durInput = new TextInputBuilder()
-                    .setCustomId('mod_duration')
-                    .setLabel('Duration (e.g. 10m, 1h, 1d)')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('10m')
-                    .setRequired(true);
-                const reasonInput = new TextInputBuilder()
-                    .setCustomId('mod_reason')
-                    .setLabel('Reason for Timeout')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Enter reason')
-                    .setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(durInput), new ActionRowBuilder().addComponents(reasonInput));
-                return interaction.showModal(modal);
+            // --- BADWORD PANEL BUTTONS ---
+            if (interaction.customId.startsWith('badword_')) {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({ content: '❌ Only Administrators can manage this panel.', flags: [EPHEMERAL_FLAG] });
+                }
+
+                const guildId = interaction.guild.id;
+
+                if (interaction.customId === 'badword_toggle_btn') {
+                    let settings = await BadWordSettings.findOne({ guildId });
+                    if (!settings) {
+                        settings = await BadWordSettings.create({ guildId, enabled: true, words: DEFAULT_BAD_WORDS });
+                    } else {
+                        settings.enabled = !settings.enabled;
+                        await settings.save();
+                    }
+
+                    const panel = await getBadWordPanelEmbed(interaction.guild, client);
+                    return interaction.update(panel);
+                }
+
+                if (interaction.customId === 'badword_add_btn') {
+                    const modal = new ModalBuilder().setCustomId('badword_add_modal').setTitle('Add Bad Words to Filter');
+                    const input = new TextInputBuilder().setCustomId('badwords_input').setLabel('Words to Add (comma separated)').setStyle(TextInputStyle.Paragraph).setPlaceholder('e.g. word1, word2').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (interaction.customId === 'badword_remove_btn') {
+                    const modal = new ModalBuilder().setCustomId('badword_remove_modal').setTitle('Remove Bad Words from Filter');
+                    const input = new TextInputBuilder().setCustomId('badwords_input').setLabel('Words to Remove (comma separated)').setStyle(TextInputStyle.Paragraph).setPlaceholder('e.g. word1, word2').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (interaction.customId === 'badword_list_btn') {
+                    const settings = await BadWordSettings.findOne({ guildId });
+                    const wordsList = settings?.words?.length ? settings.words.join(', ') : 'No bad words currently filtered.';
+                    const listEmbed = new EmbedBuilder().setColor('#5865F2').setTitle('📜 Complete Filtered Bad Words List').setDescription(`\`\`\`${wordsList.slice(0, 3900)}\`\`\``).setTimestamp();
+                    return interaction.reply({ embeds: [listEmbed], flags: [EPHEMERAL_FLAG] });
+                }
             }
 
-            if (action === 'kick') {
-                const modal = new ModalBuilder()
-                    .setCustomId(`md_kick_${targetId}`)
-                    .setTitle('Kick Member');
-                const reasonInput = new TextInputBuilder()
-                    .setCustomId('mod_reason')
-                    .setLabel('Reason for Kick')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Enter reason')
-                    .setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-                return interaction.showModal(modal);
-            }
+            // --- VERIFY BUTTON ---
+            if (interaction.customId.startsWith('verify_role_')) {
+                const roleId = interaction.customId.split('verify_role_')[1];
+                const token = Math.random().toString(36).substring(2, 15);
+                if (!client.verifyMap) client.verifyMap = new Map();
+                client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId });
 
-            if (action === 'ban') {
-                const modal = new ModalBuilder()
-                    .setCustomId(`md_ban_${targetId}`)
-                    .setTitle('Ban Member');
-                const reasonInput = new TextInputBuilder()
-                    .setCustomId('mod_reason')
-                    .setLabel('Reason for Ban')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Enter reason')
-                    .setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-                return interaction.showModal(modal);
+                const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`;
+                const verifyUrl = `${hostUrl}/verify?token=${token}`;
+
+                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('Verify Human Access').setStyle(ButtonStyle.Link).setURL(verifyUrl).setEmoji('🌐'));
+                return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] });
             }
         }
 
-        // --- MODAL SUBMISSIONS FOR MODPANEL ---
-        if (interaction.isModalSubmit() && interaction.customId.startsWith('md_')) {
-            const parts = interaction.customId.split('_');
-            const action = parts[1];
-            const targetId = parts[2];
-
-            const targetUser = await client.users.fetch(targetId).catch(() => null);
-            if (!targetUser) return interaction.reply({ content: '❌ Target user not found.', flags: [EPHEMERAL_FLAG] });
-
-            const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-            const reason = interaction.fields.getTextInputValue('mod_reason') || 'No reason provided';
-            const caseId = Math.floor(Math.random() * 90000) + 10000;
-            const logChannel = await client.getLogChannel(interaction.guild, 'moderate');
-
-            // ⚠️ WARN SUBMISSION
-            if (action === 'warn') {
-                await interaction.reply({ content: `⚠️ **Warned <@${targetUser.id}>!**\n**Reason:** ${reason}`, flags: [EPHEMERAL_FLAG] });
-
-                if (targetMember) {
-                    await client.sendPremiumModDM(targetMember, interaction.member, 'Warning', reason, null, interaction.guild, caseId);
-                }
-
-                if (logChannel) {
-                    const warnLogEmbed = createWickLogEmbed({
-                        title: 'Member Warned',
-                        emoji: '⚠️',
-                        color: '#FEE75C',
-                        target: targetUser,
-                        moderator: interaction.user,
-                        reason: reason,
-                        caseId: caseId,
-                        guild: interaction.guild
-                    });
-                    await logChannel.send({ embeds: [warnLogEmbed] }).catch(err => {
-                        console.error('❌ Failed to dispatch warning log:', err.message);
-                    });
-                } else {
-                    console.error('❌ Could not locate #logs-moderate channel for warning log.');
-                }
-                return;
-            }
-
-            // ⏰ TIMEOUT SUBMISSION
-            if (action === 'timeout') {
-                const durationStr = interaction.fields.getTextInputValue('mod_duration') || '10m';
-                function parseDuration(text) {
-                    const match = text.match(/(\d+)\s*(s|m|h|d)/i);
-                    if (!match) return 10 * 60 * 1000;
-                    const value = parseInt(match[1]);
-                    const unit = match[2].toLowerCase();
-                    if (unit === 's') return value * 1000;
-                    if (unit === 'm') return value * 60 * 1000;
-                    if (unit === 'h') return value * 60 * 60 * 1000;
-                    if (unit === 'd') return value * 24 * 60 * 60 * 1000;
-                    return 10 * 60 * 1000;
-                }
-
-                const durationMs = parseDuration(durationStr);
-                const expiresAt = new Date(Date.now() + durationMs);
-
-                if (!targetMember) return interaction.reply({ content: '❌ Member is not in the server.', flags: [EPHEMERAL_FLAG] });
-
-                await client.sendPremiumModDM(targetMember, interaction.member, 'Timeout', reason, durationStr, interaction.guild, caseId);
-                await targetMember.timeout(durationMs, `${reason} | Executed by ${interaction.user.tag}`);
-
-                await interaction.reply({ content: `⏰ **Timed out <@${targetUser.id}> for ${durationStr}!**`, flags: [EPHEMERAL_FLAG] });
-
-                if (logChannel) {
-                    const timeoutLogEmbed = createWickLogEmbed({
-                        title: 'Member Timed Out',
-                        emoji: '⏰',
-                        color: '#ED4245',
-                        target: targetUser,
-                        moderator: interaction.user,
-                        reason: reason,
-                        duration: durationStr,
-                        expiresAt: expiresAt,
-                        caseId: caseId,
-                        guild: interaction.guild
-                    });
-                    await logChannel.send({ embeds: [timeoutLogEmbed] }).catch(err => {
-                        console.error('❌ Failed to dispatch timeout log:', err.message);
-                    });
-                }
-                return;
-            }
-
-            // 🚪 KICK SUBMISSION
-            if (action === 'kick') {
-                if (!targetMember) return interaction.reply({ content: '❌ Member is not in the server.', flags: [EPHEMERAL_FLAG] });
-
-                await client.sendPremiumModDM(targetMember, interaction.member, 'Kick', reason, null, interaction.guild, caseId);
-                await targetMember.kick(`${reason} | Executed by ${interaction.user.tag}`);
-
-                await interaction.reply({ content: `🚪 **Kicked <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
-
-                if (logChannel) {
-                    const kickLogEmbed = createWickLogEmbed({
-                        title: 'Member Kicked',
-                        emoji: '🚪',
-                        color: '#DA373C',
-                        target: targetUser,
-                        moderator: interaction.user,
-                        reason: reason,
-                        caseId: caseId,
-                        guild: interaction.guild
-                    });
-                    await logChannel.send({ embeds: [kickLogEmbed] }).catch(err => {
-                        console.error('❌ Failed to dispatch kick log:', err.message);
-                    });
-                }
-                return;
-            }
-
-            // 🔨 BAN SUBMISSION
-            if (action === 'ban') {
-                if (targetMember) {
-                    await client.sendPremiumModDM(targetMember, interaction.member, 'Ban', reason, null, interaction.guild, caseId);
-                }
-
-                await interaction.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${interaction.user.tag}` });
-                await interaction.reply({ content: `🔨 **Banned <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
-
-                if (logChannel) {
-                    const banLogEmbed = createWickLogEmbed({
-                        title: 'Member Banned',
-                        emoji: '🔨',
-                        color: '#ED4245',
-                        target: targetUser,
-                        moderator: interaction.user,
-                        reason: reason,
-                        caseId: caseId,
-                        guild: interaction.guild
-                    });
-                    await logChannel.send({ embeds: [banLogEmbed] }).catch(err => {
-                        console.error('❌ Failed to dispatch ban log:', err.message);
-                    });
-                }
-                return;
-            }
-        }
-
-        // BAD WORD AUTOMOD BUTTON INTERACTION HANDLERS
-        if (interaction.isButton() && interaction.customId.startsWith('badword_')) {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.reply({ content: '❌ Only Administrators can manage this panel.', flags: [EPHEMERAL_FLAG] });
-            }
-
-            const guildId = interaction.guild.id;
-
-            if (interaction.customId === 'badword_toggle_btn') {
-                let settings = await BadWordSettings.findOne({ guildId });
-                if (!settings) {
-                    settings = await BadWordSettings.create({ guildId, enabled: true, words: DEFAULT_BAD_WORDS });
-                } else {
-                    settings.enabled = !settings.enabled;
-                    await settings.save();
-                }
-
-                const panel = await getBadWordPanelEmbed(interaction.guild, client);
-                return interaction.update(panel);
-            }
-
-            if (interaction.customId === 'badword_add_btn') {
-                const modal = new ModalBuilder().setCustomId('badword_add_modal').setTitle('Add Bad Words to Filter');
-                const input = new TextInputBuilder().setCustomId('badwords_input').setLabel('Words to Add (comma separated)').setStyle(TextInputStyle.Paragraph).setPlaceholder('e.g. word1, word2, word3').setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'badword_remove_btn') {
-                const modal = new ModalBuilder().setCustomId('badword_remove_modal').setTitle('Remove Bad Words from Filter');
-                const input = new TextInputBuilder().setCustomId('badwords_input').setLabel('Words to Remove (comma separated)').setStyle(TextInputStyle.Paragraph).setPlaceholder('e.g. word1, word2').setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId === 'badword_list_btn') {
-                const settings = await BadWordSettings.findOne({ guildId });
-                const wordsList = settings?.words?.length ? settings.words.join(', ') : 'No bad words currently filtered.';
-                const listEmbed = new EmbedBuilder().setColor('#5865F2').setTitle('📜 Complete Filtered Bad Words List').setDescription(`\`\`\`${wordsList.slice(0, 3900)}\`\`\``).setTimestamp();
-                return interaction.reply({ embeds: [listEmbed], flags: [EPHEMERAL_FLAG] });
-            }
-        }
-
+        // ==========================================
+        // 📝 MODAL SUBMISSIONS HANDLER
+        // ==========================================
         if (interaction.isModalSubmit()) {
+            // --- MODPANEL MODALS ---
+            if (interaction.customId.startsWith('md_')) {
+                const parts = interaction.customId.split('_');
+                const action = parts[1];
+                const targetId = parts[2];
+
+                const targetUser = await client.users.fetch(targetId).catch(() => null);
+                if (!targetUser) return interaction.reply({ content: '❌ Target user not found.', flags: [EPHEMERAL_FLAG] });
+
+                const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+                const reason = interaction.fields.getTextInputValue('mod_reason') || 'No reason provided';
+                const caseId = Math.floor(Math.random() * 90000) + 10000;
+                const logChannel = await client.getLogChannel(interaction.guild, 'moderate');
+
+                // ⚠️ WARN
+                if (action === 'warn') {
+                    await interaction.reply({ content: `⚠️ **Warned <@${targetUser.id}>!**\n**Reason:** ${reason}`, flags: [EPHEMERAL_FLAG] });
+
+                    if (targetMember) {
+                        await client.sendPremiumModDM(targetMember, interaction.member, 'Warning', reason, null, interaction.guild, caseId);
+                    }
+
+                    if (logChannel) {
+                        const warnLogEmbed = createWickLogEmbed({
+                            title: 'Member Warned',
+                            emoji: '⚠️',
+                            color: '#FEE75C',
+                            target: targetUser,
+                            moderator: interaction.user,
+                            reason: reason,
+                            caseId: caseId,
+                            guild: interaction.guild
+                        });
+                        await logChannel.send({ embeds: [warnLogEmbed] }).catch(err => console.error('❌ Log dispatch error:', err.message));
+                    }
+                    return;
+                }
+
+                // ⏰ TIMEOUT
+                if (action === 'timeout') {
+                    const durationStr = interaction.fields.getTextInputValue('mod_duration') || '10m';
+                    function parseDuration(text) {
+                        const match = text.match(/(\d+)\s*(s|m|h|d)/i);
+                        if (!match) return 10 * 60 * 1000;
+                        const val = parseInt(match[1]);
+                        const unit = match[2].toLowerCase();
+                        if (unit === 's') return val * 1000;
+                        if (unit === 'm') return val * 60 * 1000;
+                        if (unit === 'h') return val * 3600 * 1000;
+                        if (unit === 'd') return val * 86400 * 1000;
+                        return 10 * 60 * 1000;
+                    }
+
+                    const durationMs = parseDuration(durationStr);
+                    const expiresAt = new Date(Date.now() + durationMs);
+
+                    if (!targetMember) return interaction.reply({ content: '❌ Member is not in the server.', flags: [EPHEMERAL_FLAG] });
+
+                    await client.sendPremiumModDM(targetMember, interaction.member, 'Timeout', reason, durationStr, interaction.guild, caseId);
+                    await targetMember.timeout(durationMs, `${reason} | Executed by ${interaction.user.tag}`);
+
+                    await interaction.reply({ content: `⏰ **Timed out <@${targetUser.id}> for ${durationStr}!**`, flags: [EPHEMERAL_FLAG] });
+
+                    if (logChannel) {
+                        const timeoutLogEmbed = createWickLogEmbed({
+                            title: 'Member Timed Out',
+                            emoji: '⏰',
+                            color: '#ED4245',
+                            target: targetUser,
+                            moderator: interaction.user,
+                            reason: reason,
+                            duration: durationStr,
+                            expiresAt: expiresAt,
+                            caseId: caseId,
+                            guild: interaction.guild
+                        });
+                        await logChannel.send({ embeds: [timeoutLogEmbed] }).catch(err => console.error('❌ Log dispatch error:', err.message));
+                    }
+                    return;
+                }
+
+                // 🚪 KICK
+                if (action === 'kick') {
+                    if (!targetMember) return interaction.reply({ content: '❌ Member is not in the server.', flags: [EPHEMERAL_FLAG] });
+
+                    await client.sendPremiumModDM(targetMember, interaction.member, 'Kick', reason, null, interaction.guild, caseId);
+                    await targetMember.kick(`${reason} | Executed by ${interaction.user.tag}`);
+
+                    await interaction.reply({ content: `🚪 **Kicked <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
+
+                    if (logChannel) {
+                        const kickLogEmbed = createWickLogEmbed({
+                            title: 'Member Kicked',
+                            emoji: '🚪',
+                            color: '#DA373C',
+                            target: targetUser,
+                            moderator: interaction.user,
+                            reason: reason,
+                            caseId: caseId,
+                            guild: interaction.guild
+                        });
+                        await logChannel.send({ embeds: [kickLogEmbed] }).catch(err => console.error('❌ Log dispatch error:', err.message));
+                    }
+                    return;
+                }
+
+                // 🔨 BAN
+                if (action === 'ban') {
+                    if (targetMember) {
+                        await client.sendPremiumModDM(targetMember, interaction.member, 'Ban', reason, null, interaction.guild, caseId);
+                    }
+
+                    await interaction.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${interaction.user.tag}` });
+                    await interaction.reply({ content: `🔨 **Banned <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
+
+                    if (logChannel) {
+                        const banLogEmbed = createWickLogEmbed({
+                            title: 'Member Banned',
+                            emoji: '🔨',
+                            color: '#ED4245',
+                            target: targetUser,
+                            moderator: interaction.user,
+                            reason: reason,
+                            caseId: caseId,
+                            guild: interaction.guild
+                        });
+                        await logChannel.send({ embeds: [banLogEmbed] }).catch(err => console.error('❌ Log dispatch error:', err.message));
+                    }
+                    return;
+                }
+            }
+
+            // --- BADWORD MODALS ---
             if (interaction.customId === 'badword_add_modal') {
                 const inputWords = interaction.fields.getTextInputValue('badwords_input').split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
                 let settings = await BadWordSettings.findOne({ guildId: interaction.guild.id });
