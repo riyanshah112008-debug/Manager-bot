@@ -1,3 +1,7 @@
+// ==========================================
+// 🛡️ MODERATION SUITE - COMMAND DATA & HELPERS
+// File Path: mod.js (Part 1 of 2)
+// ==========================================
 const { 
     SlashCommandBuilder, 
     EmbedBuilder, 
@@ -8,8 +12,59 @@ const {
     ChannelType 
 } = require('discord.js');
 
-// Bot Owners with absolute moderation bypass
 const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
+
+function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
+    const embed = new EmbedBuilder()
+        .setColor(color || '#ED4245')
+        .setAuthor({ 
+            name: `${emoji ? emoji + ' ' : ''}${title}`, 
+            iconURL: target?.displayAvatarURL ? target.displayAvatarURL({ dynamic: true }) : (guild?.iconURL({ dynamic: true }) || null)
+        });
+
+    if (target) {
+        const targetTag = target.tag || (target.user ? target.user.tag : target.username || 'Unknown User');
+        const targetId = target.id || 'N/A';
+        embed.addFields({ name: '👤 Target User', value: `<@${targetId}> (\`${targetTag}\`)\n**User ID:** \`${targetId}\``, inline: false });
+    }
+
+    if (moderator) {
+        const modTag = moderator.tag || (moderator.user ? moderator.user.tag : moderator.username || 'System Automation');
+        const modId = moderator.id || 'N/A';
+        embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
+    }
+
+    if (caseId) {
+        embed.addFields({ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true });
+    }
+
+    if (duration) {
+        embed.addFields({ name: '⏳ Duration', value: `\`${duration}\``, inline: true });
+    }
+
+    if (expiresAt) {
+        const timestamp = Math.floor(new Date(expiresAt).getTime() / 1000);
+        embed.addFields({ name: '⏰ Until', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)`, inline: true });
+    }
+
+    if (reason) {
+        embed.addFields({ name: '📝 Reason', value: `>>> ${reason}`, inline: false });
+    }
+
+    if (extraFields.length > 0) {
+        for (const field of extraFields) {
+            embed.addFields(field);
+        }
+    }
+
+    embed.setFooter({ 
+        text: `User ID: ${target?.id || 'N/A'} • Starry Security Engine`, 
+        iconURL: guild?.iconURL({ dynamic: true }) || null 
+    });
+    embed.setTimestamp();
+
+    return embed;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -17,7 +72,6 @@ module.exports = {
         .setDescription('Supreme all-in-one moderation command suite')
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 
-        // BAN
         .addSubcommand(sub => sub
             .setName('ban')
             .setDescription('Ban a user from the server')
@@ -26,7 +80,6 @@ module.exports = {
             .addIntegerOption(opt => opt.setName('delete_days').setDescription('Days of messages to delete (0-7)').setMinValue(0).setMaxValue(7))
         )
 
-        // UNBAN
         .addSubcommand(sub => sub
             .setName('unban')
             .setDescription('Unban a user by ID')
@@ -34,7 +87,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the unban'))
         )
 
-        // KICK
         .addSubcommand(sub => sub
             .setName('kick')
             .setDescription('Kick a member from the server')
@@ -42,7 +94,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick'))
         )
 
-        // TIMEOUT
         .addSubcommand(sub => sub
             .setName('timeout')
             .setDescription('Timeout/Mute a member')
@@ -51,7 +102,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout'))
         )
 
-        // UNTIMEOUT
         .addSubcommand(sub => sub
             .setName('untimeout')
             .setDescription('Remove timeout from a member')
@@ -59,7 +109,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for untimeout'))
         )
 
-        // PURGE / CLEAR
         .addSubcommand(sub => sub
             .setName('purge')
             .setDescription('Delete/Clear bulk messages from a channel')
@@ -67,7 +116,6 @@ module.exports = {
             .addUserOption(opt => opt.setName('target').setDescription('Filter messages by target user'))
         )
 
-        // WARN
         .addSubcommand(sub => sub
             .setName('warn')
             .setDescription('Warn a user')
@@ -75,28 +123,24 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true))
         )
 
-        // WARNINGS
         .addSubcommand(sub => sub
             .setName('warnings')
             .setDescription('View warnings for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The user to inspect').setRequired(true))
         )
 
-        // CLEAR WARNS
         .addSubcommand(sub => sub
             .setName('clearwarns')
             .setDescription('Clear all warnings for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The user to clear warnings for').setRequired(true))
         )
 
-        // MOD PANEL
         .addSubcommand(sub => sub
             .setName('panel')
             .setDescription('Open an interactive Moderation Control Panel for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The member to moderate').setRequired(true))
         )
 
-        // LOCKDOWN
         .addSubcommand(sub => sub
             .setName('lockdown')
             .setDescription('Lock a text channel')
@@ -104,22 +148,24 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for lockdown'))
         )
 
-        // UNLOCK
         .addSubcommand(sub => sub
             .setName('unlock')
             .setDescription('Unlock a text channel')
             .addChannelOption(opt => opt.setName('channel').setDescription('Channel to unlock').addChannelTypes(ChannelType.GuildText))
         )
 
-        // NICKNAME
         .addSubcommand(sub => sub
             .setName('nick')
             .setDescription('Change a user\'s nickname')
             .addUserOption(opt => opt.setName('target').setDescription('The member to nick').setRequired(true))
             .addStringOption(opt => opt.setName('nickname').setDescription('New nickname (leave blank to reset)'))
         ),
+                             // ==========================================
+// 🛡️ MODERATION SUITE - EXECUTION HANDLER
+// File Path: mod.js (Part 2 of 2)
+// ==========================================
     async execute(interaction) {
-        const { guild, member, options, user } = interaction;
+        const { guild, member, options, user, client } = interaction;
         const subcommand = options.getSubcommand();
         const isOwner = BOT_OWNERS.includes(user.id);
 
@@ -136,7 +182,15 @@ module.exports = {
             return true;
         };
 
+        const getLogCh = async (type) => {
+            if (typeof client.getLogChannel === 'function') {
+                return await client.getLogChannel(guild, type);
+            }
+            return null;
+        };
+
         await interaction.deferReply({ ephemeral: true });
+        const caseId = Math.floor(Math.random() * 90000) + 10000;
 
         try {
             switch (subcommand) {
@@ -152,17 +206,21 @@ module.exports = {
 
                     await guild.members.ban(targetUser.id, { reason: `${reason} | By: ${user.tag}`, deleteMessageSeconds: deleteDays * 86400 });
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🔨 User Banned')
-                        .setColor('#ff4757')
-                        .addFields(
-                            { name: 'Target', value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
-                            { name: 'Reason', value: reason }
-                        )
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Member Banned',
+                        emoji: '🔨',
+                        color: '#ED4245',
+                        target: targetUser,
+                        moderator: user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'unban': {
@@ -176,17 +234,22 @@ module.exports = {
                         return interaction.editReply({ content: `❌ Failed to unban ID \`${userId}\`.` });
                     }
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🔓 User Unbanned')
-                        .setColor('#2ed573')
-                        .addFields(
-                            { name: 'User ID', value: `\`${userId}\``, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
-                            { name: 'Reason', value: reason }
-                        )
-                        .setTimestamp();
+                    const targetUser = await client.users.fetch(userId).catch(() => ({ id: userId, tag: `User (${userId})` }));
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Member Unbanned',
+                        emoji: '🟢',
+                        color: '#2ECC71',
+                        target: targetUser,
+                        moderator: user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'kick': {
@@ -200,17 +263,21 @@ module.exports = {
 
                     await targetMember.kick(`${reason} | By: ${user.tag}`);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🥾 Member Kicked')
-                        .setColor('#ffa502')
-                        .addFields(
-                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
-                            { name: 'Reason', value: reason }
-                        )
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Member Kicked',
+                        emoji: '🚪',
+                        color: '#DA373C',
+                        target: targetUser,
+                        moderator: user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'timeout': {
@@ -223,20 +290,28 @@ module.exports = {
                     if (!targetMember) return interaction.editReply({ content: '❌ User not in server.' });
                     if (!canModerate(targetMember)) return interaction.editReply({ content: '❌ Hierarchy protection triggered.' });
 
-                    await targetMember.timeout(durationMins * 60 * 1000, `${reason} | By: ${user.tag}`);
+                    const durationMs = durationMins * 60 * 1000;
+                    const expiresAt = new Date(Date.now() + durationMs);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('⏰ Member Timed Out')
-                        .setColor('#eccc68')
-                        .addFields(
-                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'Duration', value: `${durationMins}m`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
-                            { name: 'Reason', value: reason }
-                        )
-                        .setTimestamp();
+                    await targetMember.timeout(durationMs, `${reason} | By: ${user.tag}`);
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Member Timed Out',
+                        emoji: '⏰',
+                        color: '#ED4245',
+                        target: targetUser,
+                        moderator: user,
+                        reason: reason,
+                        duration: `${durationMins}m`,
+                        expiresAt: expiresAt,
+                        caseId: caseId,
+                        guild
+                    });
+
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'untimeout': {
@@ -249,16 +324,21 @@ module.exports = {
 
                     await targetMember.timeout(null, `${reason} | By: ${user.tag}`);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🔊 Timeout Removed')
-                        .setColor('#70a1ff')
-                        .addFields(
-                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true }
-                        )
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Member Timeout Removed',
+                        emoji: '🔓',
+                        color: '#2ECC71',
+                        target: targetUser,
+                        moderator: user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'purge': {
@@ -271,16 +351,22 @@ module.exports = {
                     const toDelete = targetFilter ? fetched.filter(m => m.author.id === targetFilter.id) : fetched;
                     const deleted = await channel.bulkDelete(toDelete, true);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🧹 Messages Cleared')
-                        .setColor('#70a1ff')
-                        .addFields(
-                            { name: 'Deleted Count', value: `${deleted.size} messages`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true }
-                        )
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Channel Messages Purged',
+                        emoji: '🧹',
+                        color: '#FEE75C',
+                        target: targetFilter || null,
+                        moderator: user,
+                        reason: `Purged ${deleted.size} messages in ${channel}`,
+                        extraFields: [{ name: '📺 Channel', value: `<#${channel.id}>`, inline: true }],
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = (await getLogCh('messages')) || (await getLogCh('moderate'));
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'warn': {
@@ -290,17 +376,21 @@ module.exports = {
 
                     await targetUser.send(`⚠️ You were warned in **${guild.name}** for: ${reason}`).catch(() => null);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('⚠️ User Warned')
-                        .setColor('#eccc68')
-                        .addFields(
-                            { name: 'Target', value: `${targetUser.tag}`, inline: true },
-                            { name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}`, inline: true },
-                            { name: 'Reason', value: reason }
-                        )
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Member Warned',
+                        emoji: '⚠️',
+                        color: '#FEE75C',
+                        target: targetUser,
+                        moderator: user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'warnings': {
@@ -318,14 +408,21 @@ module.exports = {
                     if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🧹 Warnings Cleared')
-                        .setColor('#2ed573')
-                        .setDescription(`Cleared all active warnings for <@${targetUser.id}>.`)
-                        .addFields({ name: 'Moderator', value: `${user.tag} ${isOwner ? '👑 *(Owner)*' : ''}` })
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Warnings Cleared',
+                        emoji: '🧹',
+                        color: '#2ECC71',
+                        target: targetUser,
+                        moderator: user,
+                        reason: 'All active warnings cleared.',
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'panel': {
@@ -336,19 +433,19 @@ module.exports = {
                     const embed = new EmbedBuilder()
                         .setTitle(`🛡️ Moderation Control Panel`)
                         .setColor('#5f27cd')
-                        .setThumbnail(targetUser.displayAvatarURL())
+                        .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                         .addFields(
                             { name: 'Target User', value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
                             { name: 'Joined Server', value: targetMember ? `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>` : 'Not in server', inline: true },
                             { name: 'Roles', value: targetMember ? `${targetMember.roles.cache.size - 1}` : 'N/A', inline: true }
                         )
-                        .setFooter({ text: `Requested by ${user.tag}`, iconURL: user.displayAvatarURL() });
+                        .setFooter({ text: `Requested by ${user.tag}`, iconURL: user.displayAvatarURL({ dynamic: true }) });
 
                     const row = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`mod_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Warning),
-                        new ButtonBuilder().setCustomId(`mod_timeout_${targetUser.id}`).setLabel('Timeout').setStyle(ButtonStyle.Secondary),
-                        new ButtonBuilder().setCustomId(`mod_kick_${targetUser.id}`).setLabel('Kick').setStyle(ButtonStyle.Danger),
-                        new ButtonBuilder().setCustomId(`mod_ban_${targetUser.id}`).setLabel('Ban').setStyle(ButtonStyle.Danger)
+                        new ButtonBuilder().setCustomId(`mp_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Warning),
+                        new ButtonBuilder().setCustomId(`mp_timeout_${targetUser.id}`).setLabel('Timeout').setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId(`mp_kick_${targetUser.id}`).setLabel('Kick').setStyle(ButtonStyle.Danger),
+                        new ButtonBuilder().setCustomId(`mp_ban_${targetUser.id}`).setLabel('Ban').setStyle(ButtonStyle.Danger)
                     );
 
                     return interaction.editReply({ embeds: [embed], components: [row] });
@@ -361,13 +458,22 @@ module.exports = {
 
                     await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }, { reason: `Lockdown: ${reason}` });
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🔒 Channel Locked')
-                        .setColor('#ff4757')
-                        .addFields({ name: 'Channel', value: `${targetChannel}`, inline: true }, { name: 'Reason', value: reason })
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Channel Locked',
+                        emoji: '🔒',
+                        color: '#ED4245',
+                        target: null,
+                        moderator: user,
+                        reason: reason,
+                        extraFields: [{ name: '📺 Channel', value: `<#${targetChannel.id}>`, inline: true }],
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('channels') || await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'unlock': {
@@ -376,13 +482,22 @@ module.exports = {
 
                     await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🔓 Channel Unlocked')
-                        .setColor('#2ed573')
-                        .addFields({ name: 'Channel', value: `${targetChannel}`, inline: true })
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Channel Unlocked',
+                        emoji: '🔓',
+                        color: '#2ECC71',
+                        target: null,
+                        moderator: user,
+                        reason: 'Channel unlocked.',
+                        extraFields: [{ name: '📺 Channel', value: `<#${targetChannel.id}>`, inline: true }],
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('channels') || await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 case 'nick': {
@@ -396,13 +511,21 @@ module.exports = {
 
                     await targetMember.setNickname(newNick);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('🏷️ Nickname Updated')
-                        .setColor('#1e90ff')
-                        .addFields({ name: 'Target', value: `${targetUser.tag}`, inline: true }, { name: 'New Nickname', value: newNick ? `\`${newNick}\`` : '*Reset*', inline: true })
-                        .setTimestamp();
+                    const logEmbed = buildWickLogEmbed({
+                        title: 'Nickname Updated',
+                        emoji: '🏷️',
+                        color: '#5865F2',
+                        target: targetUser,
+                        moderator: user,
+                        reason: `Changed nickname to ${newNick ? `\`${newNick}\`` : '*Reset*'}`,
+                        caseId: caseId,
+                        guild
+                    });
 
-                    return interaction.editReply({ embeds: [embed] });
+                    const logChannel = await getLogCh('members') || await getLogCh('moderate');
+                    if (logChannel) await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+
+                    return interaction.editReply({ embeds: [logEmbed] });
                 }
 
                 default:
@@ -414,3 +537,4 @@ module.exports = {
         }
     }
 };
+                        
