@@ -193,7 +193,7 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
 
 // ==========================================
 // 🛡️ WICK-STYLE LOG EMBED BUILDER
-// Guarantees Moderator Name, User Tags, IDs, Timestamps, and Case Numbers
+// Standardized embed formatting matching Wick Bot layout
 // ==========================================
 function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const embed = new EmbedBuilder()
@@ -413,9 +413,9 @@ module.exports = async (client) => {
 
     start60sChannelTelemetryLoop(client);
 
-    // Dynamic routing to specific log channels
-    client.getLogChannel = (guild, logType = 'misc') => {
-        if (!guild || !guild.channels) return null;
+    // Dynamic routing to specific log channels (Async with API Fetching)
+    client.getLogChannel = async (guild, logType = 'misc') => {
+        if (!guild) return null;
         const typeMap = {
             'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
             'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
@@ -425,9 +425,16 @@ module.exports = async (client) => {
             'members': ['logs-members', 'member-logs', 'role-logs']
         };
         const targetNames = typeMap[logType.toLowerCase()] || typeMap['access'];
-        let ch = guild.channels.cache.find(c => c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-        if (ch) return ch;
-        return guild.channels.cache.find(c => c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+
+        try {
+            const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+            let ch = channels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+            if (ch) return ch;
+            return channels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+        } catch (err) {
+            console.error('❌ Log Channel Fetch Error:', err);
+            return null;
+        }
     };
 
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
@@ -457,7 +464,7 @@ module.exports = async (client) => {
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
 
-        const accessLog = client.getLogChannel(member.guild, 'access');
+        const accessLog = await client.getLogChannel(member.guild, 'access');
         if (accessLog) {
             const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
             const joinEmbed = createWickLogEmbed({
@@ -498,7 +505,7 @@ module.exports = async (client) => {
     });
 
     client.on('guildMemberRemove', async (member) => {
-        const accessLog = client.getLogChannel(member.guild, 'access');
+        const accessLog = await client.getLogChannel(member.guild, 'access');
         if (accessLog) {
             const leaveEmbed = createWickLogEmbed({
                 title: 'Member Left',
@@ -539,7 +546,7 @@ module.exports = async (client) => {
     client.on('messageDelete', async (message) => {
         try {
             if (!message.guild || message.partial) return;
-            const logChannel = client.getLogChannel(message.guild, 'messages');
+            const logChannel = await client.getLogChannel(message.guild, 'messages');
             if (!logChannel || logChannel.id === message.channel.id) return;
 
             const deleteEmbed = createWickLogEmbed({
@@ -564,7 +571,7 @@ module.exports = async (client) => {
             if (!oldMessage.guild || oldMessage.partial || newMessage.partial) return;
             if (oldMessage.author?.bot || oldMessage.content === newMessage.content) return;
 
-            const logChannel = client.getLogChannel(oldMessage.guild, 'messages');
+            const logChannel = await client.getLogChannel(oldMessage.guild, 'messages');
             if (!logChannel) return;
 
             const editEmbed = createWickLogEmbed({
@@ -589,7 +596,7 @@ module.exports = async (client) => {
         try {
             const firstMsg = messages.first();
             if (!firstMsg || !firstMsg.guild) return;
-            const logChannel = client.getLogChannel(firstMsg.guild, 'messages') || client.getLogChannel(firstMsg.guild, 'moderate');
+            const logChannel = (await client.getLogChannel(firstMsg.guild, 'messages')) || (await client.getLogChannel(firstMsg.guild, 'moderate'));
             if (!logChannel) return;
 
             const bulkEmbed = createWickLogEmbed({
@@ -618,7 +625,7 @@ module.exports = async (client) => {
     client.on('voiceStateUpdate', async (oldState, newState) => {
         try {
             const guild = newState.guild || oldState.guild;
-            const voiceLog = client.getLogChannel(guild, 'voice');
+            const voiceLog = await client.getLogChannel(guild, 'voice');
             if (!voiceLog) return;
 
             const member = newState.member || oldState.member;
@@ -666,7 +673,7 @@ module.exports = async (client) => {
     // ==========================================
     client.on('channelCreate', async (channel) => {
         if (!channel.guild) return;
-        const channelLog = client.getLogChannel(channel.guild, 'channels');
+        const channelLog = await client.getLogChannel(channel.guild, 'channels');
         if (!channelLog) return;
 
         const embed = createWickLogEmbed({
@@ -685,7 +692,7 @@ module.exports = async (client) => {
 
     client.on('channelDelete', async (channel) => {
         if (!channel.guild) return;
-        const channelLog = client.getLogChannel(channel.guild, 'channels');
+        const channelLog = await client.getLogChannel(channel.guild, 'channels');
         if (!channelLog) return;
 
         const embed = createWickLogEmbed({
@@ -707,7 +714,7 @@ module.exports = async (client) => {
     // ==========================================
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         try {
-            const memberLog = client.getLogChannel(newMember.guild, 'members');
+            const memberLog = await client.getLogChannel(newMember.guild, 'members');
             if (!memberLog) return;
 
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
@@ -763,11 +770,11 @@ module.exports = async (client) => {
     // ==========================================
     client.on('guildAuditLogEntryCreate', async (auditLog, guild) => {
         try {
-            const logChannel = client.getLogChannel(guild, 'moderate');
+            const logChannel = await client.getLogChannel(guild, 'moderate');
             if (!logChannel) return;
 
             const { action, executor, target, reason } = auditLog;
-            if (!executor || (executor.bot && executor.id === client.user.id)) return; // Avoid duplicate logging for bot calls
+            if (!executor || (executor.bot && executor.id === client.user.id)) return;
 
             if (action === AuditLogEvent.MemberUpdate) {
                 const timeoutChange = auditLog.changes?.find(c => c.key === 'communication_disabled_until');
@@ -947,7 +954,7 @@ module.exports = async (client) => {
             const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
             const reason = interaction.fields.getTextInputValue('mod_reason') || 'No reason provided';
             const caseId = Math.floor(Math.random() * 90000) + 10000;
-            const logChannel = client.getLogChannel(interaction.guild, 'moderate');
+            const logChannel = await client.getLogChannel(interaction.guild, 'moderate');
 
             // ⚠️ WARN SUBMISSION
             if (action === 'warn') {
@@ -968,7 +975,11 @@ module.exports = async (client) => {
                         caseId: caseId,
                         guild: interaction.guild
                     });
-                    await logChannel.send({ embeds: [warnLogEmbed] }).catch(() => {});
+                    await logChannel.send({ embeds: [warnLogEmbed] }).catch(err => {
+                        console.error('❌ Failed to dispatch warning log:', err.message);
+                    });
+                } else {
+                    console.error('❌ Could not locate #logs-moderate channel for warning log.');
                 }
                 return;
             }
@@ -1011,7 +1022,9 @@ module.exports = async (client) => {
                         caseId: caseId,
                         guild: interaction.guild
                     });
-                    await logChannel.send({ embeds: [timeoutLogEmbed] }).catch(() => {});
+                    await logChannel.send({ embeds: [timeoutLogEmbed] }).catch(err => {
+                        console.error('❌ Failed to dispatch timeout log:', err.message);
+                    });
                 }
                 return;
             }
@@ -1036,7 +1049,9 @@ module.exports = async (client) => {
                         caseId: caseId,
                         guild: interaction.guild
                     });
-                    await logChannel.send({ embeds: [kickLogEmbed] }).catch(() => {});
+                    await logChannel.send({ embeds: [kickLogEmbed] }).catch(err => {
+                        console.error('❌ Failed to dispatch kick log:', err.message);
+                    });
                 }
                 return;
             }
@@ -1061,7 +1076,9 @@ module.exports = async (client) => {
                         caseId: caseId,
                         guild: interaction.guild
                     });
-                    await logChannel.send({ embeds: [banLogEmbed] }).catch(() => {});
+                    await logChannel.send({ embeds: [banLogEmbed] }).catch(err => {
+                        console.error('❌ Failed to dispatch ban log:', err.message);
+                    });
                 }
                 return;
             }
@@ -1283,7 +1300,7 @@ module.exports = async (client) => {
             const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`).catch(() => null);
             if (sent) setTimeout(() => sent.delete().catch(() => {}), 3500);
 
-            const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
+            const logChannel = (await client.getLogChannel(message.guild, 'messages')) || (await client.getLogChannel(message.guild, 'moderate'));
             if (logChannel) {
                 const purgeEmbed = createWickLogEmbed({
                     title: 'Channel Messages Purged',
@@ -1319,7 +1336,7 @@ module.exports = async (client) => {
             if (lowerContent.includes('for ')) reason = rawContent.substring(rawContent.toLowerCase().indexOf('for ') + 4).trim();
 
             const caseId = Math.floor(Math.random() * 90000) + 10000;
-            const logChannel = client.getLogChannel(message.guild, 'moderate');
+            const logChannel = await client.getLogChannel(message.guild, 'moderate');
 
             if (isTimeout && !isUntimeout) {
                 const durationMs = 10 * 60 * 1000;
