@@ -22,7 +22,7 @@ const welcomeSchema = new mongoose.Schema({
     description: { type: String, default: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟' },
     color: { type: String, default: '#FF73FA' },
     image: { type: String, default: 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif' },
-    thumbnail: { type: String, default: 'avatar' }, // 'avatar' or custom URL
+    thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '✨ Enjoy your stellar journey in {server}! ✨' },
     pingContent: { type: String, default: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂' }
 });
@@ -38,8 +38,23 @@ const setupWelcomeCommand = new SlashCommandBuilder()
             .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+function isValidUrl(str) {
+    if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar') return false;
+    try {
+        const url = new URL(str);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+function isValidHex(color) {
+    if (!color || typeof color !== 'string' || color === 'undefined') return false;
+    return /^#([0-9A-F]{3}){1,2}$/i.test(color);
+}
+
 function replacePlaceholders(text, member) {
-    if (!text) return '';
+    if (!text || typeof text !== 'string' || text === 'undefined') return '';
     return text
         .replace(/\{user\}/g, `<@${member.id}>`)
         .replace(/\{username\}/g, member.user.username)
@@ -52,17 +67,25 @@ async function getWelcomeControlPanel(guildId, client) {
     let settings = await WelcomeSettings.findOne({ guildId });
     if (!settings) return null;
 
+    const channelDisplay = settings.channelId ? `<#${settings.channelId}>` : '*Not Set*';
+    const pingDisplay = (settings.pingContent && settings.pingContent !== 'undefined') ? settings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
+    const titleDisplay = (settings.title && settings.title !== 'undefined') ? settings.title : '✨ WELCOME TO {server} ✨';
+    const descDisplay = (settings.description && settings.description !== 'undefined') ? settings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
+    const colorDisplay = isValidHex(settings.color) ? settings.color : '#FF73FA';
+    const footerDisplay = (settings.footer && settings.footer !== 'undefined') ? settings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
+    const imageDisplay = isValidUrl(settings.image) ? `[View Image](${settings.image})` : '*None / Default*';
+
     const panelEmbed = new EmbedBuilder()
-        .setColor(settings.color || '#FF73FA')
-        .setTitle(`🎨 Welcome Customizer & Manager | ${settings.guildId}`)
+        .setColor(colorDisplay)
+        .setTitle(`🎨 Welcome Customizer & Manager | ${guildId}`)
         .setDescription(
             `Configure and design custom welcome cards for your server.\n\n` +
-            `**📍 Welcome Channel:** <#${settings.channelId}>\n` +
-            `**💬 Message Header:** \`${settings.pingContent}\`\n` +
-            `**🏷️ Title:** \`${settings.title}\`\n` +
-            `**📝 Description:** \`\`\`${settings.description}\`\`\`\n` +
-            `**🎨 Hex Color:** \`${settings.color}\` | **🌸 Footer:** \`${settings.footer}\`\n` +
-            `**🖼️ Banner Image:** [View Image](${settings.image})`
+            `**📍 Welcome Channel:** ${channelDisplay}\n` +
+            `**💬 Message Header:** \`${pingDisplay}\`\n` +
+            `**🏷️ Title:** \`${titleDisplay}\`\n` +
+            `**📝 Description:** \`\`\`${descDisplay}\`\`\`\n` +
+            `**🎨 Hex Color:** \`${colorDisplay}\` | **🌸 Footer:** \`${footerDisplay}\`\n` +
+            `**🖼️ Banner Image:** ${imageDisplay}`
         )
         .addFields({
             name: '🔤 Supported Variables',
@@ -105,7 +128,16 @@ const welcomeModule = (client) => {
 
         await WelcomeSettings.findOneAndUpdate(
             { guildId: interaction.guildId },
-            { channelId: channel.id },
+            { 
+                channelId: channel.id,
+                title: '✨ WELCOME TO {server} ✨',
+                description: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟',
+                color: '#FF73FA',
+                image: 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif',
+                thumbnail: 'avatar',
+                footer: '✨ Enjoy your stellar journey in {server}! ✨',
+                pingContent: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂'
+            },
             { upsert: true, new: true }
         );
 
@@ -126,37 +158,46 @@ const welcomeModule = (client) => {
             const channel = member.guild.channels.cache.get(config.channelId);
             if (!channel) return;
 
-            const pingMsg = replacePlaceholders(config.pingContent, member);
-            const titleMsg = replacePlaceholders(config.title, member);
-            const descMsg = replacePlaceholders(config.description, member);
-            const footerMsg = replacePlaceholders(config.footer, member);
+            const pingRaw = (config.pingContent && config.pingContent !== 'undefined') ? config.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
+            const titleRaw = (config.title && config.title !== 'undefined') ? config.title : '✨ WELCOME TO {server} ✨';
+            const descRaw = (config.description && config.description !== 'undefined') ? config.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
+            const footerRaw = (config.footer && config.footer !== 'undefined') ? config.footer : '✨ Enjoy your stellar journey in {server}! ✨';
+
+            const pingMsg = replacePlaceholders(pingRaw, member);
+            const titleMsg = replacePlaceholders(titleRaw, member);
+            const descMsg = replacePlaceholders(descRaw, member);
+            const footerMsg = replacePlaceholders(footerRaw, member);
 
             const welcomeEmbed = new EmbedBuilder()
-                .setColor(config.color || '#FF73FA')
-                .setTitle(titleMsg)
-                .setDescription(descMsg)
+                .setColor(isValidHex(config.color) ? config.color : '#FF73FA')
+                .setTitle(titleMsg.slice(0, 256))
+                .setDescription(descMsg.slice(0, 4000))
                 .addFields(
                     { name: '🌸 Community Member', value: `You are our precious member **#${member.guild.memberCount}**! 🎉`, inline: false },
                     { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
                 )
                 .setTimestamp();
 
-            if (config.image) welcomeEmbed.setImage(config.image);
+            if (isValidUrl(config.image)) {
+                welcomeEmbed.setImage(config.image);
+            }
 
             if (config.thumbnail === 'avatar') {
                 welcomeEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
-            } else if (config.thumbnail) {
+            } else if (isValidUrl(config.thumbnail)) {
                 welcomeEmbed.setThumbnail(config.thumbnail);
             }
 
-            if (footerMsg) welcomeEmbed.setFooter({ text: footerMsg });
+            if (footerMsg) {
+                welcomeEmbed.setFooter({ text: footerMsg.slice(0, 2048) });
+            }
 
             await channel.send({ content: pingMsg, embeds: [welcomeEmbed] }).catch(() => {});
         } catch (error) {
             console.error('[Welcome Engine Error]:', error);
         }
     });
-                                          // ==========================================
+                // ==========================================
 // 🌸 INTERACTIVE WELCOME SUITE - INTERACTION CONTROLLERS
 // File Path: welcome.js (Part 2 of 2)
 // ==========================================
@@ -175,7 +216,7 @@ const welcomeModule = (client) => {
                 return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [6] });
             }
 
-            const settings = await WelcomeSettings.findOne({ guildId: interaction.guildId });
+            let settings = await WelcomeSettings.findOne({ guildId: interaction.guildId });
             if (!settings) return interaction.reply({ content: '❌ Please run `/setupwelcome` first.', flags: [6] });
 
             // EDIT TITLE & DESCRIPTION MODAL
@@ -186,14 +227,14 @@ const welcomeModule = (client) => {
                     .setCustomId('in_title')
                     .setLabel('Welcome Embed Title')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.title || '')
+                    .setValue((settings.title && settings.title !== 'undefined') ? settings.title : '✨ WELCOME TO {server} ✨')
                     .setRequired(true);
 
                 const descInput = new TextInputBuilder()
                     .setCustomId('in_desc')
                     .setLabel('Welcome Description')
                     .setStyle(TextInputStyle.Paragraph)
-                    .setValue(settings.description || '')
+                    .setValue((settings.description && settings.description !== 'undefined') ? settings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟')
                     .setRequired(true);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(titleInput), new ActionRowBuilder().addComponents(descInput));
@@ -208,14 +249,14 @@ const welcomeModule = (client) => {
                     .setCustomId('in_image')
                     .setLabel('Banner Image URL (GIF or PNG)')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.image || '')
+                    .setValue(isValidUrl(settings.image) ? settings.image : 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
                     .setRequired(false);
 
                 const thumbInput = new TextInputBuilder()
                     .setCustomId('in_thumb')
                     .setLabel('Thumbnail ("avatar" or custom image URL)')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.thumbnail || 'avatar')
+                    .setValue((settings.thumbnail && settings.thumbnail !== 'undefined') ? settings.thumbnail : 'avatar')
                     .setRequired(false);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(imageInput), new ActionRowBuilder().addComponents(thumbInput));
@@ -230,14 +271,14 @@ const welcomeModule = (client) => {
                     .setCustomId('in_color')
                     .setLabel('Hex Color Code (e.g. #FF73FA)')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.color || '#FF73FA')
+                    .setValue(isValidHex(settings.color) ? settings.color : '#FF73FA')
                     .setRequired(true);
 
                 const footerInput = new TextInputBuilder()
                     .setCustomId('in_footer')
                     .setLabel('Footer Text')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.footer || '')
+                    .setValue((settings.footer && settings.footer !== 'undefined') ? settings.footer : '✨ Enjoy your stellar journey in {server}! ✨')
                     .setRequired(false);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(colorInput), new ActionRowBuilder().addComponents(footerInput));
@@ -252,37 +293,64 @@ const welcomeModule = (client) => {
                     .setCustomId('in_ping')
                     .setLabel('Content Above Embed')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.pingContent || '')
+                    .setValue((settings.pingContent && settings.pingContent !== 'undefined') ? settings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂')
                     .setRequired(true);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(pingInput));
                 return interaction.showModal(modal);
             }
 
-            // TEST PREVIEW CARD
+            // TEST PREVIEW CARD HANDLER (CRASH-PROOF)
             if (interaction.customId === 'welc_btn_preview') {
-                const member = interaction.member;
-                const pingMsg = replacePlaceholders(settings.pingContent, member);
-                const titleMsg = replacePlaceholders(settings.title, member);
-                const descMsg = replacePlaceholders(settings.description, member);
-                const footerMsg = replacePlaceholders(settings.footer, member);
+                try {
+                    const member = interaction.member;
 
-                const previewEmbed = new EmbedBuilder()
-                    .setColor(settings.color || '#FF73FA')
-                    .setTitle(titleMsg)
-                    .setDescription(descMsg)
-                    .addFields(
-                        { name: '🌸 Community Member', value: `You are our precious member **#${member.guild.memberCount}**! 🎉`, inline: false },
-                        { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
-                    )
-                    .setTimestamp();
+                    const pingRaw = (settings.pingContent && settings.pingContent !== 'undefined') ? settings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
+                    const titleRaw = (settings.title && settings.title !== 'undefined') ? settings.title : '✨ WELCOME TO {server} ✨';
+                    const descRaw = (settings.description && settings.description !== 'undefined') ? settings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
+                    const footerRaw = (settings.footer && settings.footer !== 'undefined') ? settings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
 
-                if (settings.image) previewEmbed.setImage(settings.image);
-                if (settings.thumbnail === 'avatar') previewEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
-                else if (settings.thumbnail) previewEmbed.setThumbnail(settings.thumbnail);
-                if (footerMsg) previewEmbed.setFooter({ text: `${footerMsg} (Setup Preview)` });
+                    const pingMsg = replacePlaceholders(pingRaw, member);
+                    const titleMsg = replacePlaceholders(titleRaw, member);
+                    const descMsg = replacePlaceholders(descRaw, member);
+                    const footerMsg = replacePlaceholders(footerRaw, member);
 
-                return interaction.reply({ content: `${pingMsg} *(Setup Preview)*`, embeds: [previewEmbed], flags: [6] });
+                    const previewEmbed = new EmbedBuilder()
+                        .setColor(isValidHex(settings.color) ? settings.color : '#FF73FA')
+                        .setTitle(titleMsg.slice(0, 256))
+                        .setDescription(descMsg.slice(0, 4000))
+                        .addFields(
+                            { name: '🌸 Community Member', value: `You are our precious member **#${member.guild.memberCount}**! 🎉`, inline: false },
+                            { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                        )
+                        .setTimestamp();
+
+                    if (isValidUrl(settings.image)) {
+                        previewEmbed.setImage(settings.image);
+                    }
+
+                    if (settings.thumbnail === 'avatar') {
+                        previewEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+                    } else if (isValidUrl(settings.thumbnail)) {
+                        previewEmbed.setThumbnail(settings.thumbnail);
+                    }
+
+                    if (footerMsg) {
+                        previewEmbed.setFooter({ text: `${footerMsg} (Setup Preview)`.slice(0, 2048) });
+                    }
+
+                    return await interaction.reply({ 
+                        content: `${pingMsg} *(Setup Preview)*`, 
+                        embeds: [previewEmbed], 
+                        flags: [6] 
+                    });
+                } catch (err) {
+                    console.error('❌ Welcome Preview Error:', err);
+                    return await interaction.reply({ 
+                        content: `❌ **Failed to generate preview:** \`${err.message}\``, 
+                        flags: [6] 
+                    }).catch(() => {});
+                }
             }
         }
 
@@ -299,14 +367,17 @@ const welcomeModule = (client) => {
             }
 
             if (interaction.customId === 'welc_modal_media') {
-                const image = interaction.fields.getTextInputValue('in_image');
-                const thumbnail = interaction.fields.getTextInputValue('in_thumb');
+                let image = interaction.fields.getTextInputValue('in_image');
+                let thumbnail = interaction.fields.getTextInputValue('in_thumb');
+                if (!isValidUrl(image)) image = 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif';
+                if (thumbnail !== 'avatar' && !isValidUrl(thumbnail)) thumbnail = 'avatar';
                 await WelcomeSettings.findOneAndUpdate({ guildId }, { image, thumbnail }, { upsert: true });
             }
 
             if (interaction.customId === 'welc_modal_style') {
-                const color = interaction.fields.getTextInputValue('in_color');
+                let color = interaction.fields.getTextInputValue('in_color');
                 const footer = interaction.fields.getTextInputValue('in_footer');
+                if (!isValidHex(color)) color = '#FF73FA';
                 await WelcomeSettings.findOneAndUpdate({ guildId }, { color, footer }, { upsert: true });
             }
 
