@@ -1025,6 +1025,54 @@ module.exports = async (client) => {
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 7)
 // File Path: modules/starry.js
 // ==========================================
+// Add this block inside client.on('interactionCreate') under if (interaction.isModalSubmit())
+if (interaction.customId === 'mod_warn_modal') {
+    const targetId = interaction.customId.split('_')[2] || interaction.fields.getTextInputValue('target_id');
+    const reason = interaction.fields.getTextInputValue('warn_reason') || 'No reason provided';
+    const caseId = Math.floor(Math.random() * 90000) + 10000;
+
+    const targetUser = await client.users.fetch(targetId).catch(() => null);
+
+    // 1. Send local confirmation response
+    await interaction.reply({
+        content: `⚠️ **Warned ${targetUser ? `<@${targetUser.id}>` : 'User'}!**\n**Reason:** ${reason}`,
+        flags: [EPHEMERAL_FLAG]
+    });
+
+    // 2. Dispatch DM to target user
+    if (targetUser) {
+        const dmEmbed = new EmbedBuilder()
+            .setColor('#FEE75C')
+            .setAuthor({ name: `${interaction.guild.name} | Security Notice`, iconURL: interaction.guild.iconURL({ dynamic: true }) })
+            .setTitle('⚠️ Moderation Warning Issued')
+            .setDescription(`You have received an official warning in **${interaction.guild.name}**.`)
+            .addFields(
+                { name: '👤 Moderator', value: `<@${interaction.user.id}> (\`${interaction.user.tag}\`)`, inline: true },
+                { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
+                { name: '📝 Reason', value: `>>> ${reason}`, inline: false }
+            )
+            .setTimestamp();
+
+        await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
+    }
+
+    // 3. Dispatch Wick-Style Log Embed to #logs-moderate channel
+    const logChannel = client.getLogChannel(interaction.guild, 'moderate');
+    if (logChannel && targetUser) {
+        const warnLogEmbed = createWickLogEmbed({
+            title: 'Member Warned',
+            emoji: '⚠️',
+            color: '#FEE75C',
+            target: targetUser,
+            moderator: interaction.user,
+            reason: reason,
+            extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+            guild: interaction.guild
+        });
+
+        await logChannel.send({ embeds: [warnLogEmbed] }).catch(() => {});
+    }
+}
 
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setup-starry') {
