@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ MODERATION SUITE - COMMAND SUITE & LOG BUILDER
+// 🛡️ MODERATION SUITE - COMMAND DATA & WICK EMBED BUILDER
 // File Path: mod.js (Part 1 of 2)
 // ==========================================
 const { 
@@ -14,8 +14,50 @@ const {
 
 const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
 
-// Helper function to prevent Discord.js EmbedBuilder null icon crashes
 const safeIcon = (url) => (url ? String(url) : undefined);
+
+// Extracts human moderator if action was performed via Dyno/Carl/Wick
+function parseModeratorDisplay(moderator, reason, guild) {
+    if (!moderator) return '`Audit Log / Discord UI`';
+    
+    if (!moderator.bot) {
+        return `<@${moderator.id}> (\`${moderator.tag || moderator.username}\`)`;
+    }
+
+    // Bot execution detected (e.g. Dyno, Carl-bot, Wick)
+    let humanModDisplay = null;
+
+    if (reason) {
+        // Match user ID in reason (e.g. "Mod ID: 123456789" or "<@123456789>")
+        const idMatch = reason.match(/(?:mod(?:erator)?|by|responsible|staff|user)[:\s]*<@!?(\d{17,19})>|(\d{17,19})/i);
+        if (idMatch) {
+            const foundId = idMatch[1] || idMatch[2];
+            if (foundId && foundId !== moderator.id) {
+                humanModDisplay = `<@${foundId}>`;
+            }
+        }
+
+        // Match username/tag in reason (e.g. "Responsible Mod: hotties" or "By hotties#0")
+        if (!humanModDisplay) {
+            const tagMatch = reason.match(/(?:responsible\s*mod(?:erator)?|mod(?:erator)?|by|issued\s*by)[:\s]*([a-zA-Z0-9_.]+)(?:#\d{4})?/i);
+            if (tagMatch && tagMatch[1]) {
+                const username = tagMatch[1].toLowerCase();
+                const foundMember = guild?.members?.cache?.find(m => m.user.username.toLowerCase() === username || m.user.tag.toLowerCase() === username);
+                if (foundMember) {
+                    humanModDisplay = `<@${foundMember.id}> (\`${foundMember.user.tag}\`)`;
+                } else {
+                    humanModDisplay = `\`${tagMatch[1]}\``;
+                }
+            }
+        }
+    }
+
+    if (humanModDisplay) {
+        return `${humanModDisplay} (using <@${moderator.id}>)`;
+    }
+
+    return `<@${moderator.id}> (\`${moderator.tag || moderator.username}\`) [Bot]`;
+}
 
 function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const targetAvatar = target?.displayAvatarURL ? target.displayAvatarURL() : guild?.iconURL();
@@ -34,13 +76,8 @@ function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, dur
         embed.addFields({ name: '👤 Target User', value: `<@${targetId}> (\`${targetTag}\`)\n**User ID:** \`${targetId}\``, inline: false });
     }
 
-    if (moderator) {
-        const modTag = moderator.tag || (moderator.user ? moderator.user.tag : moderator.username || 'System Automation');
-        const modId = moderator.id || 'N/A';
-        embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
-    } else {
-        embed.addFields({ name: '🛡️ Moderator', value: '`System Automation / Audit Log`', inline: false });
-    }
+    const modValue = parseModeratorDisplay(moderator, reason, guild);
+    embed.addFields({ name: '🛡️ Moderator', value: modValue, inline: false });
 
     if (caseId) {
         embed.addFields({ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true });
@@ -80,7 +117,6 @@ module.exports = {
         .setDescription('Supreme all-in-one moderation command suite')
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 
-        // BAN
         .addSubcommand(sub => sub
             .setName('ban')
             .setDescription('Ban a user from the server')
@@ -89,7 +125,6 @@ module.exports = {
             .addIntegerOption(opt => opt.setName('delete_days').setDescription('Days of messages to delete (0-7)').setMinValue(0).setMaxValue(7))
         )
 
-        // UNBAN
         .addSubcommand(sub => sub
             .setName('unban')
             .setDescription('Unban a user by ID')
@@ -97,7 +132,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the unban'))
         )
 
-        // KICK
         .addSubcommand(sub => sub
             .setName('kick')
             .setDescription('Kick a member from the server')
@@ -105,7 +139,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick'))
         )
 
-        // TIMEOUT
         .addSubcommand(sub => sub
             .setName('timeout')
             .setDescription('Timeout/Mute a member')
@@ -114,7 +147,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout'))
         )
 
-        // UNTIMEOUT
         .addSubcommand(sub => sub
             .setName('untimeout')
             .setDescription('Remove timeout from a member')
@@ -122,7 +154,6 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for untimeout'))
         )
 
-        // PURGE / CLEAR
         .addSubcommand(sub => sub
             .setName('purge')
             .setDescription('Delete/Clear bulk messages from a channel')
@@ -130,7 +161,6 @@ module.exports = {
             .addUserOption(opt => opt.setName('target').setDescription('Filter messages by target user'))
         )
 
-        // WARN
         .addSubcommand(sub => sub
             .setName('warn')
             .setDescription('Warn a user')
@@ -138,28 +168,24 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true))
         )
 
-        // WARNINGS
         .addSubcommand(sub => sub
             .setName('warnings')
             .setDescription('View warnings for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The user to inspect').setRequired(true))
         )
 
-        // CLEAR WARNS
         .addSubcommand(sub => sub
             .setName('clearwarns')
             .setDescription('Clear all warnings for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The user to clear warnings for').setRequired(true))
         )
 
-        // MOD PANEL
         .addSubcommand(sub => sub
             .setName('panel')
             .setDescription('Open an interactive Moderation Control Panel for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The member to moderate').setRequired(true))
         )
 
-        // LOCKDOWN
         .addSubcommand(sub => sub
             .setName('lockdown')
             .setDescription('Lock a text channel')
@@ -167,14 +193,12 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for lockdown'))
         )
 
-        // UNLOCK
         .addSubcommand(sub => sub
             .setName('unlock')
             .setDescription('Unlock a text channel')
             .addChannelOption(opt => opt.setName('channel').setDescription('Channel to unlock').addChannelTypes(ChannelType.GuildText))
         )
 
-        // NICKNAME
         .addSubcommand(sub => sub
             .setName('nick')
             .setDescription('Change a user\'s nickname')
@@ -558,4 +582,4 @@ module.exports = {
         }
     }
 };
-                                                                        
+            
