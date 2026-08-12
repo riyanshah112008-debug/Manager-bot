@@ -38,10 +38,20 @@ const setupWelcomeCommand = new SlashCommandBuilder()
             .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+function cleanImageUrl(str) {
+    if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar') return '';
+    let cleaned = str.trim().replace(/[\`\<\>]/g, '');
+    while (cleaned.endsWith('&') || cleaned.endsWith('?')) {
+        cleaned = cleaned.slice(0, -1);
+    }
+    return cleaned;
+}
+
 function isValidUrl(str) {
-    if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar' || str.trim() === '') return false;
+    const cleaned = cleanImageUrl(str);
+    if (!cleaned) return false;
     try {
-        const url = new URL(str.trim());
+        const url = new URL(cleaned);
         return url.protocol === 'http:' || url.protocol === 'https:';
     } catch {
         return false;
@@ -73,7 +83,9 @@ async function getWelcomeControlPanel(guildId, client) {
     const descDisplay = (settings.description && settings.description !== 'undefined') ? settings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
     const colorDisplay = isValidHex(settings.color) ? settings.color : '#FF73FA';
     const footerDisplay = (settings.footer && settings.footer !== 'undefined') ? settings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
-    const imageDisplay = isValidUrl(settings.image) ? `[View Image](${settings.image})` : '*None / Default GIF*';
+    
+    const activeImage = cleanImageUrl(settings.image);
+    const imageDisplay = isValidUrl(activeImage) ? `[View Media Link](${activeImage})` : '*Default GIF*';
 
     const panelEmbed = new EmbedBuilder()
         .setColor(colorDisplay)
@@ -85,7 +97,7 @@ async function getWelcomeControlPanel(guildId, client) {
             `**🏷️ Title:** \`${titleDisplay}\`\n` +
             `**📝 Description:** \`\`\`${descDisplay}\`\`\`\n` +
             `**🎨 Hex Color:** \`${colorDisplay}\` | **🌸 Footer:** \`${footerDisplay}\`\n` +
-            `**🖼️ Banner Image:** ${imageDisplay}`
+            `**🖼️ Banner Image/GIF:** ${imageDisplay}`
         )
         .addFields({
             name: '🔤 Supported Variables',
@@ -126,7 +138,6 @@ const welcomeModule = (client) => {
 
         const channel = interaction.options.getChannel('channel', true);
 
-        // PRESERVE EXISTING CUSTOM SETTINGS IF ALREADY SAVED
         let settings = await WelcomeSettings.findOne({ guildId: interaction.guildId });
         if (!settings) {
             settings = await WelcomeSettings.create({
@@ -182,14 +193,16 @@ const welcomeModule = (client) => {
                 )
                 .setTimestamp();
 
-            if (isValidUrl(config.image)) {
-                welcomeEmbed.setImage(config.image);
+            const imageUrl = cleanImageUrl(config.image);
+            if (isValidUrl(imageUrl)) {
+                welcomeEmbed.setImage(imageUrl);
             }
 
+            const thumbUrl = cleanImageUrl(config.thumbnail);
             if (config.thumbnail === 'avatar') {
                 welcomeEmbed.setThumbnail(member.user.displayAvatarURL({ size: 256 }));
-            } else if (isValidUrl(config.thumbnail)) {
-                welcomeEmbed.setThumbnail(config.thumbnail);
+            } else if (isValidUrl(thumbUrl)) {
+                welcomeEmbed.setThumbnail(thumbUrl);
             }
 
             if (footerMsg) {
@@ -201,7 +214,7 @@ const welcomeModule = (client) => {
             console.error('[Welcome Engine Error]:', error);
         }
     });
-            // ==========================================
+        // ==========================================
 // 🌸 INTERACTIVE WELCOME SUITE - INTERACTION CONTROLLERS
 // File Path: welcome.js (Part 2 of 2)
 // ==========================================
@@ -245,21 +258,22 @@ const welcomeModule = (client) => {
                 return interaction.showModal(modal);
             }
 
-            // EDIT BANNER & THUMBNAIL MODAL
+            // EDIT BANNER & THUMBNAIL MODAL (USES PARAGRAPH STYLE TO SUPPORT LONG DISCORD CDN URLS)
             if (interaction.customId === 'welc_btn_media') {
                 const modal = new ModalBuilder().setCustomId('welc_modal_media').setTitle('Edit Banner & Thumbnail');
 
                 const imageInput = new TextInputBuilder()
                     .setCustomId('in_image')
-                    .setLabel('Banner Image URL (GIF or PNG)')
-                    .setStyle(TextInputStyle.Short)
-                    .setValue(isValidUrl(settings.image) ? settings.image : 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
+                    .setLabel('Banner Image/GIF URL')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('Paste image/GIF URL (e.g., https://... or Discord CDN link)')
+                    .setValue(cleanImageUrl(settings.image) || 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
                     .setRequired(false);
 
                 const thumbInput = new TextInputBuilder()
                     .setCustomId('in_thumb')
                     .setLabel('Thumbnail ("avatar" or custom image URL)')
-                    .setStyle(TextInputStyle.Short)
+                    .setStyle(TextInputStyle.Paragraph)
                     .setValue((settings.thumbnail && settings.thumbnail !== 'undefined') ? settings.thumbnail : 'avatar')
                     .setRequired(false);
 
@@ -304,10 +318,9 @@ const welcomeModule = (client) => {
                 return interaction.showModal(modal);
             }
 
-            // TEST PREVIEW CARD HANDLER (RE-FETCHES LATEST MONGODB SAVED DATA)
+            // TEST PREVIEW CARD HANDLER
             if (interaction.customId === 'welc_btn_preview') {
                 try {
-                    // Force fetch latest saved settings from database
                     const latestSettings = await WelcomeSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const member = interaction.member;
 
@@ -331,14 +344,16 @@ const welcomeModule = (client) => {
                         )
                         .setTimestamp();
 
-                    if (isValidUrl(latestSettings.image)) {
-                        previewEmbed.setImage(latestSettings.image);
+                    const imageUrl = cleanImageUrl(latestSettings.image);
+                    if (isValidUrl(imageUrl)) {
+                        previewEmbed.setImage(imageUrl);
                     }
 
+                    const thumbUrl = cleanImageUrl(latestSettings.thumbnail);
                     if (latestSettings.thumbnail === 'avatar') {
                         previewEmbed.setThumbnail(member.user.displayAvatarURL({ size: 256 }));
-                    } else if (isValidUrl(latestSettings.thumbnail)) {
-                        previewEmbed.setThumbnail(latestSettings.thumbnail);
+                    } else if (isValidUrl(thumbUrl)) {
+                        previewEmbed.setThumbnail(thumbUrl);
                     }
 
                     if (footerMsg) {
@@ -373,10 +388,22 @@ const welcomeModule = (client) => {
             }
 
             if (interaction.customId === 'welc_modal_media') {
-                let image = interaction.fields.getTextInputValue('in_image');
-                let thumbnail = interaction.fields.getTextInputValue('in_thumb');
-                if (image && !isValidUrl(image)) image = 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif';
-                if (thumbnail !== 'avatar' && !isValidUrl(thumbnail)) thumbnail = 'avatar';
+                let imageRaw = interaction.fields.getTextInputValue('in_image');
+                let thumbnailRaw = interaction.fields.getTextInputValue('in_thumb');
+                
+                let image = cleanImageUrl(imageRaw);
+                let thumbnail = cleanImageUrl(thumbnailRaw);
+
+                if (!isValidUrl(image)) {
+                    image = 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif';
+                }
+
+                if (thumbnailRaw.trim().toLowerCase() === 'avatar') {
+                    thumbnail = 'avatar';
+                } else if (!isValidUrl(thumbnail)) {
+                    thumbnail = 'avatar';
+                }
+
                 await WelcomeSettings.findOneAndUpdate({ guildId }, { image, thumbnail }, { upsert: true });
             }
 
