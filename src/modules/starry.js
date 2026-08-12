@@ -193,7 +193,8 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
 
 // ==========================================
 // 🛡️ WICK-STYLE LOG EMBED BUILDER
-// Guarantees Moderator Name, User Tags, IDs, Timestamps, and Case Numbers
+// Standardized embed formatting matching Wick Bot layout
+// Explicitly includes Target, Moderator Name, User IDs, Case Number, and Timestamps
 // ==========================================
 function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const embed = new EmbedBuilder()
@@ -395,6 +396,11 @@ const modPanelSlashCommand = new SlashCommandBuilder()
     .setDescription('🛡️ Open Moderation Control Center for a user')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addUserOption(o => o.setName('target').setDescription('Target user to moderate').setRequired(true));
+
+const setupStarryCommand = new SlashCommandBuilder()
+    .setName('setup-starry')
+    .setDescription('✨ Autonomous Server Setup')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
@@ -847,36 +853,55 @@ module.exports = async (client) => {
 // File Path: modules/starry.js
 // ==========================================
 
-    // Single unified interaction router preventing double event binding
+    // Single unified interaction router preventing double event binding & timeout errors
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
 
         // ==========================================
-        // 🛡️ MODPANEL SLASH COMMAND DISPATCHER
+        // ⚡ INSTANT DEFERRAL TO PREVENT 3s TIMEOUT
         // ==========================================
-        if (interaction.isChatInputCommand() && interaction.commandName === 'modpanel') {
-            const targetUser = interaction.options.getUser('target', true);
+        if (interaction.isChatInputCommand()) {
+            if (interaction.commandName === 'setup-starry') {
+                if (!interaction.deferred && !interaction.replied) {
+                    await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
+                try {
+                    const result = await provisionMasterServerStructure(interaction);
+                    const embed = new EmbedBuilder()
+                        .setColor('#2ecc71')
+                        .setTitle('✨ Autonomous Server Setup Complete!')
+                        .setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
+                    return interaction.editReply({ embeds: [embed] });
+                } catch (err) {
+                    console.error('❌ Setup Error:', err);
+                    return interaction.editReply({ content: `❌ **Setup failed:** \`${err.message}\`` });
+                }
+            }
 
-            const panelEmbed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setAuthor({ name: `${interaction.guild.name} | Security Control`, iconURL: interaction.guild.iconURL({ dynamic: true }) })
-                .setTitle(`🛡️ Moderation Control Center: ${targetUser.username}`)
-                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-                .setDescription(
-                    `Select an enforcement action below to perform on <@${targetUser.id}>.\n\n` +
-                    `*Clicking a button will prompt a pop-up window for inputting reasons and durations.*`
-                )
-                .setFooter({ text: `Target ID: ${targetUser.id} • Starry Security Engine`, iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
+            if (interaction.commandName === 'modpanel') {
+                const targetUser = interaction.options.getUser('target', true);
 
-            const actionRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`mp_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Primary).setEmoji('⚠️'),
-                new ButtonBuilder().setCustomId(`mp_timeout_${targetUser.id}`).setLabel('Timeout').setStyle(ButtonStyle.Secondary).setEmoji('⏰'),
-                new ButtonBuilder().setCustomId(`mp_kick_${targetUser.id}`).setLabel('Kick').setStyle(ButtonStyle.Danger).setEmoji('🚪'),
-                new ButtonBuilder().setCustomId(`mp_ban_${targetUser.id}`).setLabel('Ban').setStyle(ButtonStyle.Danger).setEmoji('🔨')
-            );
+                const panelEmbed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setAuthor({ name: `${interaction.guild.name} | Security Control`, iconURL: interaction.guild.iconURL({ dynamic: true }) })
+                    .setTitle(`🛡️ Moderation Control Center: ${targetUser.username}`)
+                    .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                    .setDescription(
+                        `Select an enforcement action below to perform on <@${targetUser.id}>.\n\n` +
+                        `*Clicking a button will prompt a pop-up window for inputting reasons and durations.*`
+                    )
+                    .setFooter({ text: `Target ID: ${targetUser.id} • Starry Security Engine`, iconURL: client.user.displayAvatarURL() })
+                    .setTimestamp();
 
-            return interaction.reply({ embeds: [panelEmbed], components: [actionRow], flags: [EPHEMERAL_FLAG] });
+                const actionRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`mp_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Primary).setEmoji('⚠️'),
+                    new ButtonBuilder().setCustomId(`mp_timeout_${targetUser.id}`).setLabel('Timeout').setStyle(ButtonStyle.Secondary).setEmoji('⏰'),
+                    new ButtonBuilder().setCustomId(`mp_kick_${targetUser.id}`).setLabel('Kick').setStyle(ButtonStyle.Danger).setEmoji('🚪'),
+                    new ButtonBuilder().setCustomId(`mp_ban_${targetUser.id}`).setLabel('Ban').setStyle(ButtonStyle.Danger).setEmoji('🔨')
+                );
+
+                return interaction.reply({ embeds: [panelEmbed], components: [actionRow], flags: [EPHEMERAL_FLAG] });
+            }
         }
 
         // ==========================================
@@ -1420,6 +1445,7 @@ module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.executeFullGuildBackup = executeFullGuildBackup;
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
 module.exports.modPanelPayload = modPanelSlashCommand.toJSON();
+module.exports.setupStarryPayload = setupStarryCommand.toJSON();
 module.exports.modMasterPayload = modMasterCommand.toJSON();
 module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
 module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
