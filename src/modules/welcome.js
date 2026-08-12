@@ -21,7 +21,7 @@ const welcomeSchema = new mongoose.Schema({
     title: { type: String, default: '✨ WELCOME TO {server} ✨' },
     description: { type: String, default: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟' },
     color: { type: String, default: '#FF73FA' },
-    image: { type: String, default: 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif' },
+    image: { type: String, default: 'https://i.imgur.com/vH1O33q.gif' },
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '✨ Enjoy your stellar journey in {server}! ✨' },
     pingContent: { type: String, default: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂' }
@@ -40,11 +40,7 @@ const setupWelcomeCommand = new SlashCommandBuilder()
 
 function cleanImageUrl(str) {
     if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar') return '';
-    let cleaned = str.trim().replace(/[\`\<\>]/g, '');
-    while (cleaned.endsWith('&') || cleaned.endsWith('?')) {
-        cleaned = cleaned.slice(0, -1);
-    }
-    return cleaned;
+    return str.trim().replace(/[\`\<\>\s]/g, '');
 }
 
 function isValidUrl(str) {
@@ -146,7 +142,7 @@ const welcomeModule = (client) => {
                 title: '✨ WELCOME TO {server} ✨',
                 description: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟',
                 color: '#FF73FA',
-                image: 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif',
+                image: 'https://i.imgur.com/vH1O33q.gif',
                 thumbnail: 'avatar',
                 footer: '✨ Enjoy your stellar journey in {server}! ✨',
                 pingContent: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂'
@@ -214,7 +210,7 @@ const welcomeModule = (client) => {
             console.error('[Welcome Engine Error]:', error);
         }
     });
-        // ==========================================
+                // ==========================================
 // 🌸 INTERACTIVE WELCOME SUITE - INTERACTION CONTROLLERS
 // File Path: welcome.js (Part 2 of 2)
 // ==========================================
@@ -258,7 +254,7 @@ const welcomeModule = (client) => {
                 return interaction.showModal(modal);
             }
 
-            // EDIT BANNER & THUMBNAIL MODAL (USES PARAGRAPH STYLE TO SUPPORT LONG DISCORD CDN URLS)
+            // EDIT BANNER & THUMBNAIL MODAL
             if (interaction.customId === 'welc_btn_media') {
                 const modal = new ModalBuilder().setCustomId('welc_modal_media').setTitle('Edit Banner & Thumbnail');
 
@@ -267,7 +263,7 @@ const welcomeModule = (client) => {
                     .setLabel('Banner Image/GIF URL')
                     .setStyle(TextInputStyle.Paragraph)
                     .setPlaceholder('Paste image/GIF URL (e.g., https://... or Discord CDN link)')
-                    .setValue(cleanImageUrl(settings.image) || 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
+                    .setValue(cleanImageUrl(settings.image) || 'https://i.imgur.com/vH1O33q.gif')
                     .setRequired(false);
 
                 const thumbInput = new TextInputBuilder()
@@ -395,7 +391,7 @@ const welcomeModule = (client) => {
                 let thumbnail = cleanImageUrl(thumbnailRaw);
 
                 if (!isValidUrl(image)) {
-                    image = 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif';
+                    image = 'https://i.imgur.com/vH1O33q.gif';
                 }
 
                 if (thumbnailRaw.trim().toLowerCase() === 'avatar') {
