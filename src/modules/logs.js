@@ -1,5 +1,5 @@
 // ==========================================
-// 📜 AUDIT LOG ENGINE - MEMBER & VOICE EVENTS
+// 📜 AUDIT LOG SUITE - MEMBER, VOICE & EVENT LISTENERS
 // File Path: logs.js (Part 1 of 2)
 // ==========================================
 const { 
@@ -28,12 +28,56 @@ const setLogsCommand = new SlashCommandBuilder()
             .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
+const safeIcon = (url) => (url ? String(url) : undefined);
+
+function parseModeratorDisplay(moderator, reason, guild) {
+    if (!moderator) return '`Audit Log / Discord UI`';
+    
+    if (!moderator.bot) {
+        return `<@${moderator.id}> (\`${moderator.tag || moderator.username}\`)`;
+    }
+
+    let humanModDisplay = null;
+
+    if (reason) {
+        const idMatch = reason.match(/(?:mod(?:erator)?|by|responsible|staff|user)[:\s]*<@!?(\d{17,19})>|(\d{17,19})/i);
+        if (idMatch) {
+            const foundId = idMatch[1] || idMatch[2];
+            if (foundId && foundId !== moderator.id) {
+                humanModDisplay = `<@${foundId}>`;
+            }
+        }
+
+        if (!humanModDisplay) {
+            const tagMatch = reason.match(/(?:responsible\s*mod(?:erator)?|mod(?:erator)?|by|issued\s*by)[:\s]*([a-zA-Z0-9_.]+)(?:#\d{4})?/i);
+            if (tagMatch && tagMatch[1]) {
+                const username = tagMatch[1].toLowerCase();
+                const foundMember = guild?.members?.cache?.find(m => m.user.username.toLowerCase() === username || m.user.tag.toLowerCase() === username);
+                if (foundMember) {
+                    humanModDisplay = `<@${foundMember.id}> (\`${foundMember.user.tag}\`)`;
+                } else {
+                    humanModDisplay = `\`${tagMatch[1]}\``;
+                }
+            }
+        }
+    }
+
+    if (humanModDisplay) {
+        return `${humanModDisplay} (using <@${moderator.id}>)`;
+    }
+
+    return `<@${moderator.id}> (\`${moderator.tag || moderator.username}\`) [Bot]`;
+}
+
 function formatWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, extraFields = [], guild }) {
+    const targetAvatar = target?.displayAvatarURL ? target.displayAvatarURL() : guild?.iconURL();
+    const guildAvatar = guild?.iconURL();
+
     const embed = new EmbedBuilder()
         .setColor(color || '#ED4245')
         .setAuthor({ 
             name: `${emoji ? emoji + ' ' : ''}${title}`, 
-            iconURL: target?.displayAvatarURL ? target.displayAvatarURL({ dynamic: true }) : (guild?.iconURL({ dynamic: true }) || null)
+            iconURL: safeIcon(targetAvatar)
         });
 
     if (target) {
@@ -42,13 +86,8 @@ function formatWickLogEmbed({ title, emoji, color, target, moderator, reason, du
         embed.addFields({ name: '👤 Target User', value: `<@${targetId}> (\`${targetTag}\`)\n**User ID:** \`${targetId}\``, inline: false });
     }
 
-    if (moderator) {
-        const modTag = moderator.tag || (moderator.user ? moderator.user.tag : moderator.username || 'System Automation');
-        const modId = moderator.id || 'N/A';
-        embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
-    } else {
-        embed.addFields({ name: '🛡️ Moderator', value: '`Audit Log / Discord UI`', inline: false });
-    }
+    const modValue = parseModeratorDisplay(moderator, reason, guild);
+    embed.addFields({ name: '🛡️ Moderator', value: modValue, inline: false });
 
     if (duration) {
         embed.addFields({ name: '⏳ Duration', value: `\`${duration}\``, inline: true });
@@ -71,7 +110,7 @@ function formatWickLogEmbed({ title, emoji, color, target, moderator, reason, du
 
     embed.setFooter({ 
         text: `User ID: ${target?.id || 'N/A'} • Starry Security Engine`, 
-        iconURL: guild?.iconURL({ dynamic: true }) || null 
+        iconURL: safeIcon(guildAvatar) 
     });
     embed.setTimestamp();
 
@@ -310,10 +349,77 @@ module.exports = (client) => {
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
     });
-            // ==========================================
-// 📜 AUDIT LOG ENGINE - MESSAGES & SYSTEM EVENTS
+                                            // ==========================================
+// 📜 AUDIT LOG SUITE - MESSAGES, PURGE, WARN DETECTOR & SYSTEM EVENTS
 // File Path: logs.js (Part 2 of 2)
 // ==========================================
+    // ==========================================
+    // ⚠️ THIRD-PARTY BOT WARNING LISTENER (Dyno / Carl / MEE6 / Wick Warn Detector)
+    // Detects when another bot (Dyno) sends a warning message in any channel
+    // and automatically logs it to #logs-moderate with the human moderator extracted!
+    // ==========================================
+    client.on(Events.MessageCreate, async (message) => {
+        if (!message.guild || !message.author.bot) return;
+
+        const isDynoWarn = (message.content && message.content.toLowerCase().includes('has been warned')) ||
+                           (message.embeds.length > 0 && message.embeds[0].description?.toLowerCase().includes('has been warned'));
+
+        if (!isDynoWarn) return;
+
+        const modChannel = await resolveLogChannel(message.guild, 'moderate');
+        if (!modChannel || message.channel.id === modChannel.id) return;
+
+        let targetUser = message.mentions.users.first();
+        let reason = 'No reason provided';
+        let humanModerator = null;
+
+        if (message.reference) {
+            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+            if (refMsg) {
+                humanModerator = refMsg.author;
+            }
+        }
+
+        if (!humanModerator) {
+            const recentMsgs = await message.channel.messages.fetch({ limit: 10 }).catch(() => null);
+            if (recentMsgs) {
+                const triggerMsg = recentMsgs.find(m => !m.author.bot && (
+                    m.content.toLowerCase().includes('warn') || 
+                    m.content.toLowerCase().includes('dyno')
+                ));
+                if (triggerMsg) humanModerator = triggerMsg.author;
+            }
+        }
+
+        if (!targetUser) {
+            const textToSearch = message.content || message.embeds[0]?.description || '';
+            const idMatch = textToSearch.match(/\d{17,19}/);
+            if (idMatch) {
+                targetUser = await client.users.fetch(idMatch[0]).catch(() => null);
+            }
+        }
+
+        if (message.embeds.length > 0) {
+            const fields = message.embeds[0].fields || [];
+            const reasonField = fields.find(f => f.name.toLowerCase().includes('reason'));
+            if (reasonField) reason = reasonField.value;
+        }
+
+        const caseId = Math.floor(Math.random() * 90000) + 10000;
+        const embed = formatWickLogEmbed({
+            title: 'Member Warned',
+            emoji: '⚠️',
+            color: '#FEE75C',
+            target: targetUser || { id: 'Unknown', tag: 'Warned Member' },
+            moderator: humanModerator || message.author,
+            reason: reason,
+            extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+            guild: message.guild
+        });
+
+        await modChannel.send({ embeds: [embed] }).catch(() => {});
+    });
+
     client.on(Events.MessageDelete, async (message) => {
         if (!message.guild) return;
 
@@ -569,4 +675,4 @@ module.exports = (client) => {
 
 module.exports.LogSettings = LogSettings;
 module.exports.setLogsData = setLogsCommand;
-    
+                                       
