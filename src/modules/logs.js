@@ -1,6 +1,6 @@
 // ==========================================
-// 📜 STARRY SUPREME AUDIT LOG ENGINE (PART 1 OF 2)
-// File Path: logs.js
+// 📜 AUDIT LOG ENGINE - MEMBER & VOICE EVENTS
+// File Path: logs.js (Part 1 of 2)
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -12,7 +12,6 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 
-// 🗄️ MONGOOSE LOG SETTINGS SCHEMA
 const logSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     logChannel: { type: String, default: null }
@@ -29,14 +28,63 @@ const setLogsCommand = new SlashCommandBuilder()
             .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
+function formatWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, extraFields = [], guild }) {
+    const embed = new EmbedBuilder()
+        .setColor(color || '#ED4245')
+        .setAuthor({ 
+            name: `${emoji ? emoji + ' ' : ''}${title}`, 
+            iconURL: target?.displayAvatarURL ? target.displayAvatarURL({ dynamic: true }) : (guild?.iconURL({ dynamic: true }) || null)
+        });
+
+    if (target) {
+        const targetTag = target.tag || (target.user ? target.user.tag : target.username || 'Unknown User');
+        const targetId = target.id || 'N/A';
+        embed.addFields({ name: '👤 Target User', value: `<@${targetId}> (\`${targetTag}\`)\n**User ID:** \`${targetId}\``, inline: false });
+    }
+
+    if (moderator) {
+        const modTag = moderator.tag || (moderator.user ? moderator.user.tag : moderator.username || 'System Automation');
+        const modId = moderator.id || 'N/A';
+        embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
+    } else {
+        embed.addFields({ name: '🛡️ Moderator', value: '`Audit Log / Discord UI`', inline: false });
+    }
+
+    if (duration) {
+        embed.addFields({ name: '⏳ Duration', value: `\`${duration}\``, inline: true });
+    }
+
+    if (expiresAt) {
+        const timestamp = Math.floor(new Date(expiresAt).getTime() / 1000);
+        embed.addFields({ name: '⏰ Until', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)`, inline: true });
+    }
+
+    if (reason) {
+        embed.addFields({ name: '📝 Reason', value: `>>> ${reason}`, inline: false });
+    }
+
+    if (extraFields.length > 0) {
+        for (const field of extraFields) {
+            embed.addFields(field);
+        }
+    }
+
+    embed.setFooter({ 
+        text: `User ID: ${target?.id || 'N/A'} • Starry Security Engine`, 
+        iconURL: guild?.iconURL({ dynamic: true }) || null 
+    });
+    embed.setTimestamp();
+
+    return embed;
+}
+
 module.exports = (client) => {
 
-    // Smart Channel Resolver: Uses client.getLogChannel if available, else MongoDB fallback
     async function resolveLogChannel(guild, type = 'misc') {
         if (!guild) return null;
 
         if (typeof client.getLogChannel === 'function') {
-            const smartChannel = client.getLogChannel(guild, type);
+            const smartChannel = await client.getLogChannel(guild, type);
             if (smartChannel) return smartChannel;
         }
 
@@ -80,24 +128,22 @@ module.exports = (client) => {
         if (interaction.commandName === 'setlogs') await handleSetLogs(interaction);
     });
 
-    // ==========================================
-    // 📥 2. MEMBER EVENTS (JOIN, LEAVE, UPDATE)
-    // ==========================================
-
     client.on(Events.GuildMemberAdd, async (member) => {
         const logChannel = await resolveLogChannel(member.guild, 'access');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#23A559')
-            .setAuthor({ name: '📥 Member Joined', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`${member.user} (\`${member.user.tag}\`) entered the server.`)
-            .addFields(
-                { name: '👤 Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
-                { name: '👥 Member Count', value: `\`${member.guild.memberCount}\``, inline: true }
-            )
-            .setFooter({ text: `User ID: ${member.id}` })
-            .setTimestamp();
+        const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
+        const embed = formatWickLogEmbed({
+            title: 'Member Joined',
+            emoji: '📥',
+            color: '#2ECC71',
+            target: member.user,
+            extraFields: [
+                { name: '📅 Account Created', value: `<t:${createdTimestamp}:F> (<t:${createdTimestamp}:R>)`, inline: false },
+                { name: '📊 Server Census', value: `Member **#${member.guild.memberCount}**`, inline: true }
+            ],
+            guild: member.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
@@ -106,15 +152,16 @@ module.exports = (client) => {
         const logChannel = await resolveLogChannel(member.guild, 'access');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#DA373C')
-            .setAuthor({ name: '📤 Member Left', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-            .setDescription(`${member.user} (\`${member.user.tag}\`) left or was removed from the server.`)
-            .addFields(
-                { name: '👥 Member Count', value: `\`${member.guild.memberCount}\``, inline: true }
-            )
-            .setFooter({ text: `User ID: ${member.id}` })
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Member Left',
+            emoji: '📤',
+            color: '#ED4245',
+            target: member.user,
+            extraFields: [
+                { name: '📊 Server Census', value: `Remaining Members: **${member.guild.memberCount}**`, inline: true }
+            ],
+            guild: member.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
@@ -130,51 +177,76 @@ module.exports = (client) => {
 
         if (addedRoles.size > 0 || removedRoles.size > 0) {
             const roleChannel = await resolveLogChannel(newMember.guild, 'roles') || logChannel;
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
-                .setFooter({ text: `User ID: ${newMember.id}` })
-                .setTimestamp();
 
             if (addedRoles.size > 0) {
-                embed.setTitle('🛡️ Role Assigned')
-                     .setDescription(`**Added to ${newMember.user}:** ${addedRoles.map(r => r.toString()).join(', ')}`);
+                const embed = formatWickLogEmbed({
+                    title: 'Member Granted Role(s)',
+                    emoji: '🛡️',
+                    color: '#2ECC71',
+                    target: newMember.user,
+                    extraFields: [{ name: '➕ Added Role(s)', value: addedRoles.map(r => r.toString()).join(', '), inline: false }],
+                    guild: newMember.guild
+                });
+                return roleChannel.send({ embeds: [embed] }).catch(() => {});
             } else {
-                embed.setTitle('🛡️ Role Removed')
-                     .setDescription(`**Removed from ${newMember.user}:** ${removedRoles.map(r => r.toString()).join(', ')}`);
+                const embed = formatWickLogEmbed({
+                    title: 'Member Removed Role(s)',
+                    emoji: '🛑',
+                    color: '#ED4245',
+                    target: newMember.user,
+                    extraFields: [{ name: '➖ Removed Role(s)', value: removedRoles.map(r => r.toString()).join(', '), inline: false }],
+                    guild: newMember.guild
+                });
+                return roleChannel.send({ embeds: [embed] }).catch(() => {});
             }
-            return roleChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
         if (oldMember.nickname !== newMember.nickname) {
-            const embed = new EmbedBuilder()
-                .setColor('#FEE75C')
-                .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
-                .setTitle('🏷️ Nickname Changed')
-                .setDescription(`**User:** ${newMember.user}\n**Old:** \`${oldMember.nickname || 'None'}\`\n**New:** \`${newMember.nickname || 'None'}\``)
-                .setFooter({ text: `User ID: ${newMember.id}` })
-                .setTimestamp();
+            const embed = formatWickLogEmbed({
+                title: 'Member Nickname Changed',
+                emoji: '🏷️',
+                color: '#5865F2',
+                target: newMember.user,
+                extraFields: [
+                    { name: '⬅️ Before', value: `\`${oldMember.nickname || oldMember.user.username}\``, inline: true },
+                    { name: '➡️ After', value: `\`${newMember.nickname || newMember.user.username}\``, inline: true }
+                ],
+                guild: newMember.guild
+            });
 
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
         if (!oldMember.isCommunicationDisabled() && newMember.isCommunicationDisabled()) {
             const modChannel = await resolveLogChannel(newMember.guild, 'moderate') || logChannel;
-            const embed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
-                .setTitle('⏰ Member Timed Out')
-                .setDescription(`**User:** ${newMember.user}\n**Until:** <t:${Math.floor(newMember.communicationDisabledUntilTimestamp / 1000)}:F>`)
-                .setFooter({ text: `User ID: ${newMember.id}` })
-                .setTimestamp();
+
+            let executor = null;
+            let auditReason = 'No reason provided';
+            try {
+                await new Promise(r => setTimeout(r, 1000));
+                const fetchedLogs = await newMember.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberUpdate });
+                const logEntry = fetchedLogs.entries.first();
+                if (logEntry && logEntry.target.id === newMember.id && (Date.now() - logEntry.createdTimestamp) < 10000) {
+                    executor = logEntry.executor;
+                    auditReason = logEntry.reason || 'No reason provided';
+                }
+            } catch (e) {}
+
+            const embed = formatWickLogEmbed({
+                title: 'Member Timed Out',
+                emoji: '⏰',
+                color: '#ED4245',
+                target: newMember.user,
+                moderator: executor,
+                reason: auditReason,
+                expiresAt: newMember.communicationDisabledUntilTimestamp,
+                guild: newMember.guild
+            });
 
             return modChannel.send({ embeds: [embed] }).catch(() => {});
         }
     });
 
-    // ==========================================
-    // 🎙️ 3. VOICE CHANNEL AUDIT LOGS
-    // ==========================================
     client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         const guild = newState.guild || oldState.guild;
         const logChannel = await resolveLogChannel(guild, 'voice');
@@ -183,94 +255,88 @@ module.exports = (client) => {
         const user = newState.member.user;
 
         if (!oldState.channelId && newState.channelId) {
-            const embed = new EmbedBuilder()
-                .setColor('#23A559')
-                .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) })
-                .setTitle('🎙️ Voice Channel Joined')
-                .setDescription(`${user} joined **${newState.channel.name}**`)
-                .setFooter({ text: `User ID: ${user.id}` })
-                .setTimestamp();
+            const embed = formatWickLogEmbed({
+                title: 'Joined Voice Channel',
+                emoji: '🔊',
+                color: '#2ECC71',
+                target: user,
+                extraFields: [{ name: '🎙️ Voice Channel', value: `<#${newState.channelId}>`, inline: true }],
+                guild
+            });
 
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
         if (oldState.channelId && !newState.channelId) {
-            const embed = new EmbedBuilder()
-                .setColor('#DA373C')
-                .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) })
-                .setTitle('🎙️ Voice Channel Left')
-                .setDescription(`${user} left **${oldState.channel.name}**`)
-                .setFooter({ text: `User ID: ${user.id}` })
-                .setTimestamp();
+            const embed = formatWickLogEmbed({
+                title: 'Left Voice Channel',
+                emoji: '🔇',
+                color: '#ED4245',
+                target: user,
+                extraFields: [{ name: '🎙️ Voice Channel', value: `<#${oldState.channelId}>`, inline: true }],
+                guild
+            });
 
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
         if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-            const embed = new EmbedBuilder()
-                .setColor('#FEE75C')
-                .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) })
-                .setTitle('🔄 Voice Channel Switched')
-                .setDescription(`${user} moved from **${oldState.channel.name}** ➡️ **${newState.channel.name}**`)
-                .setFooter({ text: `User ID: ${user.id}` })
-                .setTimestamp();
+            const embed = formatWickLogEmbed({
+                title: 'Moved Voice Channel',
+                emoji: '🔀',
+                color: '#5865F2',
+                target: user,
+                extraFields: [
+                    { name: '⬅️ From Channel', value: `<#${oldState.channelId}>`, inline: true },
+                    { name: '➡️ To Channel', value: `<#${newState.channelId}>`, inline: true }
+                ],
+                guild
+            });
 
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
 
         if (oldState.serverMute !== newState.serverMute || oldState.serverDeaf !== newState.serverDeaf) {
             const action = newState.serverMute ? 'Muted' : newState.serverDeaf ? 'Deafened' : 'Unmuted/Undeafened';
-            const embed = new EmbedBuilder()
-                .setColor('#E91E63')
-                .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) })
-                .setTitle(`🎙️ Staff Voice State Change: ${action}`)
-                .setDescription(`${user} was server-${action.toLowerCase()} in **${newState.channel.name}**.`)
-                .setFooter({ text: `User ID: ${user.id}` })
-                .setTimestamp();
+            const embed = formatWickLogEmbed({
+                title: `Staff Voice State: ${action}`,
+                emoji: '🎙️',
+                color: '#E91E63',
+                target: user,
+                extraFields: [{ name: '🎙️ Voice Channel', value: `<#${newState.channelId}>`, inline: true }],
+                guild
+            });
 
             return logChannel.send({ embeds: [embed] }).catch(() => {});
         }
     });
-    // ==========================================
-    // 💬 4. MESSAGE AUDIT LOGS (INCLUDES SELF-PURGE)
-    // ==========================================
-
-    // SINGLE MESSAGE DELETE (User & Self-Purge/Bot Messages)
+            // ==========================================
+// 📜 AUDIT LOG ENGINE - MESSAGES & SYSTEM EVENTS
+// File Path: logs.js (Part 2 of 2)
+// ==========================================
     client.on(Events.MessageDelete, async (message) => {
         if (!message.guild) return;
 
         const logChannel = await resolveLogChannel(message.guild, 'messages');
         if (!logChannel) return;
-
-        // Prevent logging deletions happening inside the log channel itself
         if (message.channel.id === logChannel.id) return;
 
-        const isBotMessage = message.author?.bot;
-        const authorTag = message.author 
-            ? `${message.author.tag} ${isBotMessage ? '🤖 [Bot/Self-Purge]' : ''}` 
-            : 'Unknown Author (Uncached)';
-        
-        const authorAvatar = message.author 
-            ? message.author.displayAvatarURL({ dynamic: true }) 
-            : message.guild.iconURL({ dynamic: true });
-
-        const embed = new EmbedBuilder()
-            .setColor(isBotMessage ? '#7289DA' : '#ED4245')
-            .setAuthor({ name: authorTag, iconURL: authorAvatar })
-            .setTitle(isBotMessage ? `🤖 Self-Purge / Bot Message Deleted in #${message.channel.name}` : `🗑️ Message Deleted in #${message.channel.name}`)
-            .setDescription(message.content ? message.content : '*[No text content / Attachment or Embed only]*')
-            .addFields(
-                { name: 'Channel', value: `${message.channel}`, inline: true },
-                { name: 'Author', value: message.author ? `${message.author}` : '`Unknown`', inline: true },
-                { name: 'Type', value: isBotMessage ? '`🤖 Bot / Self-Purge`' : '`👤 User Message`', inline: true }
-            )
-            .setFooter({ text: `User ID: ${message.author?.id || 'N/A'} | Message ID: ${message.id}` })
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Message Deleted',
+            emoji: '🗑️',
+            color: '#ED4245',
+            target: message.author || { id: 'Unknown', tag: 'Unknown' },
+            extraFields: [
+                { name: '📺 Channel', value: `<#${message.channel.id}> (\`${message.channel.name}\`)`, inline: true },
+                { name: '🆔 Message ID', value: `\`${message.id}\``, inline: true },
+                { name: '📝 Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or attachment]*', inline: false }
+            ],
+            guild: message.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    // MESSAGE EDIT LOGS
     client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
         if (newMessage.partial) {
             try { await newMessage.fetch(); } catch (e) { return; }
@@ -282,38 +348,34 @@ module.exports = (client) => {
         const logChannel = await resolveLogChannel(newMessage.guild, 'messages');
         if (!logChannel) return;
 
-        const beforeText = oldMessage.partial || !oldMessage.content 
-            ? '*[Unknown / Message sent while bot was offline]*' 
-            : oldMessage.content;
-
-        const afterText = newMessage.content || '*[Empty]*';
-
-        const embed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setAuthor({ name: newMessage.author.tag, iconURL: newMessage.author.displayAvatarURL({ dynamic: true }) })
-            .setTitle(`✏️ Message Edited in #${newMessage.channel.name}`)
-            .setDescription(`**Before:**\n${beforeText}\n\n**After:**\n${afterText}\n\n[Jump to Message](${newMessage.url})`)
-            .setFooter({ text: `User ID: ${newMessage.author.id}` })
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Message Edited',
+            emoji: '✏️',
+            color: '#FEE75C',
+            target: newMessage.author,
+            extraFields: [
+                { name: '📺 Channel', value: `<#${newMessage.channel.id}>`, inline: true },
+                { name: '🔗 Jump Link', value: `[Click Here](${newMessage.url})`, inline: true },
+                { name: '⬅️ Before', value: `>>> ${oldMessage.content?.slice(0, 900) || '*None*'}`, inline: false },
+                { name: '➡️ After', value: `>>> ${newMessage.content?.slice(0, 900) || '*None*'}`, inline: false }
+            ],
+            guild: newMessage.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    // 🧹 SUPREME BULK DELETE / PURGE TRANSCRIPT ENGINE
     client.on(Events.MessageDeleteBulk, async (messages, channel) => {
         if (!channel || !channel.guild) return;
 
         const logChannel = await resolveLogChannel(channel.guild, 'messages');
         if (!logChannel) return;
-
-        // Prevent logging if purge occurred inside the log channel
         if (channel.id === logChannel.id) return;
 
         const sortedMessages = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
-        // Fetch Audit Log to identify who triggered the purge
         let executorTag = 'Unknown Staff / Bot Command';
-        let executorMention = '`Unknown`';
+        let executorUser = null;
         try {
             await new Promise(r => setTimeout(r, 1000));
             const fetchedLogs = await channel.guild.fetchAuditLogs({
@@ -324,11 +386,10 @@ module.exports = (client) => {
             const bulkLog = fetchedLogs?.entries.first();
             if (bulkLog && (Date.now() - bulkLog.createdTimestamp) < 15000) {
                 executorTag = `${bulkLog.executor.tag} (${bulkLog.executor.id})`;
-                executorMention = `<@${bulkLog.executor.id}> (\`${bulkLog.executor.tag}\`)`;
+                executorUser = bulkLog.executor;
             }
         } catch (e) {}
 
-        // Format Professional Text Transcript Header
         let transcriptText = `====================================================================================================\n`;
         transcriptText += `                           STARRY SUPREME AUDIT LOG - PURGE TRANSCRIPT                             \n`;
         transcriptText += `====================================================================================================\n`;
@@ -339,7 +400,6 @@ module.exports = (client) => {
         transcriptText += `Generated At   : ${new Date().toUTCString()}\n`;
         transcriptText += `====================================================================================================\n\n`;
 
-        // Append Each Deleted Message to Transcript
         sortedMessages.forEach((msg, index) => {
             const timeStr = new Date(msg.createdTimestamp).toUTCString();
             const authorTag = msg.author ? `${msg.author.tag} (ID: ${msg.author.id}) ${msg.author.bot ? '[BOT]' : '[USER]'}` : 'Unknown Author';
@@ -349,15 +409,6 @@ module.exports = (client) => {
             transcriptText += `[${String(index + 1).padStart(2, '0')}] MSG ID: ${msg.id} | TIME: ${timeStr}\n`;
             transcriptText += `AUTHOR : ${authorTag}\n`;
             transcriptText += `CONTENT:\n${contentStr}\n`;
-
-            if (msg.attachments && msg.attachments.size > 0) {
-                const attachmentUrls = msg.attachments.map(a => a.url).join('\n         ');
-                transcriptText += `ATTACHMENTS:\n         ${attachmentUrls}\n`;
-            }
-
-            if (msg.embeds && msg.embeds.length > 0) {
-                transcriptText += `EMBEDS : [${msg.embeds.length} Embedded Card(s) Present]\n`;
-            }
             transcriptText += `----------------------------------------------------------------------------------------------------\n\n`;
         });
 
@@ -366,17 +417,18 @@ module.exports = (client) => {
             name: `${channel.guild.name.replace(/[^a-zA-Z0-9]/g, '_')}_PurgeLog_${channel.name}_${Date.now()}.txt` 
         });
 
-        const purgeEmbed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle(`🧹 Bulk Messages Deleted / Purged in #${channel.name}`)
-            .setDescription(`A total of **${sortedMessages.length}** messages (including user and self-purged bot messages) were purged from <#${channel.id}>.\nFull details have been compiled into the attached transcript file.`)
-            .addFields(
-                { name: '📍 Channel', value: `${channel} (\`#${channel.name}\`)`, inline: true },
-                { name: '👤 Triggered By', value: executorMention, inline: true },
-                { name: '📊 Total Messages', value: `\`${sortedMessages.length}\` Messages`, inline: true }
-            )
-            .setFooter({ text: `Channel ID: ${channel.id}` })
-            .setTimestamp();
+        const purgeEmbed = formatWickLogEmbed({
+            title: 'Bulk Messages Purged',
+            emoji: '🧹',
+            color: '#FEE75C',
+            target: null,
+            moderator: executorUser,
+            extraFields: [
+                { name: '📺 Channel', value: `<#${channel.id}>`, inline: true },
+                { name: '📊 Amount Deleted', value: `\`${sortedMessages.length}\` messages`, inline: true }
+            ],
+            guild: channel.guild
+        });
 
         await logChannel.send({ 
             embeds: [purgeEmbed], 
@@ -384,24 +436,21 @@ module.exports = (client) => {
         }).catch(console.error);
     });
 
-    // ==========================================
-    // 🔗 5. INVITE LOGS
-    // ==========================================
     client.on(Events.InviteCreate, async (invite) => {
         const logChannel = await resolveLogChannel(invite.guild, 'access');
         if (!logChannel) return;
 
-        const inviter = invite.inviter ? `<@${invite.inviter.id}> (\`${invite.inviter.tag}\`)` : 'Unknown';
-
-        const embed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setTitle('🔗 Invite Code Created')
-            .setDescription(`**Code:** \`${invite.code}\`\n**Channel:** ${invite.channel}\n**Created By:** ${inviter}`)
-            .addFields(
-                { name: 'Max Uses', value: invite.maxUses === 0 ? 'Infinite' : `${invite.maxUses}`, inline: true },
-                { name: 'Expires', value: invite.maxAge === 0 ? 'Never' : `<t:${Math.floor((Date.now() + invite.maxAge * 1000) / 1000)}:R>`, inline: true }
-            )
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Invite Code Created',
+            emoji: '🔗',
+            color: '#5865F2',
+            target: invite.inviter,
+            extraFields: [
+                { name: '🔑 Code', value: `\`${invite.code}\``, inline: true },
+                { name: '📺 Channel', value: `${invite.channel}`, inline: true }
+            ],
+            guild: invite.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
@@ -410,29 +459,34 @@ module.exports = (client) => {
         const logChannel = await resolveLogChannel(invite.guild, 'access');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle('🗑️ Invite Code Revoked / Expired')
-            .setDescription(`The invite code \`${invite.code}\` for ${invite.channel} has been deleted or expired.`)
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Invite Revoked / Expired',
+            emoji: '🗑️',
+            color: '#ED4245',
+            target: null,
+            extraFields: [{ name: '🔑 Code', value: `\`${invite.code}\``, inline: true }],
+            guild: invite.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    // ==========================================
-    // 📁 6. CHANNEL & PERMISSION OVERWRITE LOGS
-    // ==========================================
     client.on(Events.ChannelCreate, async (channel) => {
         if (!channel.guild) return;
         const logChannel = await resolveLogChannel(channel.guild, 'channels');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#23A559')
-            .setTitle('📁 Channel Created')
-            .setDescription(`**Name:** ${channel} (\`#${channel.name}\`)\n**Type:** \`${channel.type}\``)
-            .setFooter({ text: `Channel ID: ${channel.id}` })
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Channel Created',
+            emoji: '📺',
+            color: '#23A559',
+            target: null,
+            extraFields: [
+                { name: '📛 Name', value: `<#${channel.id}> (\`${channel.name}\`)`, inline: true },
+                { name: '🆔 Channel ID', value: `\`${channel.id}\``, inline: true }
+            ],
+            guild: channel.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
@@ -442,107 +496,44 @@ module.exports = (client) => {
         const logChannel = await resolveLogChannel(channel.guild, 'channels');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#DA373C')
-            .setTitle('🗑️ Channel Deleted')
-            .setDescription(`**Name:** \`#${channel.name}\`\n**Type:** \`${channel.type}\``)
-            .setFooter({ text: `Channel ID: ${channel.id}` })
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Channel Deleted',
+            emoji: '🗑️',
+            color: '#DA373C',
+            target: null,
+            extraFields: [
+                { name: '📛 Name', value: `\`${channel.name}\``, inline: true },
+                { name: '🆔 Channel ID', value: `\`${channel.id}\``, inline: true }
+            ],
+            guild: channel.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
 
-    client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
-        if (!newChannel.guild) return;
-        const logChannel = await resolveLogChannel(newChannel.guild, 'channels');
-        if (!logChannel) return;
-
-        if (oldChannel.name !== newChannel.name) {
-            const embed = new EmbedBuilder()
-                .setColor('#FEE75C')
-                .setTitle('✏️ Channel Name Changed')
-                .setDescription(`**Channel:** ${newChannel}\n**Old Name:** \`${oldChannel.name}\`\n**New Name:** \`${newChannel.name}\``)
-                .setFooter({ text: `Channel ID: ${newChannel.id}` })
-                .setTimestamp();
-
-            return logChannel.send({ embeds: [embed] }).catch(() => {});
-        }
-
-        if (oldChannel.permissionOverwrites.cache.size !== newChannel.permissionOverwrites.cache.size ||
-            !oldChannel.permissionOverwrites.cache.equals(newChannel.permissionOverwrites.cache)) {
-
-            const embed = new EmbedBuilder()
-                .setColor('#E91E63')
-                .setTitle('🔒 Channel Permissions Updated')
-                .setDescription(`Permission overwrites were updated for ${newChannel} (\`#${newChannel.name}\`).`)
-                .setFooter({ text: `Channel ID: ${newChannel.id}` })
-                .setTimestamp();
-
-            return logChannel.send({ embeds: [embed] }).catch(() => {});
-        }
-    });
-
-    // ==========================================
-    // 🛡️ 7. ROLE AUDIT LOGS
-    // ==========================================
-    client.on(Events.GuildRoleCreate, async (role) => {
-        const logChannel = await resolveLogChannel(role.guild, 'roles');
-        if (!logChannel) return;
-
-        const embed = new EmbedBuilder()
-            .setColor('#23A559')
-            .setTitle('🛡️ Role Created')
-            .setDescription(`**Role:** ${role} (\`${role.name}\`)\n**Color:** \`${role.hexColor}\``)
-            .setFooter({ text: `Role ID: ${role.id}` })
-            .setTimestamp();
-
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    client.on(Events.GuildRoleDelete, async (role) => {
-        const logChannel = await resolveLogChannel(role.guild, 'roles');
-        if (!logChannel) return;
-
-        const embed = new EmbedBuilder()
-            .setColor('#DA373C')
-            .setTitle('🗑️ Role Deleted')
-            .setDescription(`**Role Name:** \`${role.name}\``)
-            .setFooter({ text: `Role ID: ${role.id}` })
-            .setTimestamp();
-
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
-        const logChannel = await resolveLogChannel(newRole.guild, 'roles');
-        if (!logChannel) return;
-
-        if (oldRole.name !== newRole.name) {
-            const embed = new EmbedBuilder()
-                .setColor('#FEE75C')
-                .setTitle('✏️ Role Name Changed')
-                .setDescription(`**Role:** ${newRole}\n**Old:** \`${oldRole.name}\`\n**New:** \`${newRole.name}\``)
-                .setFooter({ text: `Role ID: ${newRole.id}` })
-                .setTimestamp();
-
-            return logChannel.send({ embeds: [embed] }).catch(() => {});
-        }
-    });
-
-    // ==========================================
-    // 🔨 8. BAN & SECURITY AUDIT LOGS
-    // ==========================================
     client.on(Events.GuildBanAdd, async (ban) => {
         const logChannel = await resolveLogChannel(ban.guild, 'moderate');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setAuthor({ name: ban.user.tag, iconURL: ban.user.displayAvatarURL({ dynamic: true }) })
-            .setTitle('🔨 Member Banned')
-            .setDescription(`**User:** ${ban.user}\n**Reason:** ${ban.reason || 'No reason provided.'}`)
-            .setFooter({ text: `User ID: ${ban.user.id}` })
-            .setTimestamp();
+        let executor = null;
+        try {
+            await new Promise(r => setTimeout(r, 1000));
+            const fetchedLogs = await ban.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberBanAdd });
+            const logEntry = fetchedLogs.entries.first();
+            if (logEntry && logEntry.target.id === ban.user.id && (Date.now() - logEntry.createdTimestamp) < 10000) {
+                executor = logEntry.executor;
+            }
+        } catch (e) {}
+
+        const embed = formatWickLogEmbed({
+            title: 'Member Banned',
+            emoji: '🔨',
+            color: '#ED4245',
+            target: ban.user,
+            moderator: executor,
+            reason: ban.reason || 'No reason provided.',
+            guild: ban.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
@@ -551,57 +542,25 @@ module.exports = (client) => {
         const logChannel = await resolveLogChannel(ban.guild, 'moderate');
         if (!logChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#57F287')
-            .setAuthor({ name: ban.user.tag, iconURL: ban.user.displayAvatarURL({ dynamic: true }) })
-            .setTitle('🔓 Member Unbanned')
-            .setDescription(`**User:** ${ban.user}`)
-            .setFooter({ text: `User ID: ${ban.user.id}` })
-            .setTimestamp();
+        let executor = null;
+        try {
+            await new Promise(r => setTimeout(r, 1000));
+            const fetchedLogs = await ban.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberBanRemove });
+            const logEntry = fetchedLogs.entries.first();
+            if (logEntry && logEntry.target.id === ban.user.id && (Date.now() - logEntry.createdTimestamp) < 10000) {
+                executor = logEntry.executor;
+            }
+        } catch (e) {}
 
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    // ==========================================
-    // 🌐 9. GUILD & EMOJI UPDATES
-    // ==========================================
-    client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
-        const logChannel = await resolveLogChannel(newGuild, 'misc');
-        if (!logChannel) return;
-
-        if (oldGuild.name !== newGuild.name) {
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setTitle('🏰 Server Name Changed')
-                .setDescription(`**Old Name:** \`${oldGuild.name}\`\n**New Name:** \`${newGuild.name}\``)
-                .setTimestamp();
-
-            return logChannel.send({ embeds: [embed] }).catch(() => {});
-        }
-    });
-
-    client.on(Events.GuildEmojiCreate, async (emoji) => {
-        const logChannel = await resolveLogChannel(emoji.guild, 'misc');
-        if (!logChannel) return;
-
-        const embed = new EmbedBuilder()
-            .setColor('#23A559')
-            .setTitle('😃 Custom Emoji Created')
-            .setDescription(`**Emoji:** ${emoji} (\`:${emoji.name}:\`)`)
-            .setTimestamp();
-
-        await logChannel.send({ embeds: [embed] }).catch(() => {});
-    });
-
-    client.on(Events.GuildEmojiDelete, async (emoji) => {
-        const logChannel = await resolveLogChannel(emoji.guild, 'misc');
-        if (!logChannel) return;
-
-        const embed = new EmbedBuilder()
-            .setColor('#DA373C')
-            .setTitle('🗑️ Custom Emoji Deleted')
-            .setDescription(`**Emoji Name:** \`:${emoji.name}:\``)
-            .setTimestamp();
+        const embed = formatWickLogEmbed({
+            title: 'Member Unbanned',
+            emoji: '🔓',
+            color: '#57F287',
+            target: ban.user,
+            moderator: executor,
+            reason: 'Unbanned via Server Audit Log',
+            guild: ban.guild
+        });
 
         await logChannel.send({ embeds: [embed] }).catch(() => {});
     });
@@ -610,3 +569,4 @@ module.exports = (client) => {
 
 module.exports.LogSettings = LogSettings;
 module.exports.setLogsData = setLogsCommand;
+    
