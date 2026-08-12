@@ -15,7 +15,8 @@ const {
     ChannelType, 
     MessageFlags,
     SlashCommandBuilder,
-    AttachmentBuilder
+    AttachmentBuilder,
+    AuditLogEvent
 } = require('discord.js');
 const { GoogleGenAI } = require('@google/genai');
 const mongoose = require('mongoose');
@@ -190,6 +191,60 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
     return cat;
 }
 
+// ==========================================
+// 🛡️ WICK-STYLE LOG FORMATTER HELPER
+// Creates standardized, clean, high-visibility embeds matching Wick Bot
+// ==========================================
+function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, extraFields = [], guild }) {
+    const embed = new EmbedBuilder()
+        .setColor(color || '#ED4245')
+        .setAuthor({ 
+            name: `${emoji ? emoji + ' ' : ''}${title}`, 
+            iconURL: target?.displayAvatarURL ? target.displayAvatarURL({ dynamic: true }) : (guild?.iconURL({ dynamic: true }) || null)
+        });
+
+    if (target) {
+        const targetTag = target.tag || (target.user ? target.user.tag : target.username || 'Unknown User');
+        const targetId = target.id || 'N/A';
+        embed.addFields({ name: '👤 Target User', value: `<@${targetId}> (\`${targetTag}\`)\n**User ID:** \`${targetId}\``, inline: false });
+    }
+
+    if (moderator) {
+        const modTag = moderator.tag || (moderator.user ? moderator.user.tag : moderator.username || 'System Automation');
+        const modId = moderator.id || 'N/A';
+        embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
+    } else {
+        embed.addFields({ name: '🛡️ Moderator', value: '`System / Audit Log`', inline: false });
+    }
+
+    if (duration) {
+        embed.addFields({ name: '⏳ Duration', value: `\`${duration}\``, inline: true });
+    }
+
+    if (expiresAt) {
+        const timestamp = Math.floor(new Date(expiresAt).getTime() / 1000);
+        embed.addFields({ name: '⏰ Until', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)`, inline: true });
+    }
+
+    if (reason) {
+        embed.addFields({ name: '📝 Reason', value: `>>> ${reason}`, inline: false });
+    }
+
+    if (extraFields.length > 0) {
+        for (const field of extraFields) {
+            embed.addFields(field);
+        }
+    }
+
+    embed.setFooter({ 
+        text: `User ID: ${target?.id || 'N/A'} • Starry Wick-Style Logging`, 
+        iconURL: guild?.iconURL({ dynamic: true }) || null 
+    });
+    embed.setTimestamp();
+
+    return embed;
+}
+
 async function deployActiveModulePanel(channel, moduleType, verifiedRole) {
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
     const hasPanel = messages ? messages.some(m => m.author.id === channel.guild.client.user.id && (m.components.length > 0 || m.embeds.length > 0)) : false;
@@ -348,12 +403,16 @@ module.exports = async (client) => {
 
     start60sChannelTelemetryLoop(client);
 
+    // Dynamic routing to specific log channels
     client.getLogChannel = (guild, logType = 'misc') => {
         if (!guild || !guild.channels) return null;
         const typeMap = {
             'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
             'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
-            'messages': ['logs-messages', 'message-logs', 'chat-logs']
+            'messages': ['logs-messages', 'message-logs', 'chat-logs'],
+            'voice': ['logs-voice', 'voice-logs', 'vc-logs'],
+            'channels': ['logs-channels', 'channel-logs'],
+            'members': ['logs-members', 'member-logs', 'role-logs']
         };
         const targetNames = typeMap[logType.toLowerCase()] || typeMap['access'];
         let ch = guild.channels.cache.find(c => c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
@@ -364,16 +423,16 @@ module.exports = async (client) => {
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
         if (!member || !member.user || member.user.bot) return false;
         const actionType = action.toLowerCase();
-        let embedColor = actionType === 'ban' ? '#ED4245' : actionType === 'kick' ? '#FEE75C' : '#5865F2';
+        let embedColor = actionType === 'ban' ? '#ED4245' : actionType === 'kick' ? '#DA373C' : '#FEE75C';
 
         const modEmbed = new EmbedBuilder()
             .setColor(embedColor)
             .setAuthor({ name: `${guild.name} | Security Notice`, iconURL: guild.iconURL({ dynamic: true }) })
-            .setTitle(`🛡️ Moderation Discipline: ${actionType.toUpperCase()}`)
-            .setDescription(`Hello **${member.user.username}**, you received a moderation action in **${guild.name}**.`)
+            .setTitle(`🛡️ Moderation Action: ${actionType.toUpperCase()}`)
+            .setDescription(`Hello **${member.user.username}**, you received a moderation discipline in **${guild.name}**.`)
             .addFields(
-                { name: '👤 Moderator', value: `\`${moderator.user ? moderator.user.username : 'Starry System'}\``, inline: true },
-                { name: '🛡️ Action', value: `\`${actionType.toUpperCase()}\``, inline: true },
+                { name: '👤 Target', value: `<@${member.id}> (\`${member.user.tag}\`)`, inline: true },
+                { name: '🛡️ Moderator', value: moderator?.user ? `<@${moderator.id}> (\`${moderator.user.tag}\`)` : '`Starry System`', inline: true },
                 { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
                 { name: '📝 Reason', value: `>>> ${reason || 'No reason provided.'}`, inline: false }
             )
@@ -382,17 +441,26 @@ module.exports = async (client) => {
         try { await member.send({ embeds: [modEmbed] }); return true; } catch (err) { return false; }
     };
 
+    // ==========================================
+    // 🌸 LOGS: ACCESS CHANNEL (Joins & Leaves)
+    // ==========================================
     client.on('guildMemberAdd', async (member) => {
         if (member.user.bot) return;
 
         const accessLog = client.getLogChannel(member.guild, 'access');
         if (accessLog) {
-            const joinEmbed = new EmbedBuilder()
-                .setColor('#FF73FA')
-                .setAuthor({ name: '🌸 New Member Arrival', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`✨ Welcome <@${member.id}> to **${member.guild.name}**! We are thrilled to have you here. 💖`)
-                .setImage('https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
-                .setTimestamp();
+            const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
+            const joinEmbed = createWickLogEmbed({
+                title: 'Member Joined',
+                emoji: '📥',
+                color: '#2ECC71',
+                target: member.user,
+                extraFields: [
+                    { name: '📅 Account Created', value: `<t:${createdTimestamp}:F> (<t:${createdTimestamp}:R>)`, inline: false },
+                    { name: '📊 Server Census', value: `Member **#${member.guild.memberCount}**`, inline: true }
+                ],
+                guild: member.guild
+            });
             await accessLog.send({ embeds: [joinEmbed] }).catch(() => {});
         }
 
@@ -422,12 +490,16 @@ module.exports = async (client) => {
     client.on('guildMemberRemove', async (member) => {
         const accessLog = client.getLogChannel(member.guild, 'access');
         if (accessLog) {
-            const leaveEmbed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setAuthor({ name: '🥀 Member Departure', iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`💫 **${member.user.tag}** has fluttered away from **${member.guild.name}**.`)
-                .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
-                .setTimestamp();
+            const leaveEmbed = createWickLogEmbed({
+                title: 'Member Left',
+                emoji: '📤',
+                color: '#ED4245',
+                target: member.user,
+                extraFields: [
+                    { name: '📊 Server Census', value: `Remaining Members: **${member.guild.memberCount}**`, inline: true }
+                ],
+                guild: member.guild
+            });
             await accessLog.send({ embeds: [leaveEmbed] }).catch(() => {});
         }
 
@@ -451,25 +523,55 @@ module.exports = async (client) => {
         } catch (err) {}
     });
 
+    // ==========================================
+    // 💬 LOGS: MESSAGES CHANNEL
+    // ==========================================
     client.on('messageDelete', async (message) => {
         try {
             if (!message.guild || message.partial) return;
             const logChannel = client.getLogChannel(message.guild, 'messages');
             if (!logChannel || logChannel.id === message.channel.id) return;
 
-            const author = message.author ? `${message.author} (\`${message.author.tag}\`)` : 'Unknown User';
-            const deleteEmbed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setAuthor({ name: '🗑️ Message Deleted', iconURL: message.author?.displayAvatarURL({ dynamic: true }) || message.guild.iconURL({ dynamic: true }) })
-                .setDescription(`A message by ${author} was deleted in <#${message.channel.id}>.`)
-                .addFields(
-                    { name: '📝 Message Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or contains attachments/embeds]*', inline: false },
-                    { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
-                    { name: '🆔 Message ID', value: `\`${message.id}\``, inline: true }
-                )
-                .setTimestamp();
+            const deleteEmbed = createWickLogEmbed({
+                title: 'Message Deleted',
+                emoji: '🗑️',
+                color: '#ED4245',
+                target: message.author || { id: 'Unknown', tag: 'Unknown' },
+                extraFields: [
+                    { name: '📺 Channel', value: `<#${message.channel.id}> (\`${message.channel.name}\`)`, inline: true },
+                    { name: '🆔 Message ID', value: `\`${message.id}\``, inline: true },
+                    { name: '📝 Message Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or attachment]*', inline: false }
+                ],
+                guild: message.guild
+            });
 
             await logChannel.send({ embeds: [deleteEmbed] }).catch(() => {});
+        } catch (err) {}
+    });
+
+    client.on('messageUpdate', async (oldMessage, newMessage) => {
+        try {
+            if (!oldMessage.guild || oldMessage.partial || newMessage.partial) return;
+            if (oldMessage.author?.bot || oldMessage.content === newMessage.content) return;
+
+            const logChannel = client.getLogChannel(oldMessage.guild, 'messages');
+            if (!logChannel) return;
+
+            const editEmbed = createWickLogEmbed({
+                title: 'Message Edited',
+                emoji: '✏️',
+                color: '#FEE75C',
+                target: oldMessage.author,
+                extraFields: [
+                    { name: '📺 Channel', value: `<#${oldMessage.channel.id}>`, inline: true },
+                    { name: '🔗 Jump Link', value: `[Click Here](${newMessage.url})`, inline: true },
+                    { name: '⬅️ Before', value: `>>> ${oldMessage.content?.slice(0, 900) || '*None*'}`, inline: false },
+                    { name: '➡️ After', value: `>>> ${newMessage.content?.slice(0, 900) || '*None*'}`, inline: false }
+                ],
+                guild: oldMessage.guild
+            });
+
+            await logChannel.send({ embeds: [editEmbed] }).catch(() => {});
         } catch (err) {}
     });
 
@@ -480,23 +582,268 @@ module.exports = async (client) => {
             const logChannel = client.getLogChannel(firstMsg.guild, 'messages') || client.getLogChannel(firstMsg.guild, 'moderate');
             if (!logChannel) return;
 
-            const bulkEmbed = new EmbedBuilder()
-                .setColor('#FEE75C')
-                .setAuthor({ name: '🧹 Bulk Message Delete (Purge)', iconURL: firstMsg.guild.iconURL({ dynamic: true }) })
-                .setDescription(`**${messages.size} messages** were purged/deleted in <#${firstMsg.channel.id}>.`)
-                .addFields(
+            const bulkEmbed = createWickLogEmbed({
+                title: 'Bulk Message Purge',
+                emoji: '🧹',
+                color: '#FEE75C',
+                target: null,
+                extraFields: [
                     { name: '📺 Channel', value: `<#${firstMsg.channel.id}>`, inline: true },
-                    { name: '📊 Total Messages Deleted', value: `\`${messages.size}\``, inline: true }
-                )
-                .setTimestamp();
+                    { name: '📊 Total Purged', value: `\`${messages.size}\` messages`, inline: true }
+                ],
+                guild: firstMsg.guild
+            });
 
             await logChannel.send({ embeds: [bulkEmbed] }).catch(() => {});
         } catch (err) {}
+    });
+
+    // ==========================================
+    // 🔊 LOGS: VOICE CHANNEL
+    // ==========================================
+    client.on('voiceStateUpdate', async (oldState, newState) => {
+        try {
+            const guild = newState.guild || oldState.guild;
+            const voiceLog = client.getLogChannel(guild, 'voice');
+            if (!voiceLog) return;
+
+            const member = newState.member || oldState.member;
+            if (!member || member.user.bot) return;
+
+            if (!oldState.channelId && newState.channelId) {
+                const joinVcEmbed = createWickLogEmbed({
+                    title: 'Joined Voice Channel',
+                    emoji: '🔊',
+                    color: '#2ECC71',
+                    target: member.user,
+                    extraFields: [{ name: '🎙️ Voice Channel', value: `<#${newState.channelId}>`, inline: true }],
+                    guild
+                });
+                await voiceLog.send({ embeds: [joinVcEmbed] }).catch(() => {});
+            } else if (oldState.channelId && !newState.channelId) {
+                const leaveVcEmbed = createWickLogEmbed({
+                    title: 'Left Voice Channel',
+                    emoji: '🔇',
+                    color: '#ED4245',
+                    target: member.user,
+                    extraFields: [{ name: '🎙️ Voice Channel', value: `<#${oldState.channelId}>`, inline: true }],
+                    guild
+                });
+                await voiceLog.send({ embeds: [leaveVcEmbed] }).catch(() => {});
+            } else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+                const moveVcEmbed = createWickLogEmbed({
+                    title: 'Moved Voice Channel',
+                    emoji: '🔀',
+                    color: '#5865F2',
+                    target: member.user,
+                    extraFields: [
+                        { name: '⬅️ From Channel', value: `<#${oldState.channelId}>`, inline: true },
+                        { name: '➡️ To Channel', value: `<#${newState.channelId}>`, inline: true }
+                    ],
+                    guild
+                });
+                await voiceLog.send({ embeds: [moveVcEmbed] }).catch(() => {});
+            }
+        } catch (err) {}
+    });
+
+    // ==========================================
+    // 📁 LOGS: CHANNELS CHANNEL
+    // ==========================================
+    client.on('channelCreate', async (channel) => {
+        if (!channel.guild) return;
+        const channelLog = client.getLogChannel(channel.guild, 'channels');
+        if (!channelLog) return;
+
+        const embed = createWickLogEmbed({
+            title: 'Channel Created',
+            emoji: '📺',
+            color: '#2ECC71',
+            target: null,
+            extraFields: [
+                { name: '📛 Channel Name', value: `<#${channel.id}> (\`${channel.name}\`)`, inline: true },
+                { name: '🆔 Channel ID', value: `\`${channel.id}\``, inline: true }
+            ],
+            guild: channel.guild
+        });
+        await channelLog.send({ embeds: [embed] }).catch(() => {});
+    });
+
+    client.on('channelDelete', async (channel) => {
+        if (!channel.guild) return;
+        const channelLog = client.getLogChannel(channel.guild, 'channels');
+        if (!channelLog) return;
+
+        const embed = createWickLogEmbed({
+            title: 'Channel Deleted',
+            emoji: '🗑️',
+            color: '#ED4245',
+            target: null,
+            extraFields: [
+                { name: '📛 Channel Name', value: `\`${channel.name}\``, inline: true },
+                { name: '🆔 Channel ID', value: `\`${channel.id}\``, inline: true }
+            ],
+            guild: channel.guild
+        });
+        await channelLog.send({ embeds: [embed] }).catch(() => {});
     });
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 7)
 // File Path: modules/starry.js
 // ==========================================
+
+    // ==========================================
+    // 👥 LOGS: MEMBERS CHANNEL (Roles, Nicknames)
+    // ==========================================
+    client.on('guildMemberUpdate', async (oldMember, newMember) => {
+        try {
+            const memberLog = client.getLogChannel(newMember.guild, 'members');
+            if (!memberLog) return;
+
+            // Role Changes
+            const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
+
+            if (addedRoles.size > 0) {
+                const embed = createWickLogEmbed({
+                    title: 'Member Granted Role(s)',
+                    emoji: '🛡️',
+                    color: '#2ECC71',
+                    target: newMember.user,
+                    extraFields: [
+                        { name: '➕ Added Role(s)', value: addedRoles.map(r => `<@&${r.id}>`).join(', '), inline: false }
+                    ],
+                    guild: newMember.guild
+                });
+                await memberLog.send({ embeds: [embed] }).catch(() => {});
+            }
+
+            if (removedRoles.size > 0) {
+                const embed = createWickLogEmbed({
+                    title: 'Member Removed Role(s)',
+                    emoji: '🛑',
+                    color: '#ED4245',
+                    target: newMember.user,
+                    extraFields: [
+                        { name: '➖ Removed Role(s)', value: removedRoles.map(r => `<@&${r.id}>`).join(', '), inline: false }
+                    ],
+                    guild: newMember.guild
+                });
+                await memberLog.send({ embeds: [embed] }).catch(() => {});
+            }
+
+            // Nickname Changes
+            if (oldMember.nickname !== newMember.nickname) {
+                const embed = createWickLogEmbed({
+                    title: 'Member Nickname Changed',
+                    emoji: '🏷️',
+                    color: '#5865F2',
+                    target: newMember.user,
+                    extraFields: [
+                        { name: '⬅️ Before', value: `\`${oldMember.nickname || oldMember.user.username}\``, inline: true },
+                        { name: '➡️ After', value: `\`${newMember.nickname || newMember.user.username}\``, inline: true }
+                    ],
+                    guild: newMember.guild
+                });
+                await memberLog.send({ embeds: [embed] }).catch(() => {});
+            }
+        } catch (err) {}
+    });
+
+    // ==========================================
+    // 🛡️ NATIVE DISCORD AUDIT LOG LISTENER (WICK-STYLE MODERATOR CAPTURE)
+    // Ensures Moderator Name is ALWAYS captured even when action is done via Discord UI
+    // ==========================================
+    client.on('guildAuditLogEntryCreate', async (auditLog, guild) => {
+        try {
+            const logChannel = client.getLogChannel(guild, 'moderate');
+            if (!logChannel) return;
+
+            const { action, executor, target, reason, extra } = auditLog;
+            if (!executor || executor.bot && executor.id === client.user.id) return; // Skip self bot calls to avoid duplicate logging
+
+            // Member Timeout Update
+            if (action === AuditLogEvent.MemberUpdate) {
+                const changes = auditLog.changes;
+                const timeoutChange = changes.find(c => c.key === 'communication_disabled_until');
+
+                if (timeoutChange) {
+                    const expiresAt = timeoutChange.new;
+                    if (expiresAt) {
+                        const targetUser = await client.users.fetch(target.id).catch(() => target);
+                        const embed = createWickLogEmbed({
+                            title: 'Member Timed Out',
+                            emoji: '⏰',
+                            color: '#ED4245',
+                            target: targetUser,
+                            moderator: executor,
+                            reason: reason || 'No reason provided in Audit Log',
+                            expiresAt: expiresAt,
+                            guild
+                        });
+                        await logChannel.send({ embeds: [embed] }).catch(() => {});
+                    } else {
+                        const targetUser = await client.users.fetch(target.id).catch(() => target);
+                        const embed = createWickLogEmbed({
+                            title: 'Member Timeout Removed',
+                            emoji: '🔓',
+                            color: '#2ECC71',
+                            target: targetUser,
+                            moderator: executor,
+                            reason: reason || 'Timeout removed manually',
+                            guild
+                        });
+                        await logChannel.send({ embeds: [embed] }).catch(() => {});
+                    }
+                }
+            }
+
+            // Member Ban Add
+            if (action === AuditLogEvent.MemberBanAdd) {
+                const targetUser = await client.users.fetch(target.id).catch(() => target);
+                const embed = createWickLogEmbed({
+                    title: 'Member Banned',
+                    emoji: '🔨',
+                    color: '#ED4245',
+                    target: targetUser,
+                    moderator: executor,
+                    reason: reason || 'No reason provided in Audit Log',
+                    guild
+                });
+                await logChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+
+            // Member Kick
+            if (action === AuditLogEvent.MemberKick) {
+                const targetUser = await client.users.fetch(target.id).catch(() => target);
+                const embed = createWickLogEmbed({
+                    title: 'Member Kicked',
+                    emoji: '🚪',
+                    color: '#DA373C',
+                    target: targetUser,
+                    moderator: executor,
+                    reason: reason || 'No reason provided in Audit Log',
+                    guild
+                });
+                await logChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+
+            // Member Ban Remove (Unban)
+            if (action === AuditLogEvent.MemberBanRemove) {
+                const targetUser = await client.users.fetch(target.id).catch(() => target);
+                const embed = createWickLogEmbed({
+                    title: 'Member Unbanned',
+                    emoji: '🟢',
+                    color: '#2ECC71',
+                    target: targetUser,
+                    moderator: executor,
+                    reason: reason || 'Unbanned via Server Audit Log',
+                    guild
+                });
+                await logChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+        } catch (err) {}
+    });
 
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
@@ -674,6 +1021,10 @@ module.exports = async (client) => {
 
             return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 7)
+// File Path: modules/starry.js
+// ==========================================
 
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setup-starry') {
@@ -735,7 +1086,7 @@ module.exports = async (client) => {
                         let channelsPurged = 0;
                         let rolesPurged = 0;
 
-                        // 1. Delete ALL channels EXCEPT the channel where command was executed
+                        // Delete ALL channels EXCEPT the channel where command was executed
                         const allChannels = Array.from(interaction.guild.channels.cache.values());
                         for (const ch of allChannels) {
                             if (ch.id !== currentChannelId && ch.deletable) {
@@ -744,7 +1095,7 @@ module.exports = async (client) => {
                             }
                         }
 
-                        // 2. Delete ALL custom roles EXCEPT @everyone, bot-managed roles, and uneditable higher roles
+                        // Delete ALL custom roles EXCEPT @everyone, bot-managed roles, and uneditable higher roles
                         if (botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
                             const allRoles = Array.from(interaction.guild.roles.cache.values());
                             for (const role of allRoles) {
@@ -835,10 +1186,6 @@ module.exports = async (client) => {
             .replace(/\s+/g, ' ')
             .trim();
     }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 7)
-// File Path: modules/starry.js
-// ==========================================
 
     async function handleBadWordAutoMod(client, message) {
         if (!message.guild || message.author.bot || !message.member) return false;
@@ -846,7 +1193,7 @@ module.exports = async (client) => {
         const text = message.content.trim();
         const lowerText = text.toLowerCase();
 
-        // 1. Trigger Command: .badon
+        // Trigger Command: .badon
         if (lowerText === '.badon') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await message.reply('❌ You need **Administrator** permissions to use `.badon`.');
@@ -866,7 +1213,7 @@ module.exports = async (client) => {
             return true;
         }
 
-        // 2. Trigger Command: .badoff
+        // Trigger Command: .badoff
         if (lowerText === '.badoff') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await message.reply('❌ You need **Administrator** permissions to use `.badoff`.');
@@ -883,8 +1230,8 @@ module.exports = async (client) => {
             return true;
         }
 
-        // 3. AutoMod Bad Word Detection
-        if (message.member.permissions.has(PermissionFlagsBits.Administrator)) return false; // Bypass Admins
+        // AutoMod Bad Word Detection
+        if (message.member.permissions.has(PermissionFlagsBits.Administrator)) return false;
 
         const settings = await BadWordSettings.findOne({ guildId: message.guild.id });
         if (!settings || !settings.enabled || !settings.words || settings.words.length === 0) return false;
@@ -954,7 +1301,7 @@ module.exports = async (client) => {
 
         const isOwner = typeof client.isOwner === 'function' 
             ? client.isOwner(message.author.id) 
-            : (process.env.OWNER_ID ? message.author.id === process.env.OWNER_ID : false);
+            : (process.process?.env?.OWNER_ID ? message.author.id === process.env.OWNER_ID : false);
 
         if (!isOwner) { await message.reply("❌ Access Denied.").catch(()=>{}); return true; }
 
@@ -977,7 +1324,6 @@ module.exports = async (client) => {
     async function handleLocalActions(client, message, triggerWord, displayName) {
         if (!message.guild) return false;
         const text = message.content.toLowerCase().trim();
-        const botMember = message.guild.members.me || await message.guild.members.fetch(client.user.id).catch(() => null);
 
         const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|${triggerWord})\\s*`, 'i'), '').trim();
 
@@ -1019,6 +1365,10 @@ module.exports = async (client) => {
 // File Path: modules/starry.js
 // ==========================================
 
+    // ==========================================
+    // 🛡️ SMART MODERATION HANDLER (WICK-STYLE FORMATTING)
+    // Ensures Moderator is explicitly listed in output embeds and logs
+    // ==========================================
     async function handleSmartModeration(client, message, triggerWord = 'starry') {
         if (!message.guild || message.author.bot) return false;
 
@@ -1062,15 +1412,18 @@ module.exports = async (client) => {
 
             const logChannel = client.getLogChannel(message.guild, 'messages') || client.getLogChannel(message.guild, 'moderate');
             if (logChannel) {
-                const purgeEmbed = new EmbedBuilder()
-                    .setColor('#FEE75C')
-                    .setAuthor({ name: '🧹 Channel Messages Purged', iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                    .addFields(
-                        { name: '👤 Moderator', value: `${message.author} (\`${message.author.tag}\`)`, inline: true },
+                const purgeEmbed = createWickLogEmbed({
+                    title: 'Channel Messages Purged',
+                    emoji: '🧹',
+                    color: '#FEE75C',
+                    target: null,
+                    moderator: message.author,
+                    extraFields: [
                         { name: '📺 Channel', value: `<#${message.channel.id}>`, inline: true },
                         { name: '📊 Amount Deleted', value: `\`${actualDeletedCount}\` messages`, inline: true }
-                    )
-                    .setTimestamp();
+                    ],
+                    guild: message.guild
+                });
                 await logChannel.send({ embeds: [purgeEmbed] }).catch(() => {});
             }
             return true;
@@ -1125,6 +1478,7 @@ module.exports = async (client) => {
 
             const caseId = Math.floor(Math.random() * 90000) + 10000;
 
+            // --- TIMEOUT / MUTE ---
             if (isTimeout && !isUntimeout) {
                 if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                     await message.reply('❌ Missing `Moderate Members` permissions.');
@@ -1137,16 +1491,25 @@ module.exports = async (client) => {
 
                 const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000);
                 const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?.[0] || '10m';
+                const expiresAt = new Date(Date.now() + durationMs);
 
                 await client.sendPremiumModDM(targetMember, executor, 'Timeout', reason, durationStr, message.guild, caseId);
 
                 await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
-                const embed = new EmbedBuilder()
-                    .setColor('#ED4245')
-                    .setTitle('⏰ Member Timed Out')
-                    .setDescription(`**Target:** ${targetMember} (\`${targetUser.tag}\`)\n**Duration:** \`${durationStr}\`\n**Reason:** ${reason}\n**Case ID:** \`#${caseId}\``)
-                    .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
-                    .setTimestamp();
+
+                // Wick-Style Timed Out Embed (Includes explicit Moderator)
+                const embed = createWickLogEmbed({
+                    title: 'Member Timed Out',
+                    emoji: '⏰',
+                    color: '#ED4245',
+                    target: targetUser,
+                    moderator: message.author,
+                    reason: reason,
+                    duration: durationStr,
+                    expiresAt: expiresAt,
+                    extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+                    guild: message.guild
+                });
 
                 await message.reply({ embeds: [embed] });
 
@@ -1155,6 +1518,7 @@ module.exports = async (client) => {
                 return true;
             }
 
+            // --- UNTIMEOUT / UNMUTE ---
             if (isUntimeout) {
                 if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                     await message.reply('❌ Missing `Moderate Members` permission.');
@@ -1163,10 +1527,25 @@ module.exports = async (client) => {
                 if (!targetMember) return true;
 
                 await targetMember.timeout(null, `Untimed out by ${message.author.tag}`);
-                await message.reply(`✅ Successfully removed timeout for ${targetMember}.`);
+
+                const embed = createWickLogEmbed({
+                    title: 'Member Timeout Removed',
+                    emoji: '🔓',
+                    color: '#2ECC71',
+                    target: targetUser,
+                    moderator: message.author,
+                    reason: 'Timeout manually removed.',
+                    guild: message.guild
+                });
+
+                await message.reply({ embeds: [embed] });
+
+                const logChannel = client.getLogChannel(message.guild, 'moderate');
+                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
+            // --- KICK ---
             if (isKick) {
                 if (!executor.permissions.has(PermissionFlagsBits.KickMembers) || !botMember?.permissions.has(PermissionFlagsBits.KickMembers)) {
                     await message.reply('❌ Missing `Kick Members` permissions.');
@@ -1177,12 +1556,17 @@ module.exports = async (client) => {
                 await client.sendPremiumModDM(targetMember, executor, 'Kick', reason, null, message.guild, caseId);
 
                 await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
-                const embed = new EmbedBuilder()
-                    .setColor('#DA373C')
-                    .setTitle('🚪 Member Kicked')
-                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}\n**Case ID:** \`#${caseId}\``)
-                    .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
-                    .setTimestamp();
+
+                const embed = createWickLogEmbed({
+                    title: 'Member Kicked',
+                    emoji: '🚪',
+                    color: '#DA373C',
+                    target: targetUser,
+                    moderator: message.author,
+                    reason: reason,
+                    extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+                    guild: message.guild
+                });
 
                 await message.reply({ embeds: [embed] });
 
@@ -1191,6 +1575,7 @@ module.exports = async (client) => {
                 return true;
             }
 
+            // --- BAN ---
             if (isBan) {
                 if (!executor.permissions.has(PermissionFlagsBits.BanMembers) || !botMember?.permissions.has(PermissionFlagsBits.BanMembers)) {
                     await message.reply('❌ Missing `Ban Members` permissions.');
@@ -1202,12 +1587,17 @@ module.exports = async (client) => {
                 }
 
                 await message.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${message.author.tag}` });
-                const embed = new EmbedBuilder()
-                    .setColor('#ED4245')
-                    .setTitle('🔨 Member Banned')
-                    .setDescription(`**Target:** \`${targetUser.tag}\`\n**Reason:** ${reason}\n**Case ID:** \`#${caseId}\``)
-                    .setFooter({ text: `Moderator: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
-                    .setTimestamp();
+
+                const embed = createWickLogEmbed({
+                    title: 'Member Banned',
+                    emoji: '🔨',
+                    color: '#ED4245',
+                    target: targetUser,
+                    moderator: message.author,
+                    reason: reason,
+                    extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+                    guild: message.guild
+                });
 
                 await message.reply({ embeds: [embed] });
 
