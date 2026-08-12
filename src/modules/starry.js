@@ -192,10 +192,10 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
 }
 
 // ==========================================
-// 🛡️ WICK-STYLE LOG FORMATTER HELPER
-// Creates standardized, clean, high-visibility embeds matching Wick Bot
+// 🛡️ WICK-STYLE LOG EMBED BUILDER
+// Guarantees Moderator Name, User Tags, IDs, Timestamps, and Case Numbers
 // ==========================================
-function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, extraFields = [], guild }) {
+function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const embed = new EmbedBuilder()
         .setColor(color || '#ED4245')
         .setAuthor({ 
@@ -214,7 +214,11 @@ function createWickLogEmbed({ title, emoji, color, target, moderator, reason, du
         const modId = moderator.id || 'N/A';
         embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
     } else {
-        embed.addFields({ name: '🛡️ Moderator', value: '`System / Audit Log`', inline: false });
+        embed.addFields({ name: '🛡️ Moderator', value: '`System Automation / Audit Log`', inline: false });
+    }
+
+    if (caseId) {
+        embed.addFields({ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true });
     }
 
     if (duration) {
@@ -237,7 +241,7 @@ function createWickLogEmbed({ title, emoji, color, target, moderator, reason, du
     }
 
     embed.setFooter({ 
-        text: `User ID: ${target?.id || 'N/A'} • Starry Wick-Style Logging`, 
+        text: `User ID: ${target?.id || 'N/A'} • Starry Security Engine`, 
         iconURL: guild?.iconURL({ dynamic: true }) || null 
     });
     embed.setTimestamp();
@@ -386,6 +390,12 @@ const emergencyNukeCommand = new SlashCommandBuilder()
     ))
     .addChannelOption(o => o.setName('channel').setDescription('Specific channel to nuke (defaults to current channel)').setRequired(false));
 
+const modPanelSlashCommand = new SlashCommandBuilder()
+    .setName('modpanel')
+    .setDescription('🛡️ Open Moderation Control Center for a user')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .addUserOption(o => o.setName('target').setDescription('Target user to moderate').setRequired(true));
+
 const modMasterCommand = new SlashCommandBuilder().setName('mod').setDescription('🛡️ Master Moderation Hub').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
 const autoModMasterCommand = new SlashCommandBuilder().setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 const moderateMasterCommand = new SlashCommandBuilder().setName('moderate').setDescription('⚙️ Security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
@@ -399,7 +409,7 @@ module.exports = async (client) => {
     if (client.starryEngineInitialized) return;
     client.starryEngineInitialized = true;
 
-    console.log('🚀 Starry Aesthetic Engine Active (Welcome/Goodbye Gifs, Mod, Logs)');
+    console.log('🚀 Starry Security & Moderation Engine Active');
 
     start60sChannelTelemetryLoop(client);
 
@@ -432,7 +442,7 @@ module.exports = async (client) => {
             .setDescription(`Hello **${member.user.username}**, you received a moderation discipline in **${guild.name}**.`)
             .addFields(
                 { name: '👤 Target', value: `<@${member.id}> (\`${member.user.tag}\`)`, inline: true },
-                { name: '🛡️ Moderator', value: moderator?.user ? `<@${moderator.id}> (\`${moderator.user.tag}\`)` : '`Starry System`', inline: true },
+                { name: '🛡️ Moderator', value: moderator?.user ? `<@${moderator.id}> (\`${moderator.user.tag}\`)` : (moderator?.tag ? `<@${moderator.id}> (\`${moderator.tag}\`)` : '`Starry System`'), inline: true },
                 { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
                 { name: '📝 Reason', value: `>>> ${reason || 'No reason provided.'}`, inline: false }
             )
@@ -540,7 +550,7 @@ module.exports = async (client) => {
                 extraFields: [
                     { name: '📺 Channel', value: `<#${message.channel.id}> (\`${message.channel.name}\`)`, inline: true },
                     { name: '🆔 Message ID', value: `\`${message.id}\``, inline: true },
-                    { name: '📝 Message Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or attachment]*', inline: false }
+                    { name: '📝 Content', value: message.content ? `>>> ${message.content.slice(0, 1000)}` : '*[No text content or attachment]*', inline: false }
                 ],
                 guild: message.guild
             });
@@ -597,6 +607,10 @@ module.exports = async (client) => {
             await logChannel.send({ embeds: [bulkEmbed] }).catch(() => {});
         } catch (err) {}
     });
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 7)
+// File Path: modules/starry.js
+// ==========================================
 
     // ==========================================
     // 🔊 LOGS: VOICE CHANNEL
@@ -687,20 +701,15 @@ module.exports = async (client) => {
         });
         await channelLog.send({ embeds: [embed] }).catch(() => {});
     });
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 5 OF 7)
-// File Path: modules/starry.js
-// ==========================================
 
     // ==========================================
-    // 👥 LOGS: MEMBERS CHANNEL (Roles, Nicknames)
+    // 👥 LOGS: MEMBERS CHANNEL (Roles & Nicknames)
     // ==========================================
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         try {
             const memberLog = client.getLogChannel(newMember.guild, 'members');
             if (!memberLog) return;
 
-            // Role Changes
             const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
             const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
 
@@ -732,7 +741,6 @@ module.exports = async (client) => {
                 await memberLog.send({ embeds: [embed] }).catch(() => {});
             }
 
-            // Nickname Changes
             if (oldMember.nickname !== newMember.nickname) {
                 const embed = createWickLogEmbed({
                     title: 'Member Nickname Changed',
@@ -751,46 +759,41 @@ module.exports = async (client) => {
     });
 
     // ==========================================
-    // 🛡️ NATIVE DISCORD AUDIT LOG LISTENER (WICK-STYLE MODERATOR CAPTURE)
-    // Ensures Moderator Name is ALWAYS captured even when action is done via Discord UI
+    // 🛡️ AUDIT LOG FALLBACK (CAPTURES DISCORD UI ACTIONS & MODERATOR NAMES)
     // ==========================================
     client.on('guildAuditLogEntryCreate', async (auditLog, guild) => {
         try {
             const logChannel = client.getLogChannel(guild, 'moderate');
             if (!logChannel) return;
 
-            const { action, executor, target, reason, extra } = auditLog;
-            if (!executor || executor.bot && executor.id === client.user.id) return; // Skip self bot calls to avoid duplicate logging
+            const { action, executor, target, reason } = auditLog;
+            if (!executor || (executor.bot && executor.id === client.user.id)) return; // Avoid duplicate logging for bot calls
 
-            // Member Timeout Update
             if (action === AuditLogEvent.MemberUpdate) {
-                const changes = auditLog.changes;
-                const timeoutChange = changes.find(c => c.key === 'communication_disabled_until');
-
+                const timeoutChange = auditLog.changes?.find(c => c.key === 'communication_disabled_until');
                 if (timeoutChange) {
                     const expiresAt = timeoutChange.new;
+                    const targetUser = await client.users.fetch(target.id).catch(() => target);
                     if (expiresAt) {
-                        const targetUser = await client.users.fetch(target.id).catch(() => target);
                         const embed = createWickLogEmbed({
                             title: 'Member Timed Out',
                             emoji: '⏰',
                             color: '#ED4245',
                             target: targetUser,
                             moderator: executor,
-                            reason: reason || 'No reason provided in Audit Log',
+                            reason: reason || 'Action via Discord UI',
                             expiresAt: expiresAt,
                             guild
                         });
                         await logChannel.send({ embeds: [embed] }).catch(() => {});
                     } else {
-                        const targetUser = await client.users.fetch(target.id).catch(() => target);
                         const embed = createWickLogEmbed({
                             title: 'Member Timeout Removed',
                             emoji: '🔓',
                             color: '#2ECC71',
                             target: targetUser,
                             moderator: executor,
-                            reason: reason || 'Timeout removed manually',
+                            reason: reason || 'Timeout removed via Discord UI',
                             guild
                         });
                         await logChannel.send({ embeds: [embed] }).catch(() => {});
@@ -798,7 +801,6 @@ module.exports = async (client) => {
                 }
             }
 
-            // Member Ban Add
             if (action === AuditLogEvent.MemberBanAdd) {
                 const targetUser = await client.users.fetch(target.id).catch(() => target);
                 const embed = createWickLogEmbed({
@@ -807,13 +809,12 @@ module.exports = async (client) => {
                     color: '#ED4245',
                     target: targetUser,
                     moderator: executor,
-                    reason: reason || 'No reason provided in Audit Log',
+                    reason: reason || 'Banned via Discord UI',
                     guild
                 });
                 await logChannel.send({ embeds: [embed] }).catch(() => {});
             }
 
-            // Member Kick
             if (action === AuditLogEvent.MemberKick) {
                 const targetUser = await client.users.fetch(target.id).catch(() => target);
                 const embed = createWickLogEmbed({
@@ -822,31 +823,249 @@ module.exports = async (client) => {
                     color: '#DA373C',
                     target: targetUser,
                     moderator: executor,
-                    reason: reason || 'No reason provided in Audit Log',
-                    guild
-                });
-                await logChannel.send({ embeds: [embed] }).catch(() => {});
-            }
-
-            // Member Ban Remove (Unban)
-            if (action === AuditLogEvent.MemberBanRemove) {
-                const targetUser = await client.users.fetch(target.id).catch(() => target);
-                const embed = createWickLogEmbed({
-                    title: 'Member Unbanned',
-                    emoji: '🟢',
-                    color: '#2ECC71',
-                    target: targetUser,
-                    moderator: executor,
-                    reason: reason || 'Unbanned via Server Audit Log',
+                    reason: reason || 'Kicked via Discord UI',
                     guild
                 });
                 await logChannel.send({ embeds: [embed] }).catch(() => {});
             }
         } catch (err) {}
     });
+// ==========================================
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 7)
+// File Path: modules/starry.js
+// ==========================================
 
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.guild) return;
+
+        // ==========================================
+        // 🛡️ MODPANEL SLASH COMMAND & INTERACTION DISPATCHERS
+        // ==========================================
+        if (interaction.isChatInputCommand() && interaction.commandName === 'modpanel') {
+            const targetUser = interaction.options.getUser('target', true);
+
+            const panelEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setAuthor({ name: `${interaction.guild.name} | Security Control`, iconURL: interaction.guild.iconURL({ dynamic: true }) })
+                .setTitle(`🛡️ Moderation Control Center: ${targetUser.username}`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                .setDescription(
+                    `Select an enforcement action below to perform on <@${targetUser.id}>.\n\n` +
+                    `*Clicking a button will prompt a pop-up window for inputting reasons and durations.*`
+                )
+                .setFooter({ text: `Target ID: ${targetUser.id} • Starry Security Engine`, iconURL: client.user.displayAvatarURL() })
+                .setTimestamp();
+
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`mp_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Primary).setEmoji('⚠️'),
+                new ButtonBuilder().setCustomId(`mp_timeout_${targetUser.id}`).setLabel('Timeout').setStyle(ButtonStyle.Secondary).setEmoji('⏰'),
+                new ButtonBuilder().setCustomId(`mp_kick_${targetUser.id}`).setLabel('Kick').setStyle(ButtonStyle.Danger).setEmoji('🚪'),
+                new ButtonBuilder().setCustomId(`mp_ban_${targetUser.id}`).setLabel('Ban').setStyle(ButtonStyle.Danger).setEmoji('🔨')
+            );
+
+            return interaction.reply({ embeds: [panelEmbed], components: [actionRow], flags: [EPHEMERAL_FLAG] });
+        }
+
+        // --- BUTTON CLICK HANDLERS FOR MODPANEL ---
+        if (interaction.isButton() && interaction.customId.startsWith('mp_')) {
+            const parts = interaction.customId.split('_');
+            const action = parts[1];
+            const targetId = parts[2];
+
+            if (action === 'warn') {
+                const modal = new ModalBuilder()
+                    .setCustomId(`md_warn_${targetId}`)
+                    .setTitle('Issue User Warning');
+                const reasonInput = new TextInputBuilder()
+                    .setCustomId('mod_reason')
+                    .setLabel('Reason for Warning')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('Enter reason (e.g. Breaking rules, spamming)')
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                return interaction.showModal(modal);
+            }
+
+            if (action === 'timeout') {
+                const modal = new ModalBuilder()
+                    .setCustomId(`md_timeout_${targetId}`)
+                    .setTitle('Timeout Member');
+                const durInput = new TextInputBuilder()
+                    .setCustomId('mod_duration')
+                    .setLabel('Duration (e.g. 10m, 1h, 1d)')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('10m')
+                    .setRequired(true);
+                const reasonInput = new TextInputBuilder()
+                    .setCustomId('mod_reason')
+                    .setLabel('Reason for Timeout')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('Enter reason')
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(durInput), new ActionRowBuilder().addComponents(reasonInput));
+                return interaction.showModal(modal);
+            }
+
+            if (action === 'kick') {
+                const modal = new ModalBuilder()
+                    .setCustomId(`md_kick_${targetId}`)
+                    .setTitle('Kick Member');
+                const reasonInput = new TextInputBuilder()
+                    .setCustomId('mod_reason')
+                    .setLabel('Reason for Kick')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('Enter reason')
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                return interaction.showModal(modal);
+            }
+
+            if (action === 'ban') {
+                const modal = new ModalBuilder()
+                    .setCustomId(`md_ban_${targetId}`)
+                    .setTitle('Ban Member');
+                const reasonInput = new TextInputBuilder()
+                    .setCustomId('mod_reason')
+                    .setLabel('Reason for Ban')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('Enter reason')
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+                return interaction.showModal(modal);
+            }
+        }
+
+        // --- MODAL SUBMISSIONS FOR MODPANEL ---
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('md_')) {
+            const parts = interaction.customId.split('_');
+            const action = parts[1];
+            const targetId = parts[2];
+
+            const targetUser = await client.users.fetch(targetId).catch(() => null);
+            if (!targetUser) return interaction.reply({ content: '❌ Target user not found.', flags: [EPHEMERAL_FLAG] });
+
+            const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+            const reason = interaction.fields.getTextInputValue('mod_reason') || 'No reason provided';
+            const caseId = Math.floor(Math.random() * 90000) + 10000;
+            const logChannel = client.getLogChannel(interaction.guild, 'moderate');
+
+            // ⚠️ WARN SUBMISSION
+            if (action === 'warn') {
+                await interaction.reply({ content: `⚠️ **Warned <@${targetUser.id}>!**\n**Reason:** ${reason}`, flags: [EPHEMERAL_FLAG] });
+
+                if (targetMember) {
+                    await client.sendPremiumModDM(targetMember, interaction.member, 'Warning', reason, null, interaction.guild, caseId);
+                }
+
+                if (logChannel) {
+                    const warnLogEmbed = createWickLogEmbed({
+                        title: 'Member Warned',
+                        emoji: '⚠️',
+                        color: '#FEE75C',
+                        target: targetUser,
+                        moderator: interaction.user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild: interaction.guild
+                    });
+                    await logChannel.send({ embeds: [warnLogEmbed] }).catch(() => {});
+                }
+                return;
+            }
+
+            // ⏰ TIMEOUT SUBMISSION
+            if (action === 'timeout') {
+                const durationStr = interaction.fields.getTextInputValue('mod_duration') || '10m';
+                function parseDuration(text) {
+                    const match = text.match(/(\d+)\s*(s|m|h|d)/i);
+                    if (!match) return 10 * 60 * 1000;
+                    const value = parseInt(match[1]);
+                    const unit = match[2].toLowerCase();
+                    if (unit === 's') return value * 1000;
+                    if (unit === 'm') return value * 60 * 1000;
+                    if (unit === 'h') return value * 60 * 60 * 1000;
+                    if (unit === 'd') return value * 24 * 60 * 60 * 1000;
+                    return 10 * 60 * 1000;
+                }
+
+                const durationMs = parseDuration(durationStr);
+                const expiresAt = new Date(Date.now() + durationMs);
+
+                if (!targetMember) return interaction.reply({ content: '❌ Member is not in the server.', flags: [EPHEMERAL_FLAG] });
+
+                await client.sendPremiumModDM(targetMember, interaction.member, 'Timeout', reason, durationStr, interaction.guild, caseId);
+                await targetMember.timeout(durationMs, `${reason} | Executed by ${interaction.user.tag}`);
+
+                await interaction.reply({ content: `⏰ **Timed out <@${targetUser.id}> for ${durationStr}!**`, flags: [EPHEMERAL_FLAG] });
+
+                if (logChannel) {
+                    const timeoutLogEmbed = createWickLogEmbed({
+                        title: 'Member Timed Out',
+                        emoji: '⏰',
+                        color: '#ED4245',
+                        target: targetUser,
+                        moderator: interaction.user,
+                        reason: reason,
+                        duration: durationStr,
+                        expiresAt: expiresAt,
+                        caseId: caseId,
+                        guild: interaction.guild
+                    });
+                    await logChannel.send({ embeds: [timeoutLogEmbed] }).catch(() => {});
+                }
+                return;
+            }
+
+            // 🚪 KICK SUBMISSION
+            if (action === 'kick') {
+                if (!targetMember) return interaction.reply({ content: '❌ Member is not in the server.', flags: [EPHEMERAL_FLAG] });
+
+                await client.sendPremiumModDM(targetMember, interaction.member, 'Kick', reason, null, interaction.guild, caseId);
+                await targetMember.kick(`${reason} | Executed by ${interaction.user.tag}`);
+
+                await interaction.reply({ content: `🚪 **Kicked <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
+
+                if (logChannel) {
+                    const kickLogEmbed = createWickLogEmbed({
+                        title: 'Member Kicked',
+                        emoji: '🚪',
+                        color: '#DA373C',
+                        target: targetUser,
+                        moderator: interaction.user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild: interaction.guild
+                    });
+                    await logChannel.send({ embeds: [kickLogEmbed] }).catch(() => {});
+                }
+                return;
+            }
+
+            // 🔨 BAN SUBMISSION
+            if (action === 'ban') {
+                if (targetMember) {
+                    await client.sendPremiumModDM(targetMember, interaction.member, 'Ban', reason, null, interaction.guild, caseId);
+                }
+
+                await interaction.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${interaction.user.tag}` });
+                await interaction.reply({ content: `🔨 **Banned <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
+
+                if (logChannel) {
+                    const banLogEmbed = createWickLogEmbed({
+                        title: 'Member Banned',
+                        emoji: '🔨',
+                        color: '#ED4245',
+                        target: targetUser,
+                        moderator: interaction.user,
+                        reason: reason,
+                        caseId: caseId,
+                        guild: interaction.guild
+                    });
+                    await logChannel.send({ embeds: [banLogEmbed] }).catch(() => {});
+                }
+                return;
+            }
+        }
 
         // BAD WORD AUTOMOD BUTTON INTERACTION HANDLERS
         if (interaction.isButton() && interaction.customId.startsWith('badword_')) {
@@ -870,33 +1089,15 @@ module.exports = async (client) => {
             }
 
             if (interaction.customId === 'badword_add_btn') {
-                const modal = new ModalBuilder()
-                    .setCustomId('badword_add_modal')
-                    .setTitle('Add Bad Words to Filter');
-
-                const input = new TextInputBuilder()
-                    .setCustomId('badwords_input')
-                    .setLabel('Words to Add (comma separated)')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('e.g. word1, word2, word3')
-                    .setRequired(true);
-
+                const modal = new ModalBuilder().setCustomId('badword_add_modal').setTitle('Add Bad Words to Filter');
+                const input = new TextInputBuilder().setCustomId('badwords_input').setLabel('Words to Add (comma separated)').setStyle(TextInputStyle.Paragraph).setPlaceholder('e.g. word1, word2, word3').setRequired(true);
                 modal.addComponents(new ActionRowBuilder().addComponents(input));
                 return interaction.showModal(modal);
             }
 
             if (interaction.customId === 'badword_remove_btn') {
-                const modal = new ModalBuilder()
-                    .setCustomId('badword_remove_modal')
-                    .setTitle('Remove Bad Words from Filter');
-
-                const input = new TextInputBuilder()
-                    .setCustomId('badwords_input')
-                    .setLabel('Words to Remove (comma separated)')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('e.g. word1, word2')
-                    .setRequired(true);
-
+                const modal = new ModalBuilder().setCustomId('badword_remove_modal').setTitle('Remove Bad Words from Filter');
+                const input = new TextInputBuilder().setCustomId('badwords_input').setLabel('Words to Remove (comma separated)').setStyle(TextInputStyle.Paragraph).setPlaceholder('e.g. word1, word2').setRequired(true);
                 modal.addComponents(new ActionRowBuilder().addComponents(input));
                 return interaction.showModal(modal);
             }
@@ -904,29 +1105,16 @@ module.exports = async (client) => {
             if (interaction.customId === 'badword_list_btn') {
                 const settings = await BadWordSettings.findOne({ guildId });
                 const wordsList = settings?.words?.length ? settings.words.join(', ') : 'No bad words currently filtered.';
-
-                const listEmbed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setTitle('📜 Complete Filtered Bad Words List')
-                    .setDescription(`\`\`\`${wordsList.slice(0, 3900)}\`\`\``)
-                    .setTimestamp();
-
+                const listEmbed = new EmbedBuilder().setColor('#5865F2').setTitle('📜 Complete Filtered Bad Words List').setDescription(`\`\`\`${wordsList.slice(0, 3900)}\`\`\``).setTimestamp();
                 return interaction.reply({ embeds: [listEmbed], flags: [EPHEMERAL_FLAG] });
             }
         }
 
-        // BAD WORD AUTOMOD MODAL SUBMISSION HANDLERS
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'badword_add_modal') {
-                const inputWords = interaction.fields.getTextInputValue('badwords_input')
-                    .split(',')
-                    .map(w => w.trim().toLowerCase())
-                    .filter(w => w.length > 0);
-
+                const inputWords = interaction.fields.getTextInputValue('badwords_input').split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
                 let settings = await BadWordSettings.findOne({ guildId: interaction.guild.id });
-                if (!settings) {
-                    settings = new BadWordSettings({ guildId: interaction.guild.id, enabled: true, words: DEFAULT_BAD_WORDS });
-                }
+                if (!settings) settings = new BadWordSettings({ guildId: interaction.guild.id, enabled: true, words: DEFAULT_BAD_WORDS });
 
                 const added = [];
                 for (const word of inputWords) {
@@ -935,295 +1123,29 @@ module.exports = async (client) => {
                         added.push(word);
                     }
                 }
-
                 await settings.save();
                 await interaction.reply({ content: `✅ Added **${added.length}** new word(s) to the filter list!`, flags: [EPHEMERAL_FLAG] });
-
                 const panel = await getBadWordPanelEmbed(interaction.guild, client);
                 if (interaction.message) await interaction.message.edit(panel).catch(() => {});
             }
 
             if (interaction.customId === 'badword_remove_modal') {
-                const removeWords = interaction.fields.getTextInputValue('badwords_input')
-                    .split(',')
-                    .map(w => w.trim().toLowerCase())
-                    .filter(w => w.length > 0);
-
+                const removeWords = interaction.fields.getTextInputValue('badwords_input').split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
                 let settings = await BadWordSettings.findOne({ guildId: interaction.guild.id });
                 if (settings && settings.words) {
                     settings.words = settings.words.filter(w => !removeWords.includes(w.toLowerCase()));
                     await settings.save();
                 }
-
                 await interaction.reply({ content: `✅ Removed specified word(s) from the filter list!`, flags: [EPHEMERAL_FLAG] });
-
                 const panel = await getBadWordPanelEmbed(interaction.guild, client);
                 if (interaction.message) await interaction.message.edit(panel).catch(() => {});
             }
         }
-
-        if (interaction.isButton() && interaction.customId.startsWith('social_')) {
-            const parts = interaction.customId.split('_');
-            const actionType = parts[1] || 'pat';
-            let targetUserId = parts[2] && parts[2] !== 'back' ? parts[2] : null;
-
-            if (!targetUserId && interaction.message.embeds.length > 0) {
-                const desc = interaction.message.embeds[0].description || '';
-                const match = desc.match(/<@!?(\d+)>/);
-                if (match) targetUserId = match[1];
-            }
-
-            if (!targetUserId && interaction.message.author) {
-                targetUserId = interaction.message.author.id;
-            }
-
-            const actionGifs = {
-                pat: 'https://media.tenor.com/E6f13T34EwAAAAAC/anime-pat.gif',
-                hug: 'https://media.tenor.com/gg15582f3cAAAAAC/hug-anime.gif',
-                kiss: 'https://media.tenor.com/v4P2p1aP9xAAAAAC/anime-kiss.gif',
-                bite: 'https://media.tenor.com/39_X38I5ZqAAAAAC/anime-bite.gif',
-                cuddle: 'https://media.tenor.com/6Xz9sV5b-W0AAAAC/cuddle-anime.gif',
-                slap: 'https://media.tenor.com/Ws6vh1xRGAEAAAAC/anime-slap.gif'
-            };
-
-            const gifUrl = actionGifs[actionType.toLowerCase()] || actionGifs['pat'];
-            const formattedAction = actionType.charAt(0).toUpperCase() + actionType.slice(1);
-
-            const replyEmbed = new EmbedBuilder()
-                .setColor('#2ecc71')
-                .setDescription(`✨ <@${interaction.user.id}> ${actionType}ted back ${targetUserId ? `<@${targetUserId}>` : 'everyone'}! ❤️`)
-                .setImage(gifUrl)
-                .setTimestamp();
-
-            const reciprocalRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`social_${actionType.toLowerCase()}_${interaction.user.id}`)
-                    .setLabel(`${formattedAction} back`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji('⭐')
-            );
-
-            return interaction.reply({ embeds: [replyEmbed], components: [reciprocalRow] }).catch(() => {});
-        }
-
-        if (interaction.isButton() && interaction.customId.startsWith('verify_role_')) {
-            const roleId = interaction.customId.split('verify_role_')[1];
-            const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-            if (!client.verifyMap) client.verifyMap = new Map();
-            client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId: roleId });
-
-            const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`;
-            const verifyUrl = `${hostUrl}/verify?token=${token}`;
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setLabel('Verify Human Access').setStyle(ButtonStyle.Link).setURL(verifyUrl).setEmoji('🌐')
-            );
-
-            return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
-        }
+    });
 // ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 6 OF 7)
+// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 7)
 // File Path: modules/starry.js
 // ==========================================
-// Add this block inside client.on('interactionCreate') under if (interaction.isModalSubmit())
-if (interaction.customId === 'mod_warn_modal') {
-    const targetId = interaction.customId.split('_')[2] || interaction.fields.getTextInputValue('target_id');
-    const reason = interaction.fields.getTextInputValue('warn_reason') || 'No reason provided';
-    const caseId = Math.floor(Math.random() * 90000) + 10000;
-
-    const targetUser = await client.users.fetch(targetId).catch(() => null);
-
-    // 1. Send local confirmation response
-    await interaction.reply({
-        content: `⚠️ **Warned ${targetUser ? `<@${targetUser.id}>` : 'User'}!**\n**Reason:** ${reason}`,
-        flags: [EPHEMERAL_FLAG]
-    });
-
-    // 2. Dispatch DM to target user
-    if (targetUser) {
-        const dmEmbed = new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setAuthor({ name: `${interaction.guild.name} | Security Notice`, iconURL: interaction.guild.iconURL({ dynamic: true }) })
-            .setTitle('⚠️ Moderation Warning Issued')
-            .setDescription(`You have received an official warning in **${interaction.guild.name}**.`)
-            .addFields(
-                { name: '👤 Moderator', value: `<@${interaction.user.id}> (\`${interaction.user.tag}\`)`, inline: true },
-                { name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true },
-                { name: '📝 Reason', value: `>>> ${reason}`, inline: false }
-            )
-            .setTimestamp();
-
-        await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
-    }
-
-    // 3. Dispatch Wick-Style Log Embed to #logs-moderate channel
-    const logChannel = client.getLogChannel(interaction.guild, 'moderate');
-    if (logChannel && targetUser) {
-        const warnLogEmbed = createWickLogEmbed({
-            title: 'Member Warned',
-            emoji: '⚠️',
-            color: '#FEE75C',
-            target: targetUser,
-            moderator: interaction.user,
-            reason: reason,
-            extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
-            guild: interaction.guild
-        });
-
-        await logChannel.send({ embeds: [warnLogEmbed] }).catch(() => {});
-    }
-}
-
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'setup-starry') {
-                if (!interaction.deferred && !interaction.replied) await interaction.deferReply().catch(() => {});
-                const result = await provisionMasterServerStructure(interaction);
-                const embed = new EmbedBuilder().setColor('#2ecc71').setTitle('✨ Autonomous Server Setup Complete!').setDescription(`Configured **6 Categories** and **${result.totalChannels} Security & Log Channels**!`);
-                return interaction.editReply({ embeds: [embed] });
-            }
-
-            // ACCURATE EMERGENCY NUKE HANDLER (PURGES ALL CHANNELS/ROLES EXCEPT COMMAND CHANNEL & MAIN SYSTEM ROLES)
-            if (interaction.commandName === 'emergency-nuke') {
-                if (!interaction.deferred && !interaction.replied) {
-                    await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
-                }
-
-                try {
-                    const targetScope = interaction.options.getString('target', true);
-                    const botMember = interaction.guild.members.me;
-
-                    if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-                        return interaction.editReply({ content: '❌ **Permission Denied:** I need the **Manage Channels** permission to execute an emergency nuke!' });
-                    }
-
-                    if (targetScope === 'channel') {
-                        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
-
-                        if (!targetChannel || !targetChannel.deletable) {
-                            return interaction.editReply({ content: '❌ **Error:** I cannot delete or nuke this channel. Check my role position and permissions.' });
-                        }
-
-                        const position = targetChannel.position;
-
-                        if (targetChannel.id !== interaction.channel.id) {
-                            await interaction.editReply({ content: `⚡ Nuking channel <#${targetChannel.id}>...` });
-                        }
-
-                        const newChannel = await targetChannel.clone({
-                            reason: `Emergency Nuke executed by ${interaction.user.tag}`
-                        });
-
-                        await newChannel.setPosition(position).catch(() => {});
-                        await targetChannel.delete(`Emergency Nuke executed by ${interaction.user.tag}`).catch(() => {});
-
-                        const nukeEmbed = new EmbedBuilder()
-                            .setColor('#ED4245')
-                            .setTitle('⚡ EMERGENCY NUKE EXECUTED')
-                            .setDescription('💥 This channel has been completely purged and recreated.')
-                            .setImage('https://media.tenor.com/g05_V107_9EAAAAC/explosion-nuke.gif')
-                            .setFooter({ text: `Executed by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-                            .setTimestamp();
-
-                        return newChannel.send({ embeds: [nukeEmbed] });
-                    }
-
-                    if (targetScope === 'server') {
-                        await interaction.editReply({ content: '⚡ **EMERGENCY SERVER NUKE INITIATED:** Purging all channels and custom roles...' });
-
-                        const currentChannelId = interaction.channel.id;
-                        let channelsPurged = 0;
-                        let rolesPurged = 0;
-
-                        // Delete ALL channels EXCEPT the channel where command was executed
-                        const allChannels = Array.from(interaction.guild.channels.cache.values());
-                        for (const ch of allChannels) {
-                            if (ch.id !== currentChannelId && ch.deletable) {
-                                await ch.delete('Emergency Server Nuke').catch(() => {});
-                                channelsPurged++;
-                            }
-                        }
-
-                        // Delete ALL custom roles EXCEPT @everyone, bot-managed roles, and uneditable higher roles
-                        if (botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                            const allRoles = Array.from(interaction.guild.roles.cache.values());
-                            for (const role of allRoles) {
-                                if (
-                                    role.id !== interaction.guild.roles.everyone.id &&
-                                    !role.managed &&
-                                    role.position < botMember.roles.highest.position
-                                ) {
-                                    await role.delete('Emergency Server Nuke').catch(() => {});
-                                    rolesPurged++;
-                                }
-                            }
-                        }
-
-                        const serverNukeEmbed = new EmbedBuilder()
-                            .setColor('#ED4245')
-                            .setTitle('💥 FULL SERVER NUKE COMPLETED')
-                            .setDescription(`The server wipe has finished successfully!\n\n• **Channels Purged:** \`${channelsPurged}\`\n• **Roles Purged:** \`${rolesPurged}\`\n• **Surviving Channel:** <#${currentChannelId}>`)
-                            .setImage('https://media.tenor.com/g05_V107_9EAAAAC/explosion-nuke.gif')
-                            .setFooter({ text: `Executed by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-                            .setTimestamp();
-
-                        return interaction.followUp({ 
-                            embeds: [serverNukeEmbed], 
-                            flags: [EPHEMERAL_FLAG] 
-                        });
-                    }
-
-                } catch (err) {
-                    console.error('❌ Emergency Nuke Error:', err);
-                    return interaction.editReply({ content: `❌ **Nuke Failed:** \`${err.message}\`` }).catch(() => {});
-                }
-            }
-
-            if (interaction.commandName === 'setupwelcome') {
-                if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                    return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [EPHEMERAL_FLAG] });
-                }
-                const channel = interaction.options.getChannel('channel', true);
-                await WelcomeSettings.findOneAndUpdate({ guildId: interaction.guildId }, { channelId: channel.id }, { upsert: true });
-
-                const previewEmbed = new EmbedBuilder()
-                    .setColor('#FF73FA')
-                    .setTitle(`✨ WELCOME TO ${interaction.guild.name.toUpperCase()} ✨`)
-                    .setDescription(`💖 Hello ${interaction.user}! Welcome aboard! Make yourself at home, check out the community rules, and enjoy your wonderful stay here. ✨`)
-                    .addFields(
-                        { name: '🌸 Member Milestone', value: `You are our stellar member **#${interaction.guild.memberCount}**! 🎉`, inline: false },
-                        { name: '✨ Account Created', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true }
-                    )
-                    .setImage('https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
-                    .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
-                    .setFooter({ text: `✨ Starry Aesthetic Welcome System • Setup Preview Mode ✨` })
-                    .setTimestamp();
-
-                await channel.send({ content: `💫 Hey ${interaction.user}! We've been expecting you! 🥂 *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
-                return interaction.reply({ content: `✅ **Success!** Aesthetic welcome messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
-            }
-
-            if (interaction.commandName === 'setupgoodbye') {
-                if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                    return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [EPHEMERAL_FLAG] });
-                }
-                const channel = interaction.options.getChannel('channel', true);
-                await GoodbyeSettings.findOneAndUpdate({ guildId: interaction.guildId }, { channelId: channel.id }, { upsert: true });
-
-                const previewEmbed = new EmbedBuilder()
-                    .setColor('#7289DA')
-                    .setTitle(`🥀 FAREWELL, TRAVELER (Preview) 🥀`)
-                    .setDescription(`👋 **${interaction.user.tag}** has departed from **${interaction.guild.name}**. We wish you the absolute best on your future adventures! 🌠`)
-                    .addFields({ name: '📊 Server Census', value: `We are now down to **${interaction.guild.memberCount}** members.`, inline: false })
-                    .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
-                    .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                    .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Setup Preview Mode` })
-                    .setTimestamp();
-
-                await channel.send({ content: `🕊️ Goodbye **${interaction.user.username}**! Until we meet again... *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
-                return interaction.reply({ content: `✅ **Success!** Aesthetic goodbye messages will now be sent to ${channel}!`, flags: [EPHEMERAL_FLAG] });
-            }
-        }
-    });
 
     function cleanCategoryName(str) {
         if (!str) return '';
@@ -1241,13 +1163,11 @@ if (interaction.customId === 'mod_warn_modal') {
         const text = message.content.trim();
         const lowerText = text.toLowerCase();
 
-        // Trigger Command: .badon
         if (lowerText === '.badon') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await message.reply('❌ You need **Administrator** permissions to use `.badon`.');
                 return true;
             }
-
             let settings = await BadWordSettings.findOne({ guildId: message.guild.id });
             if (!settings) {
                 settings = await BadWordSettings.create({ guildId: message.guild.id, enabled: true, words: DEFAULT_BAD_WORDS });
@@ -1255,30 +1175,21 @@ if (interaction.customId === 'mod_warn_modal') {
                 settings.enabled = true;
                 await settings.save();
             }
-
             const panel = await getBadWordPanelEmbed(message.guild, client);
             await message.reply({ content: '✅ Bad word moderation is now **ENABLED**!', ...panel });
             return true;
         }
 
-        // Trigger Command: .badoff
         if (lowerText === '.badoff') {
             if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await message.reply('❌ You need **Administrator** permissions to use `.badoff`.');
                 return true;
             }
-
-            await BadWordSettings.findOneAndUpdate(
-                { guildId: message.guild.id },
-                { enabled: false },
-                { upsert: true }
-            );
-
+            await BadWordSettings.findOneAndUpdate({ guildId: message.guild.id }, { enabled: false }, { upsert: true });
             await message.reply('🛑 Bad word moderation has been **DISABLED**.');
             return true;
         }
 
-        // AutoMod Bad Word Detection
         if (message.member.permissions.has(PermissionFlagsBits.Administrator)) return false;
 
         const settings = await BadWordSettings.findOne({ guildId: message.guild.id });
@@ -1295,14 +1206,8 @@ if (interaction.customId === 'mod_warn_modal') {
 
         if (detectedWord) {
             await message.delete().catch(() => {});
-
-            const publicWarn = await message.channel.send(
-                `⚠️ <@${message.author.id}>, your message was removed because it contained bad/cuss words! Please keep the channel clean.`
-            ).catch(() => null);
-
-            if (publicWarn) {
-                setTimeout(() => publicWarn.delete().catch(() => {}), 6000);
-            }
+            const publicWarn = await message.channel.send(`⚠️ <@${message.author.id}>, your message was removed because it contained bad/cuss words! Please keep the channel clean.`).catch(() => null);
+            if (publicWarn) setTimeout(() => publicWarn.delete().catch(() => {}), 6000);
 
             const dmWarnEmbed = new EmbedBuilder()
                 .setColor('#ed4245')
@@ -1320,7 +1225,6 @@ if (interaction.customId === 'mod_warn_modal') {
             await message.author.send({ embeds: [dmWarnEmbed] }).catch(() => {});
             return true;
         }
-
         return false;
     }
 
@@ -1343,80 +1247,6 @@ if (interaction.customId === 'mod_warn_modal') {
         return false;
     }
 
-    async function handleDevCLI(client, message) {
-        const text = message.content.toLowerCase();
-        if (!text.startsWith('.dev') && !text.startsWith('.sysinfo') && !text.startsWith('.eval ')) return false;
-
-        const isOwner = typeof client.isOwner === 'function' 
-            ? client.isOwner(message.author.id) 
-            : (process.process?.env?.OWNER_ID ? message.author.id === process.env.OWNER_ID : false);
-
-        if (!isOwner) { await message.reply("❌ Access Denied.").catch(()=>{}); return true; }
-
-        if (text === '.sysinfo') {
-            const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-            await message.reply(`📊 **Starry System Info:**\n- **RAM:** ${memory} MB\n- **Uptime:** ${(process.uptime() / 3600).toFixed(2)} Hours\n- **Ping:** ${client.ws.ping}ms`).catch(()=>{});
-            return true;
-        }
-        if (text.startsWith('.eval ')) {
-            try {
-                let evaled = eval(message.content.slice(6));
-                if (typeof evaled !== "string") evaled = require("util").inspect(evaled);
-                await message.reply(`✅ **Output:**\n\`\`\`js\n${evaled.slice(0, 1900)}\n\`\`\``).catch(()=>{});
-            } catch (err) { await message.reply(`❌ **Error:**\n\`\`\`xl\n${err}\n\`\`\``).catch(()=>{}); }
-            return true;
-        }
-        return false;
-    }
-
-    async function handleLocalActions(client, message, triggerWord, displayName) {
-        if (!message.guild) return false;
-        const text = message.content.toLowerCase().trim();
-
-        const cleanText = text.replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|${triggerWord})\\s*`, 'i'), '').trim();
-
-        const isGreeting = cleanText === '' || ['hi', 'hello', 'hey', 'yo', 'sup', 'hola', triggerWord].includes(cleanText);
-        if (isGreeting) {
-            const responses = [
-                `Hello <@${message.author.id}>! ✨ How can I assist you today?`,
-                `Hey <@${message.author.id}>! I'm online and ready. What's on your mind? 🌟`,
-                `Hi <@${message.author.id}>! Need help with commands, music, or moderation? Just ask! 🚀`
-            ];
-            await message.reply(responses[Math.floor(Math.random() * responses.length)]);
-            return true;
-        }
-
-        if (text === '.premium' || text === `${triggerWord} premium` || text === 'jarvis premium') {
-            const premiumEmbed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setAuthor({ name: `${displayName} Protocol | Premium Suite`, iconURL: client.user.displayAvatarURL() })
-                .setTitle('💎 Starry Premium Features & Capabilities')
-                .setDescription('Below is the complete overview of all active features:')
-                .addFields(
-                    { name: '⚡ 1. High-Speed Gemini Multi-Model AI Engine', value: '• Sub-second response priority via Gemini 2.5 Flash & 2.0 Flash.', inline: false },
-                    { name: '🎨 2. High-Res Flux AI Image Generator', value: '• Instant art generation using the Flux model (`.imagine <prompt>`).', inline: false },
-                    { name: '♾️ 3. Infinite-Time Social Action Buttons', value: '• Permanent reciprocal buttons (`Pat back`, `Hug back`, `Kiss back`).', inline: false },
-                    { name: '💎 4. Premium Branded Moderation DMs', value: '• Rich DM notices sent to offenders upon Ban, Kick, or Timeout.', inline: false },
-                    { name: '⚡ 5. Instant Local Admin Actions (<10ms)', value: '• Fast local execution for channels, roles, and message purges.', inline: false }
-                )
-                .setFooter({ text: 'Starry Master System • Premium Tier Active', iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
-
-            await message.reply({ embeds: [premiumEmbed] });
-            return true;
-        }
-
-        return false;
-    }
-// ==========================================
-// 🧠 STARRY SUPREME MASTER AI ENGINE (PART 7 OF 7)
-// File Path: modules/starry.js
-// ==========================================
-
-    // ==========================================
-    // 🛡️ SMART MODERATION HANDLER (WICK-STYLE FORMATTING)
-    // Ensures Moderator is explicitly listed in output embeds and logs
-    // ==========================================
     async function handleSmartModeration(client, message, triggerWord = 'starry') {
         if (!message.guild || message.author.bot) return false;
 
@@ -1443,11 +1273,6 @@ if (interaction.customId === 'mod_warn_modal') {
                 await message.reply('❌ You need **Manage Messages** permissions to purge.');
                 return true;
             }
-            if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                await message.reply('❌ I need **Manage Messages** permission in Server Settings to purge!');
-                return true;
-            }
-
             const numberMatch = lowerContent.match(/\b\d+\b/);
             const count = numberMatch ? parseInt(numberMatch[0]) : 5;
             const deleteCount = Math.min(count, 99) + 1;
@@ -1485,67 +1310,27 @@ if (interaction.customId === 'mod_warn_modal') {
             }
 
             if (!targetUser) {
-                await message.reply('❌ Please mention a valid user to moderate (e.g. `Starry mute @user 1m for spam`).');
+                await message.reply('❌ Please mention a valid user to moderate.');
                 return true;
             }
 
             const targetMember = await message.guild.members.fetch(targetUser.id).catch(() => null);
-
-            if (targetMember) {
-                if (targetMember.roles.highest.position >= executor.roles.highest.position && message.author.id !== message.guild.ownerId) {
-                    await message.reply(`❌ You cannot moderate **${targetUser.username}** because their highest role is equal to or higher than yours!`);
-                    return true;
-                }
-
-                if (botMember && targetMember.roles.highest.position >= botMember.roles.highest.position) {
-                    await message.reply(`❌ I cannot moderate **${targetUser.username}** because their highest role is equal to or higher than my bot role! Move my Starry role higher.`);
-                    return true;
-                }
-            }
-
             let reason = 'No reason provided';
-            if (lowerContent.includes('for ')) {
-                reason = rawContent.substring(rawContent.toLowerCase().indexOf('for ') + 4).trim();
-            } else if (lowerContent.includes('reason:')) {
-                reason = rawContent.substring(rawContent.toLowerCase().indexOf('reason:') + 7).trim();
-            }
-
-            function parseDuration(text) {
-                const match = text.match(/(\d+)\s*(s|m|h|d)/i);
-                if (!match) return null;
-                const value = parseInt(match[1]);
-                const unit = match[2].toLowerCase();
-                switch (unit) {
-                    case 's': return value * 1000;
-                    case 'm': return value * 60 * 1000;
-                    case 'h': return value * 60 * 60 * 1000;
-                    case 'd': return value * 24 * 60 * 60 * 1000;
-                    default: return null;
-                }
-            }
+            if (lowerContent.includes('for ')) reason = rawContent.substring(rawContent.toLowerCase().indexOf('for ') + 4).trim();
 
             const caseId = Math.floor(Math.random() * 90000) + 10000;
+            const logChannel = client.getLogChannel(message.guild, 'moderate');
 
-            // --- TIMEOUT / MUTE ---
             if (isTimeout && !isUntimeout) {
-                if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers) || !botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-                    await message.reply('❌ Missing `Moderate Members` permissions.');
-                    return true;
-                }
-                if (!targetMember) {
-                    await message.reply('❌ That user is not currently in this server!');
-                    return true;
-                }
-
-                const durationMs = parseDuration(lowerContent) || (10 * 60 * 1000);
-                const durationStr = lowerContent.match(/(\d+)\s*(s|m|h|d)/i)?.[0] || '10m';
+                const durationMs = 10 * 60 * 1000;
+                const durationStr = '10m';
                 const expiresAt = new Date(Date.now() + durationMs);
 
-                await client.sendPremiumModDM(targetMember, executor, 'Timeout', reason, durationStr, message.guild, caseId);
+                if (targetMember) {
+                    await client.sendPremiumModDM(targetMember, executor, 'Timeout', reason, durationStr, message.guild, caseId);
+                    await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
+                }
 
-                await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
-
-                // Wick-Style Timed Out Embed (Includes explicit Moderator)
                 const embed = createWickLogEmbed({
                     title: 'Member Timed Out',
                     emoji: '⏰',
@@ -1555,55 +1340,20 @@ if (interaction.customId === 'mod_warn_modal') {
                     reason: reason,
                     duration: durationStr,
                     expiresAt: expiresAt,
-                    extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+                    caseId: caseId,
                     guild: message.guild
                 });
 
                 await message.reply({ embeds: [embed] });
-
-                const logChannel = client.getLogChannel(message.guild, 'moderate');
                 if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
-            // --- UNTIMEOUT / UNMUTE ---
-            if (isUntimeout) {
-                if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-                    await message.reply('❌ Missing `Moderate Members` permission.');
-                    return true;
-                }
-                if (!targetMember) return true;
-
-                await targetMember.timeout(null, `Untimed out by ${message.author.tag}`);
-
-                const embed = createWickLogEmbed({
-                    title: 'Member Timeout Removed',
-                    emoji: '🔓',
-                    color: '#2ECC71',
-                    target: targetUser,
-                    moderator: message.author,
-                    reason: 'Timeout manually removed.',
-                    guild: message.guild
-                });
-
-                await message.reply({ embeds: [embed] });
-
-                const logChannel = client.getLogChannel(message.guild, 'moderate');
-                if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
-                return true;
-            }
-
-            // --- KICK ---
             if (isKick) {
-                if (!executor.permissions.has(PermissionFlagsBits.KickMembers) || !botMember?.permissions.has(PermissionFlagsBits.KickMembers)) {
-                    await message.reply('❌ Missing `Kick Members` permissions.');
-                    return true;
+                if (targetMember) {
+                    await client.sendPremiumModDM(targetMember, executor, 'Kick', reason, null, message.guild, caseId);
+                    await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
                 }
-                if (!targetMember) return true;
-
-                await client.sendPremiumModDM(targetMember, executor, 'Kick', reason, null, message.guild, caseId);
-
-                await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
 
                 const embed = createWickLogEmbed({
                     title: 'Member Kicked',
@@ -1612,28 +1362,19 @@ if (interaction.customId === 'mod_warn_modal') {
                     target: targetUser,
                     moderator: message.author,
                     reason: reason,
-                    extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+                    caseId: caseId,
                     guild: message.guild
                 });
 
                 await message.reply({ embeds: [embed] });
-
-                const logChannel = client.getLogChannel(message.guild, 'moderate');
                 if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
-            // --- BAN ---
             if (isBan) {
-                if (!executor.permissions.has(PermissionFlagsBits.BanMembers) || !botMember?.permissions.has(PermissionFlagsBits.BanMembers)) {
-                    await message.reply('❌ Missing `Ban Members` permissions.');
-                    return true;
-                }
-
                 if (targetMember) {
                     await client.sendPremiumModDM(targetMember, executor, 'Ban', reason, null, message.guild, caseId);
                 }
-
                 await message.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${message.author.tag}` });
 
                 const embed = createWickLogEmbed({
@@ -1643,19 +1384,16 @@ if (interaction.customId === 'mod_warn_modal') {
                     target: targetUser,
                     moderator: message.author,
                     reason: reason,
-                    extraFields: [{ name: '🏷️ Case ID', value: `\`#${caseId}\``, inline: true }],
+                    caseId: caseId,
                     guild: message.guild
                 });
 
                 await message.reply({ embeds: [embed] });
-
-                const logChannel = client.getLogChannel(message.guild, 'moderate');
                 if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
                 return true;
             }
 
         } catch (err) {
-            console.error('❌ Moderation Error:', err);
             await message.reply(`❌ Action failed: \`${err.message}\``).catch(() => {});
             return true;
         }
@@ -1663,133 +1401,14 @@ if (interaction.customId === 'mod_warn_modal') {
         return false;
     }
 
-    async function handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine) {
-        let isImageRequest = isImagine;
-        let imagePrompt = "";
-
-        if (isImagine) {
-            imagePrompt = message.content.slice(9).trim();
-        } else if (hasName || mentionsBot) {
-            const rawText = message.content.toLowerCase();
-            const hasExplicitImageKeywords = /\b(?:image|picture|photo|art|drawing|pic|illustration|avatar)s?\b/i.test(rawText) ||
-                                            /\b(?:draw|paint|imagine)\b/i.test(rawText);
-
-            if (hasExplicitImageKeywords) {
-                let cleanPrompt = message.content
-                    .replace(new RegExp(`^(?:<@!?${client.user?.id}>|${displayName}|jarvis|starry)\\s*`, 'i'), '')
-                    .trim();
-
-                cleanPrompt = cleanPrompt
-                    .replace(/^(?:create|generate|draw|make|paint|imagine)\s+/i, '')
-                    .replace(/\b(?:an?|some|the)\b\s+/gi, '')
-                    .replace(/\b(?:image|picture|drawing|art|photo|pic|illustration)s?\b/gi, '')
-                    .replace(/\b(?:of|about|showing|with)\b\s+/gi, '')
-                    .trim();
-
-                if (cleanPrompt.length > 0) {
-                    isImageRequest = true;
-                    imagePrompt = cleanPrompt;
-                }
-            }
-        }
-
-        if (isImageRequest) {
-            if (!imagePrompt) { await message.reply('❌ Please tell me what to draw!').catch(() => {}); return true; }
-            const replyMsg = await message.reply('🎨 Painting your picture... Please wait.').catch(() => null);
-            if (!replyMsg) return true;
-            try {
-                const safePrompt = encodeURIComponent(imagePrompt.replace(/[^a-zA-Z0-9\s]/g, ''));
-                const seed = Math.floor(Math.random() * 1000000);
-                const imageUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-                
-                await message.reply({ content: `🖼️ **"${imagePrompt}"**\nGenerated by ${message.author}`, files: [{ attachment: imageUrl, name: `${displayName}_AI_Art.png` }] }).catch(() => {});
-                if (replyMsg) await replyMsg.delete().catch(() => {});
-            } catch (error) { 
-                if (replyMsg) await replyMsg.edit('❌ I had trouble drawing that. Try a simpler prompt.').catch(() => {}); 
-            }
-            return true;
-        }
-        return false;
-    }
-
-    async function handleConversationalGemini(client, message, displayName) {
-        await message.channel.sendTyping().catch(() => {});
-
-        try {
-            const prompt = `[SYSTEM INSTRUCTION]
-You are ${displayName}, an advanced all-in-one Discord AI companion and server administrator.
-
-YOUR FULL CAPABILITIES INCLUDE:
-1. 🎨 AI Image Generation: Creating custom art, pictures, and drawings on command (\`.imagine\` or \`Starry draw...\`).
-2. 🎵 Music & DJ Controls: Playing high-quality audio, track control (pause, skip, loop, volume), and VC locks.
-3. 🌐 Translator & Multilingual Engine: Auto-translating text between languages, detecting language, and multilingual support.
-4. 🔢 Smart Counting Game & High Scores: Managing server counting channels (\`/setupcount\`), evaluating math expressions, and tracking streaks.
-5. 🛡️ Autonomous Moderation & Security: Kicking, banning, unbanning, timing out users, clearing messages, and security logging.
-6. 📁 Channel & Category Management: Dynamically creating, deleting, and organizing text/voice channels and categories.
-7. 🎭 Role Management: Creating roles, assigning/removing roles from members, and managing permissions.
-
-When asked about your features, list ALL 7 of your capabilities clearly and concisely.
-
-[USER MESSAGE]
-${message.author.username} says: ${message.content}`;
-
-            let replyText = await generateAIResponseWithRetry(prompt);
-
-            if (replyText && replyText.trim().length > 0) {
-                const textChunks = replyText.trim().match(/[\s\S]{1,1950}/g) || [];
-                for (const chunk of textChunks) {
-                    await message.reply(chunk).catch(() => {});
-                }
-            }
-
-        } catch (error) {
-            console.error('Conversational Engine Error:', error.message || error);
-        }
-    }
-
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || !message.content || blacklistedUsers.has(message.author.id)) return;
 
         let triggerWord = 'starry';
-        let displayName = 'Starry'; 
-
-        try {
-            if (ServerSettings) {
-                const settings = await ServerSettings.findOne({ guildId: message.guild.id });
-                if (settings && settings.triggerWord) {
-                    triggerWord = settings.triggerWord.toLowerCase();
-                    displayName = settings.triggerWord;
-                }
-            }
-        } catch (err) {}
-
         if (await handleBadWordAutoMod(client, message)) return;
         if (await handleAutoModPing(message)) return;
-        if (await handleDevCLI(client, message)) return;
-
         const modHandled = await handleSmartModeration(client, message, triggerWord);
         if (modHandled) return;
-
-        const text = message.content.toLowerCase().trim();
-        const isImagine = text.startsWith('.imagine ');
-        const mentionsBot = message.mentions.has(client.user.id);
-        const hasName = text.includes(triggerWord) || text.includes('jarvis');
-        let isReplyToBot = false;
-
-        if (message.reference) {
-            const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(()=>null);
-            if (refMsg && refMsg.author.id === client.user.id) isReplyToBot = true;
-        }
-
-        if (!isImagine && !mentionsBot && !hasName && !isReplyToBot) return;
-
-        const localHandled = await handleLocalActions(client, message, triggerWord, displayName);
-        if (localHandled) return; 
-
-        const imageHandled = await handlePollinationsImage(client, message, displayName, mentionsBot, hasName, isImagine);
-        if (imageHandled) return;
-
-        await handleConversationalGemini(client, message, displayName);
     });
 };
 
@@ -1797,6 +1416,7 @@ module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
 module.exports.executeFullGuildBackup = executeFullGuildBackup;
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
+module.exports.modPanelPayload = modPanelSlashCommand.toJSON();
 module.exports.modMasterPayload = modMasterCommand.toJSON();
 module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
 module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
