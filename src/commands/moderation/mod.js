@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ MODERATION SUITE - COMMAND DATA & HELPERS
+// 🛡️ MODERATION SUITE - COMMAND SUITE & LOG BUILDER
 // File Path: mod.js (Part 1 of 2)
 // ==========================================
 const { 
@@ -14,12 +14,18 @@ const {
 
 const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
 
+// Helper function to prevent Discord.js EmbedBuilder null icon crashes
+const safeIcon = (url) => (url ? String(url) : undefined);
+
 function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
+    const targetAvatar = target?.displayAvatarURL ? target.displayAvatarURL() : guild?.iconURL();
+    const guildAvatar = guild?.iconURL();
+
     const embed = new EmbedBuilder()
         .setColor(color || '#ED4245')
         .setAuthor({ 
             name: `${emoji ? emoji + ' ' : ''}${title}`, 
-            iconURL: target?.displayAvatarURL ? target.displayAvatarURL({ dynamic: true }) : (guild?.iconURL({ dynamic: true }) || null)
+            iconURL: safeIcon(targetAvatar)
         });
 
     if (target) {
@@ -32,6 +38,8 @@ function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, dur
         const modTag = moderator.tag || (moderator.user ? moderator.user.tag : moderator.username || 'System Automation');
         const modId = moderator.id || 'N/A';
         embed.addFields({ name: '🛡️ Moderator', value: `<@${modId}> (\`${modTag}\`)\n**Moderator ID:** \`${modId}\``, inline: false });
+    } else {
+        embed.addFields({ name: '🛡️ Moderator', value: '`System Automation / Audit Log`', inline: false });
     }
 
     if (caseId) {
@@ -59,7 +67,7 @@ function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, dur
 
     embed.setFooter({ 
         text: `User ID: ${target?.id || 'N/A'} • Starry Security Engine`, 
-        iconURL: guild?.iconURL({ dynamic: true }) || null 
+        iconURL: safeIcon(guildAvatar) 
     });
     embed.setTimestamp();
 
@@ -72,6 +80,7 @@ module.exports = {
         .setDescription('Supreme all-in-one moderation command suite')
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
 
+        // BAN
         .addSubcommand(sub => sub
             .setName('ban')
             .setDescription('Ban a user from the server')
@@ -80,6 +89,7 @@ module.exports = {
             .addIntegerOption(opt => opt.setName('delete_days').setDescription('Days of messages to delete (0-7)').setMinValue(0).setMaxValue(7))
         )
 
+        // UNBAN
         .addSubcommand(sub => sub
             .setName('unban')
             .setDescription('Unban a user by ID')
@@ -87,6 +97,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the unban'))
         )
 
+        // KICK
         .addSubcommand(sub => sub
             .setName('kick')
             .setDescription('Kick a member from the server')
@@ -94,6 +105,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the kick'))
         )
 
+        // TIMEOUT
         .addSubcommand(sub => sub
             .setName('timeout')
             .setDescription('Timeout/Mute a member')
@@ -102,6 +114,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the timeout'))
         )
 
+        // UNTIMEOUT
         .addSubcommand(sub => sub
             .setName('untimeout')
             .setDescription('Remove timeout from a member')
@@ -109,6 +122,7 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for untimeout'))
         )
 
+        // PURGE / CLEAR
         .addSubcommand(sub => sub
             .setName('purge')
             .setDescription('Delete/Clear bulk messages from a channel')
@@ -116,6 +130,7 @@ module.exports = {
             .addUserOption(opt => opt.setName('target').setDescription('Filter messages by target user'))
         )
 
+        // WARN
         .addSubcommand(sub => sub
             .setName('warn')
             .setDescription('Warn a user')
@@ -123,24 +138,28 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for the warning').setRequired(true))
         )
 
+        // WARNINGS
         .addSubcommand(sub => sub
             .setName('warnings')
             .setDescription('View warnings for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The user to inspect').setRequired(true))
         )
 
+        // CLEAR WARNS
         .addSubcommand(sub => sub
             .setName('clearwarns')
             .setDescription('Clear all warnings for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The user to clear warnings for').setRequired(true))
         )
 
+        // MOD PANEL
         .addSubcommand(sub => sub
             .setName('panel')
             .setDescription('Open an interactive Moderation Control Panel for a user')
             .addUserOption(opt => opt.setName('target').setDescription('The member to moderate').setRequired(true))
         )
 
+        // LOCKDOWN
         .addSubcommand(sub => sub
             .setName('lockdown')
             .setDescription('Lock a text channel')
@@ -148,20 +167,22 @@ module.exports = {
             .addStringOption(opt => opt.setName('reason').setDescription('Reason for lockdown'))
         )
 
+        // UNLOCK
         .addSubcommand(sub => sub
             .setName('unlock')
             .setDescription('Unlock a text channel')
             .addChannelOption(opt => opt.setName('channel').setDescription('Channel to unlock').addChannelTypes(ChannelType.GuildText))
         )
 
+        // NICKNAME
         .addSubcommand(sub => sub
             .setName('nick')
             .setDescription('Change a user\'s nickname')
             .addUserOption(opt => opt.setName('target').setDescription('The member to nick').setRequired(true))
             .addStringOption(opt => opt.setName('nickname').setDescription('New nickname (leave blank to reset)'))
         ),
-                             // ==========================================
-// 🛡️ MODERATION SUITE - EXECUTION HANDLER
+    // ==========================================
+// 🛡️ MODERATION SUITE - EXECUTION DISPATCHER
 // File Path: mod.js (Part 2 of 2)
 // ==========================================
     async execute(interaction) {
@@ -433,13 +454,13 @@ module.exports = {
                     const embed = new EmbedBuilder()
                         .setTitle(`🛡️ Moderation Control Panel`)
                         .setColor('#5f27cd')
-                        .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                        .setThumbnail(safeIcon(targetUser.displayAvatarURL()))
                         .addFields(
                             { name: 'Target User', value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
                             { name: 'Joined Server', value: targetMember ? `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>` : 'Not in server', inline: true },
                             { name: 'Roles', value: targetMember ? `${targetMember.roles.cache.size - 1}` : 'N/A', inline: true }
                         )
-                        .setFooter({ text: `Requested by ${user.tag}`, iconURL: user.displayAvatarURL({ dynamic: true }) });
+                        .setFooter({ text: `Requested by ${user.tag}`, iconURL: safeIcon(user.displayAvatarURL()) });
 
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId(`mp_warn_${targetUser.id}`).setLabel('Warn').setStyle(ButtonStyle.Warning),
@@ -537,4 +558,4 @@ module.exports = {
         }
     }
 };
-                        
+                                                                        
