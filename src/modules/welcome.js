@@ -21,7 +21,7 @@ const welcomeSchema = new mongoose.Schema({
     title: { type: String, default: '✨ WELCOME TO {server} ✨' },
     description: { type: String, default: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟' },
     color: { type: String, default: '#FF73FA' },
-    image: { type: String, default: 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif' },
+    image: { type: String, default: 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif' },
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '✨ Enjoy your stellar journey in {server}! ✨' },
     pingContent: { type: String, default: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂' }
@@ -39,9 +39,9 @@ const setupWelcomeCommand = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 function isValidUrl(str) {
-    if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar') return false;
+    if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar' || str.trim() === '') return false;
     try {
-        const url = new URL(str);
+        const url = new URL(str.trim());
         return url.protocol === 'http:' || url.protocol === 'https:';
     } catch {
         return false;
@@ -50,7 +50,7 @@ function isValidUrl(str) {
 
 function isValidHex(color) {
     if (!color || typeof color !== 'string' || color === 'undefined') return false;
-    return /^#([0-9A-F]{3}){1,2}$/i.test(color);
+    return /^#([0-9A-F]{3}){1,2}$/i.test(color.trim());
 }
 
 function replacePlaceholders(text, member) {
@@ -73,7 +73,7 @@ async function getWelcomeControlPanel(guildId, client) {
     const descDisplay = (settings.description && settings.description !== 'undefined') ? settings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
     const colorDisplay = isValidHex(settings.color) ? settings.color : '#FF73FA';
     const footerDisplay = (settings.footer && settings.footer !== 'undefined') ? settings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
-    const imageDisplay = isValidUrl(settings.image) ? `[View Image](${settings.image})` : '*None / Default*';
+    const imageDisplay = isValidUrl(settings.image) ? `[View Image](${settings.image})` : '*None / Default GIF*';
 
     const panelEmbed = new EmbedBuilder()
         .setColor(colorDisplay)
@@ -126,24 +126,28 @@ const welcomeModule = (client) => {
 
         const channel = interaction.options.getChannel('channel', true);
 
-        await WelcomeSettings.findOneAndUpdate(
-            { guildId: interaction.guildId },
-            { 
+        // PRESERVE EXISTING CUSTOM SETTINGS IF ALREADY SAVED
+        let settings = await WelcomeSettings.findOne({ guildId: interaction.guildId });
+        if (!settings) {
+            settings = await WelcomeSettings.create({
+                guildId: interaction.guildId,
                 channelId: channel.id,
                 title: '✨ WELCOME TO {server} ✨',
                 description: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟',
                 color: '#FF73FA',
-                image: 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif',
+                image: 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif',
                 thumbnail: 'avatar',
                 footer: '✨ Enjoy your stellar journey in {server}! ✨',
                 pingContent: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂'
-            },
-            { upsert: true, new: true }
-        );
+            });
+        } else {
+            settings.channelId = channel.id;
+            await settings.save();
+        }
 
         const panelData = await getWelcomeControlPanel(interaction.guildId, client);
         return interaction.editReply({ 
-            content: `✅ **Welcome channel configured to ${channel}!** Use the Embed Manager below to customize layout:`,
+            content: `✅ **Welcome channel set to ${channel}!** Use the Embed Manager below to customize layout:`,
             ...panelData 
         });
     }
@@ -183,7 +187,7 @@ const welcomeModule = (client) => {
             }
 
             if (config.thumbnail === 'avatar') {
-                welcomeEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+                welcomeEmbed.setThumbnail(member.user.displayAvatarURL({ size: 256 }));
             } else if (isValidUrl(config.thumbnail)) {
                 welcomeEmbed.setThumbnail(config.thumbnail);
             }
@@ -197,7 +201,7 @@ const welcomeModule = (client) => {
             console.error('[Welcome Engine Error]:', error);
         }
     });
-    // ==========================================
+            // ==========================================
 // 🌸 INTERACTIVE WELCOME SUITE - INTERACTION CONTROLLERS
 // File Path: welcome.js (Part 2 of 2)
 // ==========================================
@@ -249,7 +253,7 @@ const welcomeModule = (client) => {
                     .setCustomId('in_image')
                     .setLabel('Banner Image URL (GIF or PNG)')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(isValidUrl(settings.image) ? settings.image : 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
+                    .setValue(isValidUrl(settings.image) ? settings.image : 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif')
                     .setRequired(false);
 
                 const thumbInput = new TextInputBuilder()
@@ -300,15 +304,17 @@ const welcomeModule = (client) => {
                 return interaction.showModal(modal);
             }
 
-            // TEST PREVIEW CARD HANDLER (CRASH-PROOF & EMBED RENDER FIX)
+            // TEST PREVIEW CARD HANDLER (RE-FETCHES LATEST MONGODB SAVED DATA)
             if (interaction.customId === 'welc_btn_preview') {
                 try {
+                    // Force fetch latest saved settings from database
+                    const latestSettings = await WelcomeSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const member = interaction.member;
 
-                    const pingRaw = (settings.pingContent && settings.pingContent !== 'undefined') ? settings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
-                    const titleRaw = (settings.title && settings.title !== 'undefined') ? settings.title : '✨ WELCOME TO {server} ✨';
-                    const descRaw = (settings.description && settings.description !== 'undefined') ? settings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
-                    const footerRaw = (settings.footer && settings.footer !== 'undefined') ? settings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
+                    const pingRaw = (latestSettings.pingContent && latestSettings.pingContent !== 'undefined') ? latestSettings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
+                    const titleRaw = (latestSettings.title && latestSettings.title !== 'undefined') ? latestSettings.title : '✨ WELCOME TO {server} ✨';
+                    const descRaw = (latestSettings.description && latestSettings.description !== 'undefined') ? latestSettings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
+                    const footerRaw = (latestSettings.footer && latestSettings.footer !== 'undefined') ? latestSettings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
 
                     const pingMsg = replacePlaceholders(pingRaw, member);
                     const titleMsg = replacePlaceholders(titleRaw, member);
@@ -316,7 +322,7 @@ const welcomeModule = (client) => {
                     const footerMsg = replacePlaceholders(footerRaw, member);
 
                     const previewEmbed = new EmbedBuilder()
-                        .setColor(isValidHex(settings.color) ? settings.color : '#FF73FA')
+                        .setColor(isValidHex(latestSettings.color) ? latestSettings.color : '#FF73FA')
                         .setTitle(titleMsg.slice(0, 256))
                         .setDescription(descMsg.slice(0, 4000))
                         .addFields(
@@ -325,14 +331,14 @@ const welcomeModule = (client) => {
                         )
                         .setTimestamp();
 
-                    if (isValidUrl(settings.image)) {
-                        previewEmbed.setImage(settings.image);
+                    if (isValidUrl(latestSettings.image)) {
+                        previewEmbed.setImage(latestSettings.image);
                     }
 
-                    if (settings.thumbnail === 'avatar') {
-                        previewEmbed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
-                    } else if (isValidUrl(settings.thumbnail)) {
-                        previewEmbed.setThumbnail(settings.thumbnail);
+                    if (latestSettings.thumbnail === 'avatar') {
+                        previewEmbed.setThumbnail(member.user.displayAvatarURL({ size: 256 }));
+                    } else if (isValidUrl(latestSettings.thumbnail)) {
+                        previewEmbed.setThumbnail(latestSettings.thumbnail);
                     }
 
                     if (footerMsg) {
@@ -369,7 +375,7 @@ const welcomeModule = (client) => {
             if (interaction.customId === 'welc_modal_media') {
                 let image = interaction.fields.getTextInputValue('in_image');
                 let thumbnail = interaction.fields.getTextInputValue('in_thumb');
-                if (!isValidUrl(image)) image = 'https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif';
+                if (image && !isValidUrl(image)) image = 'https://media.tenor.com/9nJ97o10U60AAAAC/anime-welcome.gif';
                 if (thumbnail !== 'avatar' && !isValidUrl(thumbnail)) thumbnail = 'avatar';
                 await WelcomeSettings.findOneAndUpdate({ guildId }, { image, thumbnail }, { upsert: true });
             }
