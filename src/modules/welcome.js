@@ -116,7 +116,7 @@ const welcomeModule = (client) => {
     async function handleSetupWelcome(interaction) {
         try {
             if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply({ flags: [6] });
+                await interaction.deferReply({ ephemeral: true });
             }
         } catch (e) { return; }
 
@@ -197,7 +197,7 @@ const welcomeModule = (client) => {
             console.error('[Welcome Engine Error]:', error);
         }
     });
-                // ==========================================
+    // ==========================================
 // 🌸 INTERACTIVE WELCOME SUITE - INTERACTION CONTROLLERS
 // File Path: welcome.js (Part 2 of 2)
 // ==========================================
@@ -213,11 +213,11 @@ const welcomeModule = (client) => {
         // ==========================================
         if (interaction.isButton() && interaction.customId.startsWith('welc_btn_')) {
             if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                return interaction.reply({ content: '❌ You need **Manage Server** permissions.', flags: [6] });
+                return interaction.reply({ content: '❌ You need **Manage Server** permissions.', ephemeral: true });
             }
 
             let settings = await WelcomeSettings.findOne({ guildId: interaction.guildId });
-            if (!settings) return interaction.reply({ content: '❌ Please run `/setupwelcome` first.', flags: [6] });
+            if (!settings) return interaction.reply({ content: '❌ Please run `/setupwelcome` first.', ephemeral: true });
 
             // EDIT TITLE & DESCRIPTION MODAL
             if (interaction.customId === 'welc_btn_text') {
@@ -300,7 +300,7 @@ const welcomeModule = (client) => {
                 return interaction.showModal(modal);
             }
 
-            // TEST PREVIEW CARD HANDLER (CRASH-PROOF)
+            // TEST PREVIEW CARD HANDLER (CRASH-PROOF & EMBED RENDER FIX)
             if (interaction.customId === 'welc_btn_preview') {
                 try {
                     const member = interaction.member;
@@ -342,13 +342,13 @@ const welcomeModule = (client) => {
                     return await interaction.reply({ 
                         content: `${pingMsg} *(Setup Preview)*`, 
                         embeds: [previewEmbed], 
-                        flags: [6] 
+                        ephemeral: true 
                     });
                 } catch (err) {
                     console.error('❌ Welcome Preview Error:', err);
                     return await interaction.reply({ 
                         content: `❌ **Failed to generate preview:** \`${err.message}\``, 
-                        flags: [6] 
+                        ephemeral: true 
                     }).catch(() => {});
                 }
             }
@@ -386,7 +386,7 @@ const welcomeModule = (client) => {
                 await WelcomeSettings.findOneAndUpdate({ guildId }, { pingContent }, { upsert: true });
             }
 
-            await interaction.reply({ content: '✅ **Welcome Embed Design Updated!**', flags: [6] });
+            await interaction.reply({ content: '✅ **Welcome Embed Design Updated!**', ephemeral: true });
 
             const panelData = await getWelcomeControlPanel(guildId, client);
             if (interaction.message && panelData) {
