@@ -1,5 +1,5 @@
 // ==========================================
-// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 1/2)
 // File Path: deploy-commands.js
 // ==========================================
 const { 
@@ -24,9 +24,7 @@ function safeRequire(paths) {
     for (const p of paths) {
         try {
             return require(p);
-        } catch (e) {
-            // Continue candidate search
-        }
+        } catch (e) {}
     }
     return null;
 }
@@ -117,6 +115,12 @@ const socialModule = safeRequire(['./src/modules/socialActions', './modules/soci
 const commands = [
     ...masterPayloads,
 
+    // TRUTH OR DARE SLASH COMMAND
+    new SlashCommandBuilder()
+        .setName('tod')
+        .setDescription('🎭 Start an interactive Truth or Dare game in this channel!')
+        .toJSON(),
+
     // TELEMETRY & VOICE
     { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
     { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
@@ -132,7 +136,7 @@ const commands = [
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
     { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
-    // 🌟 SETUP WELCOME COMMAND
+    // SETUP WELCOME COMMAND
     new SlashCommandBuilder()
         .setName('setupwelcome')
         .setDescription('Set up the channel for automated server welcome messages')
@@ -145,7 +149,7 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-    // 👋 SETUP GOODBYE COMMAND
+    // SETUP GOODBYE COMMAND
     new SlashCommandBuilder()
         .setName('setupgoodbye')
         .setDescription('Set up the channel for automated server goodbye messages')
@@ -158,7 +162,7 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-    // 🔍 GLOBAL USER APP WHOIS COMMAND
+    // GLOBAL USER APP WHOIS COMMAND
     new SlashCommandBuilder()
         .setName('whois')
         .setDescription('🔍 Lookup detailed information and permissions for a user')
@@ -178,7 +182,7 @@ const commands = [
         )
         .toJSON(),
 
-    // 📊 SINGLE LEVELING SLASH COMMAND
+    // LEVELING SLASH COMMAND
     new SlashCommandBuilder()
         .setName('enableleveling')
         .setDescription('⚙️ Enable leveling system and select log channel')
@@ -191,7 +195,7 @@ const commands = [
         )
         .toJSON(),
 
-    // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS
+    // TICKET & APPLICATION SETUP SLASH COMMANDS
     new SlashCommandBuilder()
         .setName('ticketsetup')
         .setDescription('🎫 Create the support ticket panel in this channel')
@@ -204,7 +208,7 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .toJSON(),
 
-    // 📥 GLOBAL EMOJI & STICKER STEALER COMMANDS
+    // GLOBAL EMOJI & STICKER STEALER COMMANDS
     new SlashCommandBuilder()
         .setName('steal')
         .setDescription('📥 Steal emojis or stickers from text or messages')
@@ -238,12 +242,16 @@ const commands = [
         )
         .toJSON()
 ];
+    // ==========================================
+// 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE (PART 2/2)
+// File Path: deploy-commands.js (Continued)
+// ==========================================
 
 if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
 
-// 🚀 GIVEAWAY & UTILITY COMMANDS
+// GIVEAWAY & UTILITY COMMANDS
 commands.push(
     new SlashCommandBuilder()
         .setName('giveaway')
@@ -286,7 +294,7 @@ commands.push(
     autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     
-    // UPDATED FULL REACTION ROLES COMMAND (SUBCOMMANDS: spawn, add, remove, list)
+    // REACTION ROLES COMMAND
     {
         name: 'rr',
         description: 'Manage reaction-role panels',
@@ -371,8 +379,6 @@ async function deployCommands() {
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
 
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
-        console.log(`⏳ Global commands sync across Discord can take up to 1 hour. Restart your Discord app to check local client status.`);
-
         return result;
     } catch (error) {
         console.error('❌ Discord API Rejected Command Payload:', error);
@@ -383,3 +389,4 @@ async function deployCommands() {
 if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
 
 module.exports = { commands: finalPayload, deployCommands };
+                     
