@@ -682,6 +682,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
     { name: 'Anonymous Confession System', fn: () => require('./modules/confession.js')(client, app) }
 ];
+{ name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
 
 function loadSlashCommands() {
     const commandsPath = path.join(__dirname, 'commands');
