@@ -1,21 +1,28 @@
+// ==========================================
+// 🎭 TRUTH OR DARE ENGINE - modules/truthOrDare.js
+// ==========================================
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-module.exports = (client) => {
-    // Fallback pool in case the external API is unreachable
+module.exports = (client, app) => {
+    // Local fallback database in case external web API is unreachable
     const fallbacks = {
         truth: [
-            "What is something you have never told anyone?",
-            "What is your biggest regret from the past year?",
-            "Who in this server would you trust with your life?"
+            "What is your biggest irrational fear?",
+            "What is a secret you have never told anyone in this server?",
+            "What is the most embarrassing thing in your search history?",
+            "If you had to delete one person from your friend list, who would it be?",
+            "What is the biggest lie you ever told your parents without getting caught?"
         ],
         dare: [
-            "Send the last photo in your camera roll to this chat.",
-            "Speak in an accent of the chat's choice in VC for 5 minutes.",
-            "Send a message to your 3rd recent DM saying only 'I know what you did'."
+            "Send the 4th photo in your camera roll to this chat.",
+            "Speak with an accent chosen by the server in VC for 5 minutes.",
+            "Change your nickname in this server to whatever the next person says for 2 hours.",
+            "Send a message to your 3rd most recent DM saying only 'We need to talk.'",
+            "Type your next 5 messages in chat using only emojis."
         ]
     };
 
-    // Helper: Create the 3-button control row
+    // Builds the 3 interactive game buttons
     function createTodRow() {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -36,40 +43,52 @@ module.exports = (client) => {
         );
     }
 
-    // Helper: Fetch random question from external Truth or Dare API
+    // Dynamic fetch from external API with PG-13 vs R rating detection
     async function fetchPromptFromWeb(type, rating = 'pg13') {
         try {
-            const res = await fetch(`https://api.truthordarebot.xyz/v1/${type}?rating=${rating}`);
-            if (!res.ok) throw new Error(`API response status: ${res.status}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+            const res = await fetch(`https://api.truthordarebot.xyz/v1/${type}?rating=${rating}`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) throw new Error(`API responded with status: ${res.status}`);
             const data = await res.json();
             return data.question;
         } catch (error) {
-            console.error(`[ToD] Failed to fetch ${type} from API, using fallback:`, error.message);
-            const pool = fallbacks[type];
+            console.warn(`[TruthOrDare] Web fetch fallback invoked (${error.message})`);
+            const pool = fallbacks[type] || fallbacks.truth;
             return pool[Math.floor(Math.random() * pool.length)];
         }
     }
 
     client.on('interactionCreate', async (interaction) => {
-        // Setup Command
+        // 1. Slash Command Initializer (/tod)
         if (interaction.isChatInputCommand() && interaction.commandName === 'tod') {
             const setupEmbed = new EmbedBuilder()
                 .setColor('#5865F2')
-                .setTitle('🎭 Truth or Dare')
-                .setDescription('Click a button below to generate a live prompt from the web!')
-                .addFields(
-                    { name: '🔵 Truth', value: 'Answer an honest question.', inline: true },
-                    { name: '🔴 Dare', value: 'Complete a challenge.', inline: true },
-                    { name: '🎲 Random', value: 'Let fate decide.', inline: true }
+                .setAuthor({ 
+                    name: 'Truth or Dare • Interactive Hub', 
+                    iconURL: client.user.displayAvatarURL() 
+                })
+                .setTitle('🎭 Pick Your Poison!')
+                .setDescription(
+                    'Welcome to the live Truth or Dare engine. Click any button below to draw a prompt directly from the global web database!'
                 )
-                .setFooter({ text: 'Click any button to take a turn.' });
+                .addFields(
+                    { name: '🔵 Truth', value: 'Answer an honest prompt', inline: true },
+                    { name: '🔴 Dare', value: 'Face a challenge', inline: true },
+                    { name: '🎲 Random', value: 'Let fate decide', inline: true }
+                )
+                .setFooter({ text: 'Anyone in this channel can click to take a turn.' });
 
             return interaction.reply({ embeds: [setupEmbed], components: [createTodRow()] });
         }
 
-        // Button Clicks
+        // 2. Button Turn Handler
         if (interaction.isButton() && interaction.customId.startsWith('tod_')) {
-            // Defer reply to prevent 3-second Discord timeouts while fetching from the web
             await interaction.deferReply();
 
             const rawChoice = interaction.customId.split('_')[1]; // truth, dare, or random
@@ -77,33 +96,32 @@ module.exports = (client) => {
             const promptType = isTruth ? 'truth' : 'dare';
             const resolvedLabel = isTruth ? 'Truth' : 'Dare';
 
-            // Check if server/channel allows NSFW or has premium enabled
-            const isNsfw = interaction.channel?.nsfw;
+            // Check channel content rating
+            const isNsfw = interaction.channel?.nsfw ?? false;
             const rating = isNsfw ? 'r' : 'pg13';
 
-            // Fetch dynamic prompt from the web API
             const question = await fetchPromptFromWeb(promptType, rating);
 
-            const responseEmbed = new EmbedBuilder()
+            const promptEmbed = new EmbedBuilder()
                 .setColor(isTruth ? '#3498DB' : '#E74C3C')
                 .setAuthor({
-                    name: `${interaction.user.displayName}'s Turn`,
+                    name: `${interaction.user.displayName || interaction.user.username}'s Turn`,
                     iconURL: interaction.user.displayAvatarURL({ dynamic: true })
                 })
-                .setTitle(`${isTruth ? '🔵' : '🔴'} ${resolvedLabel}`)
+                .setTitle(`${isTruth ? '🔵' : '🔴'} Selected: ${resolvedLabel}`)
                 .setDescription(
-                    `**Player:** ${interaction.user}\n` +
-                    `**Mode:** ${rawChoice === 'random' ? `🎲 Random (${resolvedLabel})` : resolvedLabel}\n\n` +
+                    `👤 **Player:** ${interaction.user} (\`${interaction.user.username}\`)\n` +
+                    `🕹️ **Choice:** ${rawChoice === 'random' ? `🎲 Random (${resolvedLabel})` : resolvedLabel}\n\n` +
                     `> **${question}**`
                 )
                 .setFooter({
                     text: `Rating: ${rating.toUpperCase()} • Click a button below for the next turn`,
-                    iconURL: interaction.guild.iconURL({ dynamic: true })
+                    iconURL: interaction.guild?.iconURL({ dynamic: true }) || undefined
                 })
                 .setTimestamp();
 
             await interaction.editReply({
-                embeds: [responseEmbed],
+                embeds: [promptEmbed],
                 components: [createTodRow()]
             });
         }
