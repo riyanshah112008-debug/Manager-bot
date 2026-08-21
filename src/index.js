@@ -1,8 +1,8 @@
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 1/7)
-// ==========================================
+// =================================================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - SRC/INDEX.JS (PART 1/4)
+// =================================================================
 
-// 🔧 Polyfill for older / 32-bit Node.js versions
+// Polyfill for older / 32-bit Node.js runtimes
 if (!Promise.withResolvers) {
     Promise.withResolvers = function () {
         let resolve, reject;
@@ -41,7 +41,7 @@ const KazagumoSpotify = require('kazagumo-spotify');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
-// Safely Require Bump Engine & Model
+// Safely Require Bump Engine & Server Listing Model
 let bumpEngine = null;
 let ServerListing = null;
 try {
@@ -60,6 +60,7 @@ const port = process.env.PORT || 10000;
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
+app.use(express.static(path.join(__dirname, '../')));
 
 app.get('/api/servers', async (req, res) => {
     try {
@@ -139,13 +140,9 @@ app.get('/', (req, res) => {
     `;
     res.send(html);
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 2/7)
-// ==========================================
-
-app.use(express.static(path.join(__dirname, '../')));
 
 app.get('/health', (req, res) => res.status(200).send('awake'));
+
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
     setInterval(() => {
@@ -153,6 +150,9 @@ app.listen(port, '0.0.0.0', () => {
         https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
     }, 840000); 
 });
+// =================================================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - SRC/INDEX.JS (PART 2/4)
+// =================================================================
 
 const client = new Client({
     intents: [
@@ -175,6 +175,7 @@ client.verifyMap = new Map();
 client.voiceCalls = new Map();
 client.vcLocks = new Map();
 
+// Auto-Mod: Mass Ping Detection Engine
 client.on('messageCreate', async (message) => {
     if (!message.guild || message.author.bot || !message.member) return;
 
@@ -204,6 +205,7 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+// Verification Web Routes
 app.get('/verify', (req, res) => {
     const token = req.query.token;
     if (!client.verifyMap.has(token)) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif; margin-top:50px;">❌ Invalid or Expired Link. Please generate a new one in Discord.</h1>');
@@ -239,69 +241,20 @@ app.post('/verify', async (req, res) => {
         res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure my bot role is higher than the verification role!</h1>');
     }
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 3/7)
-// ==========================================
 
-// UPGRADED MULTI-NODE LAVALINK CLUSTER WITH ZERO-MUSIC-LOSS FAILOVER
+// Lavalink Cluster with Failover Support
 const Nodes = [
-    {
-        name: 'Node-1-Jirayu-Primary',
-        url: 'lavalink.jirayu.net:13592',
-        auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-2-NyxBot-SG',
-        url: 'sg1-nodelink.nyxbot.app:3000',
-        auth: 'nyxbot.app/support',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-3-AjieDev-v4',
-        url: 'lava-v4.ajieblogs.eu.org:443',
-        auth: 'https://dsc.gg/ajidevserver',
-        secure: true,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-4-Lavalink-PPA',
-        url: 'lavalink.muy5.tech:443',
-        auth: 'youshallnotpass',
-        secure: true,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-5-G3V-UK',
-        url: 'lava.g3v.co.uk:9008',
-        auth: 'lavalinklol',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-6-Serenetia-v4',
-        url: 'lavalinkv4.serenetia.com:80',
-        auth: 'https://seretia.link/discord',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    }
+    { name: 'Node-1-Jirayu-Primary', url: 'lavalink.jirayu.net:13592', auth: 'youshallnotpass', secure: false, retryAmount: 50, retryDelay: 3000 },
+    { name: 'Node-2-NyxBot-SG', url: 'sg1-nodelink.nyxbot.app:3000', auth: 'nyxbot.app/support', secure: false, retryAmount: 50, retryDelay: 3000 },
+    { name: 'Node-3-AjieDev-v4', url: 'lava-v4.ajieblogs.eu.org:443', auth: 'https://dsc.gg/ajidevserver', secure: true, retryAmount: 50, retryDelay: 3000 },
+    { name: 'Node-4-Lavalink-PPA', url: 'lavalink.muy5.tech:443', auth: 'youshallnotpass', secure: true, retryAmount: 50, retryDelay: 3000 },
+    { name: 'Node-5-G3V-UK', url: 'lava.g3v.co.uk:9008', auth: 'lavalinklol', secure: false, retryAmount: 50, retryDelay: 3000 },
+    { name: 'Node-6-Serenetia-v4', url: 'lavalinkv4.serenetia.com:80', auth: 'https://seretia.link/discord', secure: false, retryAmount: 50, retryDelay: 3000 }
 ];
 
 client.manager = new Kazagumo({
     defaultSearchEngine: "spotify",
-    searchFallbacks: { 
-        spotify: "spsearch", 
-        soundcloud: "scsearch", 
-        youtube: "ytsearch" 
-    },
+    searchFallbacks: { spotify: "spsearch", soundcloud: "scsearch", youtube: "ytsearch" },
     plugins: [
         new KazagumoSpotify({ 
             clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
@@ -336,20 +289,12 @@ client.manager = new Kazagumo({
     }
 });
 
-client.manager.shoukaku.on('ready', (name) => {
-    console.log(`✅ [Lavalink Active] Node Connected: ${name}`);
-});
-
-client.manager.shoukaku.on('error', (name, error) => {
-    console.warn(`⚠️ [Lavalink Failover] Node [${name}] error, failover routing active...`);
-});
-
-client.manager.shoukaku.on('disconnect', (name, count) => {
-    console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Auto-migrating active players... (Retry: ${count})`);
-});
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 4/7)
-// ==========================================
+client.manager.shoukaku.on('ready', (name) => console.log(`✅ [Lavalink Active] Node Connected: ${name}`));
+client.manager.shoukaku.on('error', (name, error) => console.warn(`⚠️ [Lavalink Failover] Node [${name}] error, failover active...`));
+client.manager.shoukaku.on('disconnect', (name, count) => console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! (Retry: ${count})`));
+// =================================================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - SRC/INDEX.JS (PART 3/4)
+// =================================================================
 
 client.manager.on('playerStart', async (player, track) => {
     player.data.set('previousTrack', track);
@@ -432,7 +377,6 @@ client.manager.on('playerStart', async (player, track) => {
     }
 });
 
-// FIXED: Changed player.queue.size to player.queue.length
 client.manager.on('playerException', (player) => {
     try {
         if (player.queue.length > 0) player.skip();
@@ -440,7 +384,7 @@ client.manager.on('playerException', (player) => {
     } catch (e) {}
 });
 
-client.manager.on('playerEmpty', async player => {
+client.manager.on('playerEmpty', async (player) => {
     const channel = client.channels.cache.get(player.textId);
     const isAutoplay = player.data.get('autoplay');
 
@@ -448,9 +392,7 @@ client.manager.on('playerEmpty', async player => {
         const previousTrack = player.data.get('previousTrack');
         if (previousTrack) {
             try {
-                if (channel) {
-                    await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
-                }
+                if (channel) await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
 
                 const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
                 let result = await client.manager.search(searchQuery, { requester: previousTrack.requester });
@@ -474,9 +416,6 @@ client.manager.on('playerEmpty', async player => {
 
     if (channel) channel.send('📭 The queue has ended.');
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 5/7)
-// ==========================================
 
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
@@ -514,7 +453,7 @@ client.once(Events.ClientReady, async () => {
     }
 });
 
-client.on(Events.MessageCreate, async message => {
+client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot || !message.guild) return;
     const PREFIX = '.'; 
     if (!message.content.startsWith(PREFIX)) return;
@@ -536,11 +475,11 @@ client.on(Events.MessageCreate, async message => {
         console.error(`❌ Error executing prefix command ${commandName}:`, error); 
     }
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 6/7)
-// ==========================================
+// =================================================================
+// 🛡️ STARRY SUPREME MASTER ENGINE - SRC/INDEX.JS (PART 4/4)
+// =================================================================
 
-client.on(Events.InteractionCreate, async interaction => {
+client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.guild && !interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isStringSelectMenu() && !interaction.isContextMenuCommand()) return;
 
     if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
@@ -551,7 +490,7 @@ client.on(Events.InteractionCreate, async interaction => {
             'bump', 'bump-setup', 'autobump', 'set-listing',
             'ticketsetup', 'applysetup', 'setupcount', 'countstats', 'countreset',
             'whois', 'steal', 'Steal Emojis', 'setwelcome', 'setgoodbye',
-            'setupwelcome', 'setupgoodbye', 'translate', 'clear', 'confessionsetup','tod'
+            'setupwelcome', 'setupgoodbye', 'translate', 'clear', 'confessionsetup', 'tod'
         ];
         if (moduleHandledCommands.includes(interaction.commandName)) {
             return; 
@@ -635,9 +574,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 });
-// ==========================================
-// 🛡️ STARRY SUPREME MASTER ENGINE - INDEX.JS (PART 7/7)
-// ==========================================
 
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
@@ -680,8 +616,8 @@ const MODULE_INITIALIZERS = [
     { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
     { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
-    { name: 'Anonymous Confession System', fn: () => require('./modules/confession.js')(client, app) },
-    { name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
+    { name: 'Anonymous Confession System', fn: () => require('./modules/confession.js')(client, app) }
+];
 
 function loadSlashCommands() {
     const commandsPath = path.join(__dirname, 'commands');
