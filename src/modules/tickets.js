@@ -1,3 +1,7 @@
+// ==========================================
+// 🎫 STARRY TICKETS & PORTAL ENGINE (PART 1 OF 4)
+// File Path: modules/tickets.js
+// ==========================================
 const { 
     EmbedBuilder, 
     ActionRowBuilder, 
@@ -9,10 +13,28 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    MessageFlags
+    MessageFlags,
+    SlashCommandBuilder,
+    PermissionFlagsBits
 } = require('discord.js');
+const mongoose = require('mongoose');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
+
+// Mongoose Schema for Dynamic Portal Config & Role Pings
+const portalConfigSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    staffRoleId: { type: String, default: null },
+    staffRequirements: { 
+        type: String, 
+        default: '• Must be at least 15 years old\n• Minimum 14 days in server\n• Active 2+ hours daily\n• Clean moderation history' 
+    },
+    partnerRequirements: { 
+        type: String, 
+        default: '• Minimum 300+ real members\n• Active public chat\n• Must follow Discord TOS\n• Mutual @everyone / @here promo exchange' 
+    }
+});
+const PortalConfig = mongoose.models.PortalConfig || mongoose.model('PortalConfig', portalConfigSchema);
 
 module.exports = (client) => {
     // Helper: Strict Staff Check
@@ -22,6 +44,41 @@ module.exports = (client) => {
                member.permissions.has(PermissionsBitField.Flags.Administrator) ||
                member.roles.cache.some(r => ['staff', 'moderator', 'admin', 'support'].includes(r.name.toLowerCase()));
     };
+
+    // Helper: Generates the Master Portal Embed with live requirements
+    async function buildMasterPortalEmbed(guild) {
+        let config = await PortalConfig.findOne({ guildId: guild.id });
+        if (!config) {
+            config = await PortalConfig.create({ guildId: guild.id });
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#00F2FE')
+            .setAuthor({ name: `${guild.name} | Support & Applications`, iconURL: guild.iconURL({ dynamic: true }) })
+            .setTitle('🎫 Server Support, Staff & Partnership Portal')
+            .setDescription(
+                'Welcome to our server portal! Please read the requirements below before submitting an application.\n\n' +
+                '• **📩 Open Support Ticket:** Contact server staff privately for assistance.\n' +
+                '• **🛡️ Apply for Staff:** Submit a staff team moderation application.\n' +
+                '• **🤝 Request Partnership:** Submit server cross-promotion details.'
+            )
+            .addFields(
+                {
+                    name: '📜 Staff Application Requirements',
+                    value: `>>> ${config.staffRequirements || '*No specific requirements set.*'}`,
+                    inline: false
+                },
+                {
+                    name: '🤝 Server Partnership Requirements',
+                    value: `>>> ${config.partnerRequirements || '*No specific requirements set.*'}`,
+                    inline: false
+                }
+            )
+            .setFooter({ text: 'Starry Master Portal Engine • Choose an option below', iconURL: client.user.displayAvatarURL() })
+            .setTimestamp();
+
+        return embed;
+    }
 
     // Helper: Build Master 3-Option Action Row
     function getMasterPortalRow() {
@@ -65,39 +122,103 @@ module.exports = (client) => {
             return null;
         }
     }
-
+        // ==========================================
+    // 2. SLASH COMMANDS & EDITORS (PART 2 OF 4)
+    // ==========================================
     client.on('interactionCreate', async (interaction) => {
-        // ==========================================
-        // 1. SLASH COMMANDS
-        // ==========================================
         if (interaction.isChatInputCommand()) {
+            // 📌 DEPLOY PORTAL PANEL
             if (['ticketsetup', 'applysetup', 'portalsetup'].includes(interaction.commandName)) {
                 if (!isStaff(interaction.member)) {
                     return interaction.reply({ content: '❌ You lack permissions to set up the portal panel.', flags: [EPHEMERAL_FLAG] });
                 }
 
-                const embed = new EmbedBuilder()
-                    .setColor('#00F2FE')
-                    .setTitle('🎫 Support, Staff & Partnership Portal')
-                    .setDescription(
-                        'Welcome to our server portal! Please select an option below:\n\n' +
-                        '• **📩 Open Support Ticket:** Opens a private communication channel with staff.\n' +
-                        '• **🛡️ Apply for Staff:** Submit an application for staff & moderator positions.\n' +
-                        '• **🤝 Request Partnership:** Submit server details for partner cross-promotion.'
-                    )
-                    .setFooter({ text: 'Starry Master Portal Engine' });
+                const embed = await buildMasterPortalEmbed(interaction.guild);
+                const buttons = getMasterPortalRow();
 
-                await interaction.reply({ content: '✅ Master 3-in-1 portal panel deployed!', flags: [EPHEMERAL_FLAG] });
-                return interaction.channel.send({ embeds: [embed], components: [getMasterPortalRow()] });
+                await interaction.reply({ content: '✅ Master Support & Application Portal deployed!', flags: [EPHEMERAL_FLAG] });
+                return interaction.channel.send({ embeds: [embed], components: [buttons] });
+            }
+
+            // 🎯 CONFIGURE STAFF ROLE PING
+            if (interaction.commandName === 'set-staffrole') {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({ content: '❌ Only Administrators can set the staff role ping.', flags: [EPHEMERAL_FLAG] });
+                }
+
+                const targetRole = interaction.options.getRole('role', true);
+                await PortalConfig.findOneAndUpdate(
+                    { guildId: interaction.guild.id },
+                    { staffRoleId: targetRole.id },
+                    { upsert: true }
+                );
+
+                return interaction.reply({ 
+                    content: `✅ Successfully set <@&${targetRole.id}> as the default staff ping for new tickets and applications!`, 
+                    flags: [EPHEMERAL_FLAG] 
+                });
+            }
+
+            // 📝 OPEN REQUIREMENTS MODAL EDITOR
+            if (interaction.commandName === 'edit-requirements') {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({ content: '❌ Only Administrators can edit portal requirements.', flags: [EPHEMERAL_FLAG] });
+                }
+
+                const config = await PortalConfig.findOne({ guildId: interaction.guild.id });
+
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_edit_portal_reqs')
+                    .setTitle('Edit Application Requirements');
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('staff_reqs_input')
+                            .setLabel('Staff Application Requirements')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setValue(config?.staffRequirements || '')
+                            .setPlaceholder('Enter rules, age minimums, or activity goals...')
+                            .setRequired(true)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('partner_reqs_input')
+                            .setLabel('Partnership Requirements')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setValue(config?.partnerRequirements || '')
+                            .setPlaceholder('Enter member minimums, promo expectations...')
+                            .setRequired(true)
+                    )
+                );
+
+                return interaction.showModal(modal);
             }
         }
+
+        // --- SUBMIT REQUIREMENTS MODAL ---
+        if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_portal_reqs') {
+            const staffReqs = interaction.fields.getTextInputValue('staff_reqs_input');
+            const partnerReqs = interaction.fields.getTextInputValue('partner_reqs_input');
+
+            await PortalConfig.findOneAndUpdate(
+                { guildId: interaction.guild.id },
+                { staffRequirements: staffReqs, partnerRequirements: partnerReqs },
+                { upsert: true }
+            );
+
+            await interaction.reply({ 
+                content: '✅ Application requirements updated! Future panels and existing refreshed panels will display the new criteria.', 
+                flags: [EPHEMERAL_FLAG] 
+            });
+                                                                     }
                 // ==========================================
-        // 2. TICKET BUTTON INTERACTIONS
+        // 3. TICKET CREATION & LIFECYCLE (PART 3 OF 4)
         // ==========================================
         if (interaction.isButton()) {
             const customId = interaction.customId;
 
-            // 📩 CREATE SUPPORT TICKET
+            // 📩 OPEN SUPPORT TICKET
             if (['sys_create_ticket', 'create_ticket'].includes(customId)) {
                 try {
                     if (!interaction.deferred && !interaction.replied) {
@@ -107,7 +228,12 @@ module.exports = (client) => {
                     const guild = interaction.guild;
                     const user = interaction.user;
                     const openedCategory = await getOrCreateTicketCategory(guild, 'OPENED TICKETS');
-                    let staffRole = guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
+                    
+                    // Fetch configured staff role or fallback
+                    const config = await PortalConfig.findOne({ guildId: guild.id });
+                    let staffRole = config?.staffRoleId 
+                        ? guild.roles.cache.get(config.staffRoleId)
+                        : guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
                     const ticketNum = Math.floor(1000 + Math.random() * 9000);
                     const cleanUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -138,7 +264,14 @@ module.exports = (client) => {
                                     PermissionsBitField.Flags.ReadMessageHistory
                                 ] 
                             },
-                            ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
+                            ...(staffRole ? [{ 
+                                id: staffRole.id, 
+                                allow: [
+                                    PermissionsBitField.Flags.ViewChannel, 
+                                    PermissionsBitField.Flags.SendMessages, 
+                                    PermissionsBitField.Flags.ReadMessageHistory
+                                ] 
+                            }] : [])
                         ]
                     });
 
@@ -154,7 +287,13 @@ module.exports = (client) => {
                         new ButtonBuilder().setCustomId('sys_close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
                     );
 
-                    await ticketChannel.send({ content: `<@${user.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, embeds: [ticketEmbed], components: [actionRow] });
+                    // Dynamic role ping notification in ticket channel
+                    await ticketChannel.send({ 
+                        content: `<@${user.id}> ${staffRole ? `<@&${staffRole.id}>` : ''}`, 
+                        embeds: [ticketEmbed], 
+                        components: [actionRow] 
+                    });
+
                     return interaction.editReply({ content: `✅ Ticket created: <#${ticketChannel.id}>` });
                 } catch (err) {
                     console.error('Error creating ticket:', err);
@@ -243,95 +382,36 @@ module.exports = (client) => {
             if (['sys_delete_ticket', 'delete_ticket'].includes(customId)) {
                 if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Staff only.', flags: [EPHEMERAL_FLAG] });
                 return interaction.channel.delete().catch(() => {});
-                        }
-                                // ==========================================
-            // 3. APPLICATIONS MODAL DISPATCHERS
+                            }
+                                                         // ==========================================
+            // 4. MODALS & APPLICATIONS (PART 4 OF 4)
             // ==========================================
             // 🛡️ STAFF APPLICATION MODAL
             if (['sys_apply_staff', 'apply_staff'].includes(customId)) {
-                const modal = new ModalBuilder()
-                    .setCustomId('modal_staff')
-                    .setTitle('🛡️ Staff Application Form');
-
+                const modal = new ModalBuilder().setCustomId('modal_staff').setTitle('🛡️ Staff Application Form');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('staff_age_tz')
-                            .setLabel('Age & Timezone')
-                            .setPlaceholder('e.g. 18 | EST')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('staff_exp')
-                            .setLabel('Previous Moderation Experience')
-                            .setPlaceholder('List servers you have moderated and duties handled')
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('staff_why')
-                            .setLabel('Why should we pick you?')
-                            .setPlaceholder('What unique skills or activity level can you offer?')
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(true)
-                    )
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('staff_age_tz').setLabel('Age & Timezone').setPlaceholder('e.g. 18 | EST').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('staff_exp').setLabel('Previous Moderation Experience').setPlaceholder('Servers moderated and duties handled').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('staff_why').setLabel('Why should we pick you?').setPlaceholder('Skills, activity hours, qualifications').setStyle(TextInputStyle.Paragraph).setRequired(true))
                 );
-
                 return interaction.showModal(modal).catch(() => {});
             }
 
-            // 🤝 PARTNERSHIP APPLICATION MODAL (CORRECTED QUESTIONS)
+            // 🤝 PARTNERSHIP APPLICATION MODAL
             if (['sys_apply_partner', 'apply_partner'].includes(customId)) {
-                const modal = new ModalBuilder()
-                    .setCustomId('modal_partner')
-                    .setTitle('🤝 Partnership Application Form');
-
+                const modal = new ModalBuilder().setCustomId('modal_partner').setTitle('🤝 Partnership Application Form');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('partner_server')
-                            .setLabel('Server Name & Invite Link')
-                            .setPlaceholder('e.g. Starry Hangout | https://discord.gg/example')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('partner_members')
-                            .setLabel('Member Count & Daily Activity Level')
-                            .setPlaceholder('e.g. 850 Members | Active main chat & events')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('partner_pitch')
-                            .setLabel('Partnership Proposal / Reason')
-                            .setPlaceholder('Describe what type of partnership you are looking for (cross-promo, ping, event)')
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('partner_rep')
-                            .setLabel('Your Position in the Server')
-                            .setPlaceholder('e.g. Server Owner / Partnership Manager')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                    )
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('partner_server').setLabel('Server Name & Permanent Invite Link').setPlaceholder('e.g. Hangout | https://discord.gg/example').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('partner_members').setLabel('Member Count & Daily Activity Level').setPlaceholder('e.g. 750 Members | Active general chat').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('partner_pitch').setLabel('Partnership Proposal / Reason').setPlaceholder('Why partner with us and proposed promo type?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('partner_rep').setLabel('Your Role in the Partner Server').setPlaceholder('e.g. Server Owner / Partnership Manager').setStyle(TextInputStyle.Short).setRequired(true))
                 );
-
                 return interaction.showModal(modal).catch(() => {});
             }
 
             // ✅ / ❌ ACCEPT OR REJECT APPLICATION
             if (['app_accept', 'app_reject'].includes(customId)) {
-                if (!isStaff(interaction.member)) {
-                    return interaction.reply({ content: '❌ Staff permissions required.', flags: [EPHEMERAL_FLAG] });
-                }
+                if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Staff permissions required.', flags: [EPHEMERAL_FLAG] });
 
                 const isAccepted = customId === 'app_accept';
                 const applicantId = interaction.channel.topic;
@@ -341,18 +421,18 @@ module.exports = (client) => {
                     const dmEmbed = new EmbedBuilder()
                         .setColor(isAccepted ? '#2ecc71' : '#ED4245')
                         .setTitle(`Application Update: ${isAccepted ? 'Accepted ✅' : 'Rejected ❌'}`)
-                        .setDescription(`Your application for **${interaction.guild.name}** has been **${isAccepted ? 'ACCEPTED' : 'REJECTED'}** by staff.`)
+                        .setDescription(`Your application in **${interaction.guild.name}** has been **${isAccepted ? 'ACCEPTED' : 'REJECTED'}**.`)
                         .setTimestamp();
-
                     await targetUser.send({ embeds: [dmEmbed] }).catch(() => {});
                 }
 
                 await interaction.channel.delete().catch(() => {});
                 return;
             }
-                        }
-                // ==========================================
-        // 4. MODAL SUBMISSIONS PROCESSING
+        }
+
+        // ==========================================
+        // MODAL SUBMISSION DISPATCHER
         // ==========================================
         if (interaction.isModalSubmit()) {
             if (!['modal_staff', 'modal_partner'].includes(interaction.customId)) return;
@@ -360,6 +440,11 @@ module.exports = (client) => {
             const isStaffApp = interaction.customId === 'modal_staff';
             const user = interaction.user;
             const staffCategory = await getOrCreateTicketCategory(interaction.guild, 'APPLICATIONS');
+            
+            const config = await PortalConfig.findOne({ guildId: interaction.guild.id });
+            let staffRole = config?.staffRoleId 
+                ? interaction.guild.roles.cache.get(config.staffRoleId)
+                : interaction.guild.roles.cache.find(r => ['staff', 'moderator', 'admin'].includes(r.name.toLowerCase()));
 
             const appChannel = await interaction.guild.channels.create({
                 name: `${isStaffApp ? 'staff' : 'partner'}-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
@@ -368,38 +453,30 @@ module.exports = (client) => {
                 parent: staffCategory ? staffCategory.id : undefined,
                 permissionOverwrites: [
                     { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] }
+                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels] },
+                    ...(staffRole ? [{ id: staffRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
                 ]
             });
 
             const embed = new EmbedBuilder().setTimestamp();
 
             if (isStaffApp) {
-                const ageTz = interaction.fields.getTextInputValue('staff_age_tz');
-                const exp = interaction.fields.getTextInputValue('staff_exp');
-                const why = interaction.fields.getTextInputValue('staff_why');
-
                 embed.setColor('#2ecc71')
                     .setTitle(`🛡️ New Staff Application | ${user.username}`)
                     .addFields(
                         { name: '👤 Applicant', value: `<@${user.id}> (\`${user.id}\`)`, inline: true },
-                        { name: '📌 Age & Timezone', value: ageTz, inline: true },
-                        { name: '📜 Previous Experience', value: `>>> ${exp}` },
-                        { name: '💡 Why Choose Them', value: `>>> ${why}` }
+                        { name: '📌 Age & Timezone', value: interaction.fields.getTextInputValue('staff_age_tz'), inline: true },
+                        { name: '📜 Experience', value: `>>> ${interaction.fields.getTextInputValue('staff_exp')}` },
+                        { name: '💡 Why Choose Them', value: `>>> ${interaction.fields.getTextInputValue('staff_why')}` }
                     );
             } else {
-                const serverInfo = interaction.fields.getTextInputValue('partner_server');
-                const members = interaction.fields.getTextInputValue('partner_members');
-                const pitch = interaction.fields.getTextInputValue('partner_pitch');
-                const rep = interaction.fields.getTextInputValue('partner_rep');
-
                 embed.setColor('#FFD700')
                     .setTitle(`🤝 New Partnership Application | ${user.username}`)
                     .addFields(
-                        { name: '👤 Representative', value: `<@${user.id}> (${rep})`, inline: true },
-                        { name: '🌐 Server & Invite', value: serverInfo, inline: true },
-                        { name: '📊 Member Count / Activity', value: members, inline: true },
-                        { name: '📝 Proposal / Pitch', value: `>>> ${pitch}` }
+                        { name: '👤 Representative', value: `<@${user.id}> (${interaction.fields.getTextInputValue('partner_rep')})`, inline: true },
+                        { name: '🌐 Server Link', value: interaction.fields.getTextInputValue('partner_server'), inline: true },
+                        { name: '📊 Member Stats', value: interaction.fields.getTextInputValue('partner_members'), inline: true },
+                        { name: '📝 Proposal Details', value: `>>> ${interaction.fields.getTextInputValue('partner_pitch')}` }
                     );
             }
 
@@ -408,10 +485,11 @@ module.exports = (client) => {
                 new ButtonBuilder().setCustomId('app_reject').setLabel('Reject').setStyle(ButtonStyle.Danger).setEmoji('❌')
             );
 
-            await appChannel.send({ embeds: [embed], components: [reviewRow] });
-
-            let logChannel = interaction.guild.channels.cache.find(c => c.name.includes('app-logs') || c.name.includes('staff-logs') || c.name.includes('partner-logs'));
-            if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => {});
+            await appChannel.send({ 
+                content: `${staffRole ? `<@&${staffRole.id}>` : ''} 📝 **New application submitted by <@${user.id}>:**`, 
+                embeds: [embed], 
+                components: [reviewRow] 
+            });
 
             return interaction.reply({ 
                 content: `✅ Your **${isStaffApp ? 'Staff' : 'Partnership'}** application has been submitted! Staff will review it in <#${appChannel.id}>.`, 
@@ -420,3 +498,23 @@ module.exports = (client) => {
         }
     });
 };
+
+module.exports.buildMasterPortalEmbed = async (guild, client) => {
+    let config = await mongoose.models.PortalConfig?.findOne({ guildId: guild.id });
+    const embed = new EmbedBuilder()
+        .setColor('#00F2FE')
+        .setTitle('🎫 Server Support, Staff & Partnership Portal')
+        .setDescription(
+            'Welcome! Review the requirements below before submitting an application.\n\n' +
+            '• **📩 Open Support Ticket:** Contact staff privately.\n' +
+            '• **🛡️ Apply for Staff:** Apply for a moderator role.\n' +
+            '• **🤝 Request Partnership:** Submit a partnership request.'
+        )
+        .addFields(
+            { name: '📜 Staff Requirements', value: `>>> ${config?.staffRequirements || '• Standard requirements apply.'}` },
+            { name: '🤝 Partner Requirements', value: `>>> ${config?.partnerRequirements || '• Standard requirements apply.'}` }
+        )
+        .setFooter({ text: 'Starry Master Portal Engine' });
+    return embed;
+};
+                    
