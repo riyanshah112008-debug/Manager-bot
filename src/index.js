@@ -38,7 +38,28 @@ const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
+const child_process = require('child_process');
 const KazagumoSpotify = require('kazagumo-spotify');
+
+// ==========================================
+// 🔋 TERMUX WAKE LOCK HELPERS
+// ==========================================
+function acquireWakeLock() {
+    try {
+        child_process.exec('termux-wake-lock', (err) => {
+            if (!err) {
+                console.log('🔋 [Termux] Wake lock acquired (termux-wake-lock active)');
+            }
+        });
+    } catch (e) {}
+}
+
+function releaseWakeLock() {
+    try {
+        child_process.execSync('termux-wake-unlock', { stdio: 'ignore' });
+        console.log('🔌 [Termux] Wake lock released (termux-wake-unlock)');
+    } catch (e) {}
+}
 
 const config = require('./config');
 const multiBot = require('./modules/multiBot');
@@ -186,6 +207,9 @@ client.aliases = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 client.vcLocks = new Map();
+
+// Automatically acquire Termux Wake Lock on client initialization
+acquireWakeLock();
 
 // Global Mass Ping AutoMod
 client.on('messageCreate', async (message) => {
@@ -491,6 +515,7 @@ process.on('uncaughtException', error => console.error('❌ Uncaught Exception:'
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
+    acquireWakeLock();
 
     try {
         if (client.manager && typeof client.manager.init === 'function') {
@@ -608,6 +633,7 @@ async function startBot() {
 const shutdownHandler = async (signal) => {
     console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry & Flavi Bot...`);
     try {
+        releaseWakeLock();
         if (mongoose.connection.readyState === 1) await mongoose.connection.close();
         if (client) client.destroy();
         for (const [id, info] of multiBot.instances.entries()) {
@@ -619,11 +645,13 @@ const shutdownHandler = async (signal) => {
         process.exit(0);
     } catch (err) {
         console.error("Error during graceful shutdown:", err);
+        releaseWakeLock();
         process.exit(1);
     }
 };
 
 process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
+process.on('exit', () => releaseWakeLock());
 
 startBot();
