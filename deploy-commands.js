@@ -2,6 +2,7 @@
 // 🚀 STARRY SUPREME GLOBAL DEPLOY ENGINE
 // File Path: deploy-commands.js
 // ==========================================
+require('dotenv').config();
 const { 
     REST, 
     Routes, 

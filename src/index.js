@@ -3,6 +3,8 @@
 // 150+ Commands • Multi-Bot Clustering • Fixed Comma Prefix (,) • 1-Year Interaction Lifetime
 // ==========================================
 
+require('dotenv').config();
+
 // 🔧 Polyfill for older / 32-bit Node.js versions
 if (!Promise.withResolvers) {
     Promise.withResolvers = function () {
