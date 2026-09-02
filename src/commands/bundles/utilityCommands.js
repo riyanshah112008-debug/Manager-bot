@@ -1325,6 +1325,50 @@ const commands = [
             await ctx.defer(false);
             return generateAndSendImage(ctx, prompt.trim());
         }
+    },
+
+    // 44. NITRO CLAIMS & GIVEAWAY SNIPER LOGS
+    {
+        name: 'nitroclaims',
+        aliases: ['nitrosnipe', 'giftlogs', 'nitrotracker'],
+        category: 'Utility',
+        description: 'View recently detected and claimed Discord Nitro gifts in this server.',
+        usage: ',nitroclaims',
+        async execute(ctx) {
+            const nitroDetector = require('../../modules/nitroClaimDetector');
+            const claims = await nitroDetector.getRecentClaims(ctx.guild.id, 10);
+            const stats = await nitroDetector.getStats(ctx.guild.id);
+
+            if (!claims || claims.length === 0) {
+                const emptyEmbed = new EmbedBuilder()
+                    .setColor('#F47FFF')
+                    .setAuthor({ name: 'Discord Nitro Claim Tracker', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
+                    .setTitle('🎁 No Nitro Claims Recorded Yet')
+                    .setDescription('The Nitro sniffer is active and watching! Whenever someone drops a `discord.gift` link in any channel, the bot will automatically detect who claimed it and measure the exact speed.')
+                    .setFooter({ text: 'Active Real-Time Monitoring • Prefix: ,' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [emptyEmbed] });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor('#F47FFF')
+                .setAuthor({ name: 'Discord Nitro Claim History', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
+                .setTitle(`🎁 Nitro Gifts Claimed in ${ctx.guild.name}`)
+                .setDescription(
+                    `📊 **Total Detected:** \`${stats.total}\` | ⚡ **Fastest Claim:** \`${stats.fastest ? (stats.fastest.speedMs + 'ms') : 'N/A'}\`\n\n` +
+                    claims.map((c, idx) => {
+                        const timeAgo = `<t:${Math.floor(new Date(c.claimedAt).getTime() / 1000)}:R>`;
+                        const speed = c.speedMs < 1000 ? `${c.speedMs}ms ⚡` : `${(c.speedMs / 1000).toFixed(2)}s 🚀`;
+                        return `\`${idx + 1}.\` **${c.giftType}** — ${timeAgo}\n` +
+                               `> 👤 **Claimer:** <@${c.claimerId}> (\`${c.claimerTag}\`)\n` +
+                               `> 📤 **Sender:** <@${c.senderId}> | ⚡ **Speed:** \`${speed}\` | 💬 <#${c.channelId}>`;
+                    }).join('\n\n')
+                )
+                .setFooter({ text: 'Supreme Nitro Claim & Sniffing Tracker Engine' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
     }
 ];
 
