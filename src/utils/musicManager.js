@@ -41,25 +41,29 @@ const Nodes = [
 ];
 
 function buildNowPlayingComponents() {
-    // Row 1: Core playback & transport controls (compact labels for perfect mobile & desktop alignment)
+    // Row 1: Primary Transport Controls (4 buttons - fits mobile without wrapping)
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
     );
 
-    // Row 2: Volume, VC Moderation & Queue utilities
+    // Row 2: Queue & Volume Controls (4 buttons - fits mobile without wrapping)
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('Vol -').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('Vol +').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel('Queue').setStyle(ButtonStyle.Secondary)
     );
 
-    // Row 3: High-Fidelity Audio DSP Filters
+    // Row 3: Voice Channel Security (2 buttons)
+    const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+    );
+
+    // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
             { label: 'Clear Filters', description: 'Removes all active audio effects (Default)', value: 'clear', emoji: '🚫' },
@@ -73,7 +77,7 @@ function buildNowPlayingComponents() {
         ])
     );
 
-    return [row1, row2, filterRow];
+    return [row1, row2, row3, filterRow];
 }
 
 async function applyKazagumoFilter(player, filterName) {
