@@ -54,13 +54,14 @@ const commands = [
             }
             query = query.trim();
 
-            await ctx.defer();
+            if (ctx.isSlash) await ctx.defer();
 
             const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            player.connect().catch(() => {});
+            const connectPromise = player.connect().catch(() => {});
+            const searchPromise = StarryAudioEngine.search(query, ctx.user);
 
             try {
-                const result = await StarryAudioEngine.search(query, ctx.user);
+                const [_, result] = await Promise.all([connectPromise, searchPromise]);
                 if (!result || !result.tracks || result.tracks.length === 0) {
                     return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
                 }

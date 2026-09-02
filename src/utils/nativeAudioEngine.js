@@ -95,6 +95,7 @@ class StarryGuildPlayer {
         this.audioResource = null;
         this.paused = false;
         this.destroyed = false;
+        this.isPlaying = false;
         this.playbackStartTime = 0;
         this.disconnectTimeout = null;
 
@@ -112,15 +113,25 @@ class StarryGuildPlayer {
     }
 
     setupPlayerEvents() {
+        this.player.on(AudioPlayerStatus.Playing, () => {
+            this.isPlaying = true;
+        });
+
         this.player.on(AudioPlayerStatus.Idle, () => {
             if (this.destroyed) return;
-            this.handleTrackEnd();
+            if (this.isPlaying) {
+                this.isPlaying = false;
+                this.handleTrackEnd();
+            }
         });
 
         this.player.on('error', (error) => {
             console.warn(`⚠️ [Audio Stream Engine Status in ${this.guildId}]:`, error.message || error);
             if (this.destroyed) return;
-            this.handleTrackEnd();
+            if (this.isPlaying) {
+                this.isPlaying = false;
+                this.handleTrackEnd();
+            }
         });
     }
 
@@ -142,8 +153,8 @@ class StarryGuildPlayer {
             this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
                 try {
                     await Promise.race([
-                        entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
-                        entersState(this.connection, VoiceConnectionStatus.Connecting, 5000)
+                        entersState(this.connection, VoiceConnectionStatus.Signalling, 3000),
+                        entersState(this.connection, VoiceConnectionStatus.Connecting, 3000)
                     ]);
                 } catch (e) {
                     if (!this.is247) {
@@ -151,13 +162,14 @@ class StarryGuildPlayer {
                     }
                 }
             });
-
-            this.connection.subscribe(this.player);
         }
+
+        this.connection.subscribe(this.player);
 
         if (this.connection.state.status !== VoiceConnectionStatus.Ready) {
             try {
-                await entersState(this.connection, VoiceConnectionStatus.Ready, 10000);
+                await entersState(this.connection, VoiceConnectionStatus.Ready, 4000);
+                this.connection.subscribe(this.player);
             } catch (e) {}
         }
         return this.connection;
@@ -167,11 +179,13 @@ class StarryGuildPlayer {
         if (this.destroyed) return;
 
         if (this.queue.length === 0) {
+            const hadTrack = !!this.currentTrack;
             if (this.currentTrack) {
                 this.history.push(this.currentTrack);
                 this.previousTrack = this.currentTrack;
             }
             this.currentTrack = null;
+            this.isPlaying = false;
 
             if (this.nowPlayingMessage) {
                 await this.nowPlayingMessage.delete().catch(() => {});
@@ -196,8 +210,10 @@ class StarryGuildPlayer {
                 } catch (e) {}
             }
 
-            if (this.textChannel) {
-                this.textChannel.send('📭 **The queue has ended.** Use `,play <song>` to queue more music!').catch(() => {});
+            if (hadTrack && !this.destroyed) {
+                if (this.textChannel) {
+                    this.textChannel.send('📭 **The queue has ended.** Use `,play <song>` to queue more music!').catch(() => {});
+                }
             }
 
             if (!this.is247) {
