@@ -4,7 +4,16 @@
 // 165+ Master Commands • Dual Prefix (, & .) • Mention Support • 1-Year Persistent Interaction Engine
 // Fully compatible with Android/Termux & PC (Windows/Linux/macOS)
 // ==========================================
-const { Collection, Events, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { 
+    Collection, 
+    Events, 
+    EmbedBuilder, 
+    PermissionFlagsBits,
+    AttachmentBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
+} = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
@@ -395,7 +404,80 @@ class CommandRegistry {
                     });
                 }
 
-                // D. Music & DJ Panel Global Controls (1-Year Global Handler)
+                // D. AI Image Regenerate & Enhance Variations (1-Year Global Handler)
+                if (customId.startsWith('ai_regen_') || customId.startsWith('ai_enhance_')) {
+                    await interaction.deferUpdate().catch(() => {});
+
+                    const embed = interaction.message.embeds?.[0];
+                    if (!embed) return;
+
+                    // Extract prompt from embed description
+                    let prompt = '';
+                    const desc = embed.description || '';
+                    const match = desc.match(/Prompt:\*\* "(.*?)"/s) || desc.match(/Prompt:\*\* (.*?)\n/s);
+                    if (match && match[1]) {
+                        prompt = match[1];
+                    } else {
+                        prompt = embed.title || 'Masterpiece artwork';
+                    }
+
+                    if (customId.startsWith('ai_enhance_')) {
+                        if (!prompt.includes('masterpiece') && !prompt.includes('8k resolution')) {
+                            prompt = `${prompt}, masterpiece, highly detailed, 8k resolution, cinematic lighting, ultra-fine art, photorealistic`;
+                        }
+                    }
+
+                    const newSeed = Math.floor(Math.random() * 9999999);
+                    const encoded = encodeURIComponent(prompt);
+                    const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&seed=${newSeed}&model=flux&enhance=true`;
+
+                    try {
+                        const fetch = require('node-fetch');
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 25000);
+                        const res = await fetch(imgUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+
+                        if (res.ok) {
+                            const arrayBuffer = await res.arrayBuffer();
+                            const buffer = Buffer.from(arrayBuffer);
+                            const attachment = new AttachmentBuilder(buffer, { name: `starry_art_${newSeed}.jpg` });
+
+                            const updatedEmbed = EmbedBuilder.from(embed)
+                                .setDescription(`✨ **Prompt:** "${prompt.length > 250 ? prompt.substring(0, 247) + '...' : prompt}"\n🧠 **Engine:** \`Flux.1 Schnell (1024x1024 HD)\`\n👤 **Requested by:** <@${interaction.user.id}>`)
+                                .setImage(`attachment://starry_art_${newSeed}.jpg`)
+                                .setFooter({ text: `Seed: ${newSeed} • Starry AI • Direct HD Rendering` })
+                                .setTimestamp();
+
+                            const updatedRow = new ActionRowBuilder().addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(`ai_regen_${newSeed}`)
+                                    .setLabel('🔄 Regenerate')
+                                    .setStyle(ButtonStyle.Primary),
+                                new ButtonBuilder()
+                                    .setCustomId(`ai_enhance_${newSeed}`)
+                                    .setLabel('✨ Enhance Variations')
+                                    .setStyle(ButtonStyle.Secondary),
+                                new ButtonBuilder()
+                                    .setLabel('📥 Direct HD Link')
+                                    .setStyle(ButtonStyle.Link)
+                                    .setURL(imgUrl)
+                            );
+
+                            await interaction.message.edit({
+                                embeds: [updatedEmbed],
+                                components: [updatedRow],
+                                files: [attachment],
+                                attachments: []
+                            }).catch(() => {});
+                        }
+                    } catch (err) {
+                        console.error('AI Image Regenerate Error:', err);
+                    }
+                    return;
+                }
+
+                // E. Music & DJ Panel Global Controls (1-Year Global Handler)
                 if (customId.startsWith('dj_') || customId.startsWith('music_')) {
                     const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
                     const { applyKazagumoFilter } = require('../utils/musicManager');

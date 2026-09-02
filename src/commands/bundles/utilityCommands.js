@@ -168,18 +168,18 @@ async function generateAndSendImage(ctx, prompt) {
             seed = Math.floor(Math.random() * 9999999);
             const newImgData = await fetchImageAttachment(cleanPrompt, seed, currentModel);
             const updated = buildImageEmbed(cleanPrompt, seed, newImgData.fileName, newImgData.url);
-            const editPayload = { embeds: [updated.embed], components: [updated.row] };
+            const editPayload = { embeds: [updated.embed], components: [updated.row], attachments: [] };
             if (newImgData.attachment) editPayload.files = [newImgData.attachment];
-            await sentMsg.edit(editPayload).catch(() => {});
+            await (sentMsg.edit ? sentMsg.edit(editPayload) : i.message?.edit(editPayload)).catch(() => {});
         } else if (i.customId.startsWith('ai_enhance_')) {
             await i.deferUpdate().catch(() => {});
             seed = Math.floor(Math.random() * 9999999);
             const enhancedPrompt = `${cleanPrompt}, masterpiece, highly detailed, 8k resolution, cinematic lighting, ultra-fine art`;
             const newImgData = await fetchImageAttachment(enhancedPrompt, seed, currentModel);
             const updated = buildImageEmbed(enhancedPrompt, seed, newImgData.fileName, newImgData.url);
-            const editPayload = { embeds: [updated.embed], components: [updated.row] };
+            const editPayload = { embeds: [updated.embed], components: [updated.row], attachments: [] };
             if (newImgData.attachment) editPayload.files = [newImgData.attachment];
-            await sentMsg.edit(editPayload).catch(() => {});
+            await (sentMsg.edit ? sentMsg.edit(editPayload) : i.message?.edit(editPayload)).catch(() => {});
         }
     });
 }
