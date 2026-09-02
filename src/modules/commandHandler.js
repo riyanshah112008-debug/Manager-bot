@@ -397,38 +397,144 @@ class CommandRegistry {
 
                 // D. Music & DJ Panel Global Controls (1-Year Global Handler)
                 if (customId.startsWith('dj_') || customId.startsWith('music_')) {
-                    const player = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
+                    const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
+                    const { applyKazagumoFilter } = require('../utils/musicManager');
+
+                    const kPlayer = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
+                    const nPlayer = StarryAudioEngine.getPlayer(interaction.guild.id);
                     const voiceChannel = interaction.member?.voice?.channel;
 
-                    if (!voiceChannel && customId !== 'dj_refresh_panel') {
-                        return interaction.reply({ content: '❌ You must be connected to a voice channel to use audio controls!', ephemeral: true }).catch(() => {});
+                    if (!voiceChannel && customId !== 'dj_refresh_panel' && customId !== 'music_queue') {
+                        return interaction.reply({ 
+                            content: '❌ You must be connected to a voice channel to use audio controls!', 
+                            flags: [EPHEMERAL_FLAG] 
+                        }).catch(() => {});
                     }
 
-                    if (!player) {
-                        return interaction.reply({ content: '❌ No active music session in this server.', ephemeral: true }).catch(() => {});
+                    // 1. Voice Channel Locking & Unlocking
+                    if (customId === 'dj_lock') {
+                        if (!voiceChannel) {
+                            return interaction.reply({ content: '❌ You are not in a voice channel.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                        }
+                        await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: false }).catch(() => {});
+                        return interaction.reply({ 
+                            content: `🔒 **Locked voice channel:** <#${voiceChannel.id}>\n*Only existing members and moderators can join.*`, 
+                            flags: [EPHEMERAL_FLAG] 
+                        }).catch(() => {});
+                    }
+
+                    if (customId === 'dj_unlock') {
+                        if (!voiceChannel) {
+                            return interaction.reply({ content: '❌ You are not in a voice channel.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                        }
+                        await voiceChannel.permissionOverwrites.edit(interaction.guild.roles.everyone, { Connect: null }).catch(() => {});
+                        return interaction.reply({ 
+                            content: `🔓 **Unlocked voice channel:** <#${voiceChannel.id}>\n*Everyone can now join.*`, 
+                            flags: [EPHEMERAL_FLAG] 
+                        }).catch(() => {});
+                    }
+
+                    // 2. Queue Viewer
+                    if (customId === 'music_queue') {
+                        if (kPlayer) {
+                            const current = kPlayer.queue.current;
+                            const tracks = kPlayer.queue.slice(0, 10);
+                            let qList = tracks.map((t, idx) => `\`${idx + 1}.\` **${t.title?.substring(0, 60)}** \`(${t.isStream ? 'LIVE' : formatTime(t.length)})\``).join('\n');
+                            if (!qList) qList = '*No upcoming tracks in queue.*';
+
+                            const embed = new EmbedBuilder()
+                                .setColor('#5865F2')
+                                .setTitle(`🎵 Current Music Queue • ${kPlayer.queue.length} Tracks`)
+                                .setDescription(`▶️ **Now Playing:**\n**${current ? current.title : 'None'}**\n\n📜 **Upcoming:**\n${qList}`)
+                                .setFooter({ text: 'Starry Audio Intelligence Engine' });
+
+                            return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                        } else if (nPlayer) {
+                            const current = nPlayer.currentTrack;
+                            const tracks = nPlayer.queue.slice(0, 10);
+                            let qList = tracks.map((t, idx) => `\`${idx + 1}.\` **${t.title?.substring(0, 60)}**`).join('\n');
+                            if (!qList) qList = '*No upcoming tracks in queue.*';
+
+                            const embed = new EmbedBuilder()
+                                .setColor('#5865F2')
+                                .setTitle(`🎵 Current Music Queue • ${nPlayer.queue.length} Tracks`)
+                                .setDescription(`▶️ **Now Playing:**\n**${current ? current.title : 'None'}**\n\n📜 **Upcoming:**\n${qList}`)
+                                .setFooter({ text: 'Starry Native Audio Engine' });
+
+                            return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                        } else {
+                            return interaction.reply({ content: '❌ No active music session in this server.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                        }
+                    }
+
+                    // 3. Audio Filter Dropdown
+                    if (customId === 'music_filter') {
+                        const selectedFilter = interaction.values[0] || 'clear';
+                        if (kPlayer) {
+                            await applyKazagumoFilter(kPlayer, selectedFilter);
+                        }
+                        if (nPlayer) {
+                            nPlayer.filter = selectedFilter;
+                        }
+                        return interaction.reply({ 
+                            content: `🎧 **Audio DSP Filter updated:** \`${selectedFilter.toUpperCase()}\``, 
+                            flags: [EPHEMERAL_FLAG] 
+                        }).catch(() => {});
+                    }
+
+                    if (!kPlayer && !nPlayer) {
+                        return interaction.reply({ content: '❌ No active music session in this server.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
                     }
 
                     await interaction.deferUpdate().catch(() => {});
 
                     try {
                         if (customId === 'music_pause' || customId === 'dj_pause') {
-                            if (player.paused) await player.pause(false);
-                            else await player.pause(true);
+                            if (kPlayer) {
+                                if (kPlayer.paused) await kPlayer.pause(false);
+                                else await kPlayer.pause(true);
+                            }
+                            if (nPlayer) {
+                                nPlayer.pause();
+                            }
                         } else if (customId === 'music_skip' || customId === 'dj_skip') {
-                            await player.skip();
+                            if (kPlayer) await kPlayer.skip();
+                            if (nPlayer) nPlayer.skip();
                         } else if (customId === 'music_stop' || customId === 'dj_stop') {
-                            await player.destroy();
+                            if (kPlayer) await kPlayer.destroy();
+                            if (nPlayer) nPlayer.stop();
                         } else if (customId === 'music_loop' || customId === 'dj_loop') {
-                            const nextLoop = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
-                            player.setLoop(nextLoop);
+                            if (kPlayer) {
+                                const nextLoop = kPlayer.loop === 'none' ? 'track' : kPlayer.loop === 'track' ? 'queue' : 'none';
+                                kPlayer.setLoop(nextLoop);
+                            }
+                            if (nPlayer) {
+                                nPlayer.loop = nPlayer.loop === 'none' ? 'track' : nPlayer.loop === 'track' ? 'queue' : 'none';
+                            }
                         } else if (customId === 'dj_shuffle') {
-                            player.queue.shuffle();
+                            if (kPlayer) kPlayer.queue.shuffle();
+                            if (nPlayer) {
+                                for (let i = nPlayer.queue.length - 1; i > 0; i--) {
+                                    const j = Math.floor(Math.random() * (i + 1));
+                                    [nPlayer.queue[i], nPlayer.queue[j]] = [nPlayer.queue[j], nPlayer.queue[i]];
+                                }
+                            }
                         } else if (customId === 'dj_vol_down') {
-                            const newVol = Math.max(10, (player.volume || 100) - 10);
-                            await player.setVolume(newVol);
+                            if (kPlayer) {
+                                const newVol = Math.max(10, (kPlayer.volume || 100) - 10);
+                                await kPlayer.setVolume(newVol);
+                            }
+                            if (nPlayer) {
+                                nPlayer.setVolume(Math.max(10, nPlayer.volume - 10));
+                            }
                         } else if (customId === 'dj_vol_up') {
-                            const newVol = Math.min(150, (player.volume || 100) + 10);
-                            await player.setVolume(newVol);
+                            if (kPlayer) {
+                                const newVol = Math.min(150, (kPlayer.volume || 100) + 10);
+                                await kPlayer.setVolume(newVol);
+                            }
+                            if (nPlayer) {
+                                nPlayer.setVolume(Math.min(150, nPlayer.volume + 10));
+                            }
                         }
                     } catch (e) {}
                 }

@@ -7,7 +7,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } =
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 const config = require('../../config');
 
-const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
+const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
 const formatTime = (ms) => {
     if (!ms || isNaN(ms)) return '0:00';

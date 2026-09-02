@@ -1,7 +1,9 @@
 const { Kazagumo } = require('kazagumo');
 const { Connectors } = require('shoukaku');
 const KazagumoSpotify = require('kazagumo-spotify');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
+
+const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
 const Nodes = [
     {
@@ -27,8 +29,124 @@ const Nodes = [
         secure: true,
         retryAmount: 50,
         retryDelay: 3000
+    },
+    {
+        name: 'Node-4-DevamOp-SSL',
+        url: 'lavalink.devamop.in:443',
+        auth: 'DevamOp',
+        secure: true,
+        retryAmount: 50,
+        retryDelay: 3000
     }
 ];
+
+function buildNowPlayingComponents() {
+    // Row 1: Core playback & transport controls (compact labels for perfect mobile & desktop alignment)
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
+    );
+
+    // Row 2: Volume, VC Moderation & Queue utilities
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('Vol -').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('Vol +').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel('Queue').setStyle(ButtonStyle.Secondary)
+    );
+
+    // Row 3: High-Fidelity Audio DSP Filters
+    const filterRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
+            { label: 'Clear Filters', description: 'Removes all active audio effects (Default)', value: 'clear', emoji: '🚫' },
+            { label: 'Bassboost', description: 'Deep, heavy bass enhancement', value: 'bassboost', emoji: '🎸' },
+            { label: '8D Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
+            { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
+            { label: 'Daycore / Slowed', description: 'Slowed down tempo + deeper tone', value: 'daycore', emoji: '🌅' },
+            { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' },
+            { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '🔊' },
+            { label: 'Pop & Vocal Clarity', description: 'Enhanced vocals and clean acoustic profile', value: 'pop', emoji: '📻' }
+        ])
+    );
+
+    return [row1, row2, filterRow];
+}
+
+async function applyKazagumoFilter(player, filterName) {
+    if (!player || !player.shoukaku) return false;
+    try {
+        const shoukakuPlayer = player.shoukaku;
+        switch (filterName) {
+            case 'bassboost':
+                await shoukakuPlayer.setFilters({
+                    equalizer: [
+                        { band: 0, gain: 0.25 },
+                        { band: 1, gain: 0.20 },
+                        { band: 2, gain: 0.15 },
+                        { band: 3, gain: 0.10 },
+                        { band: 4, gain: 0.05 }
+                    ]
+                });
+                break;
+            case '8d':
+                await shoukakuPlayer.setFilters({
+                    rotation: { rotationHz: 0.2 }
+                });
+                break;
+            case 'nightcore':
+                await shoukakuPlayer.setFilters({
+                    timescale: { speed: 1.25, pitch: 1.25, rate: 1.0 }
+                });
+                break;
+            case 'daycore':
+                await shoukakuPlayer.setFilters({
+                    timescale: { speed: 0.85, pitch: 0.85, rate: 1.0 }
+                });
+                break;
+            case 'vaporwave':
+                await shoukakuPlayer.setFilters({
+                    timescale: { speed: 0.8, pitch: 0.85, rate: 1.0 },
+                    tremolo: { frequency: 4.0, depth: 0.2 }
+                });
+                break;
+            case 'treble':
+                await shoukakuPlayer.setFilters({
+                    equalizer: [
+                        { band: 10, gain: 0.2 },
+                        { band: 11, gain: 0.25 },
+                        { band: 12, gain: 0.3 },
+                        { band: 13, gain: 0.35 }
+                    ]
+                });
+                break;
+            case 'pop':
+                await shoukakuPlayer.setFilters({
+                    equalizer: [
+                        { band: 0, gain: -0.05 },
+                        { band: 1, gain: -0.02 },
+                        { band: 2, gain: 0.02 },
+                        { band: 3, gain: 0.12 },
+                        { band: 4, gain: 0.2 },
+                        { band: 5, gain: 0.15 }
+                    ]
+                });
+                break;
+            case 'clear':
+            default:
+                await shoukakuPlayer.setFilters({});
+                break;
+        }
+        player.data.set('activeFilter', filterName);
+        return true;
+    } catch (e) {
+        console.warn('⚠️ Could not apply Lavalink filter:', e.message);
+        return false;
+    }
+}
 
 function createMusicManager(client) {
     if (client.manager) return client.manager;
@@ -82,7 +200,7 @@ function createMusicManager(client) {
     });
 
     manager.shoukaku.on('error', (name, error) => {
-        console.warn(`⚠️ [Lavalink Failover] (${client.user ? client.user.username : 'Bot'}) Node [${name}] error`);
+        console.warn(`⚠️ [Lavalink Failover] (${client.user ? client.user.username : 'Bot'}) Node [${name}] notice`);
     });
 
     manager.shoukaku.on('disconnect', (name, count) => {
@@ -108,7 +226,7 @@ function createMusicManager(client) {
         } catch (lockErr) {}
 
         const formatTime = (ms) => {
-            if (!ms) return '0:00';
+            if (!ms || isNaN(ms)) return '0:00';
             const totalSeconds = Math.floor(ms / 1000);
             const minutes = Math.floor(totalSeconds / 60);
             const seconds = totalSeconds % 60;
@@ -126,44 +244,31 @@ function createMusicManager(client) {
             ? track.thumbnail
             : (client.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
 
+        const activeFilter = player.data.get('activeFilter') || 'Clear';
+
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
-            .setAuthor({ name: `Now Playing • ${client.user ? client.user.username : 'Music Bot'}`, iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
-            .setTitle(track.title)
-            .setURL(track.uri)
+            .setAuthor({ 
+                name: `Now Playing • ${client.user ? client.user.username : 'Music Bot'}`, 
+                iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+            })
+            .setTitle(track.title ? track.title.substring(0, 95) : 'Audio Track')
+            .setURL(track.uri || 'https://discord.gg')
             .setThumbnail(trackThumb)
             .setDescription(
-                `ℹ️ **Song Details**\n▶️ **Status:** Playing\n⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue'}\n🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown'}\n🔠 **Queue:** ${player.queue.length} songs in queue\n\n⚙️ **Playback & Filters (1-Year Response Lifetime)**\nUse the interactive controls below to manage your audio session.`
+                `ℹ️ **Song Details**\n` +
+                `▶️ **Status:** Playing | ⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? '🔂 Track' : '🔁 Queue'}\n` +
+                `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)} | 🔊 **Volume:** ${player.volume || 100}%\n` +
+                `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
+                `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Soundcloud'}\n` +
+                `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
+                `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
+                `Use the interactive controls below to manage your audio session.`
             )
             .setFooter({ text: `Starry Music Engine • Bot: ${client.user ? client.user.tag : 'Starry'}`, iconURL: client.user ? client.user.displayAvatarURL() : undefined });
 
-        const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
-        );
-
-        const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
-        );
-
-        const filterRow = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
-                { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
-                { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
-                { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
-                { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
-                { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
-                { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' }
-            ])
-        );
-
-        const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
+        const components = buildNowPlayingComponents();
+        const messageData = { embeds: [embed], components };
 
         try {
             if (interaction) {
@@ -181,7 +286,7 @@ function createMusicManager(client) {
     });
 
     manager.on('playerException', async (player, track, exception) => {
-        console.warn('⚠️ [Music Player Exception]:', exception?.message || exception);
+        console.warn('⚠️ [Music Player Exception]:', exception?.message || exception || 'Node failover event');
         if (player && player.queue && player.queue.length > 0) {
             player.skip();
         }
@@ -203,7 +308,7 @@ function createMusicManager(client) {
                     let result = await manager.search(searchQuery, { requester: previousTrack.requester });
 
                     if (!result || !result.tracks || !result.tracks.length) {
-                        const fallbackQuery = `ytsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
+                        const fallbackQuery = `scsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
                         result = await manager.search(fallbackQuery, { requester: previousTrack.requester });
                     }
 
@@ -219,7 +324,16 @@ function createMusicManager(client) {
             }
         }
 
-        if (channel) channel.send('📭 The queue has ended.').catch(() => {});
+        // Clean up now playing message
+        const oldMsg = player.data.get('nowPlayingMessage');
+        if (oldMsg) {
+            await oldMsg.delete().catch(() => {});
+            player.data.delete('nowPlayingMessage');
+        }
+
+        if (channel) {
+            channel.send('📭 **The queue has ended.** Use `,play <song>` to queue more music!').catch(() => {});
+        }
     });
 
     client.manager = manager;
@@ -228,5 +342,7 @@ function createMusicManager(client) {
 
 module.exports = {
     Nodes,
-    createMusicManager
+    createMusicManager,
+    buildNowPlayingComponents,
+    applyKazagumoFilter
 };

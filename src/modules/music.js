@@ -1,8 +1,7 @@
 // ==========================================
 // 🎵 STARRY SUPREME MUSIC ENGINE MODULE
-// ==========================================
 const { EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
-const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
+const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
 module.exports = (client) => {
     const checkPermissions = (channel, botMember) => {

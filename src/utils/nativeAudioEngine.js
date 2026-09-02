@@ -253,7 +253,7 @@ class StarryGuildPlayer {
             .setTimestamp();
 
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
@@ -261,19 +261,20 @@ class StarryGuildPlayer {
         );
 
         const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('Vol -').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('Vol +').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+            new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel('Queue').setStyle(ButtonStyle.Secondary)
         );
 
         const filterRow = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio DSP filter...').addOptions([
-                { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
+            new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
+                { label: 'Clear Filters', description: 'Removes all audio effects (Default)', value: 'clear', emoji: '🚫' },
                 { label: 'Bassboost', description: 'Heavy low-frequency boost', value: 'bassboost', emoji: '🎸' },
                 { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
                 { label: 'Nightcore', description: 'Faster tempo + higher pitch', value: 'nightcore', emoji: '✨' },
-                { label: 'Daycore', description: 'Slower tempo + lower pitch', value: 'daycore', emoji: '🌅' },
+                { label: 'Daycore / Slowed', description: 'Slower tempo + lower pitch', value: 'daycore', emoji: '🌅' },
                 { label: 'Vaporwave', description: 'Slowed + reverb aesthetic', value: 'vaporwave', emoji: '🪩' }
             ])
         );

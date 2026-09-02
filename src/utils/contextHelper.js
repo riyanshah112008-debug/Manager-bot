@@ -7,7 +7,7 @@
 const { MessageFlags, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
 
-const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
+const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 const ONE_YEAR_MS = config.ONE_YEAR_MS || 2147483647;
 
 class CommandContext {
