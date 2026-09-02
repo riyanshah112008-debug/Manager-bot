@@ -1,8 +1,7 @@
 // ==========================================
-// 🎵 STARRY SUPREME BULLETPROOF NATIVE AUDIO ENGINE
+// 🎵 MASTER HIGH-FIDELITY AUDIO ENGINE
 // File Path: src/utils/nativeAudioEngine.js
-// Direct @discordjs/voice + play-dl + Prism Media libopus
-// 100% Pure Node.js • 0 External Lavalink Dependencies • Bulletproof
+// Multi-Platform Search Resolver • Direct Stream Encoder • DSP Filters • 100% Host-Anywhere
 // ==========================================
 const {
     joinVoiceChannel,
@@ -29,10 +28,10 @@ const config = require('../config');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
-// Audio Filter FFmpeg arguments
+// Audio DSP Filter FFmpeg argument definitions
 const FILTER_ARGS = {
     clear: [],
-    bassboost: ['-af', 'equalizer=f=40:width_type=h:width=50:g=12,equalizer=f=80:width_type=h:width=50:g=10'],
+    bassboost: ['-af', 'equalizer=f=40:width_type=h:width=50:g=14,equalizer=f=80:width_type=h:width=50:g=10'],
     '8d': ['-af', 'apulsator=hz=0.125'],
     nightcore: ['-af', 'asetrate=48000*1.25,aresample=48000,atempo=1.0'],
     daycore: ['-af', 'asetrate=48000*0.85,aresample=48000,atempo=1.0'],
@@ -41,20 +40,22 @@ const FILTER_ARGS = {
     pop: ['-af', 'equalizer=f=1000:width_type=h:width=500:g=5,equalizer=f=3000:width_type=h:width=1000:g=4']
 };
 
-let soundcloudReady = false;
-async function ensureSoundCloudToken() {
-    if (soundcloudReady) return;
+let scClientId = null;
+let lastTokenRefresh = 0;
+
+async function refreshSoundCloudToken() {
+    const now = Date.now();
+    if (scClientId && (now - lastTokenRefresh < 3600000)) return;
     try {
         const id = await play.getFreeClientID();
         if (id) {
+            scClientId = id;
             await play.setToken({ soundcloud: { client_id: id } });
-            soundcloudReady = true;
+            lastTokenRefresh = now;
         }
-    } catch (e) {
-        // Fallback
-    }
+    } catch (e) {}
 }
-ensureSoundCloudToken();
+refreshSoundCloudToken();
 
 function formatTime(ms) {
     if (!ms || isNaN(ms)) return '0:00';
@@ -64,6 +65,17 @@ function formatTime(ms) {
     return `${m}m ${s.toString().padStart(2, '0')}s`;
 }
 
+function createProgressBar(currentMs, totalMs, length = 12) {
+    if (!totalMs || totalMs <= 0) return '🔘' + '▬'.repeat(length - 1);
+    const progress = Math.min(Math.max(currentMs / totalMs, 0), 1);
+    const index = Math.round(progress * (length - 1));
+    let bar = '';
+    for (let i = 0; i < length; i++) {
+        bar += (i === index) ? '🔘' : '▬';
+    }
+    return bar;
+}
+
 class StarryGuildPlayer {
     constructor(client, guildId, voiceChannel, textChannel) {
         this.client = client;
@@ -71,7 +83,9 @@ class StarryGuildPlayer {
         this.voiceChannel = voiceChannel;
         this.textChannel = textChannel;
         this.queue = [];
+        this.history = [];
         this.currentTrack = null;
+        this.previousTrack = null;
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
         this.filter = 'clear';
@@ -81,13 +95,20 @@ class StarryGuildPlayer {
         this.audioResource = null;
         this.paused = false;
         this.destroyed = false;
+        this.playbackStartTime = 0;
         this.disconnectTimeout = null;
 
-        // Initialize Discord.js Voice Player
+        // Initialize Discord.js AudioPlayer
         this.player = createAudioPlayer();
         this.connection = null;
 
         this.setupPlayerEvents();
+    }
+
+    get position() {
+        if (!this.currentTrack || this.playbackStartTime === 0) return 0;
+        if (this.paused) return this._pausedPosition || 0;
+        return Date.now() - this.playbackStartTime;
     }
 
     setupPlayerEvents() {
@@ -97,7 +118,7 @@ class StarryGuildPlayer {
         });
 
         this.player.on('error', (error) => {
-            console.warn(`⚠️ [Audio Player Status in ${this.guildId}]:`, error.message || error);
+            console.warn(`⚠️ [Audio Stream Engine Status in ${this.guildId}]:`, error.message || error);
             if (this.destroyed) return;
             this.handleTrackEnd();
         });
@@ -146,7 +167,10 @@ class StarryGuildPlayer {
         if (this.destroyed) return;
 
         if (this.queue.length === 0) {
-            const previousTrack = this.currentTrack;
+            if (this.currentTrack) {
+                this.history.push(this.currentTrack);
+                this.previousTrack = this.currentTrack;
+            }
             this.currentTrack = null;
 
             if (this.nowPlayingMessage) {
@@ -154,15 +178,16 @@ class StarryGuildPlayer {
                 this.nowPlayingMessage = null;
             }
 
-            // Smart Autoplay
-            if (this.autoplay && previousTrack) {
+            // High-Intelligence Autoplay Recommendation
+            if (this.autoplay && this.previousTrack) {
                 try {
                     if (this.textChannel) {
                         await this.textChannel.send('📻 **Autoplay:** Finding next recommended song...').catch(() => {});
                     }
-                    const relatedRes = await StarryAudioEngine.search(`${previousTrack.author || ''} ${previousTrack.title || ''} song`, previousTrack.requester);
+                    const searchSeed = `${this.previousTrack.author || ''} ${this.previousTrack.title || ''}`.replace(/[^\w\s]/gi, ' ').trim();
+                    const relatedRes = await StarryAudioEngine.search(`${searchSeed} song`, this.previousTrack.requester);
                     if (relatedRes && relatedRes.tracks && relatedRes.tracks.length > 0) {
-                        const nextSong = relatedRes.tracks.find(t => t.url !== previousTrack.url) || relatedRes.tracks[0];
+                        const nextSong = relatedRes.tracks.find(t => t.url !== this.previousTrack.url && !this.history.some(h => h.url === t.url)) || relatedRes.tracks[0];
                         if (nextSong) {
                             this.queue.push(nextSong);
                             return this.playNext();
@@ -187,10 +212,14 @@ class StarryGuildPlayer {
 
         await this.connect();
         const track = this.queue.shift();
+        if (this.currentTrack) {
+            this.history.push(this.currentTrack);
+            this.previousTrack = this.currentTrack;
+        }
         this.currentTrack = track;
 
         try {
-            await ensureSoundCloudToken();
+            await refreshSoundCloudToken();
 
             let targetUrl = track.url;
             if (!targetUrl) {
@@ -202,13 +231,45 @@ class StarryGuildPlayer {
             }
 
             if (!targetUrl) {
-                throw new Error('No playable streaming URL found for track.');
+                throw new Error('Could not resolve audio stream URL.');
             }
 
-            const stream = await play.stream(targetUrl, { quality: 2 });
+            let stream = null;
+            try {
+                stream = await play.stream(targetUrl, { quality: 2, discordPlayerCompatibility: true });
+            } catch (streamErr) {
+                console.warn(`⚠️ [Stream Fallback] "${targetUrl}" failed (${streamErr.message}). Searching fallback stream...`);
+                const altResults = await play.search(`${track.author || ''} ${track.title}`.trim(), { limit: 4 }).catch(() => []);
+                for (const alt of altResults) {
+                    if (alt.url && alt.url !== targetUrl) {
+                        try {
+                            stream = await play.stream(alt.url, { quality: 2, discordPlayerCompatibility: true });
+                            if (stream) {
+                                track.url = alt.url;
+                                break;
+                            }
+                        } catch (e) {}
+                    }
+                }
+                if (!stream) {
+                    const scAlt = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 4 }).catch(() => []);
+                    for (const alt of scAlt) {
+                        if (alt.url && alt.url !== targetUrl) {
+                            try {
+                                stream = await play.stream(alt.url, { quality: 2, discordPlayerCompatibility: true });
+                                if (stream) {
+                                    track.url = alt.url;
+                                    break;
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
+                if (!stream) throw streamErr;
+            }
             let audioStream = stream.stream;
 
-            // Apply FFmpeg DSP Filters if requested
+            // Apply Real-time FFmpeg Audio DSP Filters
             if (this.filter && this.filter !== 'clear' && FILTER_ARGS[this.filter]) {
                 const ffmpeg = new prism.FFmpeg({
                     args: [
@@ -240,12 +301,13 @@ class StarryGuildPlayer {
 
             this.player.play(this.audioResource);
             this.paused = false;
+            this.playbackStartTime = Date.now();
+            this._pausedPosition = 0;
 
             await this.sendNowPlayingPanel(track);
 
         } catch (err) {
             console.error(`⚠️ [Playback Exception for "${track.title}"]:`, err.message || err);
-            // Try skipping to next track if available
             this.handleTrackEnd();
         }
     }
@@ -340,10 +402,12 @@ class StarryGuildPlayer {
             shouldPause = (this.player.state.status === AudioPlayerStatus.Playing);
         }
         if (shouldPause) {
+            this._pausedPosition = this.position;
             this.player.pause();
             this.paused = true;
             return true;
         } else {
+            this.playbackStartTime = Date.now() - (this._pausedPosition || 0);
             this.player.unpause();
             this.paused = false;
             return false;
@@ -387,6 +451,51 @@ class StarryGuildPlayer {
         }
     }
 
+    jump(position) {
+        const index = position - 1;
+        if (index < 0 || index >= this.queue.length) return false;
+        this.queue = this.queue.slice(index);
+        this.skip();
+        return true;
+    }
+
+    move(from, to) {
+        const fromIdx = from - 1;
+        const toIdx = to - 1;
+        if (fromIdx < 0 || fromIdx >= this.queue.length || toIdx < 0 || toIdx >= this.queue.length) return false;
+        const [moved] = this.queue.splice(fromIdx, 1);
+        this.queue.splice(toIdx, 0, moved);
+        return true;
+    }
+
+    remove(position) {
+        const index = position - 1;
+        if (index < 0 || index >= this.queue.length) return null;
+        return this.queue.splice(index, 1)[0];
+    }
+
+    clearQueue() {
+        const count = this.queue.length;
+        this.queue = [];
+        return count;
+    }
+
+    replay() {
+        if (!this.currentTrack) return false;
+        this.queue.unshift(this.currentTrack);
+        this.skip();
+        return true;
+    }
+
+    previous() {
+        if (this.history.length === 0) return false;
+        const prev = this.history.pop();
+        if (this.currentTrack) this.queue.unshift(this.currentTrack);
+        this.queue.unshift(prev);
+        this.skip();
+        return true;
+    }
+
     destroy() {
         this.destroyed = true;
         this.stop();
@@ -417,9 +526,10 @@ class StarryAudioEngine {
         return player;
     }
 
-    static async search(query, requester) {
+    static async search(rawQuery, requester) {
         const tracks = [];
-        await ensureSoundCloudToken();
+        await refreshSoundCloudToken();
+        const query = rawQuery.trim();
 
         // 1. Spotify URL Handling
         if (query.includes('spotify.com')) {
@@ -446,7 +556,6 @@ class StarryAudioEngine {
                         const thumb = t.coverArt?.sources?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80';
                         const resolvedTitle = `${t.artists?.map(a => a.name).join(', ') || ''} - ${t.name}`;
                         
-                        // Search audio on soundcloud
                         let matchedUrl = null;
                         const scRes = await play.search(resolvedTitle, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
                         if (scRes && scRes[0]) matchedUrl = scRes[0].url;
@@ -500,7 +609,7 @@ class StarryAudioEngine {
                 }
             }
 
-            // High-Speed SoundCloud Keyword Search (0.2s)
+            // High-Speed Keyword Search via SoundCloud
             const scSearch = await play.search(query, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
             if (scSearch && scSearch.length > 0) {
                 const item = scSearch[0];
@@ -542,5 +651,6 @@ class StarryAudioEngine {
 module.exports = {
     StarryAudioEngine,
     StarryGuildPlayer,
-    formatTime
+    formatTime,
+    createProgressBar
 };
