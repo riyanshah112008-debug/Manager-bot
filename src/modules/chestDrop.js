@@ -101,7 +101,7 @@ module.exports = (client) => {
             );
 
             const chestMessage = await message.channel.send({ embeds: [dropEmbed], components: [claimButton] });
-            const collector = chestMessage.createMessageComponentCollector({ max: 1, time: 31536000000 }); 
+            const collector = chestMessage.createMessageComponentCollector({ max: 1, time: 2147483647 }); 
             collector.on('collect', async interaction => {
                 if (interaction.customId === 'claim_chest') {
                     await interaction.deferUpdate(); 

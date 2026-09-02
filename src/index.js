@@ -1,9 +1,38 @@
 // ==========================================
-// 🛡️ STARRY & FLAVI SUPREME MASTER ENGINE - INDEX.JS
+// 🛡️ Starry SUPREME MASTER ENGINE - INDEX.JS
 // 150+ Commands • Multi-Bot Clustering • Fixed Comma Prefix (,) • 1-Year Interaction Lifetime
 // ==========================================
 
 require('dotenv').config();
+
+// 🌐 Auto-Adaptive In-Process DNS Cache & Resilient Network Resolver
+const dns = require('dns');
+try {
+    if (typeof dns.setDefaultResultOrder === 'function') {
+        dns.setDefaultResultOrder('ipv4first');
+    }
+    const origLookup = dns.lookup;
+    const dnsCache = new Map();
+
+    dns.lookup = function(hostname, options, callback) {
+        if (typeof options === 'function') {
+            callback = options;
+            options = {};
+        }
+        origLookup(hostname, options, (err, address, family) => {
+            if (!err && address) {
+                dnsCache.set(hostname, { address, family, timestamp: Date.now() });
+                return callback(null, address, family);
+            }
+            // If DNS lookup threw transient ENOTFOUND/timeout, fall back to memory cache
+            const cached = dnsCache.get(hostname);
+            if (cached && (Date.now() - cached.timestamp < 3600000)) {
+                return callback(null, cached.address, cached.family);
+            }
+            return callback(err, address, family);
+        });
+    };
+} catch (e) {}
 
 // 🔧 Polyfill for older / 32-bit Node.js versions
 if (!Promise.withResolvers) {
@@ -17,7 +46,11 @@ if (!Promise.withResolvers) {
     };
 }
 
-process.env.FFMPEG_PATH = require('ffmpeg-static');
+try {
+    process.env.FFMPEG_PATH = require('ffmpeg-static') || 'ffmpeg';
+} catch (e) {
+    process.env.FFMPEG_PATH = 'ffmpeg';
+}
 const { 
     Client, 
     GatewayIntentBits, 
@@ -107,84 +140,21 @@ app.get('/api/multibot/stats', (req, res) => {
     }
 });
 
-app.get('/', (req, res) => {
-    const html = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Starry & Flavi | Global Server Network</title>
-        <style>
-            body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1f22; color: #dcddde; display: flex; flex-direction: column; align-items: center; }
-            header { width: 100%; background-color: #2b2d31; padding: 20px 0; text-align: center; border-bottom: 2px solid #5865F2; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-            h1 { margin: 0; color: #fff; font-size: 2.5rem; }
-            h1 span { color: #5865F2; }
-            .container { width: 90%; max-width: 1200px; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-bottom: 50px; }
-            .card { background-color: #2b2d31; border-radius: 12px; width: 320px; padding: 20px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; text-align: center; border: 1px solid transparent; }
-            .card:hover { transform: translateY(-5px); border-bottom: 1px solid #5865F2; }
-            .icon { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; background-color: #1e1f22; border: 2px solid #5865F2; }
-            .name { font-size: 1.4rem; font-weight: bold; color: #fff; margin: 0 0 10px 0; }
-            .desc { font-size: 0.95rem; color: #b5bac1; margin-bottom: 15px; height: 60px; overflow: hidden; }
-            .stats { display: flex; gap: 15px; font-size: 0.9rem; font-weight: bold; color: #949ba4; margin-bottom: 15px; }
-            .tags { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
-            .tag { background-color: #1e1f22; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; color: #5865F2; }
-            .join-btn { background-color: #5865F2; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; width: 80%; transition: background 0.2s; }
-            .join-btn:hover { background-color: #4752c4; }
-            .bump-time { font-size: 0.8rem; color: #80848e; margin-top: 15px; }
-        </style>
-    </head>
-    <body>
-        <header>
-            <h1><span>Starry & Flavi</span> Global Network</h1>
-            <p>150+ Commands • Multi-Bot Clustering • Default Fixed Prefix: <b>,</b></p>
-        </header>
-        <div class="container" id="server-list">
-            <p style="font-size: 1.2rem;">Loading servers...</p>
-        </div>
-        <script>
-            async function loadServers() {
-                try {
-                    const res = await fetch('/api/servers');
-                    const servers = await res.json();
-                    const container = document.getElementById('server-list');
-                    container.innerHTML = '';
-                    if(!servers || servers.length === 0) { container.innerHTML = '<p>No servers listed yet. Run ,bump!</p>'; return; }
-                    servers.forEach(s => {
-                        const defaultIcon = 'https://cdn.discordapp.com/embed/avatars/0.png';
-                        const timeAgo = s.lastBump ? new Date(s.lastBump).toLocaleString() : 'Recently';
-                        let tagsHtml = (s.tags || []).map(function(t) { return '<span class="tag">' + t + '</span>'; }).join('');
-                        container.innerHTML += '<div class="card">' +
-                            '<img src="' + (s.iconUrl || defaultIcon) + '" class="icon" alt="Icon">' +
-                            '<h2 class="name">' + s.name + '</h2>' +
-                            '<p class="desc">' + s.description + '</p>' +
-                            '<div class="stats"><span>👥 ' + s.memberCount + ' Members</span><span>🚀 ' + (s.bumps || 0) + ' Bumps</span></div>' +
-                            '<div class="tags">' + tagsHtml + '</div>' +
-                            '<a href="' + s.inviteLink + '" target="_blank" class="join-btn">Join Server</a>' +
-                            '<span class="bump-time">Last bumped: ' + timeAgo + '</span>' +
-                            '</div>';
-                    });
-                } catch(e) {
-                    document.getElementById('server-list').innerHTML = '<p>Error loading servers.</p>';
-                }
-            }
-            loadServers();
-        </script>
-    </body>
-    </html>
-    `;
-    res.send(html);
-});
-
+app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.static(path.join(__dirname, '../')));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 
 app.get('/health', (req, res) => res.status(200).send('awake'));
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
-    setInterval(() => {
-        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com';
-        https.get(`${appUrl}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', (err) => console.error('⚠️ Self-ping failed:', err.message));
-    }, 840000); 
+    if (process.env.RENDER_EXTERNAL_URL) {
+        setInterval(() => {
+            https.get(`${process.env.RENDER_EXTERNAL_URL}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', () => {});
+        }, 840000);
+    }
 });
 
 // Create Primary Bot Client
@@ -199,7 +169,20 @@ const client = new Client({
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.DirectMessages
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember]
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User, Partials.GuildMember],
+    failIfNotExists: false,
+    rest: {
+        timeout: 30000,
+        retries: 5
+    },
+    ws: {
+        large_threshold: 50,
+        properties: {
+            os: 'android',
+            browser: 'Discord Android',
+            device: 'Discord Android'
+        }
+    }
 }); 
 
 client.setMaxListeners(50);
@@ -209,6 +192,14 @@ client.aliases = new Collection();
 client.verifyMap = new Map(); 
 client.voiceCalls = new Map();
 client.vcLocks = new Map();
+
+// Mount Starry Enterprise Web Dashboard & Payment Suite
+const { setupDashboardRoutes } = require('./modules/dashboardServer');
+setupDashboardRoutes(app, client);
+
+// Initialize 24/7 Global Public Tunnel
+const { startTunnel } = require('./utils/tunnelManager');
+startTunnel(port).catch(() => {});
 
 // Automatically acquire Termux Wake Lock on client initialization
 acquireWakeLock();
@@ -251,7 +242,7 @@ app.get('/verify', (req, res) => {
         <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
         <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:10vh;">
             <img src="https://i.imgur.com/13w1J4L.png" width="100" style="border-radius:50%; margin-bottom:20px;">
-            <h2>Starry & Flavi Security Protocol</h2>
+            <h2>Starry Security Protocol</h2>
             <p style="color:#b5bac1; margin-bottom:40px;">To protect our server from automated bots, please verify you are human.</p>
             <form action="/verify" method="POST">
                 <input type="hidden" name="token" value="${token}">
@@ -283,237 +274,29 @@ app.post('/verify', async (req, res) => {
 // ==========================================
 // 🎵 LAVALINK & KAZAGUMO MUSIC CLUSTER
 // ==========================================
-const Nodes = [
-    {
-        name: 'Node-1-Jirayu-Primary',
-        url: 'lavalink.jirayu.net:13592',
-        auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-2-NyxBot-SG',
-        url: 'sg1-nodelink.nyxbot.app:3000',
-        auth: 'nyxbot.app/support',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-3-AjieDev-v4',
-        url: 'lava-v4.ajieblogs.eu.org:443',
-        auth: 'https://dsc.gg/ajidevserver',
-        secure: true,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-4-Lavalink-PPA',
-        url: 'lavalink.muy5.tech:443',
-        auth: 'youshallnotpass',
-        secure: true,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-5-G3V-UK',
-        url: 'lava.g3v.co.uk:9008',
-        auth: 'lavalinklol',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-6-Serenetia-v4',
-        url: 'lavalinkv4.serenetia.com:80',
-        auth: 'https://seretia.link/discord',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    }
-];
+const { createMusicManager } = require('./utils/musicManager');
+createMusicManager(client);
 
-client.manager = new Kazagumo({
-    defaultSearchEngine: "spotify",
-    searchFallbacks: { 
-        spotify: "spsearch", 
-        soundcloud: "scsearch", 
-        youtube: "ytsearch" 
-    },
-    plugins: [
-        new KazagumoSpotify({ 
-            clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET || 'dummy_secret', 
-            playlistPageLimit: 3, 
-            albumPageLimit: 2, 
-            searchMarket: 'IN', 
-            searchPrefix: 'ytsearch:' 
-        })
-    ],
-    send: (guildId, payload) => {
-        const guild = client.guilds.cache.get(guildId);
-        if (guild) guild.shard.send(payload);
-    }
-}, new Connectors.DiscordJS(client), Nodes, {
-    moveOnDisconnect: true,
-    resume: true,
-    resumeTimeout: 60,
-    reconnectTries: 50,
-    reconnectInterval: 3000,
-    restTimeout: 10000,
-    voiceConnectionTimeout: 15000,
-    linkInitializers: true,
-    nodeResolver: (nodes) => {
-        const readyNodes = Array.from(nodes.values()).filter(node => node.state === 1);
-        if (!readyNodes.length) return null;
-        return readyNodes.reduce((prev, current) => {
-            const prevLoad = prev.stats?.cpu?.lavalinkLoad || 0;
-            const currentLoad = current.stats?.cpu?.lavalinkLoad || 0;
-            return prevLoad < currentLoad ? prev : current;
-        });
-    }
-});
-
-client.manager.shoukaku.on('ready', (name) => {
-    console.log(`✅ [Lavalink Active] Node Connected: ${name}`);
-});
-
-client.manager.shoukaku.on('error', (name, error) => {
-    console.warn(`⚠️ [Lavalink Failover] Node [${name}] error, failover routing active...`);
-});
-
-client.manager.shoukaku.on('disconnect', (name, count) => {
-    console.warn(`⚠️ [Lavalink] Node [${name}] disconnected! Auto-migrating active players... (Retry: ${count})`);
-});
-
-// Kazagumo Player Events with High 1-Year Interactive Controls
-client.manager.on('playerStart', async (player, track) => {
-    player.data.set('previousTrack', track);
-
-    const channel = client.channels.cache.get(player.textId);
-    const interaction = player.data.get('interaction');
-    player.data.delete('interaction');
-
-    try {
-        const guild = client.guilds.cache.get(player.guildId);
-        if (guild && client.vcLocks && client.vcLocks.get(guild.id)) {
-            const voiceChannel = guild.channels.cache.get(player.voiceId);
-            if (voiceChannel) {
-                await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-            }
-        }
-    } catch (lockErr) {}
-
-    const formatTime = (ms) => {
-        if (!ms) return '0:00';
-        const totalSeconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
-    };
-
-    const embed = new EmbedBuilder()
-        .setColor('#2b2d31')
-        .setAuthor({ name: 'Now Playing', iconURL: 'https://i.imgur.com/13w1J4L.png' })
-        .setTitle(track.title)
-        .setURL(track.uri)
-        .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
-        .setDescription(
-            `ℹ️ **Song Details**\n▶️ **Status:** Playing\n⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? 'Track' : 'Queue'}\n🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Unknown'}\n🔠 **Queue:** ${player.queue.length} songs in queue\n\n⚙️ **Playback & Filters (1-Year Response Lifetime)**\nUse the interactive controls below to manage your audio session.`
-        )
-        .setFooter({ text: 'Flavi & Starry Music Engine • Prefix: ,', iconURL: client.user.displayAvatarURL() });
-
-    const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause/Resume').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('-10%').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('+10%').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
-    );
-
-    const filterRow = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('Select audio filter...').addOptions([
-            { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
-            { label: 'Bassboost', description: 'Boosts low frequencies', value: 'bassboost', emoji: '🎸' },
-            { label: '8D Audio', description: 'Rotates sound 360°', value: '8d', emoji: '🌀' },
-            { label: 'Nightcore', description: 'Faster + higher pitch', value: 'nightcore', emoji: '✨' },
-            { label: 'Daycore', description: 'Slower + lower pitch', value: 'daycore', emoji: '🌅' },
-            { label: 'Vaporwave', description: 'Slowed + reverb style', value: 'vaporwave', emoji: '🪩' }
-        ])
-    );
-
-    const messageData = { embeds: [embed], components: [row1, row2, filterRow] };
-
-    try {
-        if (interaction) {
-            await interaction.editReply(messageData);
-        } else if (channel) {
-            const msg = await channel.send(messageData);
-            player.data.set('nowPlayingMessage', msg);
-        }
-    } catch (e) {
-        if (channel) {
-            const msg = await channel.send(messageData).catch(() => {});
-            if (msg) player.data.set('nowPlayingMessage', msg);
-        }
-    }
-});
-
-client.manager.on('playerException', (player) => {
-    try {
-        if (player.queue.length > 0) player.skip();
-        else player.destroy();
-    } catch (e) {}
-});
-
-client.manager.on('playerEmpty', async player => {
-    const channel = client.channels.cache.get(player.textId);
-    const isAutoplay = player.data.get('autoplay');
-
-    if (isAutoplay) {
-        const previousTrack = player.data.get('previousTrack');
-        if (previousTrack) {
-            try {
-                if (channel) {
-                    await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
-                }
-
-                const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
-                let result = await client.manager.search(searchQuery, { requester: previousTrack.requester });
-
-                if (!result || !result.tracks || !result.tracks.length) {
-                    const fallbackQuery = `ytsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
-                    result = await client.manager.search(fallbackQuery, { requester: previousTrack.requester });
-                }
-
-                if (result && result.tracks && result.tracks.length > 0) {
-                    const nextTrack = result.tracks.find(t => t.identifier !== previousTrack.identifier) || result.tracks[0];
-                    player.queue.add(nextTrack);
-                    await player.play();
-                    return;
-                }
-            } catch (err) {
-                console.error('❌ Autoplay Recommendation Error:', err.message || err);
-            }
-        }
-    }
-
-    if (channel) channel.send('📭 The queue has ended.');
-});
 
 client.on(Events.Error, err => console.error('❌ Discord Client Error:', err));
 client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
 client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
+client.on(Events.ShardDisconnect, (event, id) => {
+    console.warn(`⚠️ Gateway Shard #${id} Disconnected (Code: ${event?.code || 'N/A'}). Attempting automatic reconnection...`);
+    acquireWakeLock();
+});
+client.on(Events.ShardReconnecting, (id) => console.log(`🔄 Gateway Shard #${id} Reconnecting to Discord...`));
+client.on(Events.ShardResume, (id, replayedEvents) => console.log(`✅ Gateway Shard #${id} Resumed connection successfully (${replayedEvents} events synced).`));
+
 process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
 process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
+
+// 🛡️ High-Reliability Gateway Health Watchdog
+setInterval(() => {
+    if (client.isReady() && client.ws && client.ws.status !== 0) {
+        console.warn(`⚠️ [Watchdog] Gateway WebSocket status abnormal (${client.ws.status}). Monitoring connection...`);
+    }
+}, 60000);
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
@@ -540,7 +323,7 @@ client.once(Events.ClientReady, async () => {
             }
         }
         if (deploy && typeof deploy.deployCommands === 'function') {
-            await deploy.deployCommands();
+            await deploy.deployCommands(client);
         }
     } catch (err) {
         console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
@@ -633,7 +416,7 @@ async function startBot() {
 }
 
 const shutdownHandler = async (signal) => {
-    console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry & Flavi Bot...`);
+    console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry Bot...`);
     try {
         releaseWakeLock();
         if (mongoose.connection.readyState === 1) await mongoose.connection.close();

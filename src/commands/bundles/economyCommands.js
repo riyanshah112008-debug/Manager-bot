@@ -1,5 +1,5 @@
 // ==========================================
-// 💰 FLAVI-STYLE SUPREME ECONOMY & LEVELING SUITE (16 COMMANDS)
+// 💰 Starry SUPREME ECONOMY & LEVELING SUITE (16 COMMANDS)
 // File Path: src/commands/bundles/economyCommands.js
 // XP Cards, Casino Slots, Banking & 1-Year Interactive Shop
 // ==========================================
@@ -61,7 +61,7 @@ const commands = [
                     { name: '✨ XP Progress', value: `\`${doc.xp} / ${neededXp} XP\``, inline: true },
                     { name: '💰 Net Worth', value: `\`$${(doc.wallet + doc.bank).toLocaleString()}\``, inline: true }
                 )
-                .setFooter({ text: 'Flavi Leveling Engine • Prefix: ,' })
+                .setFooter({ text: 'Starry Leveling Engine • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -138,7 +138,7 @@ const commands = [
                     { name: '🏦 Bank', value: `\`$${doc.bank.toLocaleString()}\``, inline: true },
                     { name: '💎 Net Worth', value: `\`$${(doc.wallet + doc.bank).toLocaleString()}\``, inline: true }
                 )
-                .setFooter({ text: 'Flavi Banking System • Prefix: ,' })
+                .setFooter({ text: 'Starry Banking System • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });

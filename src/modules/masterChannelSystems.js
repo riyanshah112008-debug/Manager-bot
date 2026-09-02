@@ -34,7 +34,7 @@ const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', Po
 const masterSecuritySchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
-    modules: { wick: { type: Boolean, default: true }, beemo: { type: Boolean, default: true }, altdentifier: { type: Boolean, default: false }, dyno_carl: { type: Boolean, default: true } },
+    modules: { antinuke: { type: Boolean, default: true }, antiraid: { type: Boolean, default: true }, altshield: { type: Boolean, default: false }, automod: { type: Boolean, default: true } },
     userInfractions: { type: Map, of: Number, default: {} }
 });
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
@@ -48,7 +48,7 @@ async function getSecurityConfig(guildId) {
     if (securityCache.has(guildId)) return securityCache.get(guildId);
     let config = await MasterSecurity.findOne({ guildId }).lean();
     if (!config) {
-        config = { guildId, autoKick: false, autoBan: false, ownerBypass: true, modules: { wick: true, beemo: true, altdentifier: false, dyno_carl: true }, userInfractions: new Map() };
+        config = { guildId, autoKick: false, autoBan: false, ownerBypass: true, modules: { antinuke: true, antiraid: true, altshield: false, automod: true }, userInfractions: new Map() };
         await MasterSecurity.create(config).catch(() => {});
     }
     securityCache.set(guildId, config);
@@ -242,7 +242,7 @@ const autoModMasterCommand = new SlashCommandBuilder()
 
 const moderateMasterCommand = new SlashCommandBuilder()
     .setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Wick', value: 'wick' }, { name: 'Beemo', value: 'beemo' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
+    .addSubcommand(sub => sub.setName('toggle').setDescription('Toggle module').addStringOption(o => o.setName('module').setDescription('Module').setRequired(true).addChoices({ name: 'Anti-Nuke', value: 'antinuke' }, { name: 'Anti-Raid', value: 'antiraid' })).addBooleanOption(o => o.setName('status').setDescription('Status').setRequired(true)));
 
 const verifySetupCommand = new SlashCommandBuilder()
     .setName('verify-setup').setDescription('Set up verification panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)

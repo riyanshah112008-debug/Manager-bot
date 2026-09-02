@@ -1,4 +1,4 @@
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
@@ -48,9 +48,9 @@ module.exports = (client) => {
     // ==========================================
     // ⏰ BACKGROUND CHECKER ENGINE
     // ==========================================
-    client.once('ready', () => {
+    client.once(Events.ClientReady || 'clientReady', () => {
         setInterval(checkGiveaways, 8000);
-        console.log('✅ Supreme RDJ & Leo Media Giveaway Engine Active');
+        console.log('✅ Supreme Starry Giveaway Engine Active');
     });
 
     // ==========================================

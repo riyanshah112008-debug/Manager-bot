@@ -205,6 +205,45 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .toJSON(),
 
+    // 🎨 AI IMAGE GENERATION SLASH COMMANDS (Usable in Guilds, DMs, & Group Chats)
+    new SlashCommandBuilder()
+        .setName('imagine')
+        .setDescription('🎨 Generate stunning high-resolution AI art and images using Flux/SDXL neural engines')
+        .setIntegrationTypes(
+            ApplicationIntegrationType.GuildInstall, 
+            ApplicationIntegrationType.UserInstall
+        )
+        .setContexts(
+            InteractionContextType.Guild, 
+            InteractionContextType.BotDM, 
+            InteractionContextType.PrivateChannel
+        )
+        .addStringOption(option => 
+            option.setName('prompt')
+                .setDescription('Detailed text description of the image to generate')
+                .setRequired(true)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('image')
+        .setDescription('🎨 Generate AI images and artwork from text prompts')
+        .setIntegrationTypes(
+            ApplicationIntegrationType.GuildInstall, 
+            ApplicationIntegrationType.UserInstall
+        )
+        .setContexts(
+            InteractionContextType.Guild, 
+            InteractionContextType.BotDM, 
+            InteractionContextType.PrivateChannel
+        )
+        .addStringOption(option => 
+            option.setName('prompt')
+                .setDescription('Detailed text description of the image to generate')
+                .setRequired(true)
+        )
+        .toJSON(),
+
     // 📥 GLOBAL EMOJI & STICKER STEALER COMMANDS
     new SlashCommandBuilder()
         .setName('steal')
@@ -244,24 +283,64 @@ if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
 
-// 🚀 GIVEAWAY & UTILITY COMMANDS
+// Direct Social Action Slash Commands (Top-Level)
+const directSocials = ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'handhold', 'bonk'];
+for (const act of directSocials) {
+    commands.push(
+        new SlashCommandBuilder()
+            .setName(act)
+            .setDescription(`${act.charAt(0).toUpperCase() + act.slice(1)} a member with an animated anime GIF!`)
+            .setContexts([0, 1, 2])
+            .setIntegrationTypes([0, 1])
+            .addUserOption(opt => opt.setName('target').setDescription('Target member').setRequired(true))
+            .toJSON()
+    );
+}
+
+// ✨ AI, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
 commands.push(
     new SlashCommandBuilder()
-        .setName('giveaway')
-        .setDescription('🎉 Start a supreme giveaway with animated media banners!')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addStringOption(option => option.setName('duration').setDescription('Duration of the giveaway').setRequired(true))
-        .addStringOption(option => option.setName('prize').setDescription('The prize being given away').setRequired(true))
-        .addIntegerOption(option => option.setName('winners').setDescription('Number of winners').setRequired(false))
-        .addChannelOption(option => option.setName('channel').setDescription('Target channel').addChannelTypes(ChannelType.GuildText).setRequired(false))
+        .setName('ask')
+        .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons!')
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
+        .addStringOption(option => 
+            option.setName('question')
+                .setDescription('The question or prompt for Starry AI')
+                .setRequired(true)
+        )
         .toJSON(),
 
     new SlashCommandBuilder()
-        .setName('reroll')
-        .setDescription('🔄 Reroll a new winner for a concluded giveaway!')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addStringOption(option => option.setName('message_id').setDescription('The Message ID of the giveaway').setRequired(true))
-        .addIntegerOption(option => option.setName('winners').setDescription('Number of winners').setRequired(false))
+        .setName('ai')
+        .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons!')
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
+        .addStringOption(option => 
+            option.setName('question')
+                .setDescription('The question or prompt for Starry AI')
+                .setRequired(true)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('setprefix')
+        .setDescription('⚙️ Set a custom prefix for this server')
+        .setContexts([0])
+        .setIntegrationTypes([0])
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addStringOption(option => 
+            option.setName('prefix')
+                .setDescription('The new prefix (e.g. ! or ? or -)')
+                .setRequired(true)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('vote')
+        .setDescription('⭐ Vote for Starry on Top.gg to earn free Credits and XP boosts!')
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
         .toJSON()
 );
 
@@ -272,6 +351,49 @@ commands.push(
     { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check active pet', type: 1 }, { name: 'equip', description: 'Equip a pet', type: 1, options: [{ name: 'name', description: 'Pet name', type: 3, required: true }] }] },
     { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add role to shop', type: 1, options: [{ name: 'role', description: 'Role', type: 8, required: true }, { name: 'price', description: 'Price', type: 10, required: true }, { name: 'description', description: 'Description', type: 3, required: true }] }] },
     { name: 'chest-setup', description: 'Enable or disable automatic chest drops', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops', type: 1, options: [{ name: 'channel', description: 'Channel', type: 7, required: true }] }] },
+    { 
+        name: 'chest-toggle', 
+        description: 'Toggle or configure automatic chest drops for your server or a channel', 
+        default_member_permissions: '8', 
+        options: [
+            { 
+                name: 'server', 
+                description: 'Toggle chest drops across this server', 
+                type: 1, 
+                options: [
+                    { 
+                        name: 'action', 
+                        description: 'Enable, disable or check status', 
+                        type: 3, 
+                        required: false, 
+                        choices: [
+                            { name: '🟢 Enable Everywhere', value: 'enable' },
+                            { name: '🔴 Disable Everywhere', value: 'disable' },
+                            { name: '📊 Check Status', value: 'status' }
+                        ] 
+                    }
+                ] 
+            },
+            { 
+                name: 'channel', 
+                description: 'Toggle chest drops for a specific channel', 
+                type: 1, 
+                options: [
+                    { name: 'target', description: 'Select the channel', type: 7, required: true },
+                    { 
+                        name: 'action', 
+                        description: 'Enable or disable in this channel', 
+                        type: 3, 
+                        required: false, 
+                        choices: [
+                            { name: '🟢 Enable Channel', value: 'enable' },
+                            { name: '🔴 Disable Channel', value: 'disable' }
+                        ] 
+                    }
+                ] 
+            }
+        ] 
+    },
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
@@ -349,18 +471,28 @@ commands.push(
     { name: 'lyrics', description: '🎙️ Fetch lyrics for currently playing or specified song', options: [{ name: 'song', type: 3, required: false, description: 'Song title' }] }
 );
 
-// 3. STRICT DEDUPLICATION ENGINE
+// 3. STRICT DEDUPLICATION ENGINE & USER APP ACTIVATION
 const commandMap = new Map();
 commands.forEach(cmd => { 
     if (cmd) {
         const jsonCmd = typeof cmd.toJSON === 'function' ? cmd.toJSON() : cmd;
-        if (jsonCmd.name) commandMap.set(jsonCmd.name, jsonCmd);
+        if (jsonCmd.name) {
+            // Enable User Install (0 = Guild, 1 = User) and all Contexts (0 = Guild, 1 = Bot DM, 2 = Private Channel)
+            // Allows commands to be used anywhere across Discord even if bot is not in that server!
+            if (!jsonCmd.integration_types) {
+                jsonCmd.integration_types = [0, 1];
+            }
+            if (!jsonCmd.contexts) {
+                jsonCmd.contexts = [0, 1, 2];
+            }
+            commandMap.set(jsonCmd.name, jsonCmd);
+        }
     }
 });
 const finalPayload = Array.from(commandMap.values());
 
 // 4. GLOBAL DEPLOYMENT FUNCTION
-async function deployCommands() {
+async function deployCommands(client) {
     const token = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
     let clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID;
 
@@ -380,9 +512,18 @@ async function deployCommands() {
         console.log(`🌍 [GLOBAL SYNC] Registering ${finalPayload.length} application commands globally across all servers...`);
 
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
-
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
-        console.log(`⏳ Global commands sync across Discord can take up to 1 hour. Restart your Discord app to check local client status.`);
+
+        // Instant Guild Sync (0-Second Appearance in Active Servers)
+        if (client && client.guilds && client.guilds.cache.size > 0) {
+            console.log(`⚡ [INSTANT GUILD SYNC] Deploying commands to ${client.guilds.cache.size} connected servers for instant 0s availability...`);
+            for (const guild of client.guilds.cache.values()) {
+                try {
+                    await rest.put(Routes.applicationGuildCommands(clientId, guild.id), { body: finalPayload });
+                } catch (gErr) {}
+            }
+            console.log(`⚡ [INSTANT GUILD SYNC] All connected servers synchronized instantly!`);
+        }
 
         return result;
     } catch (error) {

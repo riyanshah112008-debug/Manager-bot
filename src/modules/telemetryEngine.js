@@ -73,41 +73,48 @@ module.exports = (client) => {
 
     // 📡 HOURLY OWNER DM DISPATCHER
     setInterval(async () => {
-        const ownerId = process.env.OWNER_ID;
-        if (!ownerId) return;
+        const ownerIds = (process.env.OWNER_ID || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (ownerIds.length === 0) return;
 
         try {
-            const owner = await client.users.fetch(ownerId);
-            if (!owner) return;
-
             const allGuilds = client.guilds.cache;
 
-            for (const [guildId, guild] of allGuilds) {
-                let telemetry = await GuildTelemetry.findOne({ guildId });
-                if (!telemetry) {
-                    telemetry = await GuildTelemetry.create({ guildId, guildName: guild.name });
+            for (const ownerId of ownerIds) {
+                const owner = await client.users.fetch(ownerId).catch(() => null);
+                if (!owner) continue;
+
+                for (const [guildId, guild] of allGuilds) {
+                    let telemetry = await GuildTelemetry.findOne({ guildId });
+                    if (!telemetry) {
+                        telemetry = await GuildTelemetry.create({ guildId, guildName: guild.name });
+                    }
+
+                    const vcHours = (telemetry.totalVcSeconds / 3600).toFixed(1);
+
+                    const embed = new EmbedBuilder()
+                        .setColor('#7289DA')
+                        .setTitle(`📩 Owner Telemetry Digest: ${guild.name}`)
+                        .setThumbnail(guild.iconURL({ dynamic: true }) || null)
+                        .addFields(
+                            { name: '👥 Member Velocity', value: `• Total Members: **${guild.memberCount}**\n• Joins Past Hour: **${telemetry.joinsThisHour}** /hr`, inline: true },
+                            { name: '🎙️ Voice Active Time', value: `• Total VC Duration: **${vcHours} hrs**`, inline: true },
+                            { name: '🛡️ Security Enforcements', value: `• Warns: **${telemetry.modStats.warns}**\n• Kicks: **${telemetry.modStats.kicks}**\n• Bans: **${telemetry.modStats.bans}**\n• AutoMod Actions: **${telemetry.modStats.automodTriggers}**`, inline: false }
+                        )
+                        .setFooter({ text: `Guild ID: ${guild.id} • Sent directly to Bot Owner` })
+                        .setTimestamp();
+
+                    await owner.send({ embeds: [embed] }).catch(() => {});
                 }
+            }
 
-                const vcHours = (telemetry.totalVcSeconds / 3600).toFixed(1);
-
-                const embed = new EmbedBuilder()
-                    .setColor('#7289DA')
-                    .setTitle(`📩 Owner Telemetry Digest: ${guild.name}`)
-                    .setThumbnail(guild.iconURL({ dynamic: true }) || null)
-                    .addFields(
-                        { name: '👥 Member Velocity', value: `• Total Members: **${guild.memberCount}**\n• Joins Past Hour: **${telemetry.joinsThisHour}** /hr`, inline: true },
-                        { name: '🎙️ Voice Active Time', value: `• Total VC Duration: **${vcHours} hrs**`, inline: true },
-                        { name: '🛡️ Security Enforcements', value: `• Warns: **${telemetry.modStats.warns}**\n• Kicks: **${telemetry.modStats.kicks}**\n• Bans: **${telemetry.modStats.bans}**\n• AutoMod Actions: **${telemetry.modStats.automodTriggers}**`, inline: false }
-                    )
-                    .setFooter({ text: `Guild ID: ${guild.id} • Sent directly to Bot Owner` })
-                    .setTimestamp();
-
-                await owner.send({ embeds: [embed] }).catch(() => {});
-
-                // Reset hourly velocity count
-                telemetry.lastHourJoinsRecord = telemetry.joinsThisHour;
-                telemetry.joinsThisHour = 0;
-                await telemetry.save();
+            // Reset hourly velocity count across guilds
+            for (const [guildId] of allGuilds) {
+                const telemetry = await GuildTelemetry.findOne({ guildId });
+                if (telemetry) {
+                    telemetry.lastHourJoinsRecord = telemetry.joinsThisHour;
+                    telemetry.joinsThisHour = 0;
+                    await telemetry.save().catch(() => {});
+                }
             }
         } catch (error) {
             console.error('[Telemetry Engine] DM Dispatch Error:', error);

@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ STARRY & FLAVI BOT CONFIGURATION
+// 🛡️ Starry BOT CONFIGURATION
 // ==========================================
 
 module.exports = {
@@ -7,10 +7,9 @@ module.exports = {
     DEFAULT_PREFIX: ',',
     PREFIX: ',',
 
-    // High interaction timing up to 1 year in milliseconds (365 days)
-    // 365 * 24 * 60 * 60 * 1000 = 31,536,000,000 ms
-    INTERACTION_TIMEOUT: 31536000000,
-    ONE_YEAR_MS: 31536000000,
+    // Maximum 32-bit signed integer supported by Node.js event loop (~24.8 days)
+    INTERACTION_TIMEOUT: 2147483647,
+    ONE_YEAR_MS: 2147483647,
 
     // Bot owner user IDs for unrestricted administrative access
     BOT_OWNERS: ['1465049039153135639', '1257676837249617971'],
@@ -28,5 +27,5 @@ module.exports = {
     },
 
     // Multi-bot cluster metadata
-    CLUSTER_NAME: 'Starry-Flavi-Network'
+    CLUSTER_NAME: 'Starry-Starry-Network'
 };

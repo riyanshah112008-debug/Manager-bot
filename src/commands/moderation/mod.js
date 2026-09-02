@@ -1,5 +1,5 @@
 // ==========================================
-// 🛡️ MODERATION SUITE - COMMAND DATA & WICK EMBED BUILDER
+// 🛡️ STARRY MODERATION SUITE - COMMAND DATA & EMBED BUILDER
 // File Path: mod.js (Part 1 of 2)
 // ==========================================
 const { 
@@ -16,7 +16,7 @@ const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
 
 const safeIcon = (url) => (url ? String(url) : undefined);
 
-// Extracts human moderator if action was performed via Dyno/Carl/Wick
+// Extracts human moderator if action was performed via automated bot
 function parseModeratorDisplay(moderator, reason, guild) {
     if (!moderator) return '`Audit Log / Discord UI`';
     
@@ -24,7 +24,7 @@ function parseModeratorDisplay(moderator, reason, guild) {
         return `<@${moderator.id}> (\`${moderator.tag || moderator.username}\`)`;
     }
 
-    // Bot execution detected (e.g. Dyno, Carl-bot, Wick)
+    // Bot execution detected
     let humanModDisplay = null;
 
     if (reason) {
@@ -59,7 +59,7 @@ function parseModeratorDisplay(moderator, reason, guild) {
     return `<@${moderator.id}> (\`${moderator.tag || moderator.username}\`) [Bot]`;
 }
 
-function buildWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
+function buildStarryLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const targetAvatar = target?.displayAvatarURL ? target.displayAvatarURL() : guild?.iconURL();
     const guildAvatar = guild?.iconURL();
 
@@ -251,7 +251,7 @@ module.exports = {
 
                     await guild.members.ban(targetUser.id, { reason: `${reason} | By: ${user.tag}`, deleteMessageSeconds: deleteDays * 86400 });
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Member Banned',
                         emoji: '🔨',
                         color: '#ED4245',
@@ -280,7 +280,7 @@ module.exports = {
                     }
 
                     const targetUser = await client.users.fetch(userId).catch(() => ({ id: userId, tag: `User (${userId})` }));
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Member Unbanned',
                         emoji: '🟢',
                         color: '#2ECC71',
@@ -308,7 +308,7 @@ module.exports = {
 
                     await targetMember.kick(`${reason} | By: ${user.tag}`);
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Member Kicked',
                         emoji: '🚪',
                         color: '#DA373C',
@@ -340,7 +340,7 @@ module.exports = {
 
                     await targetMember.timeout(durationMs, `${reason} | By: ${user.tag}`);
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Member Timed Out',
                         emoji: '⏰',
                         color: '#ED4245',
@@ -369,7 +369,7 @@ module.exports = {
 
                     await targetMember.timeout(null, `${reason} | By: ${user.tag}`);
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Member Timeout Removed',
                         emoji: '🔓',
                         color: '#2ECC71',
@@ -396,7 +396,7 @@ module.exports = {
                     const toDelete = targetFilter ? fetched.filter(m => m.author.id === targetFilter.id) : fetched;
                     const deleted = await channel.bulkDelete(toDelete, true);
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Channel Messages Purged',
                         emoji: '🧹',
                         color: '#FEE75C',
@@ -421,7 +421,7 @@ module.exports = {
 
                     await targetUser.send(`⚠️ You were warned in **${guild.name}** for: ${reason}`).catch(() => null);
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Member Warned',
                         emoji: '⚠️',
                         color: '#FEE75C',
@@ -453,7 +453,7 @@ module.exports = {
                     if (!checkUserPerm(PermissionFlagsBits.ModerateMembers)) return interaction.editReply({ content: '❌ Permission denied.' });
                     const targetUser = options.getUser('target');
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Warnings Cleared',
                         emoji: '🧹',
                         color: '#2ECC71',
@@ -503,7 +503,7 @@ module.exports = {
 
                     await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }, { reason: `Lockdown: ${reason}` });
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Channel Locked',
                         emoji: '🔒',
                         color: '#ED4245',
@@ -527,7 +527,7 @@ module.exports = {
 
                     await targetChannel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Channel Unlocked',
                         emoji: '🔓',
                         color: '#2ECC71',
@@ -556,7 +556,7 @@ module.exports = {
 
                     await targetMember.setNickname(newNick);
 
-                    const logEmbed = buildWickLogEmbed({
+                    const logEmbed = buildStarryLogEmbed({
                         title: 'Nickname Updated',
                         emoji: '🏷️',
                         color: '#5865F2',

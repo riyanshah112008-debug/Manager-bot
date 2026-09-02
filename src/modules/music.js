@@ -33,7 +33,11 @@ module.exports = (client) => {
 
         try {
             if (command === 'play') {
-                const query = interaction.options.getString('song', true).trim();
+                const rawSong = typeof interaction.options?.getString === 'function' ? interaction.options.getString('song') : (interaction.args ? interaction.args.join(' ') : null);
+                const query = rawSong?.trim();
+                if (!query) {
+                    return interaction.reply({ content: '❌ Please provide a song title or URL! Example: `/play beggin`', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
                 
                 // 1. Immediately defer reply to eliminate Discord 3s timeout
                 await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});

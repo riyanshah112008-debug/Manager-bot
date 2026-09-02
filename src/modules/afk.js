@@ -326,7 +326,7 @@ module.exports = (client) => {
             }
         }
 
-        // --- C. WARN USERS WHO PING THEM (DYNO STYLE) ---
+        // --- C. WARN USERS WHO PING THEM ---
         const targets = new Set(message.mentions.users.values());
         if (message.mentions.repliedUser) targets.add(message.mentions.repliedUser);
 

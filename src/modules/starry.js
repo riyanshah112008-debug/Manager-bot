@@ -68,10 +68,10 @@ const masterSecuritySchema = new mongoose.Schema({
     autoBan: { type: Boolean, default: false }, 
     ownerBypass: { type: Boolean, default: true },
     modules: { 
-        wick: { type: Boolean, default: true }, 
-        beemo: { type: Boolean, default: true }, 
-        altdentifier: { type: Boolean, default: false }, 
-        dyno_carl: { type: Boolean, default: true } 
+        antinuke: { type: Boolean, default: true }, 
+        antiraid: { type: Boolean, default: true }, 
+        altshield: { type: Boolean, default: false }, 
+        automod: { type: Boolean, default: true } 
     },
     userInfractions: { type: Map, of: Number, default: {} }
 });
@@ -192,11 +192,11 @@ async function getOrCreateCategory(guild, name, overwrites = []) {
 }
 
 // ==========================================
-// 🛡️ WICK-STYLE LOG EMBED BUILDER
-// Standardized embed formatting matching Wick Bot layout
+// 🛡️ STARRY LOG EMBED BUILDER
+// Standardized embed formatting matching Starry Security layout
 // Explicitly includes Target, Moderator Name, User IDs, Case Number, and Timestamps
 // ==========================================
-function createWickLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
+function createStarryLogEmbed({ title, emoji, color, target, moderator, reason, duration, expiresAt, caseId, extraFields = [], guild }) {
     const embed = new EmbedBuilder()
         .setColor(color || '#ED4245')
         .setAuthor({ 
@@ -478,7 +478,7 @@ module.exports = async (client) => {
         const accessLog = await client.getLogChannel(member.guild, 'access');
         if (accessLog) {
             const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
-            const joinEmbed = createWickLogEmbed({
+            const joinEmbed = createStarryLogEmbed({
                 title: 'Member Joined',
                 emoji: '📥',
                 color: '#2ECC71',
@@ -518,7 +518,7 @@ module.exports = async (client) => {
     client.on('guildMemberRemove', async (member) => {
         const accessLog = await client.getLogChannel(member.guild, 'access');
         if (accessLog) {
-            const leaveEmbed = createWickLogEmbed({
+            const leaveEmbed = createStarryLogEmbed({
                 title: 'Member Left',
                 emoji: '📤',
                 color: '#ED4245',
@@ -560,7 +560,7 @@ module.exports = async (client) => {
             const logChannel = await client.getLogChannel(message.guild, 'messages');
             if (!logChannel || logChannel.id === message.channel.id) return;
 
-            const deleteEmbed = createWickLogEmbed({
+            const deleteEmbed = createStarryLogEmbed({
                 title: 'Message Deleted',
                 emoji: '🗑️',
                 color: '#ED4245',
@@ -585,7 +585,7 @@ module.exports = async (client) => {
             const logChannel = await client.getLogChannel(oldMessage.guild, 'messages');
             if (!logChannel) return;
 
-            const editEmbed = createWickLogEmbed({
+            const editEmbed = createStarryLogEmbed({
                 title: 'Message Edited',
                 emoji: '✏️',
                 color: '#FEE75C',
@@ -610,7 +610,7 @@ module.exports = async (client) => {
             const logChannel = (await client.getLogChannel(firstMsg.guild, 'messages')) || (await client.getLogChannel(firstMsg.guild, 'moderate'));
             if (!logChannel) return;
 
-            const bulkEmbed = createWickLogEmbed({
+            const bulkEmbed = createStarryLogEmbed({
                 title: 'Bulk Message Purge',
                 emoji: '🧹',
                 color: '#FEE75C',
@@ -643,7 +643,7 @@ module.exports = async (client) => {
             if (!member || member.user.bot) return;
 
             if (!oldState.channelId && newState.channelId) {
-                const joinVcEmbed = createWickLogEmbed({
+                const joinVcEmbed = createStarryLogEmbed({
                     title: 'Joined Voice Channel',
                     emoji: '🔊',
                     color: '#2ECC71',
@@ -653,7 +653,7 @@ module.exports = async (client) => {
                 });
                 await voiceLog.send({ embeds: [joinVcEmbed] }).catch(() => {});
             } else if (oldState.channelId && !newState.channelId) {
-                const leaveVcEmbed = createWickLogEmbed({
+                const leaveVcEmbed = createStarryLogEmbed({
                     title: 'Left Voice Channel',
                     emoji: '🔇',
                     color: '#ED4245',
@@ -663,7 +663,7 @@ module.exports = async (client) => {
                 });
                 await voiceLog.send({ embeds: [leaveVcEmbed] }).catch(() => {});
             } else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-                const moveVcEmbed = createWickLogEmbed({
+                const moveVcEmbed = createStarryLogEmbed({
                     title: 'Moved Voice Channel',
                     emoji: '🔀',
                     color: '#5865F2',
@@ -687,7 +687,7 @@ module.exports = async (client) => {
         const channelLog = await client.getLogChannel(channel.guild, 'channels');
         if (!channelLog) return;
 
-        const embed = createWickLogEmbed({
+        const embed = createStarryLogEmbed({
             title: 'Channel Created',
             emoji: '📺',
             color: '#2ECC71',
@@ -706,7 +706,7 @@ module.exports = async (client) => {
         const channelLog = await client.getLogChannel(channel.guild, 'channels');
         if (!channelLog) return;
 
-        const embed = createWickLogEmbed({
+        const embed = createStarryLogEmbed({
             title: 'Channel Deleted',
             emoji: '🗑️',
             color: '#ED4245',
@@ -732,7 +732,7 @@ module.exports = async (client) => {
             const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
 
             if (addedRoles.size > 0) {
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Granted Role(s)',
                     emoji: '🛡️',
                     color: '#2ECC71',
@@ -746,7 +746,7 @@ module.exports = async (client) => {
             }
 
             if (removedRoles.size > 0) {
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Removed Role(s)',
                     emoji: '🛑',
                     color: '#ED4245',
@@ -760,7 +760,7 @@ module.exports = async (client) => {
             }
 
             if (oldMember.nickname !== newMember.nickname) {
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Nickname Changed',
                     emoji: '🏷️',
                     color: '#5865F2',
@@ -793,7 +793,7 @@ module.exports = async (client) => {
                     const expiresAt = timeoutChange.new;
                     const targetUser = await client.users.fetch(target.id).catch(() => target);
                     if (expiresAt) {
-                        const embed = createWickLogEmbed({
+                        const embed = createStarryLogEmbed({
                             title: 'Member Timed Out',
                             emoji: '⏰',
                             color: '#ED4245',
@@ -805,7 +805,7 @@ module.exports = async (client) => {
                         });
                         await logChannel.send({ embeds: [embed] }).catch(() => {});
                     } else {
-                        const embed = createWickLogEmbed({
+                        const embed = createStarryLogEmbed({
                             title: 'Member Timeout Removed',
                             emoji: '🔓',
                             color: '#2ECC71',
@@ -821,7 +821,7 @@ module.exports = async (client) => {
 
             if (action === AuditLogEvent.MemberBanAdd) {
                 const targetUser = await client.users.fetch(target.id).catch(() => target);
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Banned',
                     emoji: '🔨',
                     color: '#ED4245',
@@ -835,7 +835,7 @@ module.exports = async (client) => {
 
             if (action === AuditLogEvent.MemberKick) {
                 const targetUser = await client.users.fetch(target.id).catch(() => target);
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Kicked',
                     emoji: '🚪',
                     color: '#DA373C',
@@ -1029,7 +1029,7 @@ module.exports = async (client) => {
                     }
 
                     if (logChannel) {
-                        const warnLogEmbed = createWickLogEmbed({
+                        const warnLogEmbed = createStarryLogEmbed({
                             title: 'Member Warned',
                             emoji: '⚠️',
                             color: '#FEE75C',
@@ -1070,7 +1070,7 @@ module.exports = async (client) => {
                     await interaction.reply({ content: `⏰ **Timed out <@${targetUser.id}> for ${durationStr}!**`, flags: [EPHEMERAL_FLAG] });
 
                     if (logChannel) {
-                        const timeoutLogEmbed = createWickLogEmbed({
+                        const timeoutLogEmbed = createStarryLogEmbed({
                             title: 'Member Timed Out',
                             emoji: '⏰',
                             color: '#ED4245',
@@ -1097,7 +1097,7 @@ module.exports = async (client) => {
                     await interaction.reply({ content: `🚪 **Kicked <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
 
                     if (logChannel) {
-                        const kickLogEmbed = createWickLogEmbed({
+                        const kickLogEmbed = createStarryLogEmbed({
                             title: 'Member Kicked',
                             emoji: '🚪',
                             color: '#DA373C',
@@ -1122,7 +1122,7 @@ module.exports = async (client) => {
                     await interaction.reply({ content: `🔨 **Banned <@${targetUser.id}>!**`, flags: [EPHEMERAL_FLAG] });
 
                     if (logChannel) {
-                        const banLogEmbed = createWickLogEmbed({
+                        const banLogEmbed = createStarryLogEmbed({
                             title: 'Member Banned',
                             emoji: '🔨',
                             color: '#ED4245',
@@ -1313,7 +1313,7 @@ module.exports = async (client) => {
 
             const logChannel = (await client.getLogChannel(message.guild, 'messages')) || (await client.getLogChannel(message.guild, 'moderate'));
             if (logChannel) {
-                const purgeEmbed = createWickLogEmbed({
+                const purgeEmbed = createStarryLogEmbed({
                     title: 'Channel Messages Purged',
                     emoji: '🧹',
                     color: '#FEE75C',
@@ -1359,7 +1359,7 @@ module.exports = async (client) => {
                     await targetMember.timeout(durationMs, `${reason} | Executed by ${message.author.tag}`);
                 }
 
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Timed Out',
                     emoji: '⏰',
                     color: '#ED4245',
@@ -1383,7 +1383,7 @@ module.exports = async (client) => {
                     await targetMember.kick(`${reason} | Executed by ${message.author.tag}`);
                 }
 
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Kicked',
                     emoji: '🚪',
                     color: '#DA373C',
@@ -1405,7 +1405,7 @@ module.exports = async (client) => {
                 }
                 await message.guild.members.ban(targetUser.id, { reason: `${reason} | Executed by ${message.author.tag}` });
 
-                const embed = createWickLogEmbed({
+                const embed = createStarryLogEmbed({
                     title: 'Member Banned',
                     emoji: '🔨',
                     color: '#ED4245',

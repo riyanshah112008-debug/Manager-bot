@@ -126,7 +126,7 @@ module.exports = {
             const chestMessage = await interaction.channel.send({ embeds: [spawnEmbed], components: [row] });
 
             // Listen for clicks with high 1-year interaction timing
-            const collector = chestMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: 31536000000 });
+            const collector = chestMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: 2147483647 });
 
             collector.on('collect', async (i) => {
                 // 🛑 DEFER IMMEDIATELY to prevent "Interaction Failed"

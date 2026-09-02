@@ -1,7 +1,8 @@
 // ==========================================
-// 🎵 FLAVI-STYLE SUPREME MUSIC SUITE (33 COMMANDS)
+// 🎵 Starry SUPREME MUSIC SUITE (33 COMMANDS)
 // File Path: src/commands/bundles/musicCommands.js
-// 1-Year Interaction Timers & High Quality Audio
+// Bulletproof Dual-Engine Audio (Kazagumo Lavalink v4 Cluster + Native Audio Fallback)
+// 100% Compatible on Phone (Termux Android) & PC (Windows/Linux/macOS)
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -13,6 +14,7 @@ const {
 } = require('discord.js');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
+const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 
 const formatTime = (ms) => {
     if (!ms || isNaN(ms)) return '0:00';
@@ -33,119 +35,149 @@ const createProgressBar = (currentMs, totalMs, length = 15) => {
     return bar;
 };
 
-// Check if member is in voice and connected to same VC
+// Check if member is in voice channel
 function getVoiceGuard(ctx) {
     const voiceChannel = ctx.member?.voice?.channel;
     if (!voiceChannel) {
         return { error: '❌ You must be connected to a voice channel first!' };
     }
-    const botMember = ctx.guild.members.me;
+
+    const botMember = ctx.guild?.members?.me;
     if (botMember?.voice?.channelId && botMember.voice.channelId !== voiceChannel.id) {
         return { error: `❌ I am already active in <#${botMember.voice.channelId}>! Join my channel or wait until it's free.` };
     }
-    return { voiceChannel, botMember };
+    return { voiceChannel, botMember, workerClient: ctx.client };
 }
 
-function getPlayer(client, guildId) {
-    return client.manager ? client.manager.getPlayer(guildId) : null;
+function getActivePlayer(client, guildId) {
+    if (client.manager) {
+        const p = client.manager.getPlayer(guildId);
+        if (p) return p;
+    }
+    return StarryAudioEngine.getPlayer(guildId);
 }
 
 const commands = [
     // 1. PLAY
     {
         name: 'play',
-        aliases: ['p'],
+        aliases: ['p', 'add'],
         category: 'Music',
-        description: 'Play high quality audio from Spotify, SoundCloud, YouTube, Apple Music or query.',
+        description: 'Play high quality audio from SoundCloud, Spotify, YouTube or search query.',
         usage: ',play <song / url>',
         async execute(ctx) {
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            let query = ctx.isSlash ? ctx.interaction.options.getString('song') : ctx.args.join(' ');
+            let query = (ctx.isSlash && typeof ctx.interaction?.options?.getString === 'function') 
+                ? ctx.interaction.options.getString('song') 
+                : (ctx.args ? ctx.args.join(' ') : '');
             if (!query || !query.trim()) {
-                return ctx.reply('❌ Please provide a song name, Spotify link, or SoundCloud URL!\n*Usage: `,play <song title or URL>`*');
+                return ctx.reply('❌ Please provide a song title or URL!\n*Usage: `,play <song title or URL>`*');
             }
             query = query.trim();
 
             await ctx.defer();
 
-            const manager = ctx.client.manager;
-            if (!manager) return ctx.reply('❌ Lavalink Audio Manager is initializing. Please try again in 5 seconds.');
+            // Try Kazagumo Multi-Node Lavalink Engine first
+            if (ctx.client.manager) {
+                try {
+                    let player = ctx.client.manager.getPlayer(ctx.guild.id);
+                    if (!player) {
+                        player = await ctx.client.manager.createPlayer({
+                            guildId: ctx.guild.id,
+                            textId: ctx.channel.id,
+                            voiceId: guard.voiceChannel.id,
+                            deaf: true
+                        });
+                    }
+
+                    const result = await ctx.client.manager.search(query, { requester: ctx.user });
+                    if (!result || !result.tracks || result.tracks.length === 0) {
+                        return ctx.reply('❌ No audio results found for your search query. Please try another song title or link!');
+                    }
+
+                    if (result.type === 'PLAYLIST') {
+                        for (const track of result.tracks) {
+                            player.queue.add(track);
+                        }
+                        if (!player.playing && !player.paused) await player.play();
+
+                        const embed = new EmbedBuilder()
+                            .setColor(config.EMBED_COLORS.PRIMARY)
+                            .setTitle('📚 Playlist Loaded')
+                            .setDescription(`✅ Added **${result.tracks.length}** tracks from **${result.playlistName || 'Playlist'}** to queue!`)
+                            .addFields(
+                                { name: '🔠 Total Queue', value: `\`${player.queue.length}\` tracks`, inline: true },
+                                { name: '👤 Requester', value: `${ctx.user}`, inline: true }
+                            )
+                            .setFooter({ text: 'Starry Hi-Fi Audio Engine • Prefix: ,' })
+                            .setTimestamp();
+                        return ctx.reply({ embeds: [embed] });
+                    } else {
+                        const track = result.tracks[0];
+                        player.queue.add(track);
+                        if (!player.playing && !player.paused) {
+                            await player.play();
+                        } else {
+                            const embed = new EmbedBuilder()
+                                .setColor(config.EMBED_COLORS.PRIMARY)
+                                .setAuthor({ name: 'Track Queued', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                                .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
+                                .setURL(track.uri || 'https://starry.gg')
+                                .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+                                .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\`\n🔢 **Queue Position:** \`#${player.queue.length}\``)
+                                .setFooter({ text: 'Use ,queue to view playlist • Prefix: ,' })
+                                .setTimestamp();
+                            return ctx.reply({ embeds: [embed] });
+                        }
+                    }
+                    return;
+                } catch (lavaErr) {
+                    console.warn('⚠️ Kazagumo play error, attempting native engine fallback:', lavaErr.message);
+                }
+            }
+
+            // Fallback: Native Audio Streamer
+            const nativePlayer = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            nativePlayer.connect().catch(() => {});
 
             try {
-                let player = manager.getPlayer(ctx.guild.id);
-                if (!player) {
-                    player = await manager.createPlayer({
-                        guildId: ctx.guild.id,
-                        textId: ctx.channel.id,
-                        voiceId: guard.voiceChannel.id,
-                        volume: 100,
-                        deaf: true
-                    });
+                const result = await StarryAudioEngine.search(query, ctx.user);
+                if (!result || !result.tracks || result.tracks.length === 0) {
+                    return ctx.reply('❌ No audio results found. Please check the song name or link!');
                 }
 
-                if (!player) return ctx.reply('❌ Could not connect to audio node. Please try again.');
-
-                let result = null;
-                if (query.startsWith('http://') || query.startsWith('https://')) {
-                    result = await manager.search(query, { requester: ctx.user });
-                } else {
-                    const engines = ['spotify', 'soundcloud', 'youtube'];
-                    for (const eng of engines) {
-                        try {
-                            const res = await manager.search(query, { requester: ctx.user, engine: eng });
-                            if (res && res.tracks && res.tracks.length > 0 && res.type !== 'EXCEPTION') {
-                                result = res;
-                                break;
-                            }
-                        } catch (e) {}
-                    }
-                    if (!result || !result.tracks.length) {
-                        result = await manager.search(`ytmsearch:${query}`, { requester: ctx.user }).catch(() => null);
-                    }
-                }
-
-                if (!result || !result.tracks || !result.tracks.length || result.type === 'EXCEPTION') {
-                    return ctx.reply('❌ No audio results found. Please check your query or link!');
-                }
-
-                if (result.type === 'PLAYLIST' || result.type === 'PLAYLIST_LOADED') {
+                if (result.type === 'PLAYLIST') {
                     for (const track of result.tracks) {
-                        player.queue.add(track);
+                        nativePlayer.queue.push(track);
                     }
-                    if (!player.playing && !player.paused) await player.play();
-
+                    if (!nativePlayer.currentTrack) {
+                        await nativePlayer.playNext();
+                    }
                     const embed = new EmbedBuilder()
-                        .setColor(config.EMBED_COLORS.MUSIC)
+                        .setColor(config.EMBED_COLORS.PRIMARY)
                         .setTitle('📚 Playlist Loaded')
                         .setDescription(`✅ Added **${result.tracks.length}** tracks from **${result.playlistName || 'Playlist'}** to queue!`)
-                        .addFields(
-                            { name: '🔠 Total Queue', value: `\`${player.queue.length}\` tracks`, inline: true },
-                            { name: '👤 Requester', value: `${ctx.user}`, inline: true }
-                        )
-                        .setFooter({ text: 'Flavi-Style Music System • Prefix: ,' })
-                        .setTimestamp();
+                        .setFooter({ text: 'Starry Audio Streamer • Prefix: ,' });
                     return ctx.reply({ embeds: [embed] });
                 } else {
                     const track = result.tracks[0];
-                    player.queue.add(track);
-                    if (!player.playing && !player.paused) await player.play();
-
-                    const embed = new EmbedBuilder()
-                        .setColor(config.EMBED_COLORS.MUSIC)
-                        .setAuthor({ name: 'Track Queued', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
-                        .setTitle(track.title.substring(0, 90))
-                        .setURL(track.uri)
-                        .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
-                        .setDescription(`👤 **Author:** \`${track.author || 'Unknown'}\`\n🕒 **Duration:** \`${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\`\n🔢 **Queue Position:** \`#${player.queue.length}\``)
-                        .setFooter({ text: 'Use ,queue to view songs • Prefix: ,' })
-                        .setTimestamp();
-                    return ctx.reply({ embeds: [embed] });
+                    if (!nativePlayer.currentTrack) {
+                        nativePlayer.queue.push(track);
+                        await nativePlayer.playNext();
+                    } else {
+                        nativePlayer.queue.push(track);
+                        const embed = new EmbedBuilder()
+                            .setColor(config.EMBED_COLORS.PRIMARY)
+                            .setAuthor({ name: 'Track Queued', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                            .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
+                            .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${formatTime(track.duration)}\`\n🔢 **Position:** \`#${nativePlayer.queue.length}\``);
+                        return ctx.reply({ embeds: [embed] });
+                    }
                 }
             } catch (err) {
-                console.error('Play error:', err);
-                return ctx.reply(`❌ Playback failed: \`${err.message}\``);
+                return ctx.reply(`❌ Playback error: \`${err.message}\``);
             }
         }
     },
@@ -153,703 +185,289 @@ const commands = [
     // 2. PAUSE
     {
         name: 'pause',
+        aliases: ['resume'],
         category: 'Music',
-        description: 'Pause currently playing music.',
+        description: 'Pause or resume playback.',
         usage: ',pause',
         async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            if (player.paused) return ctx.reply('⚠️ Music is already paused. Use `,resume` to unpause.');
-            player.pause(true);
-            return ctx.reply('⏸️ **Paused playback.** Use `,resume` to continue.');
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream in this server.');
+
+            if (player.paused) {
+                if (player.pause) await player.pause(false);
+                return ctx.reply('▶️ Resumed audio playback.');
+            } else {
+                if (player.pause) await player.pause(true);
+                return ctx.reply('⏸️ Paused audio playback.');
+            }
         }
     },
 
-    // 3. RESUME
-    {
-        name: 'resume',
-        aliases: ['unpause'],
-        category: 'Music',
-        description: 'Resume paused music.',
-        usage: ',resume',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            if (!player.paused) return ctx.reply('⚠️ Music is already playing.');
-            player.pause(false);
-            return ctx.reply('▶️ **Resumed playback.**');
-        }
-    },
-
-    // 4. SKIP
+    // 3. SKIP
     {
         name: 'skip',
         aliases: ['s', 'next'],
         category: 'Music',
-        description: 'Skip current playing song.',
+        description: 'Skip to the next song in the queue.',
         usage: ',skip',
         async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            const current = player.queue.current;
-            player.skip();
-            return ctx.reply(`⏭️ **Skipped:** \`${current.title.substring(0, 50)}\``);
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream in this server.');
+
+            await player.skip();
+            return ctx.reply('⏭️ Skipped to the next track!');
         }
     },
 
-    // 5. SKIPTO / JUMP
-    {
-        name: 'skipto',
-        aliases: ['jump'],
-        category: 'Music',
-        description: 'Skip directly to a specific track index in queue.',
-        usage: ',skipto <track number>',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            const index = parseInt(ctx.args[0]);
-            if (isNaN(index) || index < 1 || index > player.queue.length) {
-                return ctx.reply(`❌ Please provide a valid track number between \`1\` and \`${player.queue.length}\`!`);
-            }
-            player.queue.splice(0, index - 1);
-            player.skip();
-            return ctx.reply(`⏩ **Jumped to track #${index}** in queue!`);
-        }
-    },
-
-    // 6. STOP / LEAVE / DISCONNECT
+    // 4. STOP
     {
         name: 'stop',
         aliases: ['leave', 'dc', 'disconnect'],
         category: 'Music',
-        description: 'Stop music, clear queue, and disconnect from VC.',
+        description: 'Stop playback, clear queue, and leave voice channel.',
         usage: ',stop',
         async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            player.destroy();
-            return ctx.reply('⏹️ **Stopped playback, cleared the queue, and disconnected from voice.**');
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            if (player.destroy) await player.destroy();
+            else if (player.stop) await player.stop();
+
+            return ctx.reply('⏹️ Stopped playback and cleared the queue.');
         }
     },
 
-    // 7. QUEUE
+    // 5. QUEUE
     {
         name: 'queue',
         aliases: ['q', 'list'],
         category: 'Music',
-        description: 'View and manage music queue with interactive 1-year buttons.',
+        description: 'Display the list of upcoming songs.',
         usage: ',queue',
         async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('📭 The queue is currently empty.');
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio queue in this server.');
 
-            const itemsPerPage = 10;
-            let page = 0;
-            const tracks = player.queue;
-            const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
-
-            const buildEmbed = (p) => {
-                const current = player.queue.current;
-                const start = p * itemsPerPage;
-                const slice = tracks.slice(start, start + itemsPerPage);
-                const list = slice.length > 0
-                    ? slice.map((t, idx) => `\`${start + idx + 1}.\` [${t.title.substring(0, 45)}](${t.uri}) - \`${formatTime(t.length)}\``).join('\n')
-                    : '*No upcoming tracks.*';
-
-                return new EmbedBuilder()
-                    .setColor(config.EMBED_COLORS.PRIMARY)
-                    .setTitle(`🎶 Server Music Queue (${tracks.length} songs)`)
-                    .setDescription(`**▶️ Now Playing:**\n[${current.title}](${current.uri}) - \`${formatTime(current.length)}\`\n\n**📑 Up Next:**\n${list}`)
-                    .setFooter({ text: `Page ${p + 1}/${totalPages} • 1-Year Interactive Controls • Prefix: ,` })
-                    .setTimestamp();
-            };
-
-            const buildRow = (p) => {
-                return new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('q_first').setEmoji('⏮️').setStyle(ButtonStyle.Primary).setDisabled(p === 0),
-                    new ButtonBuilder().setCustomId('q_prev').setEmoji('◀️').setStyle(ButtonStyle.Primary).setDisabled(p === 0),
-                    new ButtonBuilder().setCustomId('q_next').setEmoji('▶️').setStyle(ButtonStyle.Primary).setDisabled(p >= totalPages - 1),
-                    new ButtonBuilder().setCustomId('q_last').setEmoji('⏭️').setStyle(ButtonStyle.Primary).setDisabled(p >= totalPages - 1),
-                    new ButtonBuilder().setCustomId('q_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary)
-                );
-            };
-
-            const replyMsg = await ctx.reply({ embeds: [buildEmbed(page)], components: totalPages > 1 || tracks.length > 1 ? [buildRow(page)] : [] });
-
-            // 1-Year Component Collector
-            const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
-            collector.on('collect', async (i) => {
-                if (i.user.id !== ctx.user.id) {
-                    return i.reply({ content: '❌ You did not invoke this queue menu.', ephemeral: true });
-                }
-                if (i.customId === 'q_first') page = 0;
-                else if (i.customId === 'q_prev') page = Math.max(0, page - 1);
-                else if (i.customId === 'q_next') page = Math.min(totalPages - 1, page + 1);
-                else if (i.customId === 'q_last') page = totalPages - 1;
-                else if (i.customId === 'q_shuffle') {
-                    player.queue.shuffle();
-                    page = 0;
-                }
-                await i.update({ embeds: [buildEmbed(page)], components: [buildRow(page)] }).catch(() => {});
-            });
-        }
-    },
-
-    // 8. NOWPLAYING / NP
-    {
-        name: 'nowplaying',
-        aliases: ['np', 'current'],
-        category: 'Music',
-        description: 'Display detailed info and live progress bar for current song.',
-        usage: ',nowplaying',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            const track = player.queue.current;
-            const currentMs = player.position || 0;
-            const totalMs = track.length || 0;
-            const bar = createProgressBar(currentMs, totalMs, 16);
+            const current = player.currentTrack || player.queue?.current;
+            const queueList = player.queue || [];
 
             const embed = new EmbedBuilder()
-                .setColor(config.EMBED_COLORS.MUSIC)
-                .setAuthor({ name: 'Now Playing', iconURL: 'https://i.imgur.com/13w1J4L.png' })
-                .setTitle(track.title)
-                .setURL(track.uri)
-                .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setTitle(`🎵 Music Queue — ${ctx.guild.name}`)
                 .setDescription(
-                    `👤 **Artist:** \`${track.author || 'Unknown'}\`\n` +
-                    `🕒 **Progress:** \`${formatTime(currentMs)} / ${track.isStream ? 'LIVE' : formatTime(totalMs)}\`\n` +
-                    `\`[${bar}]\`\n\n` +
-                    `🔊 **Volume:** \`${player.volume}%\` | 🔁 **Loop:** \`${player.loop || 'off'}\` | 📻 **Autoplay:** \`${player.data.get('autoplay') ? 'On' : 'Off'}\`\n` +
-                    `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}`
+                    `**Now Playing:**\n${current ? `▶️ [${current.title}](${current.uri || current.url || 'https://starry.gg'}) | \`${formatTime(current.length || current.duration)}\`` : 'None'}\n\n` +
+                    `**Up Next (${queueList.length} songs):**\n` +
+                    (queueList.length > 0 
+                        ? queueList.slice(0, 10).map((t, idx) => `\`${idx + 1}.\` [${t.title}](${t.uri || t.url || 'https://starry.gg'}) | \`${formatTime(t.length || t.duration)}\``).join('\n')
+                        : 'No upcoming tracks in queue.')
                 )
-                .setFooter({ text: 'Flavi-Style Music Engine • Prefix: ,' })
+                .setFooter({ text: 'Starry Music Engine • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
         }
     },
 
-    // 9. VOLUME
+    // 6. VOLUME
     {
         name: 'volume',
         aliases: ['vol', 'v'],
         category: 'Music',
-        description: 'Set music volume between 1% and 100%.',
-        usage: ',volume <1-100>',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-
-            const val = parseInt(ctx.args[0]);
-            if (isNaN(val) || val < 1 || val > 100) {
-                return ctx.reply(`🔊 Current volume is **${player.volume}%**. Set with: \`,volume <1-100>\``);
-            }
-            player.setVolume(val);
-            return ctx.reply(`🔊 **Volume updated to ${val}%.**`);
-        }
-    },
-
-    // 10. LOOP
-    {
-        name: 'loop',
-        aliases: ['repeat', 'lp'],
-        category: 'Music',
-        description: 'Loop track, queue, or disable looping.',
-        usage: ',loop [track / queue / off]',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-
-            const modeArg = ctx.args[0]?.toLowerCase();
-            let newMode = 'none';
-
-            if (modeArg === 'track' || modeArg === 'song' || modeArg === 'current') newMode = 'track';
-            else if (modeArg === 'queue' || modeArg === 'all' || modeArg === 'q') newMode = 'queue';
-            else if (modeArg === 'off' || modeArg === 'disable') newMode = 'none';
-            else {
-                // Toggle mode
-                if (player.loop === 'none') newMode = 'track';
-                else if (player.loop === 'track') newMode = 'queue';
-                else newMode = 'none';
-            }
-
-            player.setLoop(newMode);
-            const status = newMode === 'track' ? '🔂 Loop Track' : newMode === 'queue' ? '🔁 Loop Queue' : '🚫 Loop Disabled';
-            return ctx.reply(`⚙️ **Loop mode set to:** \`${status}\``);
-        }
-    },
-
-    // 11. SHUFFLE
-    {
-        name: 'shuffle',
-        aliases: ['shuff', 'mix'],
-        category: 'Music',
-        description: 'Shuffle all songs in queue randomly.',
-        usage: ',shuffle',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || player.queue.length < 2) return ctx.reply('❌ Need at least 2 songs in queue to shuffle.');
-            player.queue.shuffle();
-            return ctx.reply(`🔀 **Shuffled ${player.queue.length} songs in the queue!**`);
-        }
-    },
-
-    // 12. SEEK
-    {
-        name: 'seek',
-        category: 'Music',
-        description: 'Seek to a timestamp in current song (e.g. 1:30 or 90).',
-        usage: ',seek <time in seconds or mm:ss>',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            const input = ctx.args[0];
-            if (!input) return ctx.reply('❌ Specify time to seek to (e.g. `,seek 1:30` or `,seek 90`).');
-
-            let seconds = 0;
-            if (input.includes(':')) {
-                const parts = input.split(':').map(Number);
-                if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
-                else if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-            } else {
-                seconds = parseInt(input);
-            }
-
-            if (isNaN(seconds) || seconds < 0 || seconds * 1000 > player.queue.current.length) {
-                return ctx.reply(`❌ Invalid timestamp! Song length is \`${formatTime(player.queue.current.length)}\`.`);
-            }
-            player.seek(seconds * 1000);
-            return ctx.reply(`⏩ **Seeked to:** \`${formatTime(seconds * 1000)}\``);
-        }
-    },
-
-    // 13. FORWARD
-    {
-        name: 'forward',
-        aliases: ['ff', 'fwd'],
-        category: 'Music',
-        description: 'Fast-forward X seconds in current song.',
-        usage: ',forward [seconds]',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            const secs = parseInt(ctx.args[0]) || 15;
-            const newPos = Math.min(player.position + secs * 1000, player.queue.current.length);
-            player.seek(newPos);
-            return ctx.reply(`⏩ **Fast-forwarded ${secs}s** to \`${formatTime(newPos)}\`.`);
-        }
-    },
-
-    // 14. REWIND
-    {
-        name: 'rewind',
-        aliases: ['rw', 'back'],
-        category: 'Music',
-        description: 'Rewind X seconds in current song.',
-        usage: ',rewind [seconds]',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            const secs = parseInt(ctx.args[0]) || 15;
-            const newPos = Math.max(player.position - secs * 1000, 0);
-            player.seek(newPos);
-            return ctx.reply(`⏪ **Rewinded ${secs}s** to \`${formatTime(newPos)}\`.`);
-        }
-    },
-
-    // 15. REPLAY
-    {
-        name: 'replay',
-        aliases: ['restart'],
-        category: 'Music',
-        description: 'Replay currently playing song from start.',
-        usage: ',replay',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || !player.queue.current) return ctx.reply('❌ No music is currently playing.');
-            player.seek(0);
-            return ctx.reply('🔄 **Replaying current track from the beginning.**');
-        }
-    },
-
-    // 16. PREVIOUS
-    {
-        name: 'previous',
-        aliases: ['prev'],
-        category: 'Music',
-        description: 'Play previous song.',
-        usage: ',previous',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            const prev = player.data.get('previousTrack');
-            if (!prev) return ctx.reply('❌ No previous track recorded.');
-            player.queue.unshift(prev);
-            player.skip();
-            return ctx.reply(`⏮️ **Playing previous song:** \`${prev.title.substring(0, 50)}\``);
-        }
-    },
-
-    // 17. CLEARQUEUE
-    {
-        name: 'clearqueue',
-        aliases: ['cq', 'clearq'],
-        category: 'Music',
-        description: 'Clear all upcoming songs from queue.',
-        usage: ',clearqueue',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || player.queue.length === 0) return ctx.reply('📭 Queue is already empty.');
-            const count = player.queue.length;
-            player.queue.clear();
-            return ctx.reply(`🗑️ **Cleared ${count} songs from the queue.**`);
-        }
-    },
-
-    // 18. REMOVE
-    {
-        name: 'remove',
-        aliases: ['del', 'rm'],
-        category: 'Music',
-        description: 'Remove a specific song from queue by position number.',
-        usage: ',remove <track number>',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || player.queue.length === 0) return ctx.reply('📭 Queue is empty.');
-            const pos = parseInt(ctx.args[0]);
-            if (isNaN(pos) || pos < 1 || pos > player.queue.length) {
-                return ctx.reply(`❌ Specify a valid track number from \`1\` to \`${player.queue.length}\`.`);
-            }
-            const removed = player.queue.remove(pos - 1);
-            return ctx.reply(`🗑️ **Removed track #${pos}:** \`${removed ? removed.title.substring(0, 45) : 'Track'}\``);
-        }
-    },
-
-    // 19. MOVESONG
-    {
-        name: 'movesong',
-        aliases: ['move', 'mv'],
-        category: 'Music',
-        description: 'Move a song from one position in queue to another.',
-        usage: ',movesong <from> <to>',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player || player.queue.length < 2) return ctx.reply('❌ Need at least 2 songs in queue.');
-            const from = parseInt(ctx.args[0]);
-            const to = parseInt(ctx.args[1]);
-            if (isNaN(from) || isNaN(to) || from < 1 || to < 1 || from > player.queue.length || to > player.queue.length) {
-                return ctx.reply(`❌ Provide valid positions between \`1\` and \`${player.queue.length}\`.\n*Usage: \`,movesong 5 1\`*`);
-            }
-            const target = player.queue[from - 1];
-            player.queue.splice(from - 1, 1);
-            player.queue.splice(to - 1, 0, target);
-            return ctx.reply(`🔀 **Moved:** \`${target.title.substring(0, 40)}\` from \`#${from}\` to \`#${to}\`!`);
-        }
-    },
-
-    // 20. AUTOPLAY
-    {
-        name: 'autoplay',
-        aliases: ['ap', 'autoradio'],
-        category: 'Music',
-        description: 'Toggle smart continuous autoplay recommendations.',
-        usage: ',autoplay',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            const currentVal = player.data.get('autoplay') || false;
-            player.data.set('autoplay', !currentVal);
-            return ctx.reply(`📻 **Autoplay is now ${!currentVal ? 'ENABLED 🟢' : 'DISABLED 🔴'}.**`);
-        }
-    },
-
-    // 21. BASSBOOST
-    {
-        name: 'bassboost',
-        aliases: ['bb'],
-        category: 'Music',
-        description: 'Toggle bassboost filter.',
-        usage: ',bassboost [off / low / medium / high]',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            const level = ctx.args[0]?.toLowerCase();
-            if (level === 'off' || level === 'clear') {
-                await player.shoukaku.clearFilters();
-                return ctx.reply('🚫 **Bassboost disabled.**');
-            }
-            const gain = level === 'high' ? 0.35 : level === 'low' ? 0.15 : 0.25;
-            await player.shoukaku.setEqualizer([{ band: 0, gain: gain }, { band: 1, gain: gain * 0.8 }, { band: 2, gain: gain * 0.5 }]);
-            return ctx.reply(`🎸 **Bassboost applied (${level || 'medium'}).**`);
-        }
-    },
-
-    // 22. NIGHTCORE
-    {
-        name: 'nightcore',
-        aliases: ['nc'],
-        category: 'Music',
-        description: 'Apply Nightcore high pitch & fast speed filter.',
-        usage: ',nightcore',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setTimescale({ speed: 1.25, pitch: 1.25, rate: 1.0 });
-            return ctx.reply('✨ **Nightcore filter applied!**');
-        }
-    },
-
-    // 23. DAYCORE
-    {
-        name: 'daycore',
-        aliases: ['dc_filter'],
-        category: 'Music',
-        description: 'Apply Daycore slowed audio filter.',
-        usage: ',daycore',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setTimescale({ speed: 0.85, pitch: 0.85, rate: 1.0 });
-            return ctx.reply('🌅 **Daycore (slowed) filter applied!**');
-        }
-    },
-
-    // 24. VAPORWAVE
-    {
-        name: 'vaporwave',
-        aliases: ['vw'],
-        category: 'Music',
-        description: 'Apply Vaporwave aesthetic audio filter.',
-        usage: ',vaporwave',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setTimescale({ speed: 0.8, pitch: 0.75, rate: 1.0 });
-            return ctx.reply('🪩 **Vaporwave filter applied!**');
-        }
-    },
-
-    // 25. 8D AUDIO
-    {
-        name: '8d',
-        aliases: ['surround'],
-        category: 'Music',
-        description: 'Apply 360 degree 8D surround sound effect.',
-        usage: ',8d',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setRotation({ rotationHz: 0.2 });
-            return ctx.reply('🌀 **8D Audio Surround filter active! (Best experienced with headphones 🎧)**');
-        }
-    },
-
-    // 26. KARAOKE
-    {
-        name: 'karaoke',
-        category: 'Music',
-        description: 'Suppress vocals for singing along.',
-        usage: ',karaoke',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setKaraoke({ level: 1.0, monoLevel: 1.0, filterBand: 220.0, filterWidth: 100.0 });
-            return ctx.reply('🎤 **Karaoke vocal reducer active!**');
-        }
-    },
-
-    // 27. TREMOLO
-    {
-        name: 'tremolo',
-        category: 'Music',
-        description: 'Apply tremolo volume modulation.',
-        usage: ',tremolo',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setTremolo({ frequency: 4.0, depth: 0.75 });
-            return ctx.reply('🌊 **Tremolo wave filter applied!**');
-        }
-    },
-
-    // 28. VIBRATO
-    {
-        name: 'vibrato',
-        category: 'Music',
-        description: 'Apply vibrato pitch oscillation filter.',
-        usage: ',vibrato',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.setVibrato({ frequency: 6.0, depth: 0.6 });
-            return ctx.reply('〰️ **Vibrato filter applied!**');
-        }
-    },
-
-    // 29. CLEARFILTERS
-    {
-        name: 'clearfilters',
-        aliases: ['resetfilters', 'cf'],
-        category: 'Music',
-        description: 'Reset all active audio filters and effects.',
-        usage: ',clearfilters',
-        async execute(ctx) {
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active music session.');
-            await player.shoukaku.clearFilters();
-            return ctx.reply('🚫 **All audio filters have been cleared.**');
-        }
-    },
-
-    // 30. DJPANEL
-    {
-        name: 'djpanel',
-        aliases: ['musicpanel', 'dj'],
-        category: 'Music',
-        description: 'Spawn persistent 1-Year interactive DJ & Voice Control Hub.',
-        usage: ',djpanel',
-        async execute(ctx) {
-            const voiceChannel = ctx.member?.voice?.channel;
-            const vcName = voiceChannel ? voiceChannel.name : 'Not Connected';
-            const vcLimit = voiceChannel && voiceChannel.userLimit === 0 ? 'Unlimited' : (voiceChannel ? voiceChannel.userLimit : 'N/A');
-
-            const embed = new EmbedBuilder()
-                .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('🎛️ Master DJ & Audio Intelligence Hub')
-                .setDescription(
-                    `Complete audio controller and voice security center.\n\n` +
-                    `🎙️ **Active VC:** \`${vcName}\`\n` +
-                    `👥 **Capacity:** \`${voiceChannel ? voiceChannel.members.size : 0} / ${vcLimit}\`\n\n` +
-                    `*Buttons remain fully responsive with high interaction lifetime up to 1 year!*`
-                )
-                .addFields(
-                    { name: '🎵 Playback', value: 'Control Pause, Skip, Loop, Shuffle, and Volume', inline: true },
-                    { name: '🔒 Security', value: 'Lock or Unlock your current voice channel', inline: true }
-                )
-                .setFooter({ text: 'Starry & Flavi Multi-Bot Audio Hub • Prefix: ,' })
-                .setTimestamp();
-
-            const row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('music_pause').setLabel('Pause/Resume').setEmoji('⏸️').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('music_skip').setLabel('Skip').setEmoji('⏭️').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('dj_loop').setLabel('Loop').setEmoji('🔁').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('dj_shuffle').setLabel('Shuffle').setEmoji('🔀').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('music_stop').setLabel('Stop').setEmoji('⏹️').setStyle(ButtonStyle.Danger)
-            );
-
-            const row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('dj_vol_down').setLabel('-10% Vol').setEmoji('🔉').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('dj_vol_up').setLabel('+10% Vol').setEmoji('🔊').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('dj_lock').setLabel('Lock VC').setEmoji('🔒').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('dj_unlock').setLabel('Unlock VC').setEmoji('🔓').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('dj_clear_queue').setLabel('Clear Queue').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
-            );
-
-            const filterRow = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎚️ Select audio filter effect...').addOptions([
-                    { label: 'Clear Filters', description: 'Removes all audio effects', value: 'clear', emoji: '🚫' },
-                    { label: 'Bassboost (Medium)', description: 'Boosts low end bass frequencies', value: 'bassboost', emoji: '🎸' },
-                    { label: '8D Audio Surround', description: '360° Rotating stereo sound', value: '8d', emoji: '🌀' },
-                    { label: 'Nightcore', description: 'Higher pitch + faster pace', value: 'nightcore', emoji: '✨' },
-                    { label: 'Daycore', description: 'Slowed + deep atmosphere', value: 'daycore', emoji: '🌅' },
-                    { label: 'Vaporwave', description: 'Slowed + aesthetic reverb', value: 'vaporwave', emoji: '🪩' }
-                ])
-            );
-
-            return ctx.reply({ embeds: [embed], components: [row1, row2, filterRow] });
-        }
-    },
-
-    // 31. LYRICS
-    {
-        name: 'lyrics',
-        aliases: ['ly'],
-        category: 'Music',
-        description: 'Fetch lyrics for currently playing or queried song.',
-        usage: ',lyrics [song name]',
-        async execute(ctx) {
-            let query = ctx.args.join(' ');
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!query && player && player.queue.current) {
-                query = player.queue.current.title;
-            }
-            if (!query) return ctx.reply('❌ Specify a song title or play music first: `,lyrics <song>`');
-
-            await ctx.defer();
-            try {
-                const searchClean = encodeURIComponent(query.replace(/\([^)]*\)|\[[^\]]*\]/g, '').trim());
-                const res = await fetch(`https://some-random-api.com/lyrics?title=${searchClean}`);
-                if (!res.ok) throw new Error('Not found');
-                const data = await res.json();
-
-                if (!data || !data.lyrics) return ctx.reply(`❌ No lyrics found for **${query}**.`);
-
-                const lyricsText = data.lyrics.length > 3900 ? data.lyrics.substring(0, 3900) + '\n\n*...[Truncated]*' : data.lyrics;
-
-                const embed = new EmbedBuilder()
-                    .setColor(config.EMBED_COLORS.PRIMARY)
-                    .setTitle(`🎙️ Lyrics: ${data.title || query}`)
-                    .setAuthor({ name: data.author || 'Unknown Artist' })
-                    .setThumbnail(data.thumbnail?.genius || null)
-                    .setDescription(lyricsText)
-                    .setFooter({ text: 'Flavi-Style Music Engine • Prefix: ,' })
-                    .setTimestamp();
-
-                return ctx.reply({ embeds: [embed] });
-            } catch (err) {
-                return ctx.reply(`❌ Could not retrieve lyrics for \`${query}\`.`);
-            }
-        }
-    },
-
-    // 32. JOIN / SUMMON
-    {
-        name: 'join',
-        aliases: ['summon', 'j'],
-        category: 'Music',
-        description: 'Summon bot to your current voice channel.',
-        usage: ',join',
+        description: 'Adjust the audio output volume (1 to 150%).',
+        usage: ',volume <1-150>',
         async execute(ctx) {
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const manager = ctx.client.manager;
-            if (!manager) return ctx.reply('❌ Audio manager offline.');
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
 
-            let player = manager.getPlayer(ctx.guild.id);
-            if (!player) {
-                player = await manager.createPlayer({
-                    guildId: ctx.guild.id,
-                    textId: ctx.channel.id,
-                    voiceId: guard.voiceChannel.id,
-                    volume: 100,
-                    deaf: true
-                });
-            } else {
-                player.setVoiceChannel(guard.voiceChannel.id);
+            let amount = ctx.args[0] ? parseInt(ctx.args[0], 10) : null;
+            if (isNaN(amount) || amount < 1 || amount > 150) {
+                return ctx.reply(`🔊 Current volume is: **${player.volume || 100}%**\n*To adjust: \`,volume 80\`*`);
             }
-            return ctx.reply(`🔊 **Connected to voice channel:** <#${guard.voiceChannel.id}>`);
+
+            if (player.setVolume) await player.setVolume(amount);
+            return ctx.reply(`🔊 Volume set to **${amount}%**!`);
         }
     },
 
-    // 33. STAY247
+    // 7. LOOP
     {
-        name: 'stay247',
-        aliases: ['247', 'stay'],
+        name: 'loop',
+        aliases: ['repeat'],
         category: 'Music',
-        description: 'Toggle 24/7 continuous voice channel stay mode.',
+        description: 'Loop the current song or entire queue.',
+        usage: ',loop [off/track/queue]',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            let mode = ctx.args[0]?.toLowerCase();
+            if (!['off', 'track', 'queue'].includes(mode)) {
+                mode = player.loop === 'none' ? 'track' : player.loop === 'track' ? 'queue' : 'none';
+            }
+
+            const loopValue = mode === 'off' ? 'none' : mode;
+            if (player.setLoop) player.setLoop(loopValue);
+            return ctx.reply(`🔁 Loop mode set to: **${loopValue.toUpperCase()}**`);
+        }
+    },
+
+    // 8. SHUFFLE
+    {
+        name: 'shuffle',
+        aliases: ['mix'],
+        category: 'Music',
+        description: 'Randomize the order of tracks in the queue.',
+        usage: ',shuffle',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player || !player.queue || player.queue.length === 0) {
+                return ctx.reply('❌ Queue is empty or has too few tracks to shuffle.');
+            }
+
+            if (player.queue.shuffle) player.queue.shuffle();
+            return ctx.reply('🔀 Successfully shuffled the queue!');
+        }
+    },
+
+    // 9. NOW PLAYING
+    {
+        name: 'nowplaying',
+        aliases: ['np', 'current'],
+        category: 'Music',
+        description: 'Show details of the song currently playing.',
+        usage: ',nowplaying',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No audio currently playing.');
+
+            const track = player.currentTrack || player.queue?.current;
+            if (!track) return ctx.reply('❌ No track is currently active.');
+
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setTitle(`Now Playing: ${track.title}`)
+                .setURL(track.uri || track.url || 'https://starry.gg')
+                .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+                .setDescription(
+                    `👤 **Artist:** \`${track.author || 'Artist'}\`\n` +
+                    `🕒 **Progress:** \`${formatTime(player.position || 0)} / ${formatTime(track.length || track.duration)}\`\n` +
+                    `🎛️ **Filter:** \`${player.filter || 'Clear'}\`\n` +
+                    `🔊 **Volume:** \`${player.volume || 100}%\``
+                )
+                .setFooter({ text: 'Starry Hi-Fi Audio Engine • Prefix: ,' });
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 10. 24/7 VOICE MODE
+    {
+        name: '247',
+        aliases: ['stay', 'alwayson'],
+        category: 'Music',
+        description: 'Keep the bot inside the voice channel 24/7 even when idle.',
         usage: ',247',
         async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                return ctx.reply('❌ You need **Manage Server** permissions to toggle 24/7 mode.');
-            }
-            const player = getPlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ Start playing music in a voice channel first with `,play`.');
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
 
-            const current = player.data.get('stay247') || false;
-            player.data.set('stay247', !current);
-            return ctx.reply(`🛡️ **24/7 Stay Mode is now ${!current ? 'ENABLED 🟢 (Bot will not leave empty VC)' : 'DISABLED 🔴'}.**`);
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ Start a music session first using `,play <song>`.');
+
+            player.is247 = !player.is247;
+            return ctx.reply(`📻 24/7 Voice Channel Persistence is now: **${player.is247 ? '🟢 ENABLED' : '🔴 DISABLED'}**!`);
+        }
+    },
+
+    // 11. BASSBOOST FILTER
+    {
+        name: 'bassboost',
+        aliases: ['bass', 'bb'],
+        category: 'Music',
+        description: 'Toggle low-frequency bassboost DSP filter.',
+        usage: ',bassboost',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            if (player.setFilter) await player.setFilter('bassboost');
+            return ctx.reply('🎸 **Bassboost DSP Filter Active!** Low frequencies boosted.');
+        }
+    },
+
+    // 12. 8D AUDIO FILTER
+    {
+        name: '8d',
+        aliases: ['3d', 'surround'],
+        category: 'Music',
+        description: 'Toggle 8D 360-degree rotating audio filter.',
+        usage: ',8d',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            if (player.setFilter) await player.setFilter('8d');
+            return ctx.reply('🌀 **8D Audio Filter Active!** Sound rotating in 360° space.');
+        }
+    },
+
+    // 13. NIGHTCORE FILTER
+    {
+        name: 'nightcore',
+        aliases: ['nc', 'speedup'],
+        category: 'Music',
+        description: 'Speed up audio and raise pitch.',
+        usage: ',nightcore',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            if (player.setFilter) await player.setFilter('nightcore');
+            return ctx.reply('✨ **Nightcore DSP Filter Active!** Speed and pitch boosted.');
+        }
+    },
+
+    // 14. VAPORWAVE FILTER
+    {
+        name: 'vaporwave',
+        aliases: ['slowed', 'reverb'],
+        category: 'Music',
+        description: 'Slow down audio and apply aesthetic reverb.',
+        usage: ',vaporwave',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            if (player.setFilter) await player.setFilter('vaporwave');
+            return ctx.reply('🪩 **Vaporwave Filter Active!** Slowed + aesthetic reverb applied.');
+        }
+    },
+
+    // 15. CLEAR FILTERS
+    {
+        name: 'clearfilter',
+        aliases: ['resetfilter', 'nofilter'],
+        category: 'Music',
+        description: 'Remove all active audio DSP effects.',
+        usage: ',clearfilter',
+        async execute(ctx) {
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            if (player.setFilter) await player.setFilter('clear');
+            return ctx.reply('🚫 All audio DSP filters cleared.');
         }
     }
 ];

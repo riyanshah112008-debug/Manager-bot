@@ -1,5 +1,5 @@
 // ==========================================
-// 🤖 FLAVI-STYLE MULTI-BOT, GIVEAWAYS & SYSTEMS (15 COMMANDS)
+// 🤖 Starry MULTI-BOT, GIVEAWAYS & SYSTEMS (15 COMMANDS)
 // File Path: src/commands/bundles/systemCommands.js
 // Multi-Bot Cluster Status, 1-Year Giveaways, Tickets & Backups
 // ==========================================
@@ -17,59 +17,185 @@ const commands = [
     // 1. MULTIBOT / BOTS / CLUSTER
     {
         name: 'multibot',
-        aliases: ['bots', 'cluster'],
+        aliases: ['bots', 'cluster', 'summon', 'clones', 'inviteclones', 'clonebots'],
         category: 'Systems',
-        description: 'View and manage Multi-Bot cluster status, worker nodes, and secondary bots.',
-        usage: ',multibot [add <token>]',
+        description: 'View and manage Multi-Bot cluster status, worker nodes, 1-click summon invites, and roles.',
+        usage: ',multibot [invite | add <token> | setrole <bot> <role> | remove <bot> | roles]',
         async execute(ctx) {
             const multiBot = ctx.client.multiBot;
             if (!multiBot) {
                 return ctx.reply('❌ Multi-Bot Cluster Manager is not initialized.');
             }
 
-            const sub = ctx.args[0]?.toLowerCase();
+            let sub = ctx.args[0]?.toLowerCase();
+            const calledCommand = ctx.isSlash ? ctx.interaction.commandName : ctx.args[0] || '';
+            const invokedName = (!ctx.isSlash && ctx.message?.content) ? ctx.message.content.slice(1).split(/\s+/)[0].toLowerCase() : '';
 
-            // Admin Add Token Subcommand
+            if (invokedName === 'summon' || invokedName === 'clones' || invokedName === 'inviteclones' || invokedName === 'clonebots') {
+                sub = 'invite';
+            }
+
+            // 1. Available Roles Subcommand
+            if (sub === 'roles') {
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setTitle('🎭 Multi-Bot Work & Role Assignment Presets')
+                    .setDescription(
+                        `You can assign specialized roles to any bot in your cluster so each bot focuses on specific tasks:\n\n` +
+                        `• **👑 \`all\`**: Handles everything (Moderation, Music, Economy, Social, Utility).\n` +
+                        `• **🛡️ \`moderation\`**: Dedicated to Moderation, AutoMod, Security & Tickets.\n` +
+                        `• **🎵 \`music\`**: Dedicated to Voice Channels, 24/7 radio & High Quality Audio.\n` +
+                        `• **🛠️ \`utility\`**: Dedicated to Utility, Whois, Server Info & Steal.\n` +
+                        `• **💰 \`economy\`**: Dedicated to Shop, Chests, Prestige & Pet system.\n` +
+                        `• **🎭 \`social\`**: Dedicated to Anime Social Actions, Leveling & Mini-Games.\n\n` +
+                        `*Usage:* \`,multibot add <token> <role>\` or \`,multibot setrole <botName/ID> <role>\``
+                    )
+                    .setFooter({ text: 'Multi-Bot Task Partitioning • Prefix: ,' });
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // 1B. Invite Cluster Bots Subcommand (One-Click Invites for Clone Bots)
+            if (sub === 'invite' || sub === 'invites' || sub === 'clones') {
+                const row = new ActionRowBuilder();
+                const primaryId = ctx.client.user?.id || 'primary';
+                const primaryInvite = `https://discord.com/oauth2/authorize?client_id=${primaryId}&permissions=8&scope=bot%20applications.commands`;
+                const starry2Invite = `https://discord.com/oauth2/authorize?client_id=1543515940069572628&permissions=8&integration_type=0&scope=bot+applications.commands`;
+                const starry3Invite = `https://discord.com/oauth2/authorize?client_id=1543519236586999928&permissions=8&integration_type=0&scope=bot+applications.commands`;
+
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setLabel(`Invite ${ctx.client.user?.username || 'Starry 1'}`)
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(primaryInvite)
+                        .setEmoji('👑'),
+                    new ButtonBuilder()
+                        .setLabel('Invite Starry 2')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(starry2Invite)
+                        .setEmoji('🎵'),
+                    new ButtonBuilder()
+                        .setLabel('Invite Starry 3')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(starry3Invite)
+                        .setEmoji('🎵')
+                );
+
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setTitle('🤖 Starry Multi-Bot & Audio Node Invites')
+                    .setDescription(
+                        `Invite all Starry cluster bots to your server so multiple voice channels can play music simultaneously!\n\n` +
+                        `**1. ${ctx.client.user?.username || 'Starry'}** 👑 *(Primary Master Node)*\n` +
+                        `🔗 [Click to Invite Starry](${primaryInvite})\n\n` +
+                        `**2. Starry 2** 🎵 *(Dedicated Music Node #1)*\n` +
+                        `🔗 [Click to Invite Starry 2](${starry2Invite})\n\n` +
+                        `**3. Starry 3** 🎵 *(Dedicated Music Node #2)*\n` +
+                        `🔗 [Click to Invite Starry 3](${starry3Invite})\n\n` +
+                        `*Click any button below to instantly authorize and add that bot to your server.*`
+                    )
+                    .setFooter({ text: 'Starry Multi-Bot Infrastructure' });
+
+                return ctx.reply({ embeds: [embed], components: [row] });
+            }
+
+            // 2. Admin Add Token Subcommand
             if (sub === 'add') {
-                if (!config.BOT_OWNERS.includes(ctx.user.id)) {
-                    return ctx.reply('❌ Only Bot Owners can connect new secondary bot tokens to the cluster.');
+                if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
+                    return ctx.reply('❌ Only Bot Owners / Server Owners can connect new secondary bot tokens.');
                 }
                 const token = ctx.args[1];
-                if (!token) return ctx.reply('❌ Please provide the secondary Discord bot token: `,multibot add <token>`');
+                if (!token) return ctx.reply('❌ Please provide the bot token: `,multibot add <token> [role] [name]`\n*Example: `,multibot add MTI... music "Starry Music #1"`*');
+
+                const role = ctx.args[2]?.toLowerCase() || 'all';
+                const customName = ctx.args.slice(3).join(' ') || `Worker Node #${multiBot.instances.size + 1}`;
 
                 await ctx.defer(true);
                 try {
-                    const spawned = await multiBot.addToken(token, `Worker Node #${multiBot.instances.size + 1}`, ctx.user.tag);
+                    const spawned = await multiBot.addToken(token, role, customName, ctx.user.tag);
                     if (spawned) {
-                        return ctx.reply(`✅ **Successfully spawned and connected secondary bot instance!**\nName: \`${spawned.name}\`\nCluster Size: **${multiBot.instances.size} bots**`);
+                        return ctx.reply(`✅ **Successfully spawned and connected secondary bot instance!**\n` +
+                                         `• **Name:** \`${spawned.name}\`\n` +
+                                         `• **Assigned Role:** \`${spawned.role.toUpperCase()}\`\n` +
+                                         `• **Cluster Size:** **${multiBot.instances.size} bots online**`);
                     } else {
-                        return ctx.reply('❌ Failed to login secondary bot. Please check token permissions.');
+                        return ctx.reply('❌ Failed to login secondary bot. Please check token permissions in Discord Developer Portal.');
                     }
                 } catch (err) {
                     return ctx.reply(`❌ Error adding token: \`${err.message}\``);
                 }
             }
 
-            // Overview Cluster Embed
+            // 3. Admin Set Role Subcommand
+            if (sub === 'setrole' || sub === 'role') {
+                if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
+                    return ctx.reply('❌ Only Bot Owners / Server Owners can change bot roles.');
+                }
+                const targetBot = ctx.args[1];
+                const newRole = ctx.args[2]?.toLowerCase();
+                if (!targetBot || !newRole) {
+                    return ctx.reply('🔹 **Usage:** `,multibot setrole <botId/name> <role>`\n*Roles: `all`, `moderation`, `music`, `utility`, `economy`, `social`*');
+                }
+
+                try {
+                    const res = await multiBot.setRole(targetBot, newRole);
+                    if (res.success) {
+                        return ctx.reply(`✅ **Updated Work Assignment!**\nBot **${res.bot.name}** is now assigned to: **${newRole.toUpperCase()}**`);
+                    } else {
+                        return ctx.reply(`❌ ${res.message || 'Could not find bot instance.'}`);
+                    }
+                } catch (e) {
+                    return ctx.reply(`❌ Error: \`${e.message}\``);
+                }
+            }
+
+            // 4. Admin Remove Token Subcommand
+            if (sub === 'remove' || sub === 'delete') {
+                if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
+                    return ctx.reply('❌ Only Bot Owners / Server Owners can remove secondary bots.');
+                }
+                const targetBot = ctx.args[1];
+                if (!targetBot) return ctx.reply('🔹 **Usage:** `,multibot remove <botId/token>`');
+
+                const removed = await multiBot.removeToken(targetBot);
+                if (removed) {
+                    return ctx.reply(`✅ **Successfully removed bot from cluster.** Current cluster size: **${multiBot.instances.size}**`);
+                } else {
+                    return ctx.reply(`❌ Could not remove bot or cannot remove Primary Bot.`);
+                }
+            }
+
+            // 5. Overview Cluster Embed
             const stats = multiBot.getClusterStats();
-            const botList = stats.bots.map((b, i) => {
-                return `**${i + 1}.** \`${b.tag}\` ${b.isPrimary ? '👑 *(Primary)*' : '🤖 *(Worker)*'}\n` +
-                       `   • Servers: \`${b.guilds}\` | Users: \`${b.users.toLocaleString()}\` | Ping: \`${b.ping}ms\` | Status: ${b.status}`;
+            const virtualList = (stats.virtualNodes || []).map((vn, i) => {
+                return `**${i + 1}.** ${vn.emoji} **${vn.name}** \`[ACTIVE 🟢]\`\n` +
+                       `   • **Specialization:** ${vn.role}\n` +
+                       `   • **Engine Scope:** \`${vn.commands}\` | Status: \`Online (Single-Token Virtual Multi-Bot)\``;
             }).join('\n\n');
+
+            let physicalSection = '';
+            if (stats.physicalBots && stats.physicalBots.length > 0) {
+                const pList = stats.physicalBots.map((b, i) => {
+                    return `• \`${b.tag}\` ${b.isPrimary ? '👑 *(Primary)*' : '🤖 *(Worker)*'} • **Role:** ${b.roleLabel} • **Ping:** \`${b.ping}ms\` • **Status:** ${b.status}`;
+                }).join('\n');
+                physicalSection = `\n\n**🌐 Connected Discord Client Nodes (${stats.physicalBots.length}):**\n` + pList;
+            }
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('🤖 Multi-Bot Network Cluster Status')
+                .setTitle('🤖 Starry Multi-Bot & Sub-Engine Architecture')
                 .setDescription(
-                    `Multi-bot clustering allows secondary worker bots to share workloads, database state, and music playback seamlessly!\n\n` +
-                    botList
+                    `The bot runs an asynchronous **Virtual Multi-Bot Cluster** on a single token, dividing tasks across dedicated specialized worker engines with dynamic presence and independent queue memory!\n\n` +
+                    `**🛡️ Virtual Specialized Worker Engines (6 Running):**\n\n` +
+                    virtualList +
+                    physicalSection + `\n\n` +
+                    `💡 *Presence automatically cycles across all 6 virtual workers. Use \`,multibot roles\` to inspect roles or \`,multibot add <token>\` to link physical clone bots!*`
                 )
                 .addFields(
-                    { name: '🌐 Total Bots Online', value: `\`${stats.totalBots}\` instances`, inline: true },
-                    { name: '🏰 Total Network Guilds', value: `\`${stats.totalGuilds}\` servers`, inline: true },
-                    { name: '👥 Total Network Users', value: `\`${stats.totalUsers.toLocaleString()}\` users`, inline: true }
+                    { name: '⚙️ Virtual Engines', value: `\`6\` active workers`, inline: true },
+                    { name: '🌐 Client Instances', value: `\`${stats.totalPhysicalBots}\` connected`, inline: true },
+                    { name: '🏰 Total Guilds', value: `\`${stats.totalGuilds}\` servers`, inline: true }
                 )
-                .setFooter({ text: 'Flavi-Style Multi-Bot Architecture • Prefix: ,' })
+                .setFooter({ text: 'Starry Virtual Multi-Bot Engine • Single-Token Multi-Tasking' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -292,7 +418,7 @@ const commands = [
                     `Click **Create Ticket** below to spawn a private channel with our staff team.\n\n` +
                     `*Button interactions are persistent with high lifetime up to 1 year.*`
                 )
-                .setFooter({ text: 'Flavi-Style Ticket Engine • Prefix: ,' })
+                .setFooter({ text: 'Starry Ticket Engine • Prefix: ,' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -348,7 +474,7 @@ const commands = [
                 .setColor('#2ECC71')
                 .setTitle('🛡️ Member Verification Required')
                 .setDescription('Welcome! To prevent automated raid bots and spam, please click below to verify you are human.')
-                .setFooter({ text: 'Starry & Flavi Security Protocol • Prefix: ,' });
+                .setFooter({ text: 'Starry Security Protocol • Prefix: ,' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('verify_human_btn').setLabel('I am Human (Verify)').setStyle(ButtonStyle.Success).setEmoji('✅')
@@ -431,6 +557,152 @@ const commands = [
             const backupId = ctx.args[0];
             if (!backupId) return ctx.reply('❌ Please provide the Backup ID: `,restore <ID>`');
             return ctx.reply(`⏳ **Restoring server from Backup \`${backupId}\`...**`);
+        }
+    },
+
+    // ==========================================
+    // 👑 BOT OWNER / DEVELOPER SUITE
+    // ==========================================
+
+    // 16. EVAL (Bot Owner Only)
+    {
+        name: 'eval',
+        aliases: ['e'],
+        category: 'Systems',
+        description: 'Execute arbitrary JavaScript code on the bot runtime (Bot Owners Only).',
+        usage: ',eval <code>',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ **Access Denied**: Developer-only command.');
+            }
+
+            const code = ctx.args.join(' ');
+            if (!code) return ctx.reply('❌ Please provide JavaScript code to evaluate.');
+
+            const start = process.hrtime.bigint();
+            let result;
+            let isError = false;
+
+            try {
+                result = await eval(code);
+                if (typeof result !== 'string') {
+                    result = require('util').inspect(result, { depth: 1 });
+                }
+            } catch (err) {
+                isError = true;
+                result = err.stack || err.toString();
+            }
+
+            const end = process.hrtime.bigint();
+            const timeTaken = `${(Number(end - start) / 1e6).toFixed(2)}ms`;
+
+            // Clean sensitive secrets from output
+            if (process.env.DISCORD_TOKEN) result = result.replace(new RegExp(process.env.DISCORD_TOKEN, 'g'), '[SECRET_DISCORD_TOKEN]');
+            if (process.env.MONGO_URI) result = result.replace(new RegExp(process.env.MONGO_URI, 'g'), '[SECRET_MONGO_URI]');
+
+            if (result.length > 1900) result = result.substring(0, 1900) + '... (truncated)';
+
+            const embed = new EmbedBuilder()
+                .setColor(isError ? config.EMBED_COLORS.DANGER : config.EMBED_COLORS.SUCCESS)
+                .setTitle(isError ? '❌ Evaluation Error' : '✅ Evaluation Output')
+                .addFields(
+                    { name: '📥 Input', value: `\`\`\`js\n${code.substring(0, 500)}\n\`\`\`` },
+                    { name: '📤 Output', value: `\`\`\`js\n${result}\n\`\`\`` },
+                    { name: '⏱️ Execution Time', value: `\`${timeTaken}\``, inline: true }
+                )
+                .setFooter({ text: 'Starry Developer Engine' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 17. BOTSERVERS (Bot Owner Only)
+    {
+        name: 'botservers',
+        aliases: ['guildlist', 'serverlist'],
+        category: 'Systems',
+        description: 'List all servers and member counts connected to the bot cluster (Bot Owners Only).',
+        usage: ',botservers',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ **Access Denied**: Developer-only command.');
+            }
+
+            const client = ctx.client;
+            const guilds = Array.from(client.guilds.cache.values());
+
+            const list = guilds.map((g, i) => {
+                return `**${i + 1}. ${g.name}**\n` +
+                       `   • ID: \`${g.id}\` | Members: \`${g.memberCount}\` | Owner ID: \`${g.ownerId}\``;
+            }).slice(0, 20).join('\n');
+
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setTitle(`🌐 Connected Server Network (${guilds.length} Guilds)`)
+                .setDescription(list + (guilds.length > 20 ? `\n\n*...and ${guilds.length - 20} more servers.*` : ''))
+                .setFooter({ text: 'Starry Developer Engine' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 18. BOTLEAVE (Bot Owner Only)
+    {
+        name: 'botleave',
+        category: 'Systems',
+        description: 'Force the bot to leave a specified server by ID (Bot Owners Only).',
+        usage: ',botleave <guildId>',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ **Access Denied**: Developer-only command.');
+            }
+
+            const targetGuildId = ctx.args[0];
+            if (!targetGuildId) return ctx.reply('❌ Usage: `,botleave <guildId>`');
+
+            const guild = ctx.client.guilds.cache.get(targetGuildId);
+            if (!guild) return ctx.reply('❌ Server not found in cache.');
+
+            const guildName = guild.name;
+            await guild.leave();
+            return ctx.reply(`👋 Successfully left server **${guildName}** (\`${targetGuildId}\`).`);
+        }
+    },
+
+    // 19. BROADCAST (Bot Owner Only)
+    {
+        name: 'broadcast',
+        category: 'Systems',
+        description: 'Broadcast an official announcement to all servers (Bot Owners Only).',
+        usage: ',broadcast <message>',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ **Access Denied**: Developer-only command.');
+            }
+
+            const announcement = ctx.args.join(' ');
+            if (!announcement) return ctx.reply('❌ Please specify announcement message.');
+
+            await ctx.defer(false);
+
+            let sentCount = 0;
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setTitle('📢 Starry Global Network Announcement')
+                .setDescription(announcement)
+                .setFooter({ text: 'Starry Official Announcement System' })
+                .setTimestamp();
+
+            for (const guild of ctx.client.guilds.cache.values()) {
+                const targetChannel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0 && c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages));
+                if (targetChannel) {
+                    await targetChannel.send({ embeds: [embed] }).then(() => sentCount++).catch(() => {});
+                }
+            }
+
+            return ctx.reply(`✅ Broadcast sent to **${sentCount}** servers across the network!`);
         }
     }
 ];

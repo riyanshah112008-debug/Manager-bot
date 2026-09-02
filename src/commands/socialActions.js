@@ -1,102 +1,55 @@
 // ==========================================
-// 🎭 STARRY & FLAVI SOCIAL & ANIME ACTIONS MODULE
+// 🎭 Starry SOCIAL & ANIME ACTIONS MODULE
 // File Path: src/commands/socialActions.js
-// 1-Year Responsive Interaction & Fixed Comma Prefix (,)
+// 1-Year Responsive Interaction • MongoDB Shared Count Tracking
+// Direct Fast-CDN Animated Anime GIFs
 // ==========================================
 const { 
     SlashCommandBuilder, 
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle,
-    MessageFlags
+    ButtonStyle, 
+    StringSelectMenuBuilder,
+    MessageFlags 
 } = require('discord.js');
 const mongoose = require('mongoose');
-const crypto = require('crypto');
 const config = require('../config');
 const { ONE_YEAR_MS } = require('../utils/contextHelper');
+const { getSocialGif, ANIME_GIFS } = require('../utils/animeGifs');
+const { incrementSocialCount, getSocialCount } = require('../models/SocialStats');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
-const User = mongoose.models.User || (function() {
-    try {
-        return require('../models/User');
-    } catch (e) {
-        const userSchema = new mongoose.Schema({
-            userId: { type: String, required: true },
-            guildId: { type: String, required: true }
-        }, { strict: false });
-        return mongoose.models.User || mongoose.model('User', userSchema);
-    }
-})();
-
-function getRandomIndex(arrayLength) {
-    if (!arrayLength || arrayLength <= 0) return 0;
-    return crypto.randomInt(0, arrayLength);
-}
-
-const GIF_DATABASE = {
-    kiss: ['https://media.tenor.com/dn_m_R3A7pAAAAAC/anime-kiss.gif', 'https://media.tenor.com/gU212bx3424AAAAC/kiss-anime.gif'],
-    pat: ['https://media.tenor.com/E6f12CmgB_QAAAAC/head-pat-anime.gif', 'https://media.tenor.com/Y7233_L2-EAAAAAC/anime-pat.gif'],
-    hug: ['https://media.tenor.com/0PIf-R3635AAAAAC/hug-anime.gif', 'https://media.tenor.com/kCZ9T_hn2M0AAAAC/hug-anime.gif'],
-    slap: ['https://media.tenor.com/Ws6dm1ZW2z8AAAAC/anime-slap.gif', 'https://media.tenor.com/E3B1E2se2RMAAAAC/slap-anime.gif'],
-    cuddle: ['https://media.tenor.com/P5e5d36eR3MAAAAC/anime-cuddle.gif'],
-    bite: ['https://media.tenor.com/O613x3z-s7IAAAAC/anime-bite.gif'],
-    poke: ['https://media.tenor.com/39D7Mh9Q0e0AAAAC/anime-poke.gif'],
-    punch: ['https://media.tenor.com/p_A3m8_0m4AAAAAC/anime-punch.gif'],
-    tickle: ['https://media.tenor.com/8499n8a2G4IAAAAC/anime-tickle.gif'],
-    feed: ['https://media.tenor.com/EF29x13G8LIAAAAC/anime-feed.gif'],
-    lick: ['https://media.tenor.com/4kC5S9lD2pUAAAAC/anime-lick.gif'],
-    highfive: ['https://media.tenor.com/M5b-e4wD41gAAAAC/anime-high-five.gif'],
-    wave: ['https://media.tenor.com/m2K-I_eX7JMAAAAC/anime-wave.gif'],
-    sleep: ['https://media.tenor.com/7L3f6n4I5e8AAAAC/anime-sleep.gif'],
-    wakeup: ['https://media.tenor.com/yFzN-d8C_jMAAAAC/anime-wakeup.gif'],
-    cry: ['https://media.tenor.com/m40fH9PZ1JkAAAAC/anime-cry.gif'],
-    laugh: ['https://media.tenor.com/8Q_a4Kqf8jAAAAAC/anime-laugh.gif'],
-    dance: ['https://media.tenor.com/x8mR9xK6K8AAAAAC/anime-dance.gif'],
-    blush: ['https://media.tenor.com/82N7l4aL1w0AAAAC/anime-blush.gif'],
-    pout: ['https://media.tenor.com/C5uB0v452WIAAAAC/anime-pout.gif'],
-    smile: ['https://media.tenor.com/3P6I362mP2AAAAAC/anime-smile.gif'],
-    bored: ['https://media.tenor.com/6Uq4vA5C_mUAAAAC/anime-bored.gif']
-};
-
-async function fetchSafeAnimeGif(actionKey) {
-    try {
-        const response = await fetch(`https://api.otakugifs.xyz/gif?reaction=${encodeURIComponent(actionKey)}`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data && data.url) return data.url;
-        }
-    } catch (err) {}
-    const fallbackList = GIF_DATABASE[actionKey] || GIF_DATABASE.hug;
-    const idx = getRandomIndex(fallbackList.length);
-    return fallbackList[idx];
-}
-
 const ACTION_CONFIG = {
-    kiss: { verb: 'kisses', emoji: '💋', color: '#FFB6C1', group: 'action', dbField: 'kisses', requiresTarget: true },
-    pat: { verb: 'pets', emoji: '⭐', color: '#A7C7E7', group: 'action', dbField: 'pats', requiresTarget: true },
-    hug: { verb: 'hugs', emoji: '🤗', color: '#FF9494', group: 'action', dbField: 'hugs', requiresTarget: true },
-    slap: { verb: 'slaps', emoji: '✋', color: '#E74C3C', group: 'action', dbField: 'slaps', requiresTarget: true },
-    cuddle: { verb: 'cuddles with', emoji: '🥺', color: '#F39C12', group: 'action', dbField: 'cuddles', requiresTarget: true },
-    bite: { verb: 'bites', emoji: '🦷', color: '#9B59B6', group: 'action', dbField: 'bites', requiresTarget: true },
-    poke: { verb: 'pokes', emoji: '👉', color: '#3498DB', group: 'action', dbField: 'pokes', requiresTarget: true },
-    punch: { verb: 'punches', emoji: '🥊', color: '#C0392B', group: 'action', dbField: 'punches', requiresTarget: true },
-    tickle: { verb: 'tickles', emoji: '🤏', color: '#1ABC9C', group: 'action', dbField: 'tickles', requiresTarget: true },
-    feed: { verb: 'feeds', emoji: '🍱', color: '#2ECC71', group: 'action', dbField: 'feeds', requiresTarget: true },
-    lick: { verb: 'licks', emoji: '👅', color: '#E91E63', group: 'action', dbField: 'licks', requiresTarget: true },
-    highfive: { verb: 'highfives', emoji: '🙌', color: '#F1C40F', group: 'action', dbField: 'highfives', requiresTarget: true },
-    wave: { verb: 'waves at', emoji: '👋', color: '#34495E', group: 'action', dbField: 'waves', requiresTarget: true },
+    highfive: { verb: 'highfives', noun: 'highfives', emoji: '🙌', color: '#F1C40F', group: 'action', requiresTarget: true },
+    hug: { verb: 'hugs', noun: 'hugs', emoji: '🤗', color: '#FF9494', group: 'action', requiresTarget: true },
+    kiss: { verb: 'kisses', noun: 'kisses', emoji: '💋', color: '#FFB6C1', group: 'action', requiresTarget: true },
+    pat: { verb: 'pets', noun: 'pats', emoji: '⭐', color: '#A7C7E7', group: 'action', requiresTarget: true },
+    slap: { verb: 'slaps', noun: 'slaps', emoji: '✋', color: '#E74C3C', group: 'action', requiresTarget: true },
+    cuddle: { verb: 'cuddles with', noun: 'cuddles', emoji: '🥺', color: '#F39C12', group: 'action', requiresTarget: true },
+    bite: { verb: 'bites', noun: 'bites', emoji: '🦷', color: '#9B59B6', group: 'action', requiresTarget: true },
+    poke: { verb: 'pokes', noun: 'pokes', emoji: '👉', color: '#3498DB', group: 'action', requiresTarget: true },
+    punch: { verb: 'punches', noun: 'punches', emoji: '🥊', color: '#C0392B', group: 'action', requiresTarget: true },
+    tickle: { verb: 'tickles', noun: 'tickles', emoji: '🤏', color: '#1ABC9C', group: 'action', requiresTarget: true },
+    feed: { verb: 'feeds', noun: 'meals', emoji: '🍱', color: '#2ECC71', group: 'action', requiresTarget: true },
+    lick: { verb: 'licks', noun: 'licks', emoji: '👅', color: '#E91E63', group: 'action', requiresTarget: true },
+    wave: { verb: 'waves at', noun: 'waves', emoji: '👋', color: '#34495E', group: 'action', requiresTarget: true },
+    handhold: { verb: 'holds hands with', noun: 'handholds', emoji: '🤝', color: '#FFD700', group: 'action', requiresTarget: true },
+    bonk: { verb: 'bonks', noun: 'bonks', emoji: '🔨', color: '#E67E22', group: 'action', requiresTarget: true },
+    yeet: { verb: 'yeets', noun: 'yeets', emoji: '🚀', color: '#9B59B6', group: 'action', requiresTarget: true },
+    boop: { verb: 'boops', noun: 'boops', emoji: '👉', color: '#1ABC9C', group: 'action', requiresTarget: true },
     
-    sleep: { verb: 'is sleeping zzz...', emoji: '😴', color: '#2C3E50', group: 'express', requiresTarget: false },
-    wakeup: { verb: 'just woke up!', emoji: '⏰', color: '#E67E22', group: 'express', requiresTarget: false },
-    cry: { verb: 'is crying...', emoji: '😭', color: '#3498DB', group: 'express', requiresTarget: false },
-    laugh: { verb: 'is laughing hysterically!', emoji: '😆', color: '#F1C40F', group: 'express', requiresTarget: false },
-    dance: { verb: 'is dancing happily!', emoji: '💃', color: '#9B59B6', group: 'express', requiresTarget: false },
-    blush: { verb: 'is blushing deeply...', emoji: '😳', color: '#FFB6C1', group: 'express', requiresTarget: false },
-    pout: { verb: 'is pouting!', emoji: '😤', color: '#E74C3C', group: 'express', requiresTarget: false },
-    smile: { verb: 'smiles warmly!', emoji: '😊', color: '#2ECC71', group: 'express', requiresTarget: false },
-    bored: { verb: 'is feeling super bored...', emoji: '🥱', color: '#95A5A6', group: 'express', requiresTarget: false }
+    sleep: { verb: 'is sleeping zzz...', noun: 'naps', emoji: '😴', color: '#2C3E50', group: 'express', requiresTarget: false },
+    wakeup: { verb: 'just woke up!', noun: 'wakeups', emoji: '⏰', color: '#E67E22', group: 'express', requiresTarget: false },
+    cry: { verb: 'is crying...', noun: 'cries', emoji: '😭', color: '#3498DB', group: 'express', requiresTarget: false },
+    laugh: { verb: 'is laughing hysterically!', noun: 'laughs', emoji: '😆', color: '#F1C40F', group: 'express', requiresTarget: false },
+    dance: { verb: 'is dancing happily!', noun: 'dances', emoji: '💃', color: '#9B59B6', group: 'express', requiresTarget: false },
+    blush: { verb: 'is blushing deeply...', noun: 'blushes', emoji: '😳', color: '#FFB6C1', group: 'express', requiresTarget: false },
+    pout: { verb: 'is pouting!', noun: 'pouts', emoji: '😤', color: '#E74C3C', group: 'express', requiresTarget: false },
+    smile: { verb: 'smiles warmly!', noun: 'smiles', emoji: '😊', color: '#2ECC71', group: 'express', requiresTarget: false },
+    stare: { verb: 'stares intently...', noun: 'stares', emoji: '👀', color: '#95A5A6', group: 'express', requiresTarget: false },
+    cheer: { verb: 'is cheering excitedly!', noun: 'cheers', emoji: '🎉', color: '#F39C12', group: 'express', requiresTarget: false }
 };
 
 const socialCommandBuilder = new SlashCommandBuilder()
@@ -140,20 +93,20 @@ async function executeSocialAction(actionKey, context, isSlash) {
 
     if (configData.requiresTarget) {
         if (isSlash) {
-            target = context.options.getUser('target');
+            target = context.options?.getUser ? context.options.getUser('target') : null;
         } else {
             if (context.reference && context.reference.messageId) {
                 try {
                     const refMsg = await context.channel.messages.fetch(context.reference.messageId);
                     target = refMsg.author;
                 } catch (err) {}
-            } else if (context.mentions && context.mentions.users.size > 0) {
+            } else if (context.mentions && context.mentions.users && context.mentions.users.size > 0) {
                 target = context.mentions.users.first();
             }
         }
 
         if (!target) {
-            const reqMsg = `❌ Please mention a user or reply to a message to ${actionKey} them!`;
+            const reqMsg = `❌ Please mention a user or reply to a message to ${actionKey} them!\n*Example: \`,${actionKey} @user\`*`;
             return isSlash 
                 ? context.reply({ content: reqMsg, flags: [EPHEMERAL_FLAG] }) 
                 : context.reply(reqMsg);
@@ -167,22 +120,24 @@ async function executeSocialAction(actionKey, context, isSlash) {
         }
     }
 
-    if (isSlash && !context.deferred && !context.replied) {
-        await context.deferReply().catch(() => {});
-    }
+    const randomGif = getSocialGif(actionKey);
 
-    const randomGif = await fetchSafeAnimeGif(actionKey);
+    // Save and increment count in MongoDB database
+    const targetIdStr = target ? String(target.id) : null;
+    const totalCount = await incrementSocialCount(authorIdStr, targetIdStr, actionKey);
 
     let descriptionText = `**${authorName}** ${configData.verb}`;
     if (target) {
-        descriptionText += ` **${target.username}**!`;
+        descriptionText += ` **${target.username}**!\n\n✨ That's **${totalCount}** ${configData.noun || actionKey}s shared together! ${configData.emoji}`;
+    } else {
+        descriptionText += `\n\n✨ Personal ${actionKey} count: **${totalCount}** ${configData.emoji}`;
     }
 
     const embed = new EmbedBuilder()
         .setColor(configData.color)
         .setDescription(descriptionText)
         .setImage(randomGif)
-        .setFooter({ text: '1-Year Responsive Interaction • Prefix: ,' });
+        .setFooter({ text: `Social Actions Engine • Total: ${totalCount} • Prefix: ,` });
 
     const components = [];
     if (target && !target.bot) {
@@ -196,7 +151,7 @@ async function executeSocialAction(actionKey, context, isSlash) {
         components.push(row);
     }
 
-    if (isSlash) {
+    if (isSlash && (context.deferred || context.replied)) {
         await context.editReply({ embeds: [embed], components }).catch(() => {});
     } else {
         await context.reply({ embeds: [embed], components }).catch(() => {});
@@ -205,106 +160,76 @@ async function executeSocialAction(actionKey, context, isSlash) {
 
 async function sendSocialHelpMenu(context) {
     const prefix = config.DEFAULT_PREFIX || ',';
+    
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('social_select_action')
+        .setPlaceholder('🎭 Select a social action to view preview & details...')
+        .addOptions([
+            { label: 'Highfive', description: 'Highfive a friend 🙌', value: 'highfive', emoji: '🙌' },
+            { label: 'Hug', description: 'Give someone a warm hug 🤗', value: 'hug', emoji: '🤗' },
+            { label: 'Kiss', description: 'Blow a sweet kiss 💋', value: 'kiss', emoji: '💋' },
+            { label: 'Pat', description: 'Gently pat someone on the head ⭐', value: 'pat', emoji: '⭐' },
+            { label: 'Slap', description: 'Slap someone ✋', value: 'slap', emoji: '✋' },
+            { label: 'Cuddle', description: 'Snuggle up and cuddle 🥺', value: 'cuddle', emoji: '🥺' },
+            { label: 'Handhold', description: 'Hold hands 🤝', value: 'handhold', emoji: '🤝' },
+            { label: 'Bonk', description: 'Bonk on the head 🔨', value: 'bonk', emoji: '🔨' },
+            { label: 'Bite', description: 'Playfully bite 🦷', value: 'bite', emoji: '🦷' },
+            { label: 'Poke', description: 'Poke someone 👉', value: 'poke', emoji: '👉' },
+            { label: 'Punch', description: 'Playful punch 🥊', value: 'punch', emoji: '🥊' },
+            { label: 'Dance', description: 'Dance happily 💃', value: 'dance', emoji: '💃' },
+            { label: 'Cry', description: 'Cry your heart out 😭', value: 'cry', emoji: '😭' },
+            { label: 'Blush', description: 'Blush deeply 😳', value: 'blush', emoji: '😳' },
+            { label: 'Smile', description: 'Smile warmly 😊', value: 'smile', emoji: '😊' },
+            { label: 'Sleep', description: 'Sleep zzz... 😴', value: 'sleep', emoji: '😴' }
+        ]);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
     const embed = new EmbedBuilder()
         .setColor('#FF79C6')
-        .setTitle('🎭 Starry & Flavi Social Actions Menu')
-        .setDescription(`Express feelings or interact with friends using high-quality animated anime GIFs!\n\n*Works via prefix commands (\`${prefix}hug @user\`) OR slash commands (\`/social action hug\`).*\n*Interaction timing up to 1 Year!*`)
-        .addFields(
-            { 
-                name: '🫂 Targeted Member Actions (Requires Mention/Reply)', 
-                value: '`kiss`, `pat`, `hug`, `slap`, `cuddle`, `bite`, `poke`, `punch`, `tickle`, `feed`, `lick`, `highfive`, `wave`', 
-                inline: false 
-            },
-            { 
-                name: '🎭 Solo Expressions & Feelings', 
-                value: '`sleep`, `wakeup`, `cry`, `laugh`, `dance`, `blush`, `pout`, `smile`, `bored`', 
-                inline: false 
-            },
-            { 
-                name: '💡 Usage Examples', 
-                value: `• \`${prefix}hug @user\` — Hug a friend\n• Reply to a message with \`${prefix}kiss\` — Kiss sender\n• \`${prefix}sleep\` — Express sleeping\n• \`/social action highfive target:@user\``, 
-                inline: false 
-            }
-        )
-        .setFooter({ text: 'Starry & Flavi Interactive Engine • 1-Year Responsive Buttons' })
+        .setTitle('🎭 Starry Anime Social Actions')
+        .setDescription(`Express feelings or interact with friends using animated anime GIFs!\nAll shared actions (hugs, kisses, pats, highfives) are saved and tracked in the database!\n\n**Direct Command Examples:**\n• \`${prefix}highfive @user\` — Highfive someone\n• \`${prefix}hug @user\` — Hug a friend\n• \`${prefix}kiss @user\` — Kiss someone\n• \`${prefix}slap @user\` — Slap someone\n• \`${prefix}pat @user\` — Pat someone\n• \`${prefix}dance\` — Dance solo\n\n*Select an action from the dropdown menu to preview:*`)
+        .setFooter({ text: 'Starry Social Suite • Prefix: ,' })
         .setTimestamp();
 
-    return context.reply({ embeds: [embed] });
+    const replyMsg = await context.reply({ embeds: [embed], components: [row] });
+    
+    if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
+        const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
+        collector.on('collect', async (i) => {
+            if (i.customId === 'social_select_action') {
+                const selectedAction = i.values[0];
+                const conf = ACTION_CONFIG[selectedAction];
+                if (conf) {
+                    const sampleGif = getSocialGif(selectedAction);
+                    const actionEmbed = new EmbedBuilder()
+                        .setColor(conf.color)
+                        .setTitle(`🎭 ${selectedAction.toUpperCase()} ${conf.emoji}`)
+                        .setDescription(`**How to use:**\n${conf.requiresTarget ? `Type \`${prefix}${selectedAction} @user\` to ${conf.verb} someone!` : `Type \`${prefix}${selectedAction}\` to express this emotion!`}\n\n*All interactions are recorded and saved together in the database.*`)
+                        .setImage(sampleGif)
+                        .setFooter({ text: `Starry Social Suite • Prefix: ,` });
+
+                    await i.update({ embeds: [actionEmbed], components: [row] }).catch(() => {});
+                }
+            }
+        });
+    }
 }
 
-module.exports = (client) => {
-    // 1. Slash Command /social Handler
-    client.on('interactionCreate', async (interaction) => {
-        if (interaction.isChatInputCommand() && interaction.commandName === 'social') {
-            const group = interaction.options.getSubcommandGroup(false);
-            const subCommand = interaction.options.getSubcommand(false);
-            const targetAction = subCommand || group;
-
-            if (targetAction) {
-                await executeSocialAction(targetAction, interaction, true);
-            }
-            return;
+module.exports = {
+    data: socialCommandBuilder,
+    async execute(interaction) {
+        const group = interaction.options?.getSubcommandGroup ? interaction.options.getSubcommandGroup(false) : null;
+        const subCommand = interaction.options?.getSubcommand ? interaction.options.getSubcommand(false) : null;
+        const targetAction = subCommand || group;
+        if (targetAction && ACTION_CONFIG[targetAction]) {
+            await executeSocialAction(targetAction, interaction, true);
+        } else {
+            await sendSocialHelpMenu(interaction);
         }
-
-        // 2. Button "Action Back" Handler (Global 1-Year Lifetime)
-        if (interaction.isButton() && interaction.customId.startsWith('social_')) {
-            const parts = interaction.customId.split('_');
-            const actionKey = parts[1];
-            const allowedUserId = parts[3];
-            const originalAuthorId = parts[4];
-
-            if (interaction.user.id !== allowedUserId) {
-                return interaction.reply({ 
-                    content: `❌ Only <@${allowedUserId}> can use this button to action back!`, 
-                    flags: [EPHEMERAL_FLAG] 
-                }).catch(() => {});
-            }
-
-            const configData = ACTION_CONFIG[actionKey];
-            if (!configData) return;
-
-            await interaction.deferReply().catch(() => {});
-
-            const returnGif = await fetchSafeAnimeGif(actionKey);
-
-            const returnEmbed = new EmbedBuilder()
-                .setColor(configData.color)
-                .setDescription(`**${interaction.user.username}** ${configData.verb} **<@${originalAuthorId}>** back!`)
-                .setImage(returnGif)
-                .setFooter({ text: '1-Year Responsive Interaction' });
-
-            await interaction.editReply({ embeds: [returnEmbed] }).catch(() => {});
-        }
-    });
-
-    // 3. Prefix Commands (,hug, ,kiss, ,slap, etc.)
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.content || !message.guild) return;
-        const prefix = config.DEFAULT_PREFIX || ',';
-
-        const content = message.content.toLowerCase().trim();
-        const firstWord = content.split(/\s+/)[0];
-
-        if (firstWord === `${prefix}social` || firstWord === 'social') {
-            return sendSocialHelpMenu(message);
-        }
-
-        for (const actionKey of Object.keys(ACTION_CONFIG)) {
-            if (firstWord === `${prefix}${actionKey}`) {
-                await executeSocialAction(actionKey, message, false);
-                break;
-            }
-        }
-    });
+    },
+    sendSocialHelpMenu,
+    executeSocialAction,
+    ACTION_CONFIG,
+    socialCommandPayload: socialCommandBuilder.toJSON()
 };
-
-module.exports.data = socialCommandBuilder;
-module.exports.execute = async function(interaction) {
-    const group = interaction.options.getSubcommandGroup(false);
-    const subCommand = interaction.options.getSubcommand(false);
-    const targetAction = subCommand || group;
-    if (targetAction) {
-        await executeSocialAction(targetAction, interaction, true);
-    }
-};
-module.exports.socialCommandPayload = socialCommandBuilder.toJSON();

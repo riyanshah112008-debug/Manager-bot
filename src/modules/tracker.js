@@ -9,7 +9,8 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ChannelType
+    ChannelType,
+    Events
 } = require('discord.js');
 const mongoose = require('mongoose');
 
@@ -175,7 +176,7 @@ const universalTrackerModule = (client) => {
 
     const invitesCache = new Map();
 
-    client.once('ready', async () => {
+    client.once(Events.ClientReady || 'clientReady', async () => {
         try {
             for (const [guildId, guild] of client.guilds.cache) {
                 if (guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageGuild)) {

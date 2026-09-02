@@ -8,7 +8,8 @@ const {
     PermissionFlagsBits, 
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle 
+    ButtonStyle,
+    Events
 } = require('discord.js');
 const mongoose = require('mongoose');
 
@@ -243,18 +244,19 @@ const bumpEngineModule = (client, expressApp) => {
     // --- ⏰ AUTONOMOUS 24/7 AUTO-BUMPER & REMINDER WORKER LOOP ---
     function startAutoBumpWorker() {
         setInterval(async () => {
+            if (!client.isReady()) return;
             try {
                 const now = new Date();
                 const pendingBumps = await BumpSystem.find({ nextBump: { $lte: now } });
 
                 for (const config of pendingBumps) {
                     const guild = client.guilds.cache.get(config.guildId);
-                    if (!guild) continue;
+                    if (!guild || !guild.available) continue;
 
                     const cooldown = 2 * 60 * 60 * 1000;
                     const channel = guild.channels.cache.get(config.reminderChannelId) || 
                                     guild.systemChannel || 
-                                    guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages));
+                                    guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages));
 
                     // 💎 CASE A: Auto-Bump Enabled
                     if (config.autoBumpEnabled) {
@@ -269,7 +271,7 @@ const bumpEngineModule = (client, expressApp) => {
                         config.isReady = false;
                         await config.save();
 
-                        if (channel) {
+                        if (channel && channel.isTextBased() && channel.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages)) {
                             const embed = new EmbedBuilder()
                                 .setColor('#00F2FE')
                                 .setTitle('💎 24/7 Auto-Bump Executed!')
@@ -288,7 +290,7 @@ const bumpEngineModule = (client, expressApp) => {
                         config.isReady = true;
                         await config.save();
 
-                        if (channel) {
+                        if (channel && channel.isTextBased() && channel.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages)) {
                             const pingStr = config.pingRoleId ? `<@&${config.pingRoleId}>` : '';
                             const embed = new EmbedBuilder()
                                 .setColor('#5865F2')
@@ -301,12 +303,12 @@ const bumpEngineModule = (client, expressApp) => {
                     }
                 }
             } catch (err) {
-                console.error('⚠️ [Auto-Bump Worker Error]:', err.message);
+                // Silently handle transient connection errors
             }
         }, 60000); // Checks every 60 seconds
     }
 
-    client.once('ready', async () => {
+    client.once(Events.ClientReady || 'clientReady', async () => {
         for (const [id, guild] of client.guilds.cache) {
             await syncGuildData(guild);
         }

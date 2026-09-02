@@ -33,8 +33,8 @@ async function cacheGuildInvites(guild) {
 }
 
 module.exports = (client) => {
-    // 1. INITIALIZE INVITE CACHE ON BOT READY & GUILD JOIN
-    client.on('ready', async () => {
+    const { Events } = require('discord.js');
+    client.on(Events.ClientReady || 'clientReady', async () => {
         client.guilds.cache.forEach(guild => cacheGuildInvites(guild));
     });
 

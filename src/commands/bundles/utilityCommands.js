@@ -1,5 +1,5 @@
 // ==========================================
-// 🛠️ FLAVI-STYLE SUPREME UTILITY SUITE (28 COMMANDS)
+// 🛠️ Starry SUPREME UTILITY SUITE (28 COMMANDS)
 // File Path: src/commands/bundles/utilityCommands.js
 // 1-Year Interactive Help Menus, Server Tools & Translation
 // ==========================================
@@ -10,6 +10,7 @@ const {
     ButtonStyle, 
     StringSelectMenuBuilder,
     PermissionFlagsBits,
+    AttachmentBuilder,
     parseEmoji 
 } = require('discord.js');
 const os = require('os');
@@ -41,8 +42,150 @@ function formatUptime(seconds) {
     return parts.join(' ');
 }
 
+// 🧠 High-Precision Semantic Image Intent Analyzer
+function parseImageIntent(input) {
+    if (!input || typeof input !== 'string') return null;
+    const str = input.trim();
+
+    // 1. Direct command-style action requests: "draw...", "paint...", "imagine...", "generate...", "create...", "make..."
+    const actionPattern = /^(?:please\s+)?(?:can\s+you\s+)?(?:could\s+you\s+)?(?:i\s+want\s+(?:you\s+to\s+)?)?(?:generate|create|make|draw|paint|render|imagine|show\s+me|give\s+me|produce)\s+(?:an?\s+)?(?:image|art|picture|photo|illustration|drawing|wallpaper|scene|portrait|sketch|pic|visual)?\s*(?:of|about|showing|with|for)?\s*(.*)$/i;
+    
+    // 2. Direct noun requests: "image of...", "picture of...", "pic of...", "photo of...", "drawing of...", "wallpaper of..."
+    const nounPattern = /^(?:an?\s+)?(?:image|art|picture|photo|illustration|drawing|wallpaper|scene|portrait|sketch|pic)\s+(?:of|about|showing|with|for)\s+(.*)$/i;
+
+    // 3. Simple draw keywords: "draw a cat", "paint a mountain"
+    const simpleDrawPattern = /^(?:draw|paint|imagine)\s+(.*)$/i;
+
+    const matched = str.match(actionPattern) || str.match(nounPattern) || str.match(simpleDrawPattern);
+    if (matched && matched[1] && matched[1].trim().length > 1) {
+        let extracted = matched[1].trim();
+        extracted = extracted.replace(/[?!.]+$/, '').trim();
+        if (extracted.length > 0) return extracted;
+    }
+
+    // 4. Broad pattern: contains action verb + image noun
+    if (/\b(?:generate|draw|paint|create|make|render|imagine)\b/i.test(str) && /\b(?:image|picture|pic|photo|artwork|drawing|illustration|wallpaper)\b/i.test(str)) {
+        // Strip out question filler words
+        let clean = str.replace(/^(?:can\s+you\s+|could\s+you\s+|please\s+|i\s+want\s+you\s+to\s+)/i, '');
+        clean = clean.replace(/^(?:generate|create|make|draw|paint|render|imagine)\s+(?:an?\s+)?(?:image|art|picture|photo|illustration|drawing|wallpaper)\s+(?:of\s+|about\s+|showing\s+)?/i, '');
+        return clean.trim() || str;
+    }
+
+    return null;
+}
+
+// 🎨 HIGH-PERFORMANCE NEURAL AI ART ENGINE (Direct Fast Buffer Delivery)
+// ==========================================
+async function generateAndSendImage(ctx, prompt) {
+    if (!prompt || !prompt.trim()) {
+        return ctx.reply('🎨 **Please provide a description of the image you want to generate!**\n*Example: `,imagine Cyberpunk anime girl with neon lights`*');
+    }
+
+    const cleanPrompt = prompt.trim();
+    let seed = Math.floor(Math.random() * 9999999);
+    let currentModel = 'flux';
+
+    const fetchImageAttachment = async (p, s, model = 'flux') => {
+        const encoded = encodeURIComponent(p);
+        const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&seed=${s}&model=${model}&enhance=true`;
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 18000);
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                const arrayBuffer = await res.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                const attachment = new AttachmentBuilder(buffer, { name: `starry_art_${s}.jpg` });
+                return { attachment, url, fileName: `starry_art_${s}.jpg` };
+            }
+        } catch (e) {
+            console.warn('Image fetch warning:', e.message);
+        }
+        return { attachment: null, url, fileName: null };
+    };
+
+    const buildImageEmbed = (p, s, fileName, url) => {
+        const embed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setAuthor({ name: `Starry AI Neural Art Generator`, iconURL: ctx.client?.user?.displayAvatarURL() })
+            .setTitle(`🎨 AI Generated Artwork`)
+            .setDescription(`✨ **Prompt:** "${p.length > 250 ? p.substring(0, 247) + '...' : p}"\n🧠 **Engine:** \`Flux.1 Schnell (1024x1024 HD)\`\n👤 **Requested by:** <@${ctx.user.id}>`)
+            .setFooter({ text: `Seed: ${s} • Starry AI • Direct HD Rendering` })
+            .setTimestamp();
+
+        if (fileName) {
+            embed.setImage(`attachment://${fileName}`);
+        } else if (url) {
+            embed.setImage(url);
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ai_regen_${s}`)
+                .setLabel('🔄 Regenerate')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId(`ai_enhance_${s}`)
+                .setLabel('✨ Enhance Variations')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setLabel('📥 Direct HD Link')
+                .setStyle(ButtonStyle.Link)
+                .setURL(url)
+        );
+
+        return { embed, row };
+    };
+
+    const imgData = await fetchImageAttachment(cleanPrompt, seed, currentModel);
+    const { embed, row } = buildImageEmbed(cleanPrompt, seed, imgData.fileName, imgData.url);
+
+    const replyOptions = {
+        embeds: [embed],
+        components: [row]
+    };
+    if (imgData.attachment) {
+        replyOptions.files = [imgData.attachment];
+    }
+
+    const sentMsg = await ctx.reply(replyOptions).catch(() => null);
+    if (!sentMsg) return;
+
+    const collector = sentMsg.createMessageComponentCollector({
+        time: ONE_YEAR_MS
+    });
+
+    collector.on('collect', async (i) => {
+        if (i.user.id !== ctx.user.id && !config.BOT_OWNERS?.includes(i.user.id)) {
+            return i.reply({ content: '❌ Only the author of this prompt can use these controls.', flags: [64] });
+        }
+
+        if (i.customId.startsWith('ai_regen_')) {
+            await i.deferUpdate().catch(() => {});
+            seed = Math.floor(Math.random() * 9999999);
+            const newImgData = await fetchImageAttachment(cleanPrompt, seed, currentModel);
+            const updated = buildImageEmbed(cleanPrompt, seed, newImgData.fileName, newImgData.url);
+            const editPayload = { embeds: [updated.embed], components: [updated.row] };
+            if (newImgData.attachment) editPayload.files = [newImgData.attachment];
+            await sentMsg.edit(editPayload).catch(() => {});
+        } else if (i.customId.startsWith('ai_enhance_')) {
+            await i.deferUpdate().catch(() => {});
+            seed = Math.floor(Math.random() * 9999999);
+            const enhancedPrompt = `${cleanPrompt}, masterpiece, highly detailed, 8k resolution, cinematic lighting, ultra-fine art`;
+            const newImgData = await fetchImageAttachment(enhancedPrompt, seed, currentModel);
+            const updated = buildImageEmbed(enhancedPrompt, seed, newImgData.fileName, newImgData.url);
+            const editPayload = { embeds: [updated.embed], components: [updated.row] };
+            if (newImgData.attachment) editPayload.files = [newImgData.attachment];
+            await sentMsg.edit(editPayload).catch(() => {});
+        }
+    });
+}
+
 const commands = [
-    // 1. HELP (Interactive 1-Year Flavi-Style Categorized Menu)
+    // 1. HELP (Interactive 1-Year Starry Categorized Menu)
     {
         name: 'help',
         aliases: ['h', 'commands', 'menu'],
@@ -51,125 +194,22 @@ const commands = [
         usage: ',help [category / command]',
         async execute(ctx) {
             const prefix = config.DEFAULT_PREFIX || ',';
-            const categories = [
-                { id: 'music', label: 'Music & Audio (33)', desc: 'Playback, filters, 24/7, queue & DJ panel', emoji: '🎵' },
-                { id: 'mod', label: 'Moderation & Security (32)', desc: 'Bans, mutes, kicks, warnings, lock & purge', emoji: '🛡️' },
-                { id: 'util', label: 'Utility & Tools (28)', desc: 'Server info, whois, translate, avatar & afk', emoji: '🛠️' },
-                { id: 'social', label: 'Social & Expressions (26)', desc: 'Hug, kiss, slap, anime GIFs & interactions', emoji: '🎭' },
-                { id: 'eco', label: 'Economy & Levels (16)', desc: 'Coins, balance, rank, daily, shop & slots', emoji: '💰' },
-                { id: 'sys', label: 'Multi-Bot & Systems (15)', desc: 'Multi-bot cluster, giveaways, tickets & backup', emoji: '🤖' }
-            ];
+            const { buildCategoryEmbed, createHelpComponents } = require('../../utils/helpHelper');
+            const components = createHelpComponents();
+            const replyMsg = await ctx.reply({ embeds: [buildCategoryEmbed('home', prefix)], components });
 
-            const buildCategoryEmbed = (catId) => {
-                const embed = new EmbedBuilder()
-                    .setColor(config.EMBED_COLORS.PRIMARY)
-                    .setFooter({ text: `Flavi-Style Master Bot • Default Prefix: ${prefix} • 1-Year Controls` })
-                    .setTimestamp();
-
-                if (catId === 'music') {
-                    embed.setTitle('🎵 Music & Audio Commands (33 Commands)')
-                        .setDescription(
-                            `**Playback & Controls:**\n` +
-                            `\`${prefix}play\`, \`${prefix}pause\`, \`${prefix}resume\`, \`${prefix}skip\`, \`${prefix}skipto\`, \`${prefix}stop\`, \`${prefix}queue\`, \`${prefix}nowplaying\`, \`${prefix}volume\`, \`${prefix}loop\`, \`${prefix}shuffle\`, \`${prefix}seek\`, \`${prefix}forward\`, \`${prefix}rewind\`, \`${prefix}replay\`, \`${prefix}previous\`, \`${prefix}clearqueue\`, \`${prefix}remove\`, \`${prefix}movesong\`, \`${prefix}autoplay\`, \`${prefix}join\`, \`${prefix}247\`\n\n` +
-                            `**Filters & Effects:**\n` +
-                            `\`${prefix}bassboost\`, \`${prefix}8d\`, \`${prefix}nightcore\`, \`${prefix}daycore\`, \`${prefix}vaporwave\`, \`${prefix}karaoke\`, \`${prefix}tremolo\`, \`${prefix}vibrato\`, \`${prefix}clearfilters\`\n\n` +
-                            `**Panels & Utilities:**\n` +
-                            `\`${prefix}djpanel\`, \`${prefix}lyrics\``
-                        );
-                } else if (catId === 'mod') {
-                    embed.setTitle('🛡️ Moderation & Security Commands (32 Commands)')
-                        .setDescription(
-                            `**Punishments:**\n` +
-                            `\`${prefix}ban\`, \`${prefix}unban\`, \`${prefix}softban\`, \`${prefix}tempban\`, \`${prefix}kick\`, \`${prefix}mute\`, \`${prefix}unmute\`, \`${prefix}warn\`, \`${prefix}warnings\`, \`${prefix}clearwarns\`, \`${prefix}delwarn\`\n\n` +
-                            `**Channel Controls & Purging:**\n` +
-                            `\`${prefix}purge\`, \`${prefix}purgeuser\`, \`${prefix}purgelinks\`, \`${prefix}purgebot\`, \`${prefix}slowmode\`, \`${prefix}lock\`, \`${prefix}unlock\`, \`${prefix}lockdown\`, \`${prefix}unlockdown\`, \`${prefix}nuke\`, \`${prefix}hide\`, \`${prefix}unhide\`\n\n` +
-                            `**Roles, Voice & Panels:**\n` +
-                            `\`${prefix}setnick\`, \`${prefix}role\`, \`${prefix}addrole\`, \`${prefix}removerole\`, \`${prefix}roleall\`, \`${prefix}vckick\`, \`${prefix}vcmute\`, \`${prefix}vcunmute\`, \`${prefix}modpanel\``
-                        );
-                } else if (catId === 'util') {
-                    embed.setTitle('🛠️ Utility & Server Management Commands (28 Commands)')
-                        .setDescription(
-                            `\`${prefix}help\`, \`${prefix}ahelp\`, \`${prefix}ping\`, \`${prefix}botinfo\`, \`${prefix}serverinfo\`, \`${prefix}whois\`, \`${prefix}avatar\`, \`${prefix}banner\`, \`${prefix}membercount\`, \`${prefix}roles\`, \`${prefix}emojis\`, \`${prefix}steal\`, \`${prefix}invite\`, \`${prefix}vote\`, \`${prefix}premium\`, \`${prefix}uptime\`, \`${prefix}afk\`, \`${prefix}translate\`, \`${prefix}calculator\`, \`${prefix}poll\`, \`${prefix}announce\`, \`${prefix}embed\`, \`${prefix}say\`, \`${prefix}snipe\`, \`${prefix}editsnipe\`, \`${prefix}setlogs\`, \`${prefix}setupwelcome\`, \`${prefix}setupgoodbye\``
-                        );
-                } else if (catId === 'social') {
-                    embed.setTitle('🎭 Social Actions & Anime Expressions (26 Commands)')
-                        .setDescription(
-                            `**Targeted Member Interactions (GIFs + Counter):**\n` +
-                            `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}slap\`, \`${prefix}pat\`, \`${prefix}cuddle\`, \`${prefix}bite\`, \`${prefix}poke\`, \`${prefix}punch\`, \`${prefix}tickle\`, \`${prefix}feed\`, \`${prefix}lick\`, \`${prefix}highfive\`, \`${prefix}wave\`\n\n` +
-                            `**Solo Expressions & Fun:**\n` +
-                            `\`${prefix}sleep\`, \`${prefix}wakeup\`, \`${prefix}cry\`, \`${prefix}laugh\`, \`${prefix}dance\`, \`${prefix}blush\`, \`${prefix}pout\`, \`${prefix}smile\`, \`${prefix}bored\`, \`${prefix}social\`, \`${prefix}tord\`, \`${prefix}coinflip\`, \`${prefix}roll\`\n\n` +
-                            `*All social action response buttons feature persistent 1-year lifetime!*`
-                        );
-                } else if (catId === 'eco') {
-                    embed.setTitle('💰 Economy, Leveling & Casino Commands (16 Commands)')
-                        .setDescription(
-                            `\`${prefix}rank\`, \`${prefix}leaderboard\`, \`${prefix}setlevel\`, \`${prefix}balance\`, \`${prefix}daily\`, \`${prefix}weekly\`, \`${prefix}work\`, \`${prefix}beg\`, \`${prefix}deposit\`, \`${prefix}withdraw\`, \`${prefix}pay\`, \`${prefix}gamble\`, \`${prefix}slots\`, \`${prefix}rob\`, \`${prefix}shop\`, \`${prefix}buy\``
-                        );
-                } else if (catId === 'sys') {
-                    embed.setTitle('🤖 Multi-Bot, Giveaways & Systems (15 Commands)')
-                        .setDescription(
-                            `\`${prefix}multibot\`, \`${prefix}chest\`, \`${prefix}chestdrop\`, \`${prefix}pet\`, \`${prefix}prestige\`, \`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}confessionsetup\`, \`${prefix}setupcount\`, \`${prefix}backup\`, \`${prefix}restore\``
-                        );
-                } else {
-                    // Home overview
-                    embed.setTitle('🌟 Manager Bot & Flavi Supreme Command Hub')
-                        .setDescription(
-                            `Welcome to the ultimate Discord multi-feature bot!\n` +
-                            `• **Default Prefix:** \`${prefix}\` *(Fixed standard prefix)*\n` +
-                            `• **Total Commands:** \`150+\` across 6 categories\n` +
-                            `• **Multi-Bot Clustering:** Active and synchronized\n` +
-                            `• **Embed Buttons Lifetime:** High timing up to **1 Year**\n\n` +
-                            `Select a category from the dropdown menu below or click the quick action buttons.`
-                        )
-                        .addFields(
-                            { name: '🎵 Music (33)', value: `\`${prefix}play\`, \`${prefix}queue\`, \`${prefix}djpanel\``, inline: true },
-                            { name: '🛡️ Moderation (32)', value: `\`${prefix}ban\`, \`${prefix}mute\`, \`${prefix}modpanel\``, inline: true },
-                            { name: '🛠️ Utility (28)', value: `\`${prefix}whois\`, \`${prefix}serverinfo\`, \`${prefix}steal\``, inline: true },
-                            { name: '🎭 Social (26)', value: `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}social\``, inline: true },
-                            { name: '💰 Economy (16)', value: `\`${prefix}bal\`, \`${prefix}daily\`, \`${prefix}rank\``, inline: true },
-                            { name: '🤖 Systems (15)', value: `\`${prefix}multibot\`, \`${prefix}giveaway\`, \`${prefix}ticketsetup\``, inline: true }
-                        );
-                }
-                return embed;
-            };
-
-            const selectMenu = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('help_select')
-                    .setPlaceholder('📂 Choose a command category...')
-                    .addOptions([
-                        { label: 'Overview / Home', description: 'Main bot dashboard and quick stats', value: 'home', emoji: '🏠' },
-                        ...categories.map(c => ({ label: c.label, description: c.desc, value: c.id, emoji: c.emoji }))
-                    ])
-            );
-
-            const buttonsRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('help_btn_music').setLabel('Music').setEmoji('🎵').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('help_btn_mod').setLabel('Mod').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('help_btn_social').setLabel('Social').setEmoji('🎭').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('help_btn_eco').setLabel('Economy').setEmoji('💰').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('help_btn_sys').setLabel('Multi-Bot').setEmoji('🤖').setStyle(ButtonStyle.Primary)
-            );
-
-            const replyMsg = await ctx.reply({ embeds: [buildCategoryEmbed('home')], components: [selectMenu, buttonsRow] });
-
-            // 1-Year Component Collector
-            const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
-            collector.on('collect', async (i) => {
-                if (i.user.id !== ctx.user.id) {
-                    return i.reply({ content: '❌ You did not trigger this help menu.', ephemeral: true });
-                }
-
-                let targetCat = 'home';
-                if (i.isStringSelectMenu()) {
-                    targetCat = i.values[0];
-                } else if (i.isButton()) {
-                    const id = i.customId.replace('help_btn_', '');
-                    targetCat = id;
-                }
-
-                await i.update({ embeds: [buildCategoryEmbed(targetCat)], components: [selectMenu, buttonsRow] }).catch(() => {});
-            });
+            if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
+                const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
+                collector.on('collect', async (i) => {
+                    let targetCat = 'home';
+                    if (i.isStringSelectMenu()) {
+                        targetCat = i.values[0];
+                    } else if (i.isButton()) {
+                        targetCat = i.customId.replace('help_btn_', '');
+                    }
+                    await i.update({ embeds: [buildCategoryEmbed(targetCat, prefix)], components: createHelpComponents() }).catch(() => {});
+                });
+            }
         }
     },
 
@@ -229,7 +269,7 @@ const commands = [
                     { name: '⚡ Message Roundtrip', value: `\`${latency} ms\``, inline: true },
                     { name: '🤖 Multi-Bot Status', value: `\`Cluster Online 🟢\``, inline: true }
                 )
-                .setFooter({ text: 'Flavi-Style Multi-Bot Network' })
+                .setFooter({ text: 'Starry Multi-Bot Network' })
                 .setTimestamp();
 
             if (replyMsg && typeof replyMsg.edit === 'function') {
@@ -269,7 +309,7 @@ const commands = [
                     { name: '📚 Discord.js', value: `\`v14.15.0\``, inline: true },
                     { name: '⚡ Fixed Prefix', value: `\`${config.DEFAULT_PREFIX || ','}\``, inline: true }
                 )
-                .setFooter({ text: 'Flavi-Style Multi-Bot Architecture' })
+                .setFooter({ text: 'Starry Multi-Bot Architecture' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -307,7 +347,7 @@ const commands = [
                     { name: '😃 Emojis', value: `\`${totalEmojis}\` emojis`, inline: true },
                     { name: '🛡️ Verification', value: `\`Level ${guild.verificationLevel}\``, inline: true }
                 )
-                .setFooter({ text: 'Flavi-Style Server Information • Prefix: ,' })
+                .setFooter({ text: 'Starry Server Information • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -343,7 +383,7 @@ const commands = [
                     { name: '📥 Joined Server', value: member ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:D> (<t:${Math.floor(member.joinedTimestamp / 1000)}:R>)` : 'Not in server', inline: false },
                     { name: `🏷️ Roles (${member ? member.roles.cache.size - 1 : 0})`, value: roles || 'None', inline: false }
                 )
-                .setFooter({ text: 'Flavi-Style User Lookup • Prefix: ,' })
+                .setFooter({ text: 'Starry User Lookup • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -370,7 +410,7 @@ const commands = [
                 .setColor(config.EMBED_COLORS.PRIMARY)
                 .setTitle(`🖼️ Avatar for ${targetUser.tag}`)
                 .setImage(avatarUrl)
-                .setFooter({ text: 'Flavi-Style Utility • Prefix: ,' })
+                .setFooter({ text: 'Starry Utility • Prefix: ,' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -402,7 +442,7 @@ const commands = [
                 .setColor(config.EMBED_COLORS.PRIMARY)
                 .setTitle(`🎨 Banner for ${targetUser.tag}`)
                 .setImage(bannerUrl)
-                .setFooter({ text: 'Flavi-Style Utility • Prefix: ,' })
+                .setFooter({ text: 'Starry Utility • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -534,7 +574,7 @@ const commands = [
                 .setColor(config.EMBED_COLORS.PRIMARY)
                 .setTitle(`🤖 Invite ${ctx.client.user.username} to your Server`)
                 .setDescription(`Click below to invite this bot instance with full administrative powers!`)
-                .setFooter({ text: 'Flavi-Style Multi-Bot Network' })
+                .setFooter({ text: 'Starry Multi-Bot Network' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -554,7 +594,7 @@ const commands = [
         async execute(ctx) {
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('⭐ Vote for Starry & Flavi Bot')
+                .setTitle('⭐ Vote for Starry Bot')
                 .setDescription('Voting unlocks double XP, bonus daily credits, and priority Lavalink music node routing!')
                 .setFooter({ text: 'Thank you for supporting our bot!' });
             return ctx.reply({ embeds: [embed] });
@@ -572,13 +612,13 @@ const commands = [
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.ECONOMY)
                 .setTitle('👑 Premium Status: ACTIVE ✨')
-                .setDescription('This server currently enjoys all Starry & Flavi Premium perks unlimitedly!')
+                .setDescription('This server currently enjoys all Starry Premium perks unlimitedly!')
                 .addFields(
                     { name: '🎵 Music Master', value: '24/7 Stay Mode, 8D Audio, Nightcore & Lossless Bitrate', inline: false },
-                    { name: '🛡️ Security Suite', value: 'Instant Wick/Beemo Engine sync, mass nuking & backups', inline: false },
+                    { name: '🛡️ Security Suite', value: 'Instant Starry Guard Security Engine sync, anti-nuke & backups', inline: false },
                     { name: '🤖 Multi-Bot Clustering', value: 'Access to secondary worker bots and high-capacity nodes', inline: false }
                 )
-                .setFooter({ text: 'Flavi-Style Premium Architecture' });
+                .setFooter({ text: 'Starry Premium Architecture' });
             return ctx.reply({ embeds: [embed] });
         }
     },
@@ -837,6 +877,453 @@ const commands = [
             }
             const targetChannel = ctx.message?.mentions?.channels?.first() || ctx.channel;
             return ctx.reply(`✅ **Goodbye channel configured to:** <#${targetChannel.id}>`);
+        }
+    },
+
+    // 29. ASK / AI (Interactive Paginated AI Assistant + Auto-Image Routing)
+    {
+        name: 'ask',
+        aliases: ['ai', 'gemini', 'gpt', 'chat', 'question'],
+        category: 'Utility',
+        description: 'Ask Starry AI anything or generate AI images directly with interactive page-turning buttons.',
+        usage: ',ask <your question or prompt>',
+        async execute(ctx) {
+            const prompt = (ctx.options?.getString ? (ctx.options.getString('question') || ctx.options.getString('prompt') || ctx.options.getString('text')) : null) || ctx.args.join(' ');
+            if (!prompt || !prompt.trim()) {
+                return ctx.reply('❓ **Please provide a question or prompt for Starry AI!**\n*Example: `,ask Explain quantum computing` or `,imagine Cyberpunk anime girl` or `/ask question:Hello!`*');
+            }
+
+            await ctx.defer(false);
+
+            const cleanPrompt = prompt.trim();
+            // Check if user is asking to generate an image
+            const imageSubject = parseImageIntent(cleanPrompt);
+            if (imageSubject) {
+                return generateAndSendImage(ctx, imageSubject);
+            }
+
+            let answer = '';
+            let modelUsed = 'Gemini 2.5 Flash';
+
+            try {
+                const apiKey = process.env.GEMINI_API_KEY;
+                if (apiKey) {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 6000);
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [{
+                                    text: `You are Starry AI, an intelligent, fast, polite, and helpful Discord companion. Provide concise, friendly, and well-structured answers using markdown. Question: ${prompt}`
+                                }]
+                            }]
+                        })
+                    });
+                    clearTimeout(timeoutId);
+                    const data = await res.json();
+                    answer = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                }
+            } catch (aiErr) {
+                console.warn('Gemini API Warning:', aiErr.message);
+            }
+
+            // High-Speed Fallback AI provider if needed
+            if (!answer) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 6000);
+                    const fallbackRes = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (fallbackRes.ok) {
+                        answer = await fallbackRes.text();
+                        modelUsed = 'Starry Neural AI';
+                    }
+                } catch (e) {}
+            }
+
+            if (!answer) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.DANGER)
+                    .setTitle('❌ AI Response Failed')
+                    .setDescription('I was unable to generate an answer at this time. Please try again in a moment.');
+                return ctx.reply({ embeds: [errorEmbed] });
+            }
+
+            // Helper function to split text into clean pages
+            const splitIntoPages = (text, maxPageLength = 1400) => {
+                if (!text || text.length <= maxPageLength) return [text || 'No response generated.'];
+                const pageList = [];
+                let remaining = text;
+
+                while (remaining.length > 0) {
+                    if (remaining.length <= maxPageLength) {
+                        pageList.push(remaining);
+                        break;
+                    }
+
+                    let splitIndex = remaining.lastIndexOf('\n\n', maxPageLength);
+                    if (splitIndex === -1 || splitIndex < maxPageLength * 0.5) {
+                        splitIndex = remaining.lastIndexOf('\n', maxPageLength);
+                    }
+                    if (splitIndex === -1 || splitIndex < maxPageLength * 0.5) {
+                        splitIndex = remaining.lastIndexOf(' ', maxPageLength);
+                    }
+                    if (splitIndex === -1) {
+                        splitIndex = maxPageLength;
+                    }
+
+                    const chunk = remaining.substring(0, splitIndex).trim();
+                    pageList.push(chunk);
+                    remaining = remaining.substring(splitIndex).trim();
+                }
+                return pageList;
+            };
+
+            const pages = splitIntoPages(answer, 1400);
+            let currentPage = 0;
+
+            const buildEmbed = (pageIndex) => {
+                return new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setTitle(`✨ Starry AI Assistant`)
+                    .setDescription(pages[pageIndex])
+                    .addFields({
+                        name: '❓ Question',
+                        value: `>>> ${prompt.length > 250 ? prompt.substring(0, 247) + '...' : prompt}`
+                    })
+                    .setFooter({
+                        text: pages.length > 1 ? `Page ${pageIndex + 1} of ${pages.length} • Powered by ${modelUsed}` : `Powered by ${modelUsed} • Instant Response`
+                    })
+                    .setTimestamp();
+            };
+
+            const buildButtons = (pageIndex) => {
+                if (pages.length <= 1) return [];
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('ask_first')
+                        .setLabel('⏮️')
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(pageIndex === 0),
+                    new ButtonBuilder()
+                        .setCustomId('ask_prev')
+                        .setLabel('◀️ Prev')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(pageIndex === 0),
+                    new ButtonBuilder()
+                        .setCustomId('ask_page_indicator')
+                        .setLabel(`${pageIndex + 1} / ${pages.length}`)
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true),
+                    new ButtonBuilder()
+                        .setCustomId('ask_next')
+                        .setLabel('Next ▶️')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(pageIndex === pages.length - 1),
+                    new ButtonBuilder()
+                        .setCustomId('ask_last')
+                        .setLabel('⏭️')
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(pageIndex === pages.length - 1)
+                );
+                return [row];
+            };
+
+            const components = buildButtons(0);
+            const sentMsg = await ctx.reply({
+                embeds: [buildEmbed(0)],
+                components: components
+            }).catch(() => null);
+
+            if (!sentMsg || components.length === 0) return;
+
+            // Interactive Button Collector with high lifetime
+            const collector = sentMsg.createMessageComponentCollector({
+                time: ONE_YEAR_MS
+            });
+
+            collector.on('collect', async (i) => {
+                if (i.user.id !== ctx.user.id && !config.BOT_OWNERS.includes(i.user.id)) {
+                    return i.reply({ content: '❌ Only the person who asked this question can turn pages.', ephemeral: true });
+                }
+
+                if (i.customId === 'ask_del') {
+                    return sentMsg.delete().catch(() => {});
+                }
+
+                if (i.customId === 'ask_first') {
+                    currentPage = 0;
+                } else if (i.customId === 'ask_prev') {
+                    if (currentPage > 0) currentPage--;
+                } else if (i.customId === 'ask_next') {
+                    if (currentPage < pages.length - 1) currentPage++;
+                } else if (i.customId === 'ask_last') {
+                    currentPage = pages.length - 1;
+                }
+
+                await i.update({
+                    embeds: [buildEmbed(currentPage)],
+                    components: buildButtons(currentPage)
+                }).catch(() => {});
+            });
+        }
+    },
+
+    // 29. DASHBOARD
+    {
+        name: 'dashboard',
+        aliases: ['dash', 'web', 'panel'],
+        category: 'Utility',
+        description: 'Get the official link to Starry Web Dashboard & Control Center.',
+        usage: ',dashboard',
+        async execute(ctx) {
+            let webUrl = 'https://starry-bot.loca.lt';
+            try {
+                const { getPublicUrl } = require('../../utils/tunnelManager');
+                webUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || 'https://starry-bot.loca.lt';
+            } catch (e) {}
+
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setAuthor({ name: 'Starry Master Web Dashboard', iconURL: ctx.client.user?.displayAvatarURL({ dynamic: true }) })
+                .setTitle('🌐 Starry Enterprise Web Control Center')
+                .setDescription(
+                    `Manage your server settings, auto-moderation, verification gateways, 24/7 music sessions, and visual embeds directly from our high-speed global web interface!\n\n` +
+                    `🔗 **Live Public Domain:** [Click to Open Dashboard](${webUrl})\n\n` +
+                    `🛡️ **Features Available on Web:**\n` +
+                    `• **Anti-Nuke & Guard Shield** (Mass-Delete, Bot-Add Blocker, Panic Mode)\n` +
+                    `• **Verification & Captcha Gateway** (Web Portal & Auto-Roles)\n` +
+                    `• **Live Music Studio** (Remote Web Player & 24/7 Voice Lock)\n` +
+                    `• **Visual Embed Studio** (WYSIWYG real-time Discord card preview)\n` +
+                    `• **Cloud Backups & Ban File Export**\n` +
+                    `• **Starry Premium & License Key Store**`
+                )
+                .setFooter({ text: 'Prefix: , • Single-Host Multi-Bot Orchestration' })
+                .setTimestamp();
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setLabel('🌐 Open Dashboard').setStyle(ButtonStyle.Link).setURL(webUrl),
+                new ButtonBuilder().setLabel('➕ Add Starry').setStyle(ButtonStyle.Link).setURL(`https://discord.com/oauth2/authorize?client_id=${ctx.client.user.id}&permissions=8&scope=bot%20applications.commands`)
+            );
+
+            return ctx.reply({ embeds: [embed], components: [row] });
+        }
+    },
+
+    // 30. REDEEM (License Key Activation)
+    {
+        name: 'redeem',
+        aliases: ['activate', 'license'],
+        category: 'Utility',
+        description: 'Redeem a 16-character Starry Premium License Key.',
+        usage: ',redeem <license key>',
+        async execute(ctx) {
+            const keyInput = ctx.args ? ctx.args[0] : null;
+            if (!keyInput) {
+                return ctx.reply('❌ Please provide a 16-character license key!\n*Usage: `,redeem STRY-PRO-XXXX-XXXX`*');
+            }
+
+            const cleanKey = keyInput.trim().toUpperCase();
+            const PremiumKey = require('../../models/PremiumKey');
+            const ServerSettings = require('../../models/ServerSettings');
+
+            const license = await PremiumKey.findOne({ key: cleanKey, active: true });
+            if (!license) {
+                return ctx.reply('❌ Invalid or expired license key. Check your spelling or get a key on the dashboard!');
+            }
+
+            if (license.usedCount >= license.maxUses) {
+                return ctx.reply('❌ This license key has already reached its maximum redemptions.');
+            }
+
+            let expiresAt = null;
+            if (license.durationDays && license.durationDays > 0) {
+                expiresAt = new Date(Date.now() + license.durationDays * 24 * 60 * 60 * 1000);
+            }
+
+            let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
+            if (!settings) settings = new ServerSettings({ guildId: ctx.guild.id });
+
+            settings.premium = {
+                isPremium: true,
+                tier: license.tier,
+                expiresAt: expiresAt,
+                activatedBy: ctx.user.id
+            };
+            await settings.save();
+
+            license.usedCount += 1;
+            license.redeemedBy.push({ userId: ctx.user.id, guildId: ctx.guild.id, redeemedAt: new Date() });
+            if (license.usedCount >= license.maxUses) license.active = false;
+            await license.save();
+
+            const embed = new EmbedBuilder()
+                .setColor('#F59E0B')
+                .setAuthor({ name: 'Starry Premium Activated!', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
+                .setTitle(`🎉 Guild Upgraded to ${license.tier.toUpperCase()} Tier!`)
+                .setDescription(
+                    `Thank you for supporting Starry! Your server now has full access to all premium features:\n\n` +
+                    `⚡ **24/7 Studio Quality Voice (320kbps)**\n` +
+                    `🛡️ **Starry Anti-Nuke & Anti-Raid Shield**\n` +
+                    `💾 **Unlimited Daily Cloud Backups**\n` +
+                    `👑 **Web Captcha Verification Gateway**\n` +
+                    `💰 **2x Economy XP & Loot Multiplier**\n\n` +
+                    `🕒 **Expires:** \`${expiresAt ? expiresAt.toLocaleDateString() : 'Permanent Lifetime VIP'}\``
+                )
+                .setFooter({ text: 'Manage settings via ,dashboard or web control center' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 31. PREMIUM (Perks & Status Explorer)
+    {
+        name: 'premium',
+        aliases: ['perks', 'vip'],
+        category: 'Utility',
+        description: 'View server premium status, perks, and pricing tiers.',
+        usage: ',premium',
+        async execute(ctx) {
+            const ServerSettings = require('../../models/ServerSettings');
+            const settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
+            const isPrem = settings?.premium?.isPremium || false;
+            const tier = settings?.premium?.tier || 'none';
+            const expires = settings?.premium?.expiresAt;
+
+            let webUrl = 'https://starry-bot.loca.lt';
+            try {
+                const { getPublicUrl } = require('../../utils/tunnelManager');
+                webUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || 'https://starry-bot.loca.lt';
+            } catch (e) {}
+
+            const embed = new EmbedBuilder()
+                .setColor(isPrem ? '#F59E0B' : config.EMBED_COLORS.PRIMARY)
+                .setAuthor({ name: `Starry Premium Status • ${ctx.guild.name}`, iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                .setTitle(isPrem ? `👑 Premium Active: ${tier.toUpperCase()} TIER` : '⭐ Upgrade to Starry Premium')
+                .setDescription(
+                    isPrem 
+                        ? `✅ This server has an active **${tier.toUpperCase()}** subscription!\n🕒 **Expires:** \`${expires ? expires.toLocaleDateString() : 'Permanent Lifetime'}\``
+                        : `Supercharge your server with 24/7 Voice, God-Mode Anti-Nuke, and Web Captcha Gateways!`
+                )
+                .addFields(
+                    { name: '🛡️ Shield Plus ($4.99/mo | ₹399)', value: '• 24/7 Voice Mode\n• Anti-Nuke Protection\n• Cloud Backups\n• Web Captcha Gate', inline: true },
+                    { name: '🌟 Pro Cluster ($12.99/mo | ₹999)', value: '• 3 Servers Included\n• Custom Bot Branding\n• 3-Room Music Suite\n• Gemini AI AutoMod', inline: true },
+                    { name: '👑 Lifetime VIP ($39.99 | ₹3,299)', value: '• Permanent Access\n• Unlimited Servers\n• Golden VIP Badge\n• Top Priority FLAC Nodes', inline: true }
+                )
+                .setFooter({ text: 'Get your license on the dashboard or use ,redeem <key>' })
+                .setTimestamp();
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setLabel('🛒 View Store & Checkout').setStyle(ButtonStyle.Link).setURL(webUrl + '/#premium')
+            );
+
+            return ctx.reply({ embeds: [embed], components: [row] });
+        }
+    },
+
+    // 41. SETPREFIX / PREFIX CONFIGURATION
+    {
+        name: 'setprefix',
+        aliases: ['prefix', 'changeprefix'],
+        category: 'Settings',
+        description: 'Set a custom prefix for this server or view the current active prefix.',
+        usage: ',setprefix <new_prefix>',
+        async execute(ctx) {
+            const prefixVal = ctx.options?.getString ? ctx.options.getString('prefix') : null;
+            const newPrefix = prefixVal || ctx.args[0];
+            const ServerSettings = require('../../models/ServerSettings');
+            const { setCachedPrefix } = require('../../modules/commandHandler');
+
+            if (!ctx.guild) {
+                return ctx.reply('ℹ️ The default prefix in DMs is strictly `,` (comma).');
+            }
+
+            if (!newPrefix) {
+                let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
+                const currentPrefix = settings?.prefix || ',';
+                return ctx.reply(`ℹ️ Current server prefix is: \`${currentPrefix}\`\n*To change it, type: \`${currentPrefix}setprefix <new_prefix>\` or \`/setprefix prefix:<new>\`*`);
+            }
+
+            if (!ctx.member?.permissions?.has('Administrator') && !ctx.member?.permissions?.has('ManageGuild') && !config.BOT_OWNERS?.includes(ctx.user.id)) {
+                return ctx.reply('❌ You need the **Manage Server** or **Administrator** permission to change the server prefix.');
+            }
+
+            if (newPrefix.length > 5) {
+                return ctx.reply('❌ The prefix length cannot exceed 5 characters.');
+            }
+
+            let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
+            if (!settings) settings = new ServerSettings({ guildId: ctx.guild.id });
+            settings.prefix = newPrefix;
+            await settings.save();
+
+            setCachedPrefix(ctx.guild.id, newPrefix);
+
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS?.SUCCESS || '#2ECC71')
+                .setTitle('✅ Server Prefix Updated')
+                .setDescription(`Successfully changed this server's prefix to: \`${newPrefix}\`\n\n**Example Commands:**\n• \`${newPrefix}help\` — Help Menu\n• \`${newPrefix}ask <question>\` — Starry AI\n• \`${newPrefix}play <song>\` — Music Audio\n• \`${newPrefix}hug @user\` — Social Action`)
+                .setFooter({ text: 'Starry Configuration • Default fallback: ,' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 42. TOP.GG VOTE REWARD COMMAND
+    {
+        name: 'vote',
+        aliases: ['topgg', 'upvote'],
+        category: 'Utility',
+        description: 'Vote for Starry on Top.gg to earn free Credits and XP boosts!',
+        usage: ',vote',
+        async execute(ctx) {
+            const topggUrl = 'https://top.gg/bot/1513589513648345368/vote';
+            const embed = new EmbedBuilder()
+                .setColor('#FF79C6')
+                .setTitle('⭐ Vote for Starry on Top.gg')
+                .setDescription(
+                    `Support Starry by voting on **Top.gg** and claim instant rewards!\n\n` +
+                    `🎁 **Voting Rewards:**\n` +
+                    `• **+500 Credits** (Weekday) / **+1,000 Credits** (Weekend)\n` +
+                    `• **+500 XP Boost** (Weekday) / **+1,000 XP** (Weekend)\n` +
+                    `• 🗳️ Voting resets every **12 hours**\n\n` +
+                    `*Click the button below to vote on Top.gg:*`
+                )
+                .setFooter({ text: 'Top.gg Automated Vote Sync Active' })
+                .setTimestamp();
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setLabel('🗳️ Vote on Top.gg (Free Rewards)')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(topggUrl)
+            );
+
+            return ctx.reply({ embeds: [embed], components: [row] });
+        }
+    },
+
+    // 43. IMAGINE / AI ART GENERATOR
+    {
+        name: 'imagine',
+        aliases: ['image', 'generate', 'draw', 'art', 'dalle', 'flux', 'genimage'],
+        category: 'Utility',
+        description: 'Generate stunning high-resolution AI art and images using Flux/SDXL neural engines.',
+        usage: ',imagine <prompt>',
+        async execute(ctx) {
+            const prompt = (ctx.options?.getString ? (ctx.options.getString('prompt') || ctx.options.getString('text')) : null) || ctx.args.join(' ');
+            if (!prompt || !prompt.trim()) {
+                return ctx.reply('🎨 **Please provide a description of what you want to draw or generate!**\n*Example: `,imagine Cyberpunk anime girl in a neon Tokyo street` or `/imagine prompt:Magical floating castle`*');
+            }
+
+            await ctx.defer(false);
+            return generateAndSendImage(ctx, prompt.trim());
         }
     }
 ];

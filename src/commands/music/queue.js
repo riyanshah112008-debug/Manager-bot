@@ -139,7 +139,7 @@ module.exports = {
         });
 
         // Component Collector for buttons, select menus, and modals with 1-year lifetime
-        const collector = message.createMessageComponentCollector({ time: 31536000000 });
+        const collector = message.createMessageComponentCollector({ time: 2147483647 });
 
         collector.on('collect', async (i) => {
             if (i.user.id !== interaction.user.id) {
