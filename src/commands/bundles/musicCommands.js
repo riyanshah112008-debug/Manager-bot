@@ -50,11 +50,7 @@ function getVoiceGuard(ctx) {
 }
 
 function getActivePlayer(client, guildId) {
-    if (client.manager) {
-        const p = client.manager.getPlayer(guildId);
-        if (p) return p;
-    }
-    return StarryAudioEngine.getPlayer(guildId);
+    return StarryAudioEngine.getPlayer(guildId) || (client.manager ? client.manager.getPlayer(guildId) : null);
 }
 
 const commands = [
@@ -79,73 +75,13 @@ const commands = [
 
             await ctx.defer();
 
-            // Try Kazagumo Multi-Node Lavalink Engine first
-            if (ctx.client.manager) {
-                try {
-                    let player = ctx.client.manager.getPlayer(ctx.guild.id);
-                    if (!player) {
-                        player = await ctx.client.manager.createPlayer({
-                            guildId: ctx.guild.id,
-                            textId: ctx.channel.id,
-                            voiceId: guard.voiceChannel.id,
-                            deaf: true
-                        });
-                    }
-
-                    const result = await ctx.client.manager.search(query, { requester: ctx.user });
-                    if (!result || !result.tracks || result.tracks.length === 0) {
-                        return ctx.reply('❌ No audio results found for your search query. Please try another song title or link!');
-                    }
-
-                    if (result.type === 'PLAYLIST') {
-                        for (const track of result.tracks) {
-                            player.queue.add(track);
-                        }
-                        if (!player.playing && !player.paused) await player.play();
-
-                        const embed = new EmbedBuilder()
-                            .setColor(config.EMBED_COLORS.PRIMARY)
-                            .setTitle('📚 Playlist Loaded')
-                            .setDescription(`✅ Added **${result.tracks.length}** tracks from **${result.playlistName || 'Playlist'}** to queue!`)
-                            .addFields(
-                                { name: '🔠 Total Queue', value: `\`${player.queue.length}\` tracks`, inline: true },
-                                { name: '👤 Requester', value: `${ctx.user}`, inline: true }
-                            )
-                            .setFooter({ text: 'Starry Hi-Fi Audio Engine • Prefix: ,' })
-                            .setTimestamp();
-                        return ctx.reply({ embeds: [embed] });
-                    } else {
-                        const track = result.tracks[0];
-                        player.queue.add(track);
-                        if (!player.playing && !player.paused) {
-                            await player.play();
-                        } else {
-                            const embed = new EmbedBuilder()
-                                .setColor(config.EMBED_COLORS.PRIMARY)
-                                .setAuthor({ name: 'Track Queued', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
-                                .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
-                                .setURL(track.uri || 'https://starry.gg')
-                                .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
-                                .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\`\n🔢 **Queue Position:** \`#${player.queue.length}\``)
-                                .setFooter({ text: 'Use ,queue to view playlist • Prefix: ,' })
-                                .setTimestamp();
-                            return ctx.reply({ embeds: [embed] });
-                        }
-                    }
-                    return;
-                } catch (lavaErr) {
-                    console.warn('⚠️ Kazagumo play error, attempting native engine fallback:', lavaErr.message);
-                }
-            }
-
-            // Fallback: Native Audio Streamer
             const nativePlayer = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
             nativePlayer.connect().catch(() => {});
 
             try {
                 const result = await StarryAudioEngine.search(query, ctx.user);
                 if (!result || !result.tracks || result.tracks.length === 0) {
-                    return ctx.reply('❌ No audio results found. Please check the song name or link!');
+                    return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
                 }
 
                 if (result.type === 'PLAYLIST') {
@@ -159,7 +95,12 @@ const commands = [
                         .setColor(config.EMBED_COLORS.PRIMARY)
                         .setTitle('📚 Playlist Loaded')
                         .setDescription(`✅ Added **${result.tracks.length}** tracks from **${result.playlistName || 'Playlist'}** to queue!`)
-                        .setFooter({ text: 'Starry Audio Streamer • Prefix: ,' });
+                        .addFields(
+                            { name: '🔠 Total Queue', value: `\`${nativePlayer.queue.length}\` tracks`, inline: true },
+                            { name: '👤 Requester', value: `${ctx.user}`, inline: true }
+                        )
+                        .setFooter({ text: 'Starry Native Audio Engine • Prefix: ,' })
+                        .setTimestamp();
                     return ctx.reply({ embeds: [embed] });
                 } else {
                     const track = result.tracks[0];
@@ -172,11 +113,16 @@ const commands = [
                             .setColor(config.EMBED_COLORS.PRIMARY)
                             .setAuthor({ name: 'Track Queued', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
                             .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
-                            .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${formatTime(track.duration)}\`\n🔢 **Position:** \`#${nativePlayer.queue.length}\``);
+                            .setURL(track.url || 'https://starry.gg')
+                            .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+                            .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${formatTime(track.duration)}\`\n🔢 **Queue Position:** \`#${nativePlayer.queue.length}\``)
+                            .setFooter({ text: 'Use ,queue to view playlist • Prefix: ,' })
+                            .setTimestamp();
                         return ctx.reply({ embeds: [embed] });
                     }
                 }
             } catch (err) {
+                console.error('Play error in musicCommands.js:', err);
                 return ctx.reply(`❌ Playback error: \`${err.message}\``);
             }
         }
