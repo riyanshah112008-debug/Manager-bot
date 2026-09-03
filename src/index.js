@@ -374,7 +374,8 @@ const MODULE_INITIALIZERS = [
     { name: 'Social Actions Engine', fn: () => require('./modules/socialActions.js')(client, app) },
     { name: 'Anonymous Confession System', fn: () => require('./modules/confession.js')(client, app) },
     { name: 'Nitro & Giveaway Claim Sniffer', fn: () => require('./modules/nitroClaimDetector.js')(client, app) },
-    { name: 'Developer DM Control Panel', fn: () => require('./modules/devPanel.js')(client, app) }
+    { name: 'Developer DM Control Panel', fn: () => require('./modules/devPanel.js')(client, app) },
+    { name: 'Starry Pop Mascot Engine', fn: () => require('./modules/starryPop.js')(client, app) }
 ];
 
 async function startBot() {
