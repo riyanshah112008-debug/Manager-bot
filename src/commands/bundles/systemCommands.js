@@ -564,6 +564,37 @@ const commands = [
     // 👑 BOT OWNER / DEVELOPER SUITE
     // ==========================================
 
+    // 15B. DEV / DEVELOPER DM CONTROL PANEL (Bot Owner Only)
+    {
+        name: 'dev',
+        aliases: ['devpanel', 'developer', 'ownerpanel', 'adminpanel', 'dashboarddm'],
+        category: 'Systems',
+        description: 'Dispatches the full interactive Developer Control Panel with buttons & modals to your DMs.',
+        usage: ',dev [@owner]',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ **Access Denied**: This command is strictly reserved for verified bot owners.');
+            }
+
+            const { sendDevPanelToUser } = require('../../modules/devPanel');
+
+            // Support targeting a specific bot owner if mentioned
+            const targetUser = ctx.message?.mentions?.users?.first() || ctx.user;
+
+            const res = await sendDevPanelToUser(ctx.client, targetUser);
+
+            if (!res.success) {
+                return ctx.reply(`❌ **Could not send DM to <@${targetUser.id}>!** Please ensure your Direct Messages are open.`);
+            }
+
+            if (ctx.channel?.type === 1) { // DM channel
+                return; // Already sent in DM
+            }
+
+            return ctx.reply(`📬 **Master Developer Control Panel sent to your DMs, <@${ctx.user.id}>!**\n*Use the interactive buttons in your DM to run terminal commands, restart the bot, check telemetry, and manage cluster nodes.*`);
+        }
+    },
+
     // 16. EVAL (Bot Owner Only)
     {
         name: 'eval',
