@@ -87,6 +87,13 @@ const serverSettingsSchema = new mongoose.Schema({
         panelChannelId: { type: String, default: '' }
     },
 
+    // 🔞 NSFW / Mature Anime Module Settings (Default OFF for all servers and DMs)
+    nsfw: {
+        enabled: { type: Boolean, default: false },
+        allowedChannels: { type: [String], default: [] },
+        allowInDMs: { type: Boolean, default: false }
+    },
+
     // 💎 Starry Premium Tier
     premium: {
         isPremium: { type: Boolean, default: false },

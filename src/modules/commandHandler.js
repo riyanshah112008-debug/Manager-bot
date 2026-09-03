@@ -49,6 +49,7 @@ const utilityCommands = require('../commands/bundles/utilityCommands');
 const socialCommands = require('../commands/bundles/socialCommands');
 const economyCommands = require('../commands/bundles/economyCommands');
 const systemCommands = require('../commands/bundles/systemCommands');
+const nsfwCommands = require('../commands/bundles/nsfwCommands');
 
 const allBundles = [
     ...musicCommands,
@@ -56,7 +57,8 @@ const allBundles = [
     ...utilityCommands,
     ...socialCommands,
     ...economyCommands,
-    ...systemCommands
+    ...systemCommands,
+    ...nsfwCommands
 ];
 
 function getFilesRecursively(dir) {
@@ -477,7 +479,66 @@ class CommandRegistry {
                     return;
                 }
 
-                // E. Music & DJ Panel Global Controls (1-Year Global Handler)
+                // E. NSFW & Mature Anime Interactive Buttons (1-Year Global Handler)
+                if (customId === 'nsfw_ai_explain') {
+                    const { explainNsfwWithAI } = require('./nsfwModule');
+                    const embed = await explainNsfwWithAI({ user: interaction.user, guild: interaction.guild });
+                    return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] });
+                }
+
+                if (customId === 'nsfw_toggle_server') {
+                    if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(interaction.user.id)) {
+                        return interaction.reply({ content: '❌ Administrator permission required to toggle NSFW module.', flags: [EPHEMERAL_FLAG] });
+                    }
+                    const ServerSettings = require('../models/ServerSettings');
+                    let settings = await ServerSettings.findOne({ guildId: interaction.guild.id });
+                    if (!settings) settings = await ServerSettings.create({ guildId: interaction.guild.id });
+                    if (!settings.nsfw) settings.nsfw = {};
+                    settings.nsfw.enabled = !settings.nsfw.enabled;
+                    await settings.save();
+
+                    return interaction.reply({
+                        content: settings.nsfw.enabled 
+                            ? `🔞 **NSFW Module has been ENABLED for this server!**\n*Commands will execute exclusively in Age-Restricted channels.*` 
+                            : `🔒 **NSFW Module has been DISABLED for this server.**`,
+                        flags: [EPHEMERAL_FLAG]
+                    });
+                }
+
+                // F. Starry Mascot Interactive Lore & Voice Buttons
+                if (customId === 'starry_lore_btn') {
+                    const { STARRY_MASCOT } = require('../utils/aiEngine');
+                    const loreEmbed = new EmbedBuilder()
+                        .setColor('#9B59B6')
+                        .setTitle(`📖 The Celestial Lore of ${STARRY_MASCOT.name}`)
+                        .setDescription(
+                            `Born from the primordial stardust of the Astraea Constellation, **Starry** descended into the digital cosmos to protect communities, share high-res melodies, and illuminate Discord with celestial light.\n\n` +
+                            `• **Origin:** Constellation of Astraea (Outer Cosmos)\n` +
+                            `• **Relic:** Starlight Nebula Quill\n` +
+                            `• **Mission:** Bring joy, musical harmony, and unbreakable security to Discord servers across the galaxy!\n\n` +
+                            `*“Wherever there are friends gathered under the night sky, my stars will shine for you.”* ✨`
+                        )
+                        .setFooter({ text: 'Starry Official Mascot Lore' });
+                    return interaction.reply({ embeds: [loreEmbed], flags: [EPHEMERAL_FLAG] });
+                }
+
+                if (customId === 'starry_voice_btn') {
+                    const { STARRY_MASCOT } = require('../utils/aiEngine');
+                    const phrase = STARRY_MASCOT.catchphrases[Math.floor(Math.random() * STARRY_MASCOT.catchphrases.length)];
+                    return interaction.reply({ content: `🎙️ **Starry says:**\n>>> *${phrase}*`, flags: [EPHEMERAL_FLAG] });
+                }
+
+                if (customId === 'starry_dm_btn') {
+                    try {
+                        const dm = await interaction.user.createDM();
+                        await dm.send(`✨ **Hello <@${interaction.user.id}>!** 🌟 I am Starry, your cosmic AI companion! Feel free to ask me anything or chat with me right here in our private DMs without any prefix! 💫`);
+                        return interaction.reply({ content: '💌 **I sent you a greeting in your DMs!** Check your Direct Messages to chat with me.', flags: [EPHEMERAL_FLAG] });
+                    } catch (e) {
+                        return interaction.reply({ content: '❌ Could not open DMs with you. Please enable Direct Messages in your privacy settings.', flags: [EPHEMERAL_FLAG] });
+                    }
+                }
+
+                // G. Music & DJ Panel Global Controls (1-Year Global Handler)
                 if (customId.startsWith('dj_') || customId.startsWith('music_')) {
                     const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
                     const { applyKazagumoFilter } = require('../utils/musicManager');
