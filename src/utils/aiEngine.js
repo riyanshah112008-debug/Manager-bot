@@ -225,6 +225,15 @@ async function sendPaginatedAIResponse(ctx, prompt) {
 }
 
 function buildStarryCharacterCard(user) {
+    const path = require('path');
+    const fs = require('fs');
+    const mascotGifPath = path.join(__dirname, '../assets/mascot/starry_showcase.gif');
+    let attachment = null;
+
+    if (fs.existsSync(mascotGifPath)) {
+        attachment = new AttachmentBuilder(mascotGifPath, { name: 'starry_showcase.gif' });
+    }
+
     const embed = new EmbedBuilder()
         .setColor('#FF94D2') // Starry Blossom Pink / Astral
         .setAuthor({ 
@@ -237,6 +246,7 @@ function buildStarryCharacterCard(user) {
             `Hello there, **${user?.username || 'Traveler'}**! I am **Starry**, your cosmic companion and protector of this realm! Here is everything about me:`
         )
         .setThumbnail(STARRY_MASCOT.avatarURL)
+        .setImage(attachment ? 'attachment://starry_showcase.gif' : STARRY_MASCOT.avatarURL)
         .addFields(
             { 
                 name: '👤 Identity & Stats', 
@@ -288,7 +298,9 @@ function buildStarryCharacterCard(user) {
             .setEmoji('💌')
     );
 
-    return { embed, row };
+    const payload = { embeds: [embed], components: [row] };
+    if (attachment) payload.files = [attachment];
+    return payload;
 }
 
 module.exports = {

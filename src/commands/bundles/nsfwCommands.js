@@ -117,8 +117,8 @@ const commands = [
         description: 'View the official Starry anime mascot profile, lore, powers, and voice lines.',
         usage: ',starry',
         async execute(ctx) {
-            const { embed, row } = buildStarryCharacterCard(ctx.user);
-            return ctx.reply({ embeds: [embed], components: [row] });
+            const payload = buildStarryCharacterCard(ctx.user);
+            return ctx.reply(payload);
         }
     },
 

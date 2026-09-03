@@ -1,29 +1,28 @@
 // ==========================================
 // ✨ STARRY POP & MASCOT SIGNATURE PHRASE ENGINE
 // File Path: src/modules/starryPop.js
-// "Starry Starry" Signature Trigger • Expressive Anime Mascot GIFs • Voice Lines & Affection
-// Nekotina-Style Mascot Pop Experience for Starry Bot
+// "Starry Starry" Signature Trigger • Official Custom Anime Mascot GIFs • Voice Lines & Affection
+// 100% Authentic Starry (Astraea) Artwork • Nekotina-Style Mascot Pop Experience
 // ==========================================
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, Events } = require('discord.js');
+const path = require('path');
+const fs = require('fs');
 const config = require('../config');
 
-const STARRY_POP_GIFS = [
-    'https://media.giphy.com/media/108M7gCS1JSoO4/giphy.gif', // anime sparkle magic
-    'https://media.giphy.com/media/wO4cyRJ70KVtwSTKE3/giphy.gif', // cute anime wink & sparkle
-    'https://media.giphy.com/media/ye7OTQgwmVuNTYSS07/giphy.gif', // anime cheer & stars
-    'https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif', // cute anime heart sparkle
-    'https://media.giphy.com/media/lrr9rHuoJOE0w/giphy.gif', // happy anime girl bounce
-    'https://media.giphy.com/media/nyGFcsP0kAobm/giphy.gif', // anime stardust wave
-    'https://media.giphy.com/media/ARSp9T7wwxNcs/giphy.gif', // anime sweet smile
-    'https://media.giphy.com/media/wnsgren9NtITS/giphy.gif', // anime cosmic spin
-    'https://media.giphy.com/media/k95625LKWXPP2/giphy.gif', // anime cuddly hug
-    'https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif', // anime loving kiss
-    'https://media.giphy.com/media/134BfF8UiBiVUc/giphy.gif'  // anime cute blush
+const MASCOT_DIR = path.join(__dirname, '../assets/mascot');
+
+const STARRY_MASCOT_FILES = [
+    { file: 'starry_showcase.gif', title: '✨ Sparkle Showcase ~ Cosmic Starlight!' },
+    { file: 'starry_wave.gif', title: '👋 Starry-chan says Hello!' },
+    { file: 'starry_wink.gif', title: '💖 Starlight Heart & Wink from Starry!' },
+    { file: 'starry_magic.gif', title: '🌌 Cosmic Wand Magic Stardust!' },
+    { file: 'starry_cheer.gif', title: '🎉 Yaaay! Starry is cheering for you!' },
+    { file: 'starry_music.gif', title: '🎵 High-Res Starlight Melody!' }
 ];
 
 const STARRY_VOICE_LINES = [
     '“Kira-kira! ✨ Starry has arrived to shower your day with stardust, <@USER>!” 🌟',
-    '“Starry Starry! ~ Sparkle burst! Did someone call for their cosmic guardian? 💫”',
+    '“Starry Starry! ~ Sparkle burst! Did someone call for their celestial guardian? 💫”',
     '“By the light of the Astraea Constellation, I\'m always right beside you, <@USER>! 💖✨”',
     '“Ehehe~ Starry heard you calling! Here is a handful of lucky starlight just for you! ⭐🌌”',
     '“Twinkle twinkle little star, Starry loves you just the way you are! 🌟💖”',
@@ -37,20 +36,31 @@ const STARRY_AVATAR = 'https://cdn.discordapp.com/emojis/1049283733054177301.web
 // Anti-spam cooldown cache: channelId -> timestamp
 const cooldowns = new Map();
 
-function buildStarryPopEmbed(user, client) {
-    const randomGif = STARRY_POP_GIFS[Math.floor(Math.random() * STARRY_POP_GIFS.length)];
+function buildStarryPopPayload(user, client) {
+    const randomPick = STARRY_MASCOT_FILES[Math.floor(Math.random() * STARRY_MASCOT_FILES.length)];
     const rawLine = STARRY_VOICE_LINES[Math.floor(Math.random() * STARRY_VOICE_LINES.length)];
     const voiceLine = rawLine.replace(/<@USER>/g, `<@${user.id}>`);
+
+    const filePath = path.join(MASCOT_DIR, randomPick.file);
+    let attachment = null;
+    let imageUri = null;
+
+    if (fs.existsSync(filePath)) {
+        attachment = new AttachmentBuilder(filePath, { name: randomPick.file });
+        imageUri = `attachment://${randomPick.file}`;
+    } else {
+        imageUri = 'https://media.giphy.com/media/108M7gCS1JSoO4/giphy.gif';
+    }
 
     const embed = new EmbedBuilder()
         .setColor('#FF94D2') // Starry Cosmic Blossom Pink
         .setAuthor({ 
-            name: '✨ Starry Starry! ~ Cosmic Mascot ✨', 
+            name: '✨ Starry Starry! ~ Official Mascot ✨', 
             iconURL: STARRY_AVATAR 
         })
-        .setTitle('🌟 Kira-Kira! Starry-chan is here! 🌟')
+        .setTitle(`🌟 ${randomPick.title} 🌟`)
         .setDescription(`> *${voiceLine}*`)
-        .setImage(randomGif)
+        .setImage(imageUri)
         .setFooter({ 
             text: 'Type "starry starry" or ",starry" anytime to summon Starry-chan! ✨' 
         })
@@ -75,11 +85,13 @@ function buildStarryPopEmbed(user, client) {
             .setStyle(ButtonStyle.Secondary)
     );
 
-    return { embed, row };
+    const payload = { embeds: [embed], components: [row] };
+    if (attachment) payload.files = [attachment];
+    return payload;
 }
 
 module.exports = (client) => {
-    console.log('✨ [Starry Pop Engine] Initialized "Starry Starry" Signature Mascot Trigger.');
+    console.log('✨ [Starry Pop Engine] Initialized Official Starry Mascot Animated Engine.');
 
     // 1. Sniff chat messages for "starry starry" triggers
     client.on(Events.MessageCreate, async (message) => {
@@ -90,7 +102,6 @@ module.exports = (client) => {
 
         // Exact match triggers
         const triggers = [
-            'starry starry',
             'starry starry',
             'starrystarry',
             'hey starry',
@@ -114,8 +125,8 @@ module.exports = (client) => {
         cooldowns.set(channelKey, now);
 
         try {
-            const { embed, row } = buildStarryPopEmbed(message.author, client);
-            await message.channel.send({ embeds: [embed], components: [row] });
+            const payload = buildStarryPopPayload(message.author, client);
+            await message.channel.send(payload);
         } catch (err) {
             console.warn('[Starry Pop] Send Warning:', err.message);
         }
@@ -127,6 +138,10 @@ module.exports = (client) => {
         const id = interaction.customId;
 
         if (id === 'starry_pop_stardust') {
+            const filePath = path.join(MASCOT_DIR, 'starry_magic.gif');
+            let attachment = null;
+            if (fs.existsSync(filePath)) attachment = new AttachmentBuilder(filePath, { name: 'starry_magic.gif' });
+
             const embed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setAuthor({ name: 'Starry-chan ✨ Stardust Blessing', iconURL: STARRY_AVATAR })
@@ -134,12 +149,19 @@ module.exports = (client) => {
                     `✨ **<@${interaction.user.id}> gave Starry a handful of sparkling stardust!**\n\n` +
                     `Starry\'s golden eyes glow with excitement: *“Arigatou gozaimasu! ✨ My cosmic power is supercharged thanks to you! (+100 Stardust Affinity 💖)”*`
                 )
-                .setImage('https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif')
+                .setImage(attachment ? 'attachment://starry_magic.gif' : 'https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif')
                 .setFooter({ text: 'Starry Affection System • Prefix: ,' });
-            return interaction.reply({ embeds: [embed] }).catch(() => {});
+
+            const replyData = { embeds: [embed] };
+            if (attachment) replyData.files = [attachment];
+            return interaction.reply(replyData).catch(() => {});
         }
 
         if (id === 'starry_pop_headpat') {
+            const filePath = path.join(MASCOT_DIR, 'starry_wink.gif');
+            let attachment = null;
+            if (fs.existsSync(filePath)) attachment = new AttachmentBuilder(filePath, { name: 'starry_wink.gif' });
+
             const embed = new EmbedBuilder()
                 .setColor('#FF94D2')
                 .setAuthor({ name: 'Starry-chan 💖 Sweet Headpat', iconURL: STARRY_AVATAR })
@@ -147,12 +169,19 @@ module.exports = (client) => {
                     `💖 **<@${interaction.user.id}> gently patted Starry\'s starlight hair!**\n\n` +
                     `Starry blushes happily and smiles: *“Ehehe~ your hands are so warm and gentle! Starry will protect you forever and ever!”* 🌟🌸`
                 )
-                .setImage('https://media.giphy.com/media/ARSp9T7wwxNcs/giphy.gif')
+                .setImage(attachment ? 'attachment://starry_wink.gif' : 'https://media.giphy.com/media/ARSp9T7wwxNcs/giphy.gif')
                 .setFooter({ text: 'Starry Affection System • Prefix: ,' });
-            return interaction.reply({ embeds: [embed] }).catch(() => {});
+
+            const replyData = { embeds: [embed] };
+            if (attachment) replyData.files = [attachment];
+            return interaction.reply(replyData).catch(() => {});
         }
 
         if (id === 'starry_pop_sing') {
+            const filePath = path.join(MASCOT_DIR, 'starry_music.gif');
+            let attachment = null;
+            if (fs.existsSync(filePath)) attachment = new AttachmentBuilder(filePath, { name: 'starry_music.gif' });
+
             const melodies = [
                 '♪ *Twinkle twinkle cosmic sky, we will soar so bright and high...* 🌌 ♪',
                 '♪ *La-la-lu, under the stars, no matter how far, you are in my heart...* 💖 ♪',
@@ -168,9 +197,12 @@ module.exports = (client) => {
                     `> *${song}*\n\n` +
                     `✨ *A soothing chime of starlight rings softly through the channel...*`
                 )
-                .setImage('https://media.giphy.com/media/wnsgren9NtITS/giphy.gif')
+                .setImage(attachment ? 'attachment://starry_music.gif' : 'https://media.giphy.com/media/wnsgren9NtITS/giphy.gif')
                 .setFooter({ text: 'Starry Musical Starlight' });
-            return interaction.reply({ embeds: [embed] }).catch(() => {});
+
+            const replyData = { embeds: [embed] };
+            if (attachment) replyData.files = [attachment];
+            return interaction.reply(replyData).catch(() => {});
         }
 
         if (id === 'starry_pop_chat') {
@@ -185,4 +217,4 @@ module.exports = (client) => {
     });
 };
 
-module.exports.buildStarryPopEmbed = buildStarryPopEmbed;
+module.exports.buildStarryPopPayload = buildStarryPopPayload;
