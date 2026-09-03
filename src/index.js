@@ -5,9 +5,13 @@
 
 require('dotenv').config();
 
-// 🌐 Auto-Adaptive In-Process DNS Cache & Resilient Network Resolver
+// 🌐 Auto-Adaptive In-Process IPv4 DNS Resolver (Prevents ENETUNREACH on Android/Termux)
 const dns = require('dns');
+const net = require('net');
 try {
+    if (typeof net.setDefaultAutoSelectFamily === 'function') {
+        net.setDefaultAutoSelectFamily(false);
+    }
     if (typeof dns.setDefaultResultOrder === 'function') {
         dns.setDefaultResultOrder('ipv4first');
     }
@@ -17,17 +21,21 @@ try {
     dns.lookup = function(hostname, options, callback) {
         if (typeof options === 'function') {
             callback = options;
-            options = {};
+            options = { family: 4 };
+        } else if (typeof options === 'object' && options !== null) {
+            options.family = 4;
+        } else if (typeof options === 'number') {
+            options = { family: 4 };
         }
         origLookup(hostname, options, (err, address, family) => {
             if (!err && address) {
-                dnsCache.set(hostname, { address, family, timestamp: Date.now() });
-                return callback(null, address, family);
+                dnsCache.set(hostname, { address, family: 4, timestamp: Date.now() });
+                return callback(null, address, 4);
             }
             // If DNS lookup threw transient ENOTFOUND/timeout, fall back to memory cache
             const cached = dnsCache.get(hostname);
             if (cached && (Date.now() - cached.timestamp < 3600000)) {
-                return callback(null, cached.address, cached.family);
+                return callback(null, cached.address, 4);
             }
             return callback(err, address, family);
         });

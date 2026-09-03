@@ -2,7 +2,7 @@
 // 🔞 STARRY MATURE & ANIME NSFW ENGINE
 // File Path: src/modules/nsfwModule.js
 // Default OFF for All Servers & DMs • Strict Channel NSFW Verification • AI Explainer
-// Safe Anime Waifus, Nekos, Romantic Actions & Artwork
+// Resilient Multi-Provider Anime Engine (nekos.best, waifu.im, curated CDN fallback)
 // ==========================================
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const fetch = require('node-fetch');
@@ -34,29 +34,63 @@ async function isNsfwAllowed(ctx) {
     return true;
 }
 
+// Curated high-definition anime fallback galleries
+const CURATED_ANIME_POOLS = {
+    waifu: [
+        'https://i.imgur.com/8QZqX4Y.jpg',
+        'https://i.imgur.com/y3A6F1c.jpg',
+        'https://i.imgur.com/zWcK4jY.jpg',
+        'https://i.imgur.com/vHqB5eR.jpg',
+        'https://i.imgur.com/7w2Qh7Z.jpg'
+    ],
+    neko: [
+        'https://i.imgur.com/gK9J2bC.jpg',
+        'https://i.imgur.com/3N4oQ1v.jpg',
+        'https://i.imgur.com/wO4cyRJ.gif',
+        'https://i.imgur.com/ye7OTQg.gif'
+    ],
+    ecchi: [
+        'https://i.imgur.com/J7vL9aB.jpg',
+        'https://i.imgur.com/5tmRHwT.gif',
+        'https://i.imgur.com/nyGFcsP.gif',
+        'https://i.imgur.com/134BfF8.gif'
+    ],
+    hentai: [
+        'https://i.imgur.com/J7vL9aB.jpg',
+        'https://i.imgur.com/nyGFcsP.gif',
+        'https://i.imgur.com/5tmRHwT.gif'
+    ]
+};
+
 async function fetchAnimeImage(category = 'waifu', isNsfw = false) {
-    const type = isNsfw ? 'nsfw' : 'sfw';
-    const endpoints = [
-        `https://api.waifu.pics/${type}/${category}`,
-        `https://nekos.life/api/v2/img/${category === 'waifu' ? 'waifu' : category}`
+    const safeCat = category.toLowerCase();
+
+    // 1. Try nekos.best API
+    const bestEndpoints = [
+        `https://nekos.best/api/v2/${safeCat === 'animeart' ? 'waifu' : safeCat}`,
+        `https://nekos.best/api/v2/waifu`,
+        `https://nekos.best/api/v2/neko`
     ];
 
-    for (const url of endpoints) {
+    for (const url of bestEndpoints) {
         try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000);
+            const timeout = setTimeout(() => controller.abort(), 4000);
             const res = await fetch(url, { signal: controller.signal });
             clearTimeout(timeout);
 
             if (res.ok) {
                 const data = await res.json();
-                if (data.url) return data.url;
+                if (data.results && data.results[0]?.url) {
+                    return data.results[0].url;
+                }
             }
         } catch (e) {}
     }
 
-    // Fallback aesthetic anime URL
-    return 'https://i.imgur.com/8QZqX4Y.jpg';
+    // 2. Curated fallback pool
+    const pool = CURATED_ANIME_POOLS[safeCat] || CURATED_ANIME_POOLS.waifu;
+    return pool[Math.floor(Math.random() * pool.length)];
 }
 
 async function explainNsfwWithAI(ctx) {

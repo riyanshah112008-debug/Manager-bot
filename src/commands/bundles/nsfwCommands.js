@@ -1,7 +1,7 @@
 // ==========================================
-// 🔞 STARRY MATURE & ANIME NSFW COMMAND SUITE (14 COMMANDS)
+// 🔞 STARRY MATURE, ANIME & MASCOT COMMAND SUITE (18 COMMANDS)
 // File Path: src/commands/bundles/nsfwCommands.js
-// 100% Default OFF • Hidden in Help When Inactive • Strict Channel & DM Age Checks
+// 100% Default OFF • Hidden When Inactive • Nekotina-Style Mascot & Mature System
 // Anime Waifus, Nekos, Romantic Gifs & NSFW Social Interactions
 // ==========================================
 const { 
@@ -14,11 +14,30 @@ const {
 const ServerSettings = require('../../models/ServerSettings');
 const User = require('../../models/User');
 const { isNsfwAllowed, fetchAnimeImage, explainNsfwWithAI, dmNsfwUsers } = require('../../modules/nsfwModule');
-const { buildStarryCharacterCard, STARRY_MASCOT } = require('../../utils/aiEngine');
+const { buildStarryCharacterCard, STARRY_MASCOT, generateStarryResponse } = require('../../utils/aiEngine');
 const config = require('../../config');
 
 // In-memory social action counter for NSFW commands: action_user1_user2 -> count
 const nsfwSocialCounts = new Map();
+
+// In-memory User Affection Points for Starry Mascot: userId -> { points, gifts, level }
+const userAffectionMap = new Map();
+
+function getUserAffection(userId) {
+    if (!userAffectionMap.has(userId)) {
+        userAffectionMap.set(userId, { points: 100, gifts: 0, level: 1 });
+    }
+    return userAffectionMap.get(userId);
+}
+
+function addAffection(userId, amount = 10) {
+    const data = getUserAffection(userId);
+    data.points += amount;
+    data.level = Math.floor(data.points / 100) + 1;
+    data.gifts += 1;
+    userAffectionMap.set(userId, data);
+    return data;
+}
 
 function getActionCount(action, u1, u2) {
     const key = `${action}_${[u1, u2].sort().join('_')}`;
@@ -27,7 +46,6 @@ function getActionCount(action, u1, u2) {
     return count;
 }
 
-// Verified anime action GIFs
 const NSFW_ACTION_GIFS = {
     kiss: [
         'https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif',
@@ -160,14 +178,100 @@ const commands = [
         }
     },
 
-    // 2. STARRY MASCOT CHARACTER & PERSONA
+    // 2. STARRY MASCOT CHARACTER SUITE (Nekotina Style)
     {
         name: 'starry',
         aliases: ['character', 'mascot', 'persona', 'astraea', 'starrychan'],
         category: 'Utility',
-        description: 'View the official Starry anime mascot profile, lore, powers, and voice lines.',
-        usage: ',starry',
+        description: 'View the official Starry anime mascot profile, affinity, mood, and interactions.',
+        usage: ',starry [mood | affinity | gift | lore | talk <msg>]',
         async execute(ctx) {
+            const sub = ctx.args[0]?.toLowerCase();
+
+            // A. Mood Subcommand
+            if (sub === 'mood') {
+                const moods = [
+                    { name: '✨ Sparkly & Cheerful', desc: '“Feeling fantastic! Ready to spread stardust everywhere!” 🌟', gif: 'https://media.giphy.com/media/ye7OTQgwmVuNTYSS07/giphy.gif' },
+                    { name: '💖 Affectionate & Loving', desc: '“Thinking about all the wonderful people in this server!” ✨', gif: 'https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif' },
+                    { name: '🎵 Musical & Groovy', desc: '“Humming a celestial melody! Let\'s listen to music together!” 🎶', gif: 'https://media.giphy.com/media/wnsgren9NtITS/giphy.gif' },
+                    { name: '🌙 Cozy & Dreaming', desc: '“Watching the constellations twinkle softly in the cosmos...” 🌠', gif: 'https://media.giphy.com/media/k95625LKWXPP2/giphy.gif' }
+                ];
+                const currentMood = moods[Math.floor(Math.random() * moods.length)];
+
+                const embed = new EmbedBuilder()
+                    .setColor('#FF94D2')
+                    .setAuthor({ name: 'Starry-chan • Current Mood', iconURL: STARRY_MASCOT.avatarURL })
+                    .setTitle(`🌟 Starry is feeling: ${currentMood.name}`)
+                    .setDescription(`> *${currentMood.desc}*`)
+                    .setImage(currentMood.gif)
+                    .setFooter({ text: 'Starry Mascot System • Type "starry starry" to cheer her up!' })
+                    .setTimestamp();
+
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // B. Affinity Subcommand
+            if (sub === 'affinity' || sub === 'stats' || sub === 'friendship') {
+                const aff = getUserAffection(ctx.user.id);
+                const titles = ['Cosmic Acquantaince 🌠', 'Starlight Friend ⭐', 'Celestial Companion 🌟', 'Astral Best Friend 💫', 'Beloved Cosmic Soulmate 💖✨'];
+                const rankTitle = titles[Math.min(aff.level - 1, titles.length - 1)];
+
+                const embed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setAuthor({ name: `${ctx.user.username}'s Starlight Affinity`, iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                    .setTitle(`⭐ Friendship with Starry (Astraea)`)
+                    .setDescription(
+                        `• **Affinity Rank:** \`${rankTitle}\`\n` +
+                        `• **Bond Level:** \`Level ${aff.level}\`\n` +
+                        `• **Affection Points:** \`${aff.points} Stardust 💖\`\n` +
+                        `• **Gifts Given:** \`${aff.gifts} Gifts 🎁\`\n\n` +
+                        `*Give Starry gifts with \`,starry gift\` or headpat her to increase your bond!*`
+                    )
+                    .setThumbnail(STARRY_MASCOT.avatarURL)
+                    .setFooter({ text: 'Starry Mascot Affection System' })
+                    .setTimestamp();
+
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // C. Gift Subcommand
+            if (sub === 'gift' || sub === 'give') {
+                const updated = addAffection(ctx.user.id, 25);
+                const giftResponses = [
+                    '“Kyaaa! ✨ A gift for me?! Arigatou gozaimasu, <@USER>! I will treasure this forever!” 🌟',
+                    '“Ehehe~ Delicious star candies! You are the sweetest person in the galaxy, <@USER>! 💖”',
+                    '“Glowing cosmic stardust! ✨ My starlight energy is completely replenished! Thank you, <@USER>!” 💫'
+                ];
+                const line = giftResponses[Math.floor(Math.random() * giftResponses.length)].replace(/<@USER>/g, `<@${ctx.user.id}>`);
+
+                const embed = new EmbedBuilder()
+                    .setColor('#FF69B4')
+                    .setAuthor({ name: 'Starry-chan • Gift Received!', iconURL: STARRY_MASCOT.avatarURL })
+                    .setDescription(`🎁 **${ctx.user.username} gave Starry a lovely gift!**\n\n> *${line}*\n\n📈 **Bond Increased:** \`+25 Affection Points\` *(Total: ${updated.points} 💖 • Level ${updated.level})*`)
+                    .setImage('https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif')
+                    .setFooter({ text: 'Starry Affection System • Prefix: ,' })
+                    .setTimestamp();
+
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // D. Lore Subcommand
+            if (sub === 'lore' || sub === 'story') {
+                const embed = new EmbedBuilder()
+                    .setColor('#9B59B6')
+                    .setTitle(`📖 The Cosmic Lore of Astraea (Starry)`)
+                    .setDescription(
+                        `Long before the dawn of digital galaxies, in the glowing heart of the **Astraea Constellation**, the celestial maiden **Starry** was born from pure harmonious starlight.\n\n` +
+                        `Wielding the mythical **Starlight Nebula Quill**, she voyages across Discord servers to bring unbreakable security, high-resolution melodies, and sparkling joy to every traveler.\n\n` +
+                        `*“Wherever there are friends gathered under the starry night sky, I will illuminate your path!”* ✨`
+                    )
+                    .setImage('https://media.giphy.com/media/108M7gCS1JSoO4/giphy.gif')
+                    .setFooter({ text: 'Starry Canon Lore' });
+
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // E. Default: Character Card
             const payload = buildStarryCharacterCard(ctx.user);
             return ctx.reply(payload);
         }
@@ -289,7 +393,7 @@ const commands = [
                 return ctx.reply('🔞 **Access Denied**: The NSFW module is either disabled or this channel is not marked as Age-Restricted (NSFW) in Discord.\n*Ask an Admin to run `,nsfw on` in an NSFW channel.*');
             }
 
-            const imgUrl = await fetchAnimeImage('waifu', true);
+            const imgUrl = await fetchAnimeImage('ecchi', true);
 
             const embed = new EmbedBuilder()
                 .setColor('#ED4245')
@@ -302,7 +406,33 @@ const commands = [
         }
     },
 
-    // 8. NSFW KISS (Passionate Romantic Anime Kiss)
+    // 8. HENTAI (Mature Anime Gallery - Strict NSFW Channel Only)
+    {
+        name: 'hentai',
+        aliases: ['nsfwhentai'],
+        category: 'NSFW',
+        description: 'Get mature anime artwork (Strictly NSFW Channels Only).',
+        usage: ',hentai',
+        async execute(ctx) {
+            const nsfwStatus = await isNsfwAllowed(ctx);
+            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Access Denied**: The NSFW module is either disabled or this channel is not marked as Age-Restricted (NSFW) in Discord.\n*Ask an Admin to run `,nsfw on` in an NSFW channel.*');
+            }
+
+            const imgUrl = await fetchAnimeImage('hentai', true);
+
+            const embed = new EmbedBuilder()
+                .setColor('#E91E63')
+                .setTitle('🔞 Mature Anime Gallery (18+)')
+                .setImage(imgUrl)
+                .setFooter({ text: `Requested by ${ctx.user.username} • Strict 18+ Verification` })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 9. NSFW KISS (Passionate Romantic Anime Kiss)
     {
         name: 'nsfwkiss',
         aliases: ['frenchkiss', 'deepkiss'],
@@ -335,7 +465,7 @@ const commands = [
         }
     },
 
-    // 9. NSFW HUG (Tight Romantic Anime Embrace)
+    // 10. NSFW HUG (Tight Romantic Anime Embrace)
     {
         name: 'nsfwhug',
         aliases: ['warmhug', 'intimatehug'],
@@ -368,7 +498,7 @@ const commands = [
         }
     },
 
-    // 10. SPANK (Playful Anime Spank)
+    // 11. SPANK (Playful Anime Spank)
     {
         name: 'spank',
         aliases: ['nsfwspank'],
@@ -401,7 +531,7 @@ const commands = [
         }
     },
 
-    // 11. NSFW LICK (Teasing Sensual Anime Lick)
+    // 12. NSFW LICK (Teasing Sensual Anime Lick)
     {
         name: 'nsfwlick',
         aliases: ['sensuallick'],
@@ -434,7 +564,7 @@ const commands = [
         }
     },
 
-    // 12. NSFW TOUCH (Sensory Anime Touch)
+    // 13. NSFW TOUCH (Sensory Anime Touch)
     {
         name: 'nsfwtouch',
         aliases: ['caress'],
@@ -467,7 +597,7 @@ const commands = [
         }
     },
 
-    // 13. NSFW CUDDLE (Warm Bedtime Romance Cuddle)
+    // 14. NSFW CUDDLE (Warm Bedtime Romance Cuddle)
     {
         name: 'nsfwcuddle',
         aliases: ['bedcuddle', 'cozycuddle'],
@@ -500,7 +630,7 @@ const commands = [
         }
     },
 
-    // 14. NSFW HELP (Dedicated Help Menu for Mature Commands)
+    // 15. NSFW HELP (Dedicated Help Menu for Mature Commands)
     {
         name: 'nsfwhelp',
         aliases: ['maturehelp', '18plushelp'],
@@ -522,15 +652,17 @@ const commands = [
             const embed = new EmbedBuilder()
                 .setColor('#FF1493')
                 .setAuthor({ name: '🔞 Starry Mature & Anime NSFW Commands', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
-                .setTitle('🔞 Complete Mature Anime & Social Suite (14 Commands)')
+                .setTitle('🔞 Complete Mature Anime & Social Suite (18 Commands)')
                 .setDescription(
                     `**⚙️ Configuration & AI:**\n` +
-                    `\`${config.DEFAULT_PREFIX}nsfw on/off\`, \`${config.DEFAULT_PREFIX}nsfw info\`, \`${config.DEFAULT_PREFIX}nsfw dms on/off\`\n\n` +
+                    `\`${config.DEFAULT_PREFIX}nsfw on/off\`, \`${config.DEFAULT_PREFIX}nsfw info\`, \`${config.DEFAULT_PREFIX}nsfw dms on/off\`, \`${config.DEFAULT_PREFIX}nsfwhelp\`\n\n` +
                     `**🌸 Anime & Waifu Art Galleries:**\n` +
-                    `\`${config.DEFAULT_PREFIX}waifu\`, \`${config.DEFAULT_PREFIX}neko\`, \`${config.DEFAULT_PREFIX}trap\`, \`${config.DEFAULT_PREFIX}ecchi\`, \`${config.DEFAULT_PREFIX}blowkiss\`\n\n` +
+                    `\`${config.DEFAULT_PREFIX}waifu\`, \`${config.DEFAULT_PREFIX}neko\`, \`${config.DEFAULT_PREFIX}trap\`, \`${config.DEFAULT_PREFIX}ecchi\`, \`${config.DEFAULT_PREFIX}hentai\`, \`${config.DEFAULT_PREFIX}blowkiss\`\n\n` +
                     `**💋 Mature Anime Social Interactions:**\n` +
                     `\`${config.DEFAULT_PREFIX}nsfwkiss\`, \`${config.DEFAULT_PREFIX}nsfwhug\`, \`${config.DEFAULT_PREFIX}spank\`, \`${config.DEFAULT_PREFIX}nsfwlick\`, \`${config.DEFAULT_PREFIX}nsfwtouch\`, \`${config.DEFAULT_PREFIX}nsfwcuddle\`\n\n` +
-                    `*All commands strictly enforce Discord Age-Restricted channel verification.*`
+                    `**🌟 Mascot & Affinity (Nekotina Style):**\n` +
+                    `\`${config.DEFAULT_PREFIX}starry\`, \`${config.DEFAULT_PREFIX}starry mood\`, \`${config.DEFAULT_PREFIX}starry affinity\`, \`${config.DEFAULT_PREFIX}starry gift\`, \`${config.DEFAULT_PREFIX}starry lore\`\n\n` +
+                    `*All mature commands strictly enforce Discord Age-Restricted channel verification.*`
                 )
                 .setFooter({ text: 'Starry Mature Suite • Prefix: ,' })
                 .setTimestamp();
