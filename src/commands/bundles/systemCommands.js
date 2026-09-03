@@ -704,6 +704,125 @@ const commands = [
 
             return ctx.reply(`✅ Broadcast sent to **${sentCount}** servers across the network!`);
         }
+    },
+
+    // 20. TELEMETRY / SERVER ANALYTICS / 6-HOUR SCHEDULER
+    {
+        name: 'telemetry',
+        aliases: ['metrics', 'serverstats', 'servertelemetry', 'analytics'],
+        category: 'Systems',
+        description: 'View real-time telemetry diagnostics for current or searched server, global stats, or configure 6h scheduler.',
+        usage: ',telemetry [server name / server ID | global | schedule <6h/12h/24h/off>]',
+        async execute(ctx) {
+            const isOwner = config.BOT_OWNERS.includes(ctx.user.id);
+            const { 
+                searchGuilds, 
+                getOrCreateTelemetry, 
+                buildServerTelemetryEmbed, 
+                buildGlobalTelemetryEmbed 
+            } = require('../../modules/telemetryEngine');
+            const GuildTelemetry = require('../../models/GuildTelemetry');
+
+            const query = ctx.args.join(' ').trim();
+            const firstArg = ctx.args[0]?.toLowerCase();
+
+            // 1. Sub-feature: Configure 6-Hour Scheduled Telemetry (Owner Only)
+            if (firstArg === 'schedule' || firstArg === 'auto' || firstArg === 'timer') {
+                if (!isOwner) {
+                    return ctx.reply('❌ **Access Denied**: Only bot developers/owners can configure automated telemetry schedules.');
+                }
+
+                const intervalArg = ctx.args[1]?.toLowerCase();
+                if (!intervalArg || !['6h', '12h', '24h', 'off', 'disable', 'enable'].includes(intervalArg)) {
+                    return ctx.reply(
+                        `⚙️ **Scheduled Telemetry Configuration**\n\n` +
+                        `• \`,telemetry schedule 6h\` — Enable automatic telemetry dispatch **every 6 hours**\n` +
+                        `• \`,telemetry schedule 12h\` — Enable automatic telemetry dispatch **every 12 hours**\n` +
+                        `• \`,telemetry schedule 24h\` — Enable automatic telemetry dispatch **every 24 hours (Daily)**\n` +
+                        `• \`,telemetry schedule off\` — Disable all automatic telemetry DMs\n` +
+                        `• \`,telemetry schedule 6h #channel\` — Send 6-hour digest to a specific channel`
+                    );
+                }
+
+                const targetGuild = ctx.guild;
+                if (!targetGuild) return ctx.reply('❌ Please run this schedule command inside a server.');
+
+                const doc = await getOrCreateTelemetry(targetGuild);
+
+                if (intervalArg === 'off' || intervalArg === 'disable') {
+                    doc.autoSchedule.enabled = false;
+                    await doc.save();
+                    return ctx.reply(`🔴 **Automated Telemetry Disabled** for **${targetGuild.name}**. You will no longer receive periodic DM reports.`);
+                }
+
+                let hours = 6;
+                if (intervalArg === '12h') hours = 12;
+                if (intervalArg === '24h') hours = 24;
+
+                const channelMention = ctx.message?.mentions?.channels?.first();
+                doc.autoSchedule.enabled = true;
+                doc.autoSchedule.intervalHours = hours;
+                doc.autoSchedule.target = channelMention ? 'channel' : 'dm';
+                doc.autoSchedule.channelId = channelMention ? channelMention.id : '';
+                doc.autoSchedule.lastSent = new Date();
+                await doc.save();
+
+                return ctx.reply(
+                    `🟢 **Automated Telemetry Enabled!**\n\n` +
+                    `• **Interval:** Every **${hours} hours**\n` +
+                    `• **Server:** **${targetGuild.name}** (\`${targetGuild.id}\`)\n` +
+                    `• **Destination:** ${channelMention ? `<#${channelMention.id}>` : '`Owner DMs`'}\n` +
+                    `• **Next Dispatch:** <t:${Math.floor((Date.now() + hours * 3600000) / 1000)}:R>`
+                );
+            }
+
+            // 2. Global Network Telemetry
+            if (firstArg === 'global' || firstArg === 'all' || firstArg === 'network') {
+                if (!isOwner && !ctx.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                    return ctx.reply('❌ **Access Denied**: Administrator permission required for global ecosystem overview.');
+                }
+                await ctx.defer(false);
+                const allData = await GuildTelemetry.find({});
+                const embed = buildGlobalTelemetryEmbed(ctx.client, allData);
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // 3. Search Server by Name or ID
+            if (query) {
+                if (!isOwner && !ctx.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                    return ctx.reply('❌ **Access Denied**: You can only view telemetry for this server. Contact bot owners for cross-server queries.');
+                }
+
+                await ctx.defer(false);
+                const matched = searchGuilds(ctx.client, query);
+
+                if (matched.length === 0) {
+                    return ctx.reply(`❌ No connected servers found matching: **"${query}"**.\n*Tip: Check the spelling or provide the exact 18-digit Server ID.*`);
+                }
+
+                const targetGuild = matched[0];
+                const telemetryDoc = await getOrCreateTelemetry(targetGuild);
+                const embed = buildServerTelemetryEmbed(targetGuild, telemetryDoc, ctx.client);
+
+                if (matched.length > 1) {
+                    embed.setFooter({ 
+                        text: `Found ${matched.length} matching servers. Showing top match: "${targetGuild.name}".` 
+                    });
+                }
+
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // 4. Current Server Telemetry (Default when no args)
+            if (!ctx.guild) {
+                return ctx.reply('❌ Please specify a server name or ID: `,telemetry <server name>`');
+            }
+
+            await ctx.defer(false);
+            const currentDoc = await getOrCreateTelemetry(ctx.guild);
+            const embed = buildServerTelemetryEmbed(ctx.guild, currentDoc, ctx.client);
+            return ctx.reply({ embeds: [embed] });
+        }
     }
 ];
 

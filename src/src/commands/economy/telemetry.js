@@ -1,63 +1,116 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildTelemetry = require('../../models/GuildTelemetry');
+const config = require('../../config');
+const { 
+    searchGuilds, 
+    getOrCreateTelemetry, 
+    buildServerTelemetryEmbed, 
+    buildGlobalTelemetryEmbed 
+} = require('../../modules/telemetryEngine');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('telemetry')
-        .setDescription('📡 Bot Owner Only: View the Global Network Dashboard.')
-        .setDMPermission(true),
+        .setDescription('📊 View server or global network telemetry, or configure 6-hour scheduler.')
+        .setDMPermission(true)
+        .addStringOption(option =>
+            option.setName('server')
+                .setDescription('Search telemetry by server name or 18-digit server ID')
+                .setRequired(false)
+        )
+        .addStringOption(option =>
+            option.setName('schedule')
+                .setDescription('Configure automated periodic telemetry dispatch interval')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Every 6 Hours (Recommended)', value: '6h' },
+                    { name: 'Every 12 Hours', value: '12h' },
+                    { name: 'Every 24 Hours (Daily)', value: '24h' },
+                    { name: 'Turn Off Auto-Telemetry', value: 'off' }
+                )
+        )
+        .addBooleanOption(option =>
+            option.setName('global')
+                .setDescription('View global network overview across all connected servers')
+                .setRequired(false)
+        ),
 
     async execute(interaction) {
-        // Restrict usage strictly to the Bot Owner
-        if (process.env.OWNER_ID && interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: '❌ Only the Bot Owner can run this command!', ephemeral: true });
+        const isOwner = config.BOT_OWNERS.includes(interaction.user.id);
+        const serverQuery = interaction.options.getString('server');
+        const scheduleChoice = interaction.options.getString('schedule');
+        const viewGlobal = interaction.options.getBoolean('global');
+
+        // 1. Configure Scheduled Telemetry
+        if (scheduleChoice) {
+            if (!isOwner) {
+                return interaction.reply({ content: '❌ Only bot developers/owners can configure automated telemetry schedules.', ephemeral: true });
+            }
+
+            const targetGuild = interaction.guild;
+            if (!targetGuild) {
+                return interaction.reply({ content: '❌ Please execute the schedule command inside a server channel.', ephemeral: true });
+            }
+
+            const doc = await getOrCreateTelemetry(targetGuild);
+
+            if (scheduleChoice === 'off') {
+                doc.autoSchedule.enabled = false;
+                await doc.save();
+                return interaction.reply({ content: `🔴 **Automated Telemetry Disabled** for **${targetGuild.name}**. You will no longer receive periodic DM reports.` });
+            }
+
+            let hours = 6;
+            if (scheduleChoice === '12h') hours = 12;
+            if (scheduleChoice === '24h') hours = 24;
+
+            doc.autoSchedule.enabled = true;
+            doc.autoSchedule.intervalHours = hours;
+            doc.autoSchedule.target = 'dm';
+            doc.autoSchedule.lastSent = new Date();
+            await doc.save();
+
+            return interaction.reply({
+                content: `🟢 **Automated Telemetry Configured!**\n\n• **Interval:** Every **${hours} hours**\n• **Server:** **${targetGuild.name}**\n• **Destination:** Bot Owner DMs\n• **Next Dispatch:** <t:${Math.floor((Date.now() + hours * 3600000) / 1000)}:R>`
+            });
         }
 
-        // Defer reply so Discord doesn't timeout while calculating
         await interaction.deferReply();
 
-        try {
-            // Fetch ALL telemetry data from MongoDB
+        // 2. Global Overview
+        if (viewGlobal) {
+            if (!isOwner && !interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                return interaction.editReply('❌ Administrator permission required for global ecosystem overview.');
+            }
             const allData = await GuildTelemetry.find({});
-            const totalServers = interaction.client.guilds.cache.size;
-            
-            // Calculate total users across all servers combined
-            const totalGlobalMembers = interaction.client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
-            
-            let globalJoins = 0, globalVc = 0;
-            let globalWarns = 0, globalKicks = 0, globalBans = 0, globalAutomod = 0;
-
-            // Tally up all the stats
-            allData.forEach(t => {
-                globalJoins += t.joinsThisHour || 0;
-                globalVc += t.totalVcSeconds || 0;
-                globalWarns += t.modStats?.warns || 0;
-                globalKicks += t.modStats?.kicks || 0;
-                globalBans += t.modStats?.bans || 0;
-                globalAutomod += t.modStats?.automodTriggers || 0;
-            });
-
-            const globalVcHours = (globalVc / 3600).toFixed(1);
-
-            const embed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setTitle('🌐 Starry Global Network Intelligence')
-                .setDescription(`Live overview of Starry's entire ecosystem.`)
-                .addFields(
-                    { name: '🌍 Ecosystem', value: `• **${totalServers}** Active Servers\n• **${totalGlobalMembers.toLocaleString()}** Total Users`, inline: true },
-                    { name: '👥 Network Joins (Past Hour)', value: `• **${globalJoins}** new users globally`, inline: true },
-                    { name: '🎙️ Voice Engagement', value: `• **${globalVcHours}** hours tracked globally`, inline: true },
-                    { name: '🛡️ Global Enforcements', value: `• Warns: **${globalWarns}**\n• Kicks: **${globalKicks}**\n• Bans: **${globalBans}**\n• AutoMod Stops: **${globalAutomod}**`, inline: false }
-                )
-                .setFooter({ text: 'Starry Central Command', iconURL: interaction.client.user.displayAvatarURL() })
-                .setTimestamp();
-            
-            // Send the dashboard directly in Starry's DMs
+            const embed = buildGlobalTelemetryEmbed(interaction.client, allData);
             return interaction.editReply({ embeds: [embed] });
-
-        } catch (error) {
-            console.error('Telemetry Command Error:', error);
-            return interaction.editReply('❌ A database error occurred while fetching the global dashboard.');
         }
+
+        // 3. Search by Server Name or ID
+        if (serverQuery) {
+            if (!isOwner && !interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                return interaction.editReply('❌ You can only view telemetry for this server. Contact bot owners for cross-server queries.');
+            }
+
+            const matched = searchGuilds(interaction.client, serverQuery);
+            if (matched.length === 0) {
+                return interaction.editReply(`❌ No connected servers found matching: **"${serverQuery}"**.\n*Check the spelling or supply the exact server ID.*`);
+            }
+
+            const targetGuild = matched[0];
+            const telemetryDoc = await getOrCreateTelemetry(targetGuild);
+            const embed = buildServerTelemetryEmbed(targetGuild, telemetryDoc, interaction.client);
+            return interaction.editReply({ embeds: [embed] });
+        }
+
+        // 4. Default: Current Server
+        if (!interaction.guild) {
+            return interaction.editReply('❌ Please specify a server name or use `/telemetry global:True` in DMs.');
+        }
+
+        const currentDoc = await getOrCreateTelemetry(interaction.guild);
+        const embed = buildServerTelemetryEmbed(interaction.guild, currentDoc, interaction.client);
+        return interaction.editReply({ embeds: [embed] });
     }
 };
