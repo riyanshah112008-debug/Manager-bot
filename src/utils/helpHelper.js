@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const config = require('../config');
 
-const helpCategories = [
+const BASE_HELP_CATEGORIES = [
     { id: 'music', label: 'Music & Audio (33)', desc: 'Playback, filters, 24/7, queue & DJ panel', emoji: '🎵' },
     { id: 'mod', label: 'Moderation & Security (32)', desc: 'Bans, mutes, kicks, warnings, lock & purge', emoji: '🛡️' },
     { id: 'util', label: 'Utility & Tools (28)', desc: 'Server info, whois, translate, avatar & afk', emoji: '🛠️' },
@@ -10,7 +10,21 @@ const helpCategories = [
     { id: 'sys', label: 'Multi-Bot & Systems (15)', desc: 'Multi-bot cluster, giveaways, tickets & backup', emoji: '🤖' }
 ];
 
-function buildCategoryEmbed(catId, customPrefix) {
+const NSFW_CATEGORY_INFO = {
+    id: 'nsfw',
+    label: 'Mature & Anime NSFW (14)',
+    desc: 'Anime waifus, nekos, ecchi art & mature social actions',
+    emoji: '🔞'
+};
+
+function getHelpCategories(isNsfw = false) {
+    if (isNsfw) {
+        return [...BASE_HELP_CATEGORIES, NSFW_CATEGORY_INFO];
+    }
+    return BASE_HELP_CATEGORIES;
+}
+
+function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
     const prefix = customPrefix || config.DEFAULT_PREFIX || ',';
     const embed = new EmbedBuilder()
         .setColor(config.EMBED_COLORS.PRIMARY)
@@ -61,12 +75,38 @@ function buildCategoryEmbed(catId, customPrefix) {
             .setDescription(
                 `\`${prefix}multibot\`, \`${prefix}chest\`, \`${prefix}chestdrop\`, \`${prefix}chest-toggle\`, \`${prefix}pet\`, \`${prefix}prestige\`, \`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}confessionsetup\`, \`${prefix}setupcount\`, \`${prefix}backup\`, \`${prefix}restore\``
             );
+    } else if (catId === 'nsfw') {
+        if (!isNsfw) {
+            embed.setColor('#ED4245')
+                .setTitle('🔒 Mature Commands are Hidden')
+                .setDescription(
+                    `The Mature & NSFW module is **disabled** in this server or channel.\n\n` +
+                    `**How to Enable & View:**\n` +
+                    `1. **In Servers:** An Administrator must run \`${prefix}nsfw on\` inside a channel marked as **Age-Restricted (NSFW)** in Discord settings.\n` +
+                    `2. **In DMs:** Run \`${prefix}nsfw dms on\` in Direct Messages.\n` +
+                    `3. **Ask AI:** Run \`${prefix}nsfw info\` for an AI breakdown of features.`
+                );
+            return embed;
+        }
+
+        embed.setColor('#FF1493')
+            .setTitle('🔞 Mature & Anime NSFW Commands (14 Commands)')
+            .setDescription(
+                `**⚙️ Configuration & AI:**\n` +
+                `\`${prefix}nsfw on/off\`, \`${prefix}nsfw info\`, \`${prefix}nsfw dms on/off\`, \`${prefix}nsfwhelp\`\n\n` +
+                `**🌸 Anime & Waifu Art Galleries:**\n` +
+                `\`${prefix}waifu\`, \`${prefix}neko\`, \`${prefix}trap\`, \`${prefix}ecchi\`, \`${prefix}blowkiss\`\n\n` +
+                `**💋 Mature Anime Social Interactions:**\n` +
+                `\`${prefix}nsfwkiss\`, \`${prefix}nsfwhug\`, \`${prefix}spank\`, \`${prefix}nsfwlick\`, \`${prefix}nsfwtouch\`, \`${prefix}nsfwcuddle\`\n\n` +
+                `*Strict Discord Age-Restricted channel verification active!*`
+            );
     } else {
+        const totalCommands = isNsfw ? '165+' : '150+';
         embed.setTitle('🌟 Manager Bot & Starry Supreme Command Hub')
             .setDescription(
                 `Welcome to the ultimate Discord multi-feature bot!\n` +
                 `• **Default Prefix:** \`${prefix}\` *(Fixed standard prefix)*\n` +
-                `• **Total Commands:** \`150+\` across 6 categories\n` +
+                `• **Total Commands:** \`${totalCommands}\` across ${isNsfw ? '7' : '6'} categories\n` +
                 `• **Multi-Bot Clustering:** Active and synchronized\n` +
                 `• **Embed Buttons Lifetime:** High timing up to **1 Year**\n\n` +
                 `Select a category from the dropdown menu below or click the quick action buttons.`
@@ -79,34 +119,48 @@ function buildCategoryEmbed(catId, customPrefix) {
                 { name: '💰 Economy (16)', value: `\`${prefix}bal\`, \`${prefix}daily\`, \`${prefix}rank\``, inline: true },
                 { name: '🤖 Systems (15)', value: `\`${prefix}multibot\`, \`${prefix}giveaway\`, \`${prefix}ticketsetup\``, inline: true }
             );
+
+        if (isNsfw) {
+            embed.addFields({ name: '🔞 Mature & Anime (14)', value: `\`${prefix}nsfwkiss\`, \`${prefix}waifu\`, \`${prefix}nsfwhelp\``, inline: true });
+        }
     }
     return embed;
 }
 
-function createHelpComponents() {
+function createHelpComponents(isNsfw = false) {
+    const categories = getHelpCategories(isNsfw);
+
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId('help_select')
             .setPlaceholder('📂 Choose a command category...')
             .addOptions([
                 { label: 'Overview / Home', description: 'Main bot dashboard and quick stats', value: 'home', emoji: '🏠' },
-                ...helpCategories.map(c => ({ label: c.label, description: c.desc, value: c.id, emoji: c.emoji }))
+                ...categories.map(c => ({ label: c.label, description: c.desc, value: c.id, emoji: c.emoji }))
             ])
     );
 
-    const buttonsRow = new ActionRowBuilder().addComponents(
+    const buttons = [
         new ButtonBuilder().setCustomId('help_btn_music').setLabel('Music').setEmoji('🎵').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('help_btn_mod').setLabel('Mod').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('help_btn_social').setLabel('Social').setEmoji('🎭').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('help_btn_eco').setLabel('Economy').setEmoji('💰').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('help_btn_sys').setLabel('Multi-Bot').setEmoji('🤖').setStyle(ButtonStyle.Primary)
-    );
+        new ButtonBuilder().setCustomId('help_btn_util').setLabel('Utility').setEmoji('🛠️').setStyle(ButtonStyle.Secondary)
+    ];
+
+    if (isNsfw) {
+        buttons.push(new ButtonBuilder().setCustomId('help_btn_nsfw').setLabel('NSFW').setEmoji('🔞').setStyle(ButtonStyle.Danger));
+    } else {
+        buttons.push(new ButtonBuilder().setCustomId('help_btn_eco').setLabel('Economy').setEmoji('💰').setStyle(ButtonStyle.Secondary));
+    }
+
+    const buttonsRow = new ActionRowBuilder().addComponents(buttons);
 
     return [selectMenu, buttonsRow];
 }
 
 module.exports = {
-    helpCategories,
+    helpCategories: BASE_HELP_CATEGORIES,
+    getHelpCategories,
     buildCategoryEmbed,
     createHelpComponents
 };
