@@ -27,17 +27,25 @@ try {
         } else if (typeof options === 'number') {
             options = { family: 4 };
         }
-        origLookup(hostname, options, (err, address, family) => {
-            if (!err && address) {
-                dnsCache.set(hostname, { address, family: 4, timestamp: Date.now() });
-                return callback(null, address, 4);
+        const isAll = (typeof options === 'object' && options !== null && options.all);
+
+        origLookup(hostname, options, (err, res1, res2) => {
+            if (!err) {
+                if (isAll && Array.isArray(res1)) {
+                    const ipv4List = res1.filter(a => a.family === 4);
+                    return callback(null, ipv4List.length > 0 ? ipv4List : res1);
+                }
+                dnsCache.set(hostname, { address: res1, family: 4, timestamp: Date.now() });
+                return callback(null, res1, res2 || 4);
             }
-            // If DNS lookup threw transient ENOTFOUND/timeout, fall back to memory cache
             const cached = dnsCache.get(hostname);
             if (cached && (Date.now() - cached.timestamp < 3600000)) {
+                if (isAll) {
+                    return callback(null, [{ address: cached.address, family: 4 }]);
+                }
                 return callback(null, cached.address, 4);
             }
-            return callback(err, address, family);
+            return callback(err, res1, res2);
         });
     };
 } catch (e) {}
@@ -184,12 +192,7 @@ const client = new Client({
         retries: 5
     },
     ws: {
-        large_threshold: 50,
-        properties: {
-            os: 'android',
-            browser: 'Discord Android',
-            device: 'Discord Android'
-        }
+        large_threshold: 50
     }
 }); 
 
@@ -300,11 +303,21 @@ process.on('unhandledRejection', error => console.error('❌ Unhandled Promise R
 process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
 
 // 🛡️ High-Reliability Gateway Health Watchdog
+let gatewayAbnormalCount = 0;
 setInterval(() => {
-    if (client.isReady() && client.ws && client.ws.status !== 0) {
-        console.warn(`⚠️ [Watchdog] Gateway WebSocket status abnormal (${client.ws.status}). Monitoring connection...`);
+    if (client.ws) {
+        if (client.ws.status !== 0) {
+            gatewayAbnormalCount++;
+            console.warn(`⚠️ [Watchdog] Gateway WebSocket status abnormal (${client.ws.status}) [Check ${gatewayAbnormalCount}/3]`);
+            if (gatewayAbnormalCount >= 3) {
+                console.error('🛑 [Watchdog] Gateway WebSocket stuck in non-ready state for >45s. Initiating restart...');
+                process.exit(1);
+            }
+        } else {
+            gatewayAbnormalCount = 0;
+        }
     }
-}, 60000);
+}, 15000);
 
 client.once(Events.ClientReady, async () => {
     console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
@@ -383,7 +396,11 @@ const MODULE_INITIALIZERS = [
     { name: 'Anonymous Confession System', fn: () => require('./modules/confession.js')(client, app) },
     { name: 'Nitro & Giveaway Claim Sniffer', fn: () => require('./modules/nitroClaimDetector.js')(client, app) },
     { name: 'Developer DM Control Panel', fn: () => require('./modules/devPanel.js')(client, app) },
-    { name: 'Starry Pop Mascot Engine', fn: () => require('./modules/starryPop.js')(client, app) }
+    { name: 'Starry Pop Mascot Engine', fn: () => require('./modules/starryPop.js')(client, app) },
+    { name: 'Starlight Reminder Engine', fn: () => { const { initReminderWorker } = require('./modules/reminderEngine.js'); initReminderWorker(client); } },
+    { name: 'Celestial Starboard Engine', fn: () => { const { initStarboard } = require('./modules/starboardEngine.js'); initStarboard(client); } },
+    { name: 'Dynamic Orbit Voice Engine', fn: () => { const { initTempVoice } = require('./modules/tempVoice.js'); initTempVoice(client); } },
+    { name: 'Pinned Channel Sticky Notice Engine', fn: () => { const { initSticky } = require('./modules/stickyEngine.js'); initSticky(client); } }
 ];
 
 async function startBot() {
@@ -393,8 +410,19 @@ async function startBot() {
         process.exit(1);
     }
     try {
-        await mongoose.connect(process.env.MONGO_URI);
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+            maxPoolSize: 10
+        });
         console.log('🍃 Successfully connected to MongoDB Cloud!');
+
+        mongoose.connection.on('disconnected', () => {
+            console.warn('⚠️ MongoDB connection lost. Attempting auto-reconnect...');
+        });
+        mongoose.connection.on('reconnected', () => {
+            console.log('🍃 MongoDB reconnected successfully.');
+        });
 
         try {
             const bumpModule = require('./modules/bumpEngine.js');

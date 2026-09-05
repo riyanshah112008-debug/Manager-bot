@@ -20,9 +20,12 @@ class CommandContext {
         this.user = this.isSlash ? source.user : source.author;
         this.author = this.user;
         this.member = source.member;
-        this.guild = source.guild;
+        const isRealGuild = Boolean(source.guild);
+        this.inGuild = isRealGuild;
+        this.isDM = !isRealGuild || (source.channel && (typeof source.channel.isDMBased === 'function' ? source.channel.isDMBased() : source.channel.type === 1));
+        this.guild = isRealGuild ? source.guild : null;
+        this.guildId = isRealGuild ? source.guild.id : null;
         this.channel = source.channel;
-        this.guildId = source.guildId || (source.guild ? source.guild.id : null);
         this.channelId = source.channelId || (source.channel ? source.channel.id : null);
         
         this.interaction = this.isSlash ? source : null;

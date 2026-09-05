@@ -73,15 +73,33 @@ const commands = [
                     if (!player.currentTrack) {
                         await player.playNext();
                     }
+
+                    const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
+                    const totalDurationStr = formatTime(totalDurationMs);
+
+                    const previewTracks = result.tracks.slice(0, 3).map((t, idx) => {
+                        return `\`${idx + 1}.\` **[${(t.title || 'Track').substring(0, 45)}](${t.url || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` (\`${formatTime(t.duration)}\`)`;
+                    }).join('\n');
+                    const remainingCount = result.tracks.length > 3 ? `\n*... and **${result.tracks.length - 3}** more tracks*` : '';
+
                     const embed = new EmbedBuilder()
-                        .setColor(config.EMBED_COLORS.PRIMARY)
-                        .setTitle('📚 Playlist Loaded')
-                        .setDescription(`✅ Added **${result.tracks.length}** tracks from **${result.playlistName || 'Playlist'}** to queue!`)
-                        .addFields(
-                            { name: '🔠 Total Queue', value: `\`${player.queue.length}\` tracks`, inline: true },
-                            { name: '👤 Requester', value: `${ctx.user}`, inline: true }
+                        .setColor('#5865F2')
+                        .setAuthor({ 
+                            name: `📚 Playlist Enqueued • ${result.source || 'Online Stream'}`, 
+                            iconURL: ctx.user.displayAvatarURL({ dynamic: true }) 
+                        })
+                        .setTitle(result.playlistName ? result.playlistName.substring(0, 95) : 'Loaded Playlist')
+                        .setThumbnail(result.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+                        .setDescription(
+                            `✅ Added **${result.tracks.length}** tracks to the server queue!\n\n` +
+                            `👤 **Curator / Artist:** \`${result.author || 'Featured Artist'}\`\n` +
+                            `🕒 **Total Estimated Playtime:** \`${totalDurationStr}\`\n` +
+                            `🔠 **Queue Status:** Currently playing • \`${player.queue.length}\` songs in queue\n` +
+                            `🔊 **Mastering:** \`Empowering Hi-Fi Dynamic EQ Active\`\n\n` +
+                            `📝 **Upcoming Tracks Preview:**\n` +
+                            `${previewTracks}${remainingCount}`
                         )
-                        .setFooter({ text: 'High-Fidelity Audio Engine • Prefix: ,' })
+                        .setFooter({ text: `Requested by ${ctx.user.tag} • Prefix: ,`, iconURL: ctx.user.displayAvatarURL() })
                         .setTimestamp();
                     return ctx.reply({ embeds: [embed] });
                 } else {
@@ -92,13 +110,19 @@ const commands = [
                     } else {
                         player.queue.push(track);
                         const embed = new EmbedBuilder()
-                            .setColor(config.EMBED_COLORS.PRIMARY)
-                            .setAuthor({ name: 'Track Queued', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                            .setColor('#5865F2')
+                            .setAuthor({ name: 'Track Queued • Empowering Sound Active', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
                             .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
                             .setURL(track.url || 'https://discord.gg')
                             .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
-                            .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${formatTime(track.duration)}\`\n🔢 **Queue Position:** \`#${player.queue.length}\``)
-                            .setFooter({ text: 'Use ,queue to view playlist • Prefix: ,' })
+                            .setDescription(
+                                `👤 **Artist:** \`${track.author || 'Artist'}\`\n` +
+                                `🕒 **Duration:** \`${formatTime(track.duration)}\`\n` +
+                                `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
+                                `🌐 **Source:** \`${track.source || 'Studio Hi-Fi'}\`\n` +
+                                `🔊 **Sound Profile:** \`Empowering Master Dynamic EQ\``
+                            )
+                            .setFooter({ text: `Requested by ${ctx.user.tag} • Prefix: ,` })
                             .setTimestamp();
                         return ctx.reply({ embeds: [embed] });
                     }
@@ -356,6 +380,9 @@ const commands = [
 
             const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
             player.autoplay = !player.autoplay;
+            if (player.currentTrack && typeof player.sendNowPlayingPanel === 'function') {
+                await player.sendNowPlayingPanel(player.currentTrack, true).catch(() => {});
+            }
 
             return ctx.reply(`📻 Autoplay Smart Stream is now: **${player.autoplay ? '🟢 ENABLED' : '🔴 DISABLED'}**!`);
         }
@@ -364,9 +391,9 @@ const commands = [
     // 13. BASSBOOST
     {
         name: 'bassboost',
-        aliases: ['bb'],
+        aliases: ['bb', 'bass'],
         category: 'Music',
-        description: 'Apply deep low-frequency bass enhancement.',
+        description: 'Apply deep vibrating sub-bass (Original vocals & clarity intact).',
         usage: ',bassboost',
         async execute(ctx) {
             const guard = getVoiceGuard(ctx);
@@ -376,7 +403,45 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('bassboost');
-            return ctx.reply('🎸 **Applied Audio Filter: BASSBOOST (Heavy Bass)**');
+            return ctx.reply('📳 **Applied Audio Filter: TRUE VIBRATION BASS (Original Clarity Intact)**');
+        }
+    },
+
+    // 13B. DEEP BASS
+    {
+        name: 'deepbass',
+        aliases: ['db'],
+        category: 'Music',
+        description: 'Apply sub-bass low-end punch for EDM & hip-hop.',
+        usage: ',deepbass',
+        async execute(ctx) {
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('deepbass');
+            return ctx.reply('🔊 **Applied Audio Filter: DEEP 808 SUB-BASS (Hi-Fi Mastered)**');
+        }
+    },
+
+    // 13C. EARTHQUAKE VIBRATION
+    {
+        name: 'vibrate',
+        aliases: ['vibration', 'earthquake', 'subvibe'],
+        category: 'Music',
+        description: 'Maximum physical sub-bass rumble & ear vibration (Vocals protected).',
+        usage: ',vibrate',
+        async execute(ctx) {
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('vibrate');
+            return ctx.reply('🌋 **Applied Audio Filter: EARTHQUAKE VIBRATION (Max Sub-Bass Rumble • Vocals Intact)**');
         }
     },
 
@@ -851,6 +916,7 @@ const commands = [
             const sec = parseInt(ctx.args[0], 10);
             if (isNaN(sec) || sec < 0) return ctx.reply('❌ Please provide a valid timestamp in seconds! Example: `,seek 60`');
 
+            await player.seekTo(sec);
             return ctx.reply(`⏩ **Seeked playback to \`${formatTime(sec * 1000)}\`!**`);
         }
     },
@@ -883,6 +949,52 @@ const commands = [
             }
 
             return ctx.reply(`⚡ **Playback speed set to \`${val}x\`!**`);
+        }
+    },
+
+    // 34. SETUP MUSIC CONTROLLER
+    {
+        name: 'setup',
+        aliases: ['musicsetup', 'setcontroller', 'controller', 'requestchannel', 'setmusic'],
+        category: 'Music',
+        description: 'Deploy the dedicated Starry Music Controller channel where users send song names/links directly.',
+        usage: ',setup',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            const member = ctx.member;
+            const isOwner = config.BOT_OWNERS?.includes(ctx.user?.id);
+            const hasPerm = member?.permissions?.has(PermissionFlagsBits.ManageGuild) || member?.permissions?.has(PermissionFlagsBits.Administrator) || isOwner;
+
+            if (!hasPerm) {
+                return ctx.reply('❌ You need the **Manage Server** permission to deploy the Music Controller.');
+            }
+
+            await ctx.defer();
+
+            const musicController = require('../../modules/musicController');
+            try {
+                const { channel } = await musicController.setupChannel(ctx.guild, ctx.user, ctx.client);
+
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle('🎵 Starry Music Controller Deployed!')
+                    .setDescription(
+                        `Successfully set up your dedicated music request channel: <#${channel.id}>\n\n` +
+                        `✨ **How to use:**\n` +
+                        `• Join any voice channel in this server\n` +
+                        `• Go to <#${channel.id}>\n` +
+                        `• Type any song title or link (Spotify, SoundCloud, YouTube, etc.)\n` +
+                        `• The bot will instantly play it and keep the channel clean!\n\n` +
+                        `🎛️ **Interactive Controls:**\n` +
+                        `Use the button controller in <#${channel.id}> to pause, skip, adjust volume, toggle True Vibration Bass, and manage your session.`
+                    )
+                    .setFooter({ text: 'Starry Controller System' });
+
+                return ctx.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error('❌ Error setting up music channel:', err);
+                return ctx.reply(`⚠️ Failed to setup music controller: \`${err.message}\``);
+            }
         }
     }
 ];

@@ -1,8 +1,10 @@
 // ==========================================
-// 🔞 STARRY MATURE, ANIME & MASCOT COMMAND SUITE (18 COMMANDS)
+// 🔞 STARRY MATURE, ANIME & MASCOT COMMAND SUITE (20+ COMMANDS)
 // File Path: src/commands/bundles/nsfwCommands.js
-// 100% Default OFF • Hidden When Inactive • Nekotina-Style Mascot & Mature System
-// Anime Waifus, Nekos, Romantic Gifs & NSFW Social Interactions
+// Server Owner & Bot Owners ONLY for Server Activation
+// Members Can Freely Enable / Disable in Direct Messages (DMs)
+// Strict Discord Age-Restricted (NSFW) Channel Verification
+// Anime Waifus, Nekos, Kitsunes, Husbandos, Romance GIFs & Nekotina-Style Roleplay
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -12,8 +14,16 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const ServerSettings = require('../../models/ServerSettings');
-const User = require('../../models/User');
-const { isNsfwAllowed, fetchAnimeImage, explainNsfwWithAI, dmNsfwUsers } = require('../../modules/nsfwModule');
+const UserSettings = require('../../models/UserSettings');
+const { 
+    canManageServerNsfw,
+    isNsfwAllowed, 
+    isNsfwDmEnabled,
+    setNsfwDmEnabled,
+    toggleNsfwDm,
+    fetchAnimeImage, 
+    explainNsfwWithAI 
+} = require('../../modules/nsfwModule');
 const { buildStarryCharacterCard, STARRY_MASCOT, generateStarryResponse } = require('../../utils/aiEngine');
 const config = require('../../config');
 
@@ -48,34 +58,43 @@ function getActionCount(action, u1, u2) {
 
 const NSFW_ACTION_GIFS = {
     kiss: [
-        'https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif',
-        'https://media.giphy.com/media/wO4cyRJ70KVtwSTKE3/giphy.gif',
-        'https://media.giphy.com/media/jR22gdcPiOLaE/giphy.gif',
-        'https://media.giphy.com/media/nyGFcsP0kAobm/giphy.gif'
+        'https://cdn.otakugifs.xyz/gifs/kiss/f8c5edf9aa62b175.gif',
+        'https://cdn.otakugifs.xyz/gifs/kiss/99c6d80ba787d40a.gif',
+        'https://cdn.otakugifs.xyz/gifs/kiss/a07b3bcb00751dae.gif',
+        'https://cdn.otakugifs.xyz/gifs/kiss/1ddfcffef8148cca.gif'
     ],
     hug: [
-        'https://media.giphy.com/media/od5H3PmEG5EVq/giphy.gif',
-        'https://media.giphy.com/media/lrr9rHuoJOE0w/giphy.gif',
-        'https://media.giphy.com/media/wnsgren9NtITS/giphy.gif',
-        'https://media.giphy.com/media/k95625LKWXPP2/giphy.gif'
+        'https://cdn.otakugifs.xyz/gifs/hug/c787d02e22435395.gif',
+        'https://cdn.otakugifs.xyz/gifs/hug/Fd7apEdG1m.gif',
+        'https://cdn.otakugifs.xyz/gifs/hug/52144ce42c01a39c.gif'
     ],
     spank: [
-        'https://media.giphy.com/media/Zau0yrl15oqdKURRnv/giphy.gif',
-        'https://media.giphy.com/media/Gf3AUz3eBNbTW/giphy.gif',
-        'https://media.giphy.com/media/mEtSQlxqBtWWA/giphy.gif'
+        'https://cdn.otakugifs.xyz/gifs/slap/8b4aad19774ed00c.gif',
+        'https://cdn.otakugifs.xyz/gifs/slap/IGraVDzh5b.gif',
+        'https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif'
     ],
     lick: [
-        'https://media.giphy.com/media/134BfF8UiBiVUc/giphy.gif',
-        'https://media.giphy.com/media/43Bbg5S2wTfQ145vpa/giphy.gif'
+        'https://cdn.otakugifs.xyz/gifs/lick/bd93022885fb1d22.gif',
+        'https://cdn.otakugifs.xyz/gifs/lick/d2eca216f3627926.gif'
     ],
     cuddle: [
-        'https://media.giphy.com/media/k95625LKWXPP2/giphy.gif',
-        'https://media.giphy.com/media/49mdjsMrH7oze/giphy.gif',
-        'https://media.giphy.com/media/4N1wOi78ZGzSB6aWm9/giphy.gif'
+        'https://cdn.otakugifs.xyz/gifs/cuddle/47fc5d0ee4f009aa.gif',
+        'https://cdn.otakugifs.xyz/gifs/cuddle/fa848a601c071d72.gif'
     ],
     touch: [
-        'https://media.giphy.com/media/ARSp9T7wwxNcs/giphy.gif',
-        'https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif'
+        'https://cdn.otakugifs.xyz/gifs/nuzzle/298ec4ae171e8473.gif',
+        'https://cdn.otakugifs.xyz/gifs/pat/d324b051f0bfe526.gif'
+    ],
+    suck: [
+        'https://cdn.otakugifs.xyz/gifs/lick/bd93022885fb1d22.gif',
+        'https://cdn.otakugifs.xyz/gifs/lick/d2eca216f3627926.gif'
+    ],
+    pinch: [
+        'https://cdn.otakugifs.xyz/gifs/pinch/08cb26d0dc270658.gif'
+    ],
+    smack: [
+        'https://cdn.otakugifs.xyz/gifs/smack/78c956974f371f70.gif',
+        'https://cdn.otakugifs.xyz/gifs/smack/Xhxvcdkcfx.gif'
     ]
 };
 
@@ -90,7 +109,7 @@ const commands = [
         name: 'nsfw',
         aliases: ['nsfwtoggle', 'mature', '18plus', 'nsfwconfig'],
         category: 'NSFW',
-        description: 'Configure, toggle, or ask AI to explain the Mature / Anime NSFW module.',
+        description: 'Configure, toggle, or ask AI about the Mature / Anime NSFW module.',
         usage: ',nsfw [on | off | info | ai | dms on | dms off]',
         async execute(ctx) {
             const sub = ctx.args[0]?.toLowerCase();
@@ -102,76 +121,142 @@ const commands = [
                 return ctx.reply({ embeds: [embed] });
             }
 
-            // 2. DM Opt-In Subcommands
+            // 2. DM Opt-In Subcommands (Available anywhere: in DMs or in a server)
             if (sub === 'dms' || sub === 'dm') {
                 const dmChoice = ctx.args[1]?.toLowerCase();
                 if (dmChoice === 'on' || dmChoice === 'enable') {
-                    dmNsfwUsers.add(ctx.user.id);
-                    return ctx.reply('🔞 **Mature Anime Mode Enabled in DMs!**\n*You have opted in to receive anime waifu and mature art in private DMs.*');
+                    await setNsfwDmEnabled(ctx.user.id, true);
+                    return ctx.reply('🔞 **Mature Anime Mode ENABLED in your DMs!**\n*You have opted in to receive anime waifu art and mature interactions in private Direct Messages.*');
                 } else if (dmChoice === 'off' || dmChoice === 'disable') {
-                    dmNsfwUsers.delete(ctx.user.id);
-                    return ctx.reply('🔒 **Mature Anime Mode Disabled in DMs.**');
+                    await setNsfwDmEnabled(ctx.user.id, false);
+                    return ctx.reply('🔒 **Mature Anime Mode DISABLED in your DMs.**');
                 } else {
-                    const status = dmNsfwUsers.has(ctx.user.id);
-                    return ctx.reply(`🔞 **DM Mature Status:** \`${status ? '🟢 ENABLED' : '🔴 DISABLED (Default)'}\`\n*Use \`,nsfw dms on\` or \`,nsfw dms off\` to toggle.*`);
+                    const status = await isNsfwDmEnabled(ctx.user.id);
+                    return ctx.reply(`🔞 **Your Personal DM Mature Status:** \`${status ? '🟢 ENABLED' : '🔴 DISABLED (Default)'}\`\n*Use \`,nsfw dms on\` or \`,nsfw dms off\` to toggle.*`);
                 }
             }
 
-            // 3. Server Toggles (Requires Administrator)
+            // 3. Direct Message Environment Handling
             if (!ctx.guild) {
-                return ctx.reply('💬 **You are in Direct Messages!**\n*Use `,nsfw dms on` or `,nsfw dms off` to toggle mature mode in DMs, or `,nsfw ai` to ask Starry AI about this module.*');
+                if (sub === 'on' || sub === 'enable') {
+                    await setNsfwDmEnabled(ctx.user.id, true);
+                    return ctx.reply('🔞 **Mature Anime Mode ENABLED in your DMs!**\n*You can now use mature anime commands and waifu/neko art in Direct Messages with Starry.*');
+                }
+                if (sub === 'off' || sub === 'disable') {
+                    await setNsfwDmEnabled(ctx.user.id, false);
+                    return ctx.reply('🔒 **Mature Anime Mode DISABLED in your DMs.**');
+                }
+
+                const dmStatus = await isNsfwDmEnabled(ctx.user.id);
+                const dmEmbed = new EmbedBuilder()
+                    .setColor(dmStatus ? '#FF69B4' : '#2B2D31')
+                    .setAuthor({ name: 'Starry • Direct Messages NSFW Settings', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                    .setTitle('🔞 Private DM Mature Settings')
+                    .setDescription(
+                        `**Your DM Status:** \`${dmStatus ? '🟢 ENABLED' : '🔴 DISABLED (Default)'}\`\n\n` +
+                        `You can independently enable or disable mature anime commands in your private DMs at any time!\n\n` +
+                        `• \`,nsfw on\` — Enable mature mode in DMs\n` +
+                        `• \`,nsfw off\` — Disable mature mode in DMs\n` +
+                        `• \`,nsfw info\` — Ask Starry AI about this module`
+                    )
+                    .setFooter({ text: 'Personal DM Preferences • Saved Permanently' })
+                    .setTimestamp();
+
+                const dmRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('nsfw_toggle_dm')
+                        .setLabel(dmStatus ? 'Disable DM NSFW' : 'Enable DM NSFW')
+                        .setStyle(dmStatus ? ButtonStyle.Danger : ButtonStyle.Success)
+                        .setEmoji('🔞'),
+                    new ButtonBuilder()
+                        .setCustomId('nsfw_ai_explain')
+                        .setLabel('🤖 Ask AI About NSFW')
+                        .setStyle(ButtonStyle.Primary)
+                        .setEmoji('✨')
+                );
+
+                return ctx.reply({ embeds: [dmEmbed], components: [dmRow] });
             }
 
+            // 4. Server Environment Handling (Strictly Server Owner & Bot Owners ONLY)
             let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: ctx.guild.id });
             }
 
-            const isAdmin = ctx.member?.permissions?.has(PermissionFlagsBits.Administrator) || config.BOT_OWNERS.includes(ctx.user.id);
+            const canManage = canManageServerNsfw(ctx.user.id, ctx.guild);
 
             if (sub === 'on' || sub === 'enable') {
-                if (!isAdmin) return ctx.reply('❌ **Administrator permission required** to enable NSFW module.');
+                if (!canManage) {
+                    return ctx.reply(
+                        `❌ **Permission Denied:** Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** have authority to enable the NSFW module in this server.`
+                    );
+                }
                 if (!settings.nsfw) settings.nsfw = {};
                 settings.nsfw.enabled = true;
                 await settings.save();
 
                 return ctx.reply(
                     `🔞 **NSFW Module ENABLED for ${ctx.guild.name}!**\n\n` +
-                    `> ⚠️ **Important:** Commands will **strictly execute in channels marked as Age-Restricted (NSFW)** in Discord channel settings.\n` +
+                    `> ⚠️ **Enforcement Notice:** Commands will **strictly execute in channels marked as Age-Restricted (NSFW)** in Discord channel settings.\n` +
                     `> 💡 *Ask AI about features:* \`,nsfw info\``
                 );
             }
 
             if (sub === 'off' || sub === 'disable') {
-                if (!isAdmin) return ctx.reply('❌ **Administrator permission required** to disable NSFW module.');
+                if (!canManage) {
+                    return ctx.reply(
+                        `❌ **Permission Denied:** Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** have authority to disable the NSFW module in this server.`
+                    );
+                }
                 if (!settings.nsfw) settings.nsfw = {};
                 settings.nsfw.enabled = false;
                 await settings.save();
 
-                return ctx.reply(`🔒 **NSFW Module DISABLED for ${ctx.guild.name}.** No mature commands can be executed and commands are hidden in help.`);
+                return ctx.reply(`🔒 **NSFW Module DISABLED for ${ctx.guild.name}.** No mature commands can be executed in this server.`);
             }
 
-            // 4. Default: Show Current Status & Interactive Control Panel
+            // 5. Default Server Control Panel
             const currentStatus = settings.nsfw?.enabled || false;
+            const userDmStatus = await isNsfwDmEnabled(ctx.user.id);
+
             const embed = new EmbedBuilder()
                 .setColor(currentStatus ? '#FF69B4' : '#2B2D31')
                 .setAuthor({ name: `${ctx.guild.name} • NSFW Settings`, iconURL: ctx.guild.iconURL({ dynamic: true }) })
                 .setTitle('🔞 Mature & Anime NSFW System')
                 .setDescription(
-                    `**Current Server Status:** \`${currentStatus ? '🟢 ACTIVE (Age-Restricted Channels Only)' : '🔴 DISABLED (Default for all servers)'}\`\n\n` +
-                    `The mature anime module is **100% disabled by default** to ensure server safety and family friendliness.\n\n` +
-                    `**Commands Available:**\n` +
-                    `• \`,nsfw on\` — Enable NSFW module for this server (Admin Only)\n` +
-                    `• \`,nsfw off\` — Disable NSFW module (Admin Only)\n` +
-                    `• \`,nsfw info\` — **Ask Starry AI** to explain what features are in this module\n` +
-                    `• \`,nsfw dms on/off\` — Toggle mature mode for your private DMs`
+                    `**Server Status:** \`${currentStatus ? '🟢 ACTIVE (Age-Restricted Channels Only)' : '🔴 DISABLED (Default for all servers)'}\`\n` +
+                    `**Server Owner:** <@${ctx.guild.ownerId}>\n` +
+                    `**Your Private DM Status:** \`${userDmStatus ? '🟢 ENABLED' : '🔴 DISABLED'}\`\n\n` +
+                    `🛡️ **Server Authorization Rule:**\n` +
+                    `Only the **Server Owner** or **Bot Owners** can toggle the NSFW module on or off for this server.\n\n` +
+                    `📩 **Individual DM Privacy:**\n` +
+                    `Members can independently enable or disable mature mode for their own Direct Messages using \`,nsfw dms on\` or the button below.\n\n` +
+                    `**Available Commands:**\n` +
+                    `• \`,nsfw on\` / \`,nsfw off\` — Toggle server NSFW *(Server Owner / Bot Owner only)*\n` +
+                    `• \`,nsfw dms on\` / \`,nsfw dms off\` — Toggle personal DM mature mode *(Any member)*\n` +
+                    `• \`,nsfw info\` — **Ask Starry AI** to explain everything in this module\n` +
+                    `• \`,nsfwhelp\` — View full index of mature commands and Nekotina roleplay`
                 )
                 .setFooter({ text: 'Strict Age-Restricted Verification Active • Prefix: ,' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('nsfw_ai_explain').setLabel('🤖 Ask AI About NSFW').setStyle(ButtonStyle.Primary).setEmoji('✨'),
-                new ButtonBuilder().setCustomId('nsfw_toggle_server').setLabel(currentStatus ? 'Disable NSFW' : 'Enable NSFW').setStyle(currentStatus ? ButtonStyle.Danger : ButtonStyle.Success).setEmoji('🔞')
+                new ButtonBuilder()
+                    .setCustomId('nsfw_toggle_server')
+                    .setLabel(currentStatus ? 'Disable Server NSFW' : 'Enable Server NSFW')
+                    .setStyle(currentStatus ? ButtonStyle.Danger : ButtonStyle.Success)
+                    .setEmoji('🔞'),
+                new ButtonBuilder()
+                    .setCustomId('nsfw_toggle_dm')
+                    .setLabel(userDmStatus ? 'Disable My DM NSFW' : 'Enable My DM NSFW')
+                    .setStyle(userDmStatus ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                    .setEmoji('📩'),
+                new ButtonBuilder()
+                    .setCustomId('nsfw_ai_explain')
+                    .setLabel('🤖 Ask Starry AI')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('✨')
             );
 
             return ctx.reply({ embeds: [embed], components: [row] });
@@ -191,10 +276,10 @@ const commands = [
             // A. Mood Subcommand
             if (sub === 'mood') {
                 const moods = [
-                    { name: '✨ Sparkly & Cheerful', desc: '“Feeling fantastic! Ready to spread stardust everywhere!” 🌟', gif: 'https://media.giphy.com/media/ye7OTQgwmVuNTYSS07/giphy.gif' },
-                    { name: '💖 Affectionate & Loving', desc: '“Thinking about all the wonderful people in this server!” ✨', gif: 'https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif' },
-                    { name: '🎵 Musical & Groovy', desc: '“Humming a celestial melody! Let\'s listen to music together!” 🎶', gif: 'https://media.giphy.com/media/wnsgren9NtITS/giphy.gif' },
-                    { name: '🌙 Cozy & Dreaming', desc: '“Watching the constellations twinkle softly in the cosmos...” 🌠', gif: 'https://media.giphy.com/media/k95625LKWXPP2/giphy.gif' }
+                    { name: '✨ Sparkly & Cheerful', desc: '“Feeling fantastic! Ready to spread stardust everywhere!” 🌟', gif: 'https://cdn.otakugifs.xyz/gifs/celebrate/d39e778bd0a7aa5c.gif' },
+                    { name: '💖 Affectionate & Loving', desc: '“Thinking about all the wonderful people in this server!” ✨', gif: 'https://cdn.otakugifs.xyz/gifs/cuddle/47fc5d0ee4f009aa.gif' },
+                    { name: '🎵 Musical & Groovy', desc: '“Humming a celestial melody! Let\'s listen to music together!” 🎶', gif: 'https://cdn.otakugifs.xyz/gifs/dance/67f70b7eb5c8309a.gif' },
+                    { name: '🌙 Cozy & Dreaming', desc: '“Watching the constellations twinkle softly in the cosmos...” 🌠', gif: 'https://cdn.otakugifs.xyz/gifs/sleep/b5beda61e06a315d.gif' }
                 ];
                 const currentMood = moods[Math.floor(Math.random() * moods.length)];
 
@@ -204,7 +289,7 @@ const commands = [
                     .setTitle(`🌟 Starry is feeling: ${currentMood.name}`)
                     .setDescription(`> *${currentMood.desc}*`)
                     .setImage(currentMood.gif)
-                    .setFooter({ text: 'Starry Mascot System • Type "starry starry" to cheer her up!' })
+                    .setFooter({ text: 'Starry Mascot System • Type "starry" to interact!' })
                     .setTimestamp();
 
                 return ctx.reply({ embeds: [embed] });
@@ -213,7 +298,7 @@ const commands = [
             // B. Affinity Subcommand
             if (sub === 'affinity' || sub === 'stats' || sub === 'friendship') {
                 const aff = getUserAffection(ctx.user.id);
-                const titles = ['Cosmic Acquantaince 🌠', 'Starlight Friend ⭐', 'Celestial Companion 🌟', 'Astral Best Friend 💫', 'Beloved Cosmic Soulmate 💖✨'];
+                const titles = ['Cosmic Acquaintance 🌠', 'Starlight Friend ⭐', 'Celestial Companion 🌟', 'Astral Best Friend 💫', 'Beloved Cosmic Soulmate 💖✨'];
                 const rankTitle = titles[Math.min(aff.level - 1, titles.length - 1)];
 
                 const embed = new EmbedBuilder()
@@ -248,7 +333,7 @@ const commands = [
                     .setColor('#FF69B4')
                     .setAuthor({ name: 'Starry-chan • Gift Received!', iconURL: STARRY_MASCOT.avatarURL })
                     .setDescription(`🎁 **${ctx.user.username} gave Starry a lovely gift!**\n\n> *${line}*\n\n📈 **Bond Increased:** \`+25 Affection Points\` *(Total: ${updated.points} 💖 • Level ${updated.level})*`)
-                    .setImage('https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif')
+                    .setImage('https://cdn.otakugifs.xyz/gifs/nom/vnbgxFWFHv.gif')
                     .setFooter({ text: 'Starry Affection System • Prefix: ,' })
                     .setTimestamp();
 
@@ -265,7 +350,7 @@ const commands = [
                         `Wielding the mythical **Starlight Nebula Quill**, she voyages across Discord servers to bring unbreakable security, high-resolution melodies, and sparkling joy to every traveler.\n\n` +
                         `*“Wherever there are friends gathered under the starry night sky, I will illuminate your path!”* ✨`
                     )
-                    .setImage('https://media.giphy.com/media/108M7gCS1JSoO4/giphy.gif')
+                    .setImage('https://cdn.otakugifs.xyz/gifs/celebrate/d39e778bd0a7aa5c.gif')
                     .setFooter({ text: 'Starry Canon Lore' });
 
                 return ctx.reply({ embeds: [embed] });
@@ -285,8 +370,14 @@ const commands = [
         usage: ',waifu',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
             if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **This channel is not marked as Age-Restricted (NSFW)!** Please use an NSFW channel or run `,nsfw info`.');
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*Please use an Age-Restricted (NSFW) channel or enable DM mature mode with `,nsfw dms on`.*');
             }
 
             const isMature = nsfwStatus === true;
@@ -311,8 +402,14 @@ const commands = [
         usage: ',neko',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
             if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **This channel is not marked as Age-Restricted (NSFW)!** Please use an NSFW channel.');
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*Please use an Age-Restricted (NSFW) channel.*');
             }
 
             const isMature = nsfwStatus === true;
@@ -329,7 +426,69 @@ const commands = [
         }
     },
 
-    // 5. TRAP (Anime Character Art)
+    // 5. KITSUNE (Anime Foxgirl Art)
+    {
+        name: 'kitsune',
+        category: 'NSFW',
+        description: 'Get an enchanting anime kitsune foxgirl artwork.',
+        usage: ',kitsune',
+        async execute(ctx) {
+            const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*Please use an Age-Restricted (NSFW) channel.*');
+            }
+
+            const imgUrl = await fetchAnimeImage('kitsune', nsfwStatus === true);
+
+            const embed = new EmbedBuilder()
+                .setColor('#FF9900')
+                .setTitle('🦊 Anime Kitsune Gallery')
+                .setImage(imgUrl)
+                .setFooter({ text: `Requested by ${ctx.user.username} • Starry Anime Suite` })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 6. HUSBANDO (Anime Husbando Art)
+    {
+        name: 'husbando',
+        category: 'NSFW',
+        description: 'Get a handsome anime husbando artwork.',
+        usage: ',husbando',
+        async execute(ctx) {
+            const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*Please use an Age-Restricted (NSFW) channel.*');
+            }
+
+            const imgUrl = await fetchAnimeImage('husbando', nsfwStatus === true);
+
+            const embed = new EmbedBuilder()
+                .setColor('#3498DB')
+                .setTitle('💫 Anime Husbando Gallery')
+                .setImage(imgUrl)
+                .setFooter({ text: `Requested by ${ctx.user.username} • Starry Anime Suite` })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 7. TRAP (Anime Character Art)
     {
         name: 'trap',
         category: 'NSFW',
@@ -337,8 +496,14 @@ const commands = [
         usage: ',trap',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
             if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **This channel is not marked as Age-Restricted (NSFW)!** Please use an NSFW channel.');
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*Please use an Age-Restricted (NSFW) channel.*');
             }
 
             const isMature = nsfwStatus === true;
@@ -355,7 +520,7 @@ const commands = [
         }
     },
 
-    // 6. BLOWKISS / KISS (Anime Romance Gifs)
+    // 8. BLOWKISS / KISS (Anime Romance Gifs)
     {
         name: 'blowkiss',
         aliases: ['kiss2'],
@@ -364,7 +529,7 @@ const commands = [
         usage: ',blowkiss [@user]',
         async execute(ctx) {
             const target = ctx.message?.mentions?.users?.first() || ctx.user;
-            const imgUrl = await fetchAnimeImage('kiss', false);
+            const imgUrl = await fetchAnimeImage('blowkiss', false);
 
             const embed = new EmbedBuilder()
                 .setColor('#FF79C6')
@@ -381,7 +546,7 @@ const commands = [
         }
     },
 
-    // 7. ECCHI (Anime Artwork - Strict NSFW Channel Only)
+    // 9. ECCHI (Anime Artwork - Strict NSFW Channel Only)
     {
         name: 'ecchi',
         category: 'NSFW',
@@ -389,8 +554,14 @@ const commands = [
         usage: ',ecchi',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **Access Denied**: The NSFW module is either disabled or this channel is not marked as Age-Restricted (NSFW) in Discord.\n*Ask an Admin to run `,nsfw on` in an NSFW channel.*');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command strictly requires a channel marked as Age-Restricted (NSFW) in Discord channel settings.*');
             }
 
             const imgUrl = await fetchAnimeImage('ecchi', true);
@@ -406,7 +577,7 @@ const commands = [
         }
     },
 
-    // 8. HENTAI (Mature Anime Gallery - Strict NSFW Channel Only)
+    // 10. HENTAI (Mature Anime Gallery - Strict NSFW Channel Only)
     {
         name: 'hentai',
         aliases: ['nsfwhentai'],
@@ -415,8 +586,14 @@ const commands = [
         usage: ',hentai',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **Access Denied**: The NSFW module is either disabled or this channel is not marked as Age-Restricted (NSFW) in Discord.\n*Ask an Admin to run `,nsfw on` in an NSFW channel.*');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature anime commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command strictly requires a channel marked as Age-Restricted (NSFW) in Discord channel settings.*');
             }
 
             const imgUrl = await fetchAnimeImage('hentai', true);
@@ -432,7 +609,7 @@ const commands = [
         }
     },
 
-    // 9. NSFW KISS (Passionate Romantic Anime Kiss)
+    // 11. NSFW KISS (Passionate Romantic Anime Kiss)
     {
         name: 'nsfwkiss',
         aliases: ['frenchkiss', 'deepkiss'],
@@ -441,8 +618,14 @@ const commands = [
         usage: ',nsfwkiss <@user>',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **NSFW Required:** This mature social command is only available in Age-Restricted channels when NSFW is enabled (\`,nsfw on\`).');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
             }
 
             const target = ctx.message?.mentions?.users?.first();
@@ -465,7 +648,7 @@ const commands = [
         }
     },
 
-    // 10. NSFW HUG (Tight Romantic Anime Embrace)
+    // 12. NSFW HUG (Tight Romantic Anime Embrace)
     {
         name: 'nsfwhug',
         aliases: ['warmhug', 'intimatehug'],
@@ -474,8 +657,14 @@ const commands = [
         usage: ',nsfwhug <@user>',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **NSFW Required:** This mature social command is only available in Age-Restricted channels when NSFW is enabled.');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
             }
 
             const target = ctx.message?.mentions?.users?.first();
@@ -498,7 +687,7 @@ const commands = [
         }
     },
 
-    // 11. SPANK (Playful Anime Spank)
+    // 13. SPANK (Playful Anime Spank - Nekotina Spicy Interaction)
     {
         name: 'spank',
         aliases: ['nsfwspank'],
@@ -507,8 +696,14 @@ const commands = [
         usage: ',spank <@user>',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **NSFW Required:** This mature social command is only available in Age-Restricted channels when NSFW is enabled.');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
             }
 
             const target = ctx.message?.mentions?.users?.first();
@@ -522,7 +717,7 @@ const commands = [
             const embed = new EmbedBuilder()
                 .setColor('#E91E63')
                 .setAuthor({ name: '🔞 Mature Anime Interaction', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
-                .setDescription(`👋 **${ctx.user.username}** playfully spanks **<@${target.id}>** for being naughty! 💢\n*Total spanks given: ${count} times!*`)
+                .setDescription(`👋 **${ctx.user.username}** playfully spanks **<@${target.id}>** for being naughty! 🍑💥\n*Total spanks given: ${count} times!*`)
                 .setImage(gif)
                 .setFooter({ text: 'Starry Mature Social • Prefix: ,' })
                 .setTimestamp();
@@ -531,7 +726,7 @@ const commands = [
         }
     },
 
-    // 12. NSFW LICK (Teasing Sensual Anime Lick)
+    // 14. NSFW LICK (Teasing Sensual Anime Lick - Nekotina Interaction)
     {
         name: 'nsfwlick',
         aliases: ['sensuallick'],
@@ -540,8 +735,14 @@ const commands = [
         usage: ',nsfwlick <@user>',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **NSFW Required:** This mature social command is only available in Age-Restricted channels when NSFW is enabled.');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
             }
 
             const target = ctx.message?.mentions?.users?.first();
@@ -564,7 +765,7 @@ const commands = [
         }
     },
 
-    // 13. NSFW TOUCH (Sensory Anime Touch)
+    // 15. NSFW TOUCH (Sensory Anime Touch / Caress)
     {
         name: 'nsfwtouch',
         aliases: ['caress'],
@@ -573,8 +774,14 @@ const commands = [
         usage: ',nsfwtouch <@user>',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **NSFW Required:** This mature social command is only available in Age-Restricted channels when NSFW is enabled.');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
             }
 
             const target = ctx.message?.mentions?.users?.first();
@@ -597,7 +804,7 @@ const commands = [
         }
     },
 
-    // 14. NSFW CUDDLE (Warm Bedtime Romance Cuddle)
+    // 16. NSFW CUDDLE (Warm Bedtime Romance Cuddle)
     {
         name: 'nsfwcuddle',
         aliases: ['bedcuddle', 'cozycuddle'],
@@ -606,8 +813,14 @@ const commands = [
         usage: ',nsfwcuddle <@user>',
         async execute(ctx) {
             const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply('🔞 **NSFW Required:** This mature social command is only available in Age-Restricted channels when NSFW is enabled.');
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
             }
 
             const target = ctx.message?.mentions?.users?.first();
@@ -630,7 +843,124 @@ const commands = [
         }
     },
 
-    // 15. NSFW HELP (Dedicated Help Menu for Mature Commands)
+    // 17. SUCK / NSFWSUCK (Nekotina Spicy Interaction)
+    {
+        name: 'nsfwsuck',
+        aliases: ['suck2', 'nibble'],
+        category: 'NSFW',
+        description: 'Intimately suck or nibble someone special in chat (NSFW Only).',
+        usage: ',nsfwsuck <@user>',
+        async execute(ctx) {
+            const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
+            }
+
+            const target = ctx.message?.mentions?.users?.first();
+            if (!target || target.id === ctx.user.id) {
+                return ctx.reply('🍭 **Please mention someone to nibble!** *Example: `,nsfwsuck @user`*');
+            }
+
+            const count = getActionCount('suck', ctx.user.id, target.id);
+            const gif = getRandomNsfwGif('suck');
+
+            const embed = new EmbedBuilder()
+                .setColor('#FF69B4')
+                .setAuthor({ name: '🔞 Mature Anime Interaction', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`🍭 **${ctx.user.username}** teasingly sucks and nibbles on **<@${target.id}>**! 💕\n*Shared together ${count} times!* ✨`)
+                .setImage(gif)
+                .setFooter({ text: 'Starry Mature Suite • Prefix: ,' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 18. PINCH / NSFWPINCH (Nekotina Interaction)
+    {
+        name: 'nsfwpinch',
+        aliases: ['pinch2'],
+        category: 'NSFW',
+        description: 'Give a teasing anime pinch to someone special (NSFW Only).',
+        usage: ',nsfwpinch <@user>',
+        async execute(ctx) {
+            const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
+            }
+
+            const target = ctx.message?.mentions?.users?.first();
+            if (!target || target.id === ctx.user.id) {
+                return ctx.reply('🤏 **Please mention someone to pinch!** *Example: `,nsfwpinch @user`*');
+            }
+
+            const count = getActionCount('pinch', ctx.user.id, target.id);
+            const gif = getRandomNsfwGif('pinch');
+
+            const embed = new EmbedBuilder()
+                .setColor('#E67E22')
+                .setAuthor({ name: '🔞 Mature Anime Interaction', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`🤏 **${ctx.user.username}** cheekily pinches **<@${target.id}>**! 💢\n*Pinched ${count} times!*`)
+                .setImage(gif)
+                .setFooter({ text: 'Starry Mature Suite • Prefix: ,' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 19. SMACK / SMACK2 (Nekotina Interaction)
+    {
+        name: 'nsfwsmack',
+        aliases: ['smack2'],
+        category: 'NSFW',
+        description: 'Dramatically smack someone in chat (NSFW Only).',
+        usage: ',nsfwsmack <@user>',
+        async execute(ctx) {
+            const nsfwStatus = await isNsfwAllowed(ctx);
+            if (nsfwStatus === false) {
+                if (!ctx.guild) {
+                    return ctx.reply('🔒 **Mature Mode is Disabled in your DMs!**\n*Run `,nsfw dms on` to enable mature commands in private DMs.*');
+                }
+                return ctx.reply(`🔒 **NSFW Module is Disabled for this Server!**\n*Only the **Server Owner** (<@${ctx.guild.ownerId}>) or **Bot Owners** can enable it with \`,nsfw on\`.*`);
+            }
+            if (nsfwStatus === 'CHANNEL_NOT_NSFW') {
+                return ctx.reply('🔞 **Age-Restricted Channel Required!**\n*This mature command requires a channel marked as Age-Restricted (NSFW).*');
+            }
+
+            const target = ctx.message?.mentions?.users?.first();
+            if (!target || target.id === ctx.user.id) {
+                return ctx.reply('💥 **Please mention someone to smack!** *Example: `,nsfwsmack @user`*');
+            }
+
+            const count = getActionCount('smack', ctx.user.id, target.id);
+            const gif = getRandomNsfwGif('smack');
+
+            const embed = new EmbedBuilder()
+                .setColor('#E74C3C')
+                .setAuthor({ name: '🔞 Mature Anime Interaction', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                .setDescription(`💥 **${ctx.user.username}** forcefully smacks **<@${target.id}>**! 💢\n*Smacked ${count} times!*`)
+                .setImage(gif)
+                .setFooter({ text: 'Starry Mature Suite • Prefix: ,' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 20. NSFW HELP (Dedicated Help Menu for Mature Commands)
     {
         name: 'nsfwhelp',
         aliases: ['maturehelp', '18plushelp'],
@@ -638,36 +968,56 @@ const commands = [
         description: 'View the complete list of mature and anime NSFW commands.',
         usage: ',nsfwhelp',
         async execute(ctx) {
-            const nsfwStatus = await isNsfwAllowed(ctx);
-            if (!nsfwStatus || nsfwStatus === 'CHANNEL_NOT_NSFW') {
-                return ctx.reply(
-                    '🔒 **Mature Commands are Hidden:**\n' +
-                    'The NSFW module is currently disabled. To view and use these commands:\n' +
-                    '1. In a Server: An Admin must run `,nsfw on` in an Age-Restricted (NSFW) channel.\n' +
-                    '2. In DMs: Run `,nsfw dms on`.\n' +
-                    '3. Ask AI: Run `,nsfw info` to learn more.'
-                );
+            const isGuild = Boolean(ctx.guild);
+            let isAllowed = false;
+
+            if (!isGuild) {
+                isAllowed = await isNsfwDmEnabled(ctx.user.id);
+            } else {
+                let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
+                isAllowed = Boolean(settings?.nsfw?.enabled);
             }
 
             const embed = new EmbedBuilder()
                 .setColor('#FF1493')
-                .setAuthor({ name: '🔞 Starry Mature & Anime NSFW Commands', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
-                .setTitle('🔞 Complete Mature Anime & Social Suite (18 Commands)')
+                .setAuthor({ name: '🔞 Starry Mature & Anime NSFW System', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
+                .setTitle('🔞 Complete Mature Anime & Nekotina Roleplay Suite')
                 .setDescription(
-                    `**⚙️ Configuration & AI:**\n` +
-                    `\`${config.DEFAULT_PREFIX}nsfw on/off\`, \`${config.DEFAULT_PREFIX}nsfw info\`, \`${config.DEFAULT_PREFIX}nsfw dms on/off\`, \`${config.DEFAULT_PREFIX}nsfwhelp\`\n\n` +
-                    `**🌸 Anime & Waifu Art Galleries:**\n` +
-                    `\`${config.DEFAULT_PREFIX}waifu\`, \`${config.DEFAULT_PREFIX}neko\`, \`${config.DEFAULT_PREFIX}trap\`, \`${config.DEFAULT_PREFIX}ecchi\`, \`${config.DEFAULT_PREFIX}hentai\`, \`${config.DEFAULT_PREFIX}blowkiss\`\n\n` +
-                    `**💋 Mature Anime Social Interactions:**\n` +
-                    `\`${config.DEFAULT_PREFIX}nsfwkiss\`, \`${config.DEFAULT_PREFIX}nsfwhug\`, \`${config.DEFAULT_PREFIX}spank\`, \`${config.DEFAULT_PREFIX}nsfwlick\`, \`${config.DEFAULT_PREFIX}nsfwtouch\`, \`${config.DEFAULT_PREFIX}nsfwcuddle\`\n\n` +
-                    `**🌟 Mascot & Affinity (Nekotina Style):**\n` +
-                    `\`${config.DEFAULT_PREFIX}starry\`, \`${config.DEFAULT_PREFIX}starry mood\`, \`${config.DEFAULT_PREFIX}starry affinity\`, \`${config.DEFAULT_PREFIX}starry gift\`, \`${config.DEFAULT_PREFIX}starry lore\`\n\n` +
-                    `*All mature commands strictly enforce Discord Age-Restricted channel verification.*`
+                    `**🛡️ Activation & Authorization:**\n` +
+                    `• **Server Activation:** Restricted strictly to the **Server Owner** (<@${ctx.guild?.ownerId || 'Owner'}>) and **Bot Owners**.\n` +
+                    `• **Server Command:** \`${config.DEFAULT_PREFIX}nsfw on\` / \`${config.DEFAULT_PREFIX}nsfw off\`\n` +
+                    `• **Personal DM Activation:** Any member can opt in/out: \`${config.DEFAULT_PREFIX}nsfw dms on\` / \`${config.DEFAULT_PREFIX}nsfw dms off\`\n` +
+                    `• **Channel Rule:** In servers, commands **strictly execute in Discord channels marked as Age-Restricted (NSFW)**.\n\n` +
+                    `**🌸 Anime Art Galleries:**\n` +
+                    `\`${config.DEFAULT_PREFIX}waifu\`, \`${config.DEFAULT_PREFIX}neko\`, \`${config.DEFAULT_PREFIX}kitsune\`, \`${config.DEFAULT_PREFIX}husbando\`, \`${config.DEFAULT_PREFIX}trap\`, \`${config.DEFAULT_PREFIX}ecchi\`, \`${config.DEFAULT_PREFIX}hentai\`, \`${config.DEFAULT_PREFIX}blowkiss\`\n\n` +
+                    `**💋 Mature Social & Romantic Interactions:**\n` +
+                    `\`${config.DEFAULT_PREFIX}nsfwkiss\`, \`${config.DEFAULT_PREFIX}nsfwhug\`, \`${config.DEFAULT_PREFIX}spank\`, \`${config.DEFAULT_PREFIX}nsfwlick\`, \`${config.DEFAULT_PREFIX}nsfwtouch\`, \`${config.DEFAULT_PREFIX}nsfwcuddle\`, \`${config.DEFAULT_PREFIX}nsfwsuck\`, \`${config.DEFAULT_PREFIX}nsfwpinch\`, \`${config.DEFAULT_PREFIX}nsfwsmack\`\n\n` +
+                    `**🎭 All-Ages Nekotina Roleplay (Usable in Any Channel):**\n` +
+                    `\`${config.DEFAULT_PREFIX}hug\`, \`${config.DEFAULT_PREFIX}kiss\`, \`${config.DEFAULT_PREFIX}pat\`, \`${config.DEFAULT_PREFIX}cuddle\`, \`${config.DEFAULT_PREFIX}bite\`, \`${config.DEFAULT_PREFIX}lick\`, \`${config.DEFAULT_PREFIX}pinch\`, \`${config.DEFAULT_PREFIX}smack\`, \`${config.DEFAULT_PREFIX}suck\`, \`${config.DEFAULT_PREFIX}nom\`, \`${config.DEFAULT_PREFIX}slap\`, \`${config.DEFAULT_PREFIX}poke\`, \`${config.DEFAULT_PREFIX}punch\`, \`${config.DEFAULT_PREFIX}tickle\`, \`${config.DEFAULT_PREFIX}highfive\`\n\n` +
+                    `**🌟 Mascot System (Nekotina Persona Style):**\n` +
+                    `\`${config.DEFAULT_PREFIX}starry\`, \`${config.DEFAULT_PREFIX}starry mood\`, \`${config.DEFAULT_PREFIX}starry affinity\`, \`${config.DEFAULT_PREFIX}starry gift\`, \`${config.DEFAULT_PREFIX}starry lore\``
                 )
                 .setFooter({ text: 'Starry Mature Suite • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 21. TOGGLE NSFW DM
+    {
+        name: 'togglensfwdm',
+        aliases: ['dmtoggle', 'nsfwdmtoggle'],
+        category: 'NSFW',
+        description: 'Quick toggle for Mature Anime Mode in your private Direct Messages (DMs).',
+        usage: ',togglensfwdm',
+        async execute(ctx) {
+            const newState = await toggleNsfwDm(ctx.user.id);
+            return ctx.reply(
+                newState
+                    ? '🔞 **Mature Anime Mode ENABLED in your DMs!**\n*You can now use mature anime commands (waifu, hentai, ecchi, etc.) in Direct Messages with Starry.*'
+                    : '🔒 **Mature Anime Mode DISABLED in your DMs.**'
+            );
         }
     }
 ];

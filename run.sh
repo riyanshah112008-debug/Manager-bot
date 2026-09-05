@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
@@ -18,6 +18,21 @@ fi
 if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     echo "[*] Creating .env from template..."
     cp .env.example .env
+fi
+
+TOKEN=$(grep -E "^(TOKEN|BOT_TOKEN|DISCORD_TOKEN)=" .env 2>/dev/null | cut -d '=' -f2- | tr -d ' "\r\n')
+MONGO_URI=$(grep -E "^MONGO_URI=" .env 2>/dev/null | cut -d '=' -f2- | tr -d ' "\r\n')
+
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "your_primary_bot_token_here" ] || [ "$TOKEN" = "your_primary_bot_token" ]; then
+    echo "⚠️ [CONFIG REQUIRED] Please configure your Discord Bot TOKEN in .env!"
+    echo "💡 Edit .env and set: TOKEN=your_bot_token"
+    exit 1
+fi
+
+if [ -z "$MONGO_URI" ] || [[ "$MONGO_URI" == *"username:password"* ]]; then
+    echo "⚠️ [CONFIG REQUIRED] Please configure your MongoDB MONGO_URI in .env!"
+    echo "💡 Edit .env and set: MONGO_URI=mongodb+srv://..."
+    exit 1
 fi
 
 # 3. Auto-Install Dependencies

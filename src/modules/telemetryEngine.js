@@ -240,6 +240,8 @@ module.exports = (client) => {
     // ONLY runs if explicitly enabled by the owner via `,telemetry schedule 6h`
     setInterval(async () => {
         try {
+            const mongoose = require('mongoose');
+            if (!mongoose.connection || mongoose.connection.readyState !== 1) return;
             const scheduledGuilds = await GuildTelemetry.find({ 'autoSchedule.enabled': true });
             if (!scheduledGuilds || scheduledGuilds.length === 0) return;
 

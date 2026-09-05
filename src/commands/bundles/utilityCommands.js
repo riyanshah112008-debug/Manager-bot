@@ -11,7 +11,8 @@ const {
     StringSelectMenuBuilder,
     PermissionFlagsBits,
     AttachmentBuilder,
-    parseEmoji 
+    parseEmoji,
+    ChannelType 
 } = require('discord.js');
 const os = require('os');
 const config = require('../../config');
@@ -1209,6 +1210,646 @@ const commands = [
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 45. REMIND / REMINDME / REMINDER (Autonomous Starlight Reminder)
+    {
+        name: 'remind',
+        aliases: ['remindme', 'reminder', 'timer'],
+        category: 'Utility',
+        description: 'Set an automated starlight reminder in the current channel or via Direct Message.',
+        usage: ',remind <time> <message> | ,remind dm <time> <message> | ,remind list | ,remind cancel <id>',
+        async execute(ctx) {
+            const { createReminder, parseDuration, formatTimeRemaining } = require('../../modules/reminderEngine');
+            const Reminder = require('../../models/Reminder');
+
+            if (!ctx.args || ctx.args.length === 0) {
+                const guideEmbed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setAuthor({ name: '⏰ Starlight Reminder System', iconURL: ctx.client.user.displayAvatarURL({ dynamic: true }) })
+                    .setTitle('🔔 How to Use Celestial Reminders')
+                    .setDescription(
+                        `Never forget an important task, event, or timer! Starry will notify you automatically.\n\n` +
+                        `**Examples:**\n` +
+                        `• \`,remind 10m Check the oven\`\n` +
+                        `• \`,remind 2h Study for upcoming exam\`\n` +
+                        `• \`,remind 1d Submit report --dm\`\n` +
+                        `• \`,remind dm 30m Drink water\`\n\n` +
+                        `**Management Commands:**\n` +
+                        `• \`,reminders\` or \`,remind list\` — View active reminders\n` +
+                        `• \`,delreminder <id>\` or \`,remind cancel <id>\` — Cancel a reminder\n\n` +
+                        `*Supported units: \`s\` (seconds), \`m\` (minutes), \`h\` (hours), \`d\` (days).*`
+                    )
+                    .setFooter({ text: 'Starry Cosmic Reminders • Prefix: ,' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [guideEmbed] });
+            }
+
+            const sub = ctx.args[0].toLowerCase();
+
+            // Subcommand: List
+            if (sub === 'list' || sub === 'all') {
+                const rems = await Reminder.find({ userId: ctx.user.id, completed: false }).sort({ remindAt: 1 }).limit(15);
+                if (!rems || rems.length === 0) {
+                    return ctx.reply('📭 **You have no active reminders scheduled.** Set one with `,remind <time> <message>`!');
+                }
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setAuthor({ name: `${ctx.user.username}'s Active Reminders`, iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                    .setTitle(`⏰ Scheduled Reminders (${rems.length})`)
+                    .setDescription(
+                        rems.map((r, i) => {
+                            const ts = Math.floor(new Date(r.remindAt).getTime() / 1000);
+                            const dest = r.isDM ? 'Direct Message 📬' : `<#${r.channelId}> 💬`;
+                            return `\`${i + 1}.\` **<t:${ts}:R>** (<t:${ts}:f>) in ${dest}\n> 📝 **${r.message.slice(0, 75)}**\n> 🆔 \`${r._id}\``;
+                        }).join('\n\n')
+                    )
+                    .setFooter({ text: 'Cancel a reminder with: ,delreminder <id>' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // Subcommand: Cancel / Delete
+            if (sub === 'cancel' || sub === 'delete' || sub === 'del' || sub === 'remove') {
+                const targetId = ctx.args[1];
+                if (!targetId) return ctx.reply('❌ Please provide the Reminder ID to cancel. Use `,reminders` to check IDs.');
+                const deleted = await Reminder.findOneAndDelete({ _id: targetId, userId: ctx.user.id }).catch(() => null);
+                if (!deleted) return ctx.reply('❌ Reminder not found or it does not belong to you.');
+                return ctx.reply(`🗑️ **Reminder Cancelled:** Successfully removed reminder \`${targetId}\`.`);
+            }
+
+            // Parse reminder creation
+            let isDM = false;
+            let filteredArgs = ctx.args.filter(arg => {
+                const lower = arg.toLowerCase();
+                if (lower === 'dm' || lower === '--dm' || lower === '-dm') {
+                    isDM = true;
+                    return false;
+                }
+                return true;
+            });
+
+            // Strip leading filler words like "me in" or "in" or "me"
+            if (filteredArgs[0]?.toLowerCase() === 'me' && filteredArgs[1]?.toLowerCase() === 'in') {
+                filteredArgs = filteredArgs.slice(2);
+            } else if (filteredArgs[0]?.toLowerCase() === 'me' || filteredArgs[0]?.toLowerCase() === 'in') {
+                filteredArgs = filteredArgs.slice(1);
+            }
+
+            if (filteredArgs.length === 0) {
+                return ctx.reply('❌ Please specify a duration for your reminder, e.g. `,remind 15m take a break`');
+            }
+
+            let durationMs = parseDuration(filteredArgs[0]);
+            let textParts = [];
+
+            if (durationMs) {
+                textParts = filteredArgs.slice(1);
+            } else {
+                for (let i = 0; i < filteredArgs.length; i++) {
+                    const parsed = parseDuration(filteredArgs[i]);
+                    if (parsed) {
+                        durationMs = parsed;
+                        textParts = [...filteredArgs.slice(0, i), ...filteredArgs.slice(i + 1)];
+                        break;
+                    }
+                }
+            }
+
+            if (!durationMs) {
+                return ctx.reply('❌ Could not understand the time duration. Please use formats like `10s`, `15m`, `2h`, or `1d`.');
+            }
+
+            if (durationMs < 10000) {
+                return ctx.reply('❌ The minimum reminder duration is 10 seconds.');
+            }
+            if (durationMs > 365 * 24 * 60 * 60 * 1000) {
+                return ctx.reply('❌ The maximum reminder duration is 365 days.');
+            }
+
+            let reminderText = textParts.join(' ').trim();
+            if (reminderText.toLowerCase().startsWith('to ')) {
+                reminderText = reminderText.slice(3).trim();
+            }
+            if (!reminderText) reminderText = 'Celestial Reminder Alert!';
+
+            const reminder = await createReminder(
+                ctx.user.id,
+                ctx.guild?.id || null,
+                ctx.channel.id,
+                durationMs,
+                reminderText,
+                isDM
+            );
+
+            const fireTimestamp = Math.floor(reminder.remindAt.getTime() / 1000);
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setAuthor({ name: '⏰ Starlight Reminder Armed', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                .setTitle('🔔 Celestial Reminder Scheduled!')
+                .setDescription(
+                    `I will remind you about this in **${formatTimeRemaining(durationMs)}**!\n\n` +
+                    `> 📝 **Message:** ${reminderText}\n` +
+                    `> 🔔 **Remind At:** <t:${fireTimestamp}:F> (<t:${fireTimestamp}:R>)\n` +
+                    `> 📬 **Destination:** ${isDM ? 'Direct Messages (DM)' : `<#${ctx.channel.id}>`}\n` +
+                    `> 🆔 **Reminder ID:** \`${reminder._id}\``
+                )
+                .setFooter({ text: 'Starry Cosmic Reminders • Use ,reminders to view active reminders' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 46. REMINDERS (Active Reminders Explorer)
+    {
+        name: 'reminders',
+        aliases: ['myreminders', 'reminderlist'],
+        category: 'Utility',
+        description: 'List all of your active scheduled reminders.',
+        usage: ',reminders',
+        async execute(ctx) {
+            const Reminder = require('../../models/Reminder');
+            const rems = await Reminder.find({ userId: ctx.user.id, completed: false }).sort({ remindAt: 1 }).limit(15);
+            if (!rems || rems.length === 0) {
+                return ctx.reply('📭 **You have no active reminders scheduled.** Set one with `,remind <time> <message>`!');
+            }
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setAuthor({ name: `${ctx.user.username}'s Active Reminders`, iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                .setTitle(`⏰ Scheduled Reminders (${rems.length})`)
+                .setDescription(
+                    rems.map((r, i) => {
+                        const ts = Math.floor(new Date(r.remindAt).getTime() / 1000);
+                        const dest = r.isDM ? 'Direct Message 📬' : `<#${r.channelId}> 💬`;
+                        return `\`${i + 1}.\` **<t:${ts}:R>** (<t:${ts}:f>) in ${dest}\n> 📝 **${r.message.slice(0, 75)}**\n> 🆔 \`${r._id}\``;
+                    }).join('\n\n')
+                )
+                .setFooter({ text: 'Cancel a reminder with: ,delreminder <id>' })
+                .setTimestamp();
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 47. DELREMINDER (Cancel Reminder)
+    {
+        name: 'delreminder',
+        aliases: ['cancelreminder', 'removereminder', 'rmreminder'],
+        category: 'Utility',
+        description: 'Cancel and delete one of your active reminders.',
+        usage: ',delreminder <reminder_id>',
+        async execute(ctx) {
+            const targetId = ctx.args[0];
+            if (!targetId) return ctx.reply('❌ Please specify the Reminder ID to cancel. Check your IDs with `,reminders`.');
+            const Reminder = require('../../models/Reminder');
+            const deleted = await Reminder.findOneAndDelete({ _id: targetId, userId: ctx.user.id }).catch(() => null);
+            if (!deleted) return ctx.reply('❌ Reminder not found or it was not created by you.');
+            return ctx.reply(`🗑️ **Reminder Cancelled:** Successfully deleted reminder \`${targetId}\`.`);
+        }
+    },
+
+    // 48. STARBOARD (Celestial Showcase Configuration)
+    {
+        name: 'starboard',
+        aliases: ['starboardconfig', 'starboardsetup'],
+        category: 'Utility',
+        description: 'Configure or inspect the guild Celestial Starboard reaction showcase.',
+        usage: ',starboard setup <#channel> [stars] | ,starboard stars <count> | ,starboard toggle | ,starboard info',
+        async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('❌ This command can only be used inside a server.');
+            const { StarboardConfig } = require('../../models/StarboardConfig');
+            const sub = ctx.args[0]?.toLowerCase();
+
+            if (!sub || sub === 'info' || sub === 'status') {
+                const conf = await StarboardConfig.findOne({ guildId: ctx.guild.id });
+                const embed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setAuthor({ name: '⭐ Celestial Starboard Showcase', iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                    .setTitle(`Starboard Settings for ${ctx.guild.name}`)
+                    .setDescription(
+                        `The Starboard automatically pins community-highlighted messages that receive enough star reactions!\n\n` +
+                        `• **Status:** ${conf?.enabled ? '🟢 Active & Listening' : '🔴 Disabled'}\n` +
+                        `• **Showcase Channel:** ${conf?.channelId ? `<#${conf.channelId}>` : '*None configured*'}\n` +
+                        `• **Star Threshold:** \`${conf?.starCount || 3}\` ⭐\n\n` +
+                        `**Admin Commands:**\n` +
+                        `• \`,starboard setup #channel [threshold]\` — Set showcase channel\n` +
+                        `• \`,starboard stars <number>\` — Change required star count\n` +
+                        `• \`,starboard toggle\` — Enable or disable the starboard`
+                    )
+                    .setFooter({ text: 'Starry Starboard Engine' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            const isAdmin = ctx.member.permissions.has(PermissionFlagsBits.ManageGuild) || ctx.member.permissions.has(PermissionFlagsBits.Administrator) || config.BOT_OWNERS.includes(ctx.user.id);
+            if (!isAdmin) {
+                return ctx.reply('❌ You need the **Manage Server** or **Administrator** permission to modify starboard settings.');
+            }
+
+            if (sub === 'setup' || sub === 'set') {
+                const targetChannel = ctx.message?.mentions?.channels?.first() || ctx.guild.channels.cache.get(ctx.args[1]);
+                if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
+                    return ctx.reply('❌ Please specify a valid text channel for the starboard: `,starboard setup #starboard 3`');
+                }
+
+                let starCount = parseInt(ctx.args[2] || '3', 10);
+                if (isNaN(starCount) || starCount < 1) starCount = 3;
+                if (starCount > 25) starCount = 25;
+
+                const conf = await StarboardConfig.findOneAndUpdate(
+                    { guildId: ctx.guild.id },
+                    { channelId: targetChannel.id, starCount, enabled: true },
+                    { upsert: true, new: true }
+                );
+
+                const embed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('✅ Celestial Starboard Configured!')
+                    .setDescription(
+                        `• **Showcase Channel:** <#${conf.channelId}>\n` +
+                        `• **Required Stars:** \`${conf.starCount}\` ⭐ reactions\n` +
+                        `• **Status:** 🟢 Active\n\n` +
+                        `Whenever any message receives **${conf.starCount}** ⭐ reactions, it will automatically be featured with interactive jump links!`
+                    )
+                    .setFooter({ text: 'Starry Reaction Showcase' });
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            if (sub === 'stars' || sub === 'threshold' || sub === 'count') {
+                const count = parseInt(ctx.args[1], 10);
+                if (isNaN(count) || count < 1 || count > 25) {
+                    return ctx.reply('❌ Please provide a valid star count between 1 and 25.');
+                }
+                const conf = await StarboardConfig.findOneAndUpdate(
+                    { guildId: ctx.guild.id },
+                    { starCount: count },
+                    { upsert: true, new: true }
+                );
+                return ctx.reply(`⭐ **Star Threshold Updated:** Messages now require **${conf.starCount}** star reactions to enter the showcase.`);
+            }
+
+            if (sub === 'toggle') {
+                const conf = await StarboardConfig.findOne({ guildId: ctx.guild.id });
+                const newState = !(conf?.enabled || false);
+                await StarboardConfig.findOneAndUpdate(
+                    { guildId: ctx.guild.id },
+                    { enabled: newState },
+                    { upsert: true, new: true }
+                );
+                return ctx.reply(`⭐ **Starboard Status:** ${newState ? '🟢 Enabled and active!' : '🔴 Disabled.'}`);
+            }
+
+            return ctx.reply('❌ Unknown subcommand. Use `,starboard info` to view settings.');
+        }
+    },
+
+    // 49. TEMPVOICE (Dynamic Join-to-Create Voice Hub)
+    {
+        name: 'tempvoice',
+        aliases: ['dynamicvoice', 'jointocreate', 'autovc'],
+        category: 'Utility',
+        description: 'Configure automated Join-to-Create dynamic orbit voice channels with interactive member controls.',
+        usage: ',tempvoice setup <#voiceChannel> | ,tempvoice toggle | ,tempvoice info',
+        async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('❌ This command can only be used inside a server.');
+            const TempVoiceConfig = require('../../models/TempVoiceConfig');
+            const sub = ctx.args[0]?.toLowerCase();
+
+            if (!sub || sub === 'info' || sub === 'status') {
+                const conf = await TempVoiceConfig.findOne({ guildId: ctx.guild.id });
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setAuthor({ name: '🎙️ Dynamic Orbit Voice Hub', iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                    .setTitle(`Dynamic Voice Settings for ${ctx.guild.name}`)
+                    .setDescription(
+                        `Dynamic Voice creates automatic temporary voice channels when members join the lobby channel and cleans them up when everyone leaves.\n\n` +
+                        `• **Status:** ${conf?.enabled ? '🟢 Active' : '🔴 Disabled'}\n` +
+                        `• **Lobby Channel:** ${conf?.lobbyChannelId ? `<#${conf.lobbyChannelId}>` : '*None configured*'}\n` +
+                        `• **Room Template:** \`${conf?.namingPattern || "🎧 {user}'s Orbit"}\`\n\n` +
+                        `**Admin Commands:**\n` +
+                        `• \`,tempvoice setup <#voiceChannel>\` — Set the Join-to-Create lobby channel\n` +
+                        `• \`,tempvoice toggle\` — Turn dynamic voice on/off`
+                    )
+                    .setFooter({ text: 'Starry Dynamic Voice Suite' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            const isAdmin = ctx.member.permissions.has(PermissionFlagsBits.ManageChannels) || ctx.member.permissions.has(PermissionFlagsBits.ManageGuild) || config.BOT_OWNERS.includes(ctx.user.id);
+            if (!isAdmin) {
+                return ctx.reply('❌ You need the **Manage Channels** or **Manage Server** permission to modify dynamic voice settings.');
+            }
+
+            if (sub === 'setup' || sub === 'set') {
+                const targetChannel = ctx.message?.mentions?.channels?.first() || ctx.guild.channels.cache.get(ctx.args[1]) || ctx.member.voice?.channel;
+                if (!targetChannel || targetChannel.type !== ChannelType.GuildVoice) {
+                    return ctx.reply('❌ Please mention or provide the ID of a voice channel to use as the Join-to-Create lobby, or join one and run `,tempvoice setup`.');
+                }
+
+                const conf = await TempVoiceConfig.findOneAndUpdate(
+                    { guildId: ctx.guild.id },
+                    { lobbyChannelId: targetChannel.id, categoryId: targetChannel.parentId, enabled: true },
+                    { upsert: true, new: true }
+                );
+
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setTitle('✅ Dynamic Orbit Voice Configured!')
+                    .setDescription(
+                        `• **Lobby Channel:** <#${conf.lobbyChannelId}>\n` +
+                        `• **Status:** 🟢 Active\n\n` +
+                        `Whenever a member joins <#${conf.lobbyChannelId}>, Starry will automatically create a private voice channel for them with interactive Lock 🔒, Unlock 🔓, Duo 👥, and Squad 🎮 controls!`
+                    )
+                    .setFooter({ text: 'Dynamic Voice Hub Armed' });
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            if (sub === 'toggle') {
+                const conf = await TempVoiceConfig.findOne({ guildId: ctx.guild.id });
+                const newState = !(conf?.enabled || false);
+                await TempVoiceConfig.findOneAndUpdate(
+                    { guildId: ctx.guild.id },
+                    { enabled: newState },
+                    { upsert: true, new: true }
+                );
+                return ctx.reply(`🎙️ **Dynamic Voice Status:** ${newState ? '🟢 Enabled and active!' : '🔴 Disabled.'}`);
+            }
+
+            return ctx.reply('❌ Unknown subcommand. Use `,tempvoice info` to check settings.');
+        }
+    },
+
+    // 50. TAG (Custom Guild Tags & Auto-Responders)
+    {
+        name: 'tag',
+        aliases: ['customtag', 'tagcmd'],
+        category: 'Utility',
+        description: 'Create, display, list, and manage custom server tags and shortcuts.',
+        usage: ',tag <name> | ,tag create <name> <content> | ,tag list | ,tag delete <name> | ,tag info <name>',
+        async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('❌ Tags can only be used inside a server.');
+            const Tag = require('../../models/Tag');
+
+            if (!ctx.args || ctx.args.length === 0) {
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setAuthor({ name: '🏷️ Server Custom Tags & Shortcuts', iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                    .setTitle('How to Use Tags')
+                    .setDescription(
+                        `Tags allow you to save reusable messages, rules, links, or text snippets for your community.\n\n` +
+                        `• \`,tag <name>\` — Display a saved tag\n` +
+                        `• \`,tag create <name> <content>\` — Create a new tag\n` +
+                        `• \`,tag list\` — View all server tags\n` +
+                        `• \`,tag info <name>\` — Inspect tag creator & usage statistics\n` +
+                        `• \`,tag delete <name>\` — Delete a tag (creator or mods)`
+                    )
+                    .setFooter({ text: 'Starry Tag Engine • Prefix: ,' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            const sub = ctx.args[0].toLowerCase();
+            const RESERVED = ['create', 'add', 'del', 'delete', 'remove', 'list', 'all', 'info', 'stats', 'help'];
+
+            if (sub === 'list' || sub === 'all') {
+                const tags = await Tag.find({ guildId: ctx.guild.id }).sort({ name: 1 }).limit(50);
+                if (!tags || tags.length === 0) {
+                    return ctx.reply('🏷️ **No tags have been created in this server yet.** Create one with `,tag create <name> <content>`!');
+                }
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setAuthor({ name: `Custom Tags for ${ctx.guild.name}`, iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                    .setTitle(`🏷️ Server Tags (${tags.length})`)
+                    .setDescription(
+                        tags.map(t => `• \`${t.name}\` — used \`${t.uses}\` times`).join('\n')
+                    )
+                    .setFooter({ text: 'Use ,tag <name> to view any tag' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            if (sub === 'create' || sub === 'add') {
+                const canManage = ctx.member.permissions.has(PermissionFlagsBits.ManageMessages) || config.BOT_OWNERS.includes(ctx.user.id);
+                if (!canManage) {
+                    return ctx.reply('❌ You need the **Manage Messages** permission to create server tags.');
+                }
+
+                const tagName = ctx.args[1]?.toLowerCase();
+                const tagContent = ctx.args.slice(2).join(' ');
+
+                if (!tagName || !tagContent) {
+                    return ctx.reply('❌ Usage: `,tag create <tag_name> <tag_content>`');
+                }
+                if (RESERVED.includes(tagName)) {
+                    return ctx.reply(`❌ \`${tagName}\` is a reserved command name and cannot be used as a tag.`);
+                }
+                if (tagName.length > 30) {
+                    return ctx.reply('❌ Tag names cannot exceed 30 characters.');
+                }
+
+                const existing = await Tag.findOne({ guildId: ctx.guild.id, name: tagName });
+                if (existing) {
+                    return ctx.reply(`❌ A tag named \`${tagName}\` already exists in this server!`);
+                }
+
+                await Tag.create({
+                    guildId: ctx.guild.id,
+                    name: tagName,
+                    content: tagContent,
+                    authorId: ctx.user.id,
+                    uses: 0
+                });
+
+                return ctx.reply(`✅ **Tag Created:** Successfully saved tag \`${tagName}\`! Display it anytime with \`,tag ${tagName}\`.`);
+            }
+
+            if (sub === 'delete' || sub === 'del' || sub === 'remove') {
+                const tagName = ctx.args[1]?.toLowerCase();
+                if (!tagName) return ctx.reply('❌ Please specify the tag to delete: `,tag delete <name>`');
+
+                const tag = await Tag.findOne({ guildId: ctx.guild.id, name: tagName });
+                if (!tag) return ctx.reply(`❌ Tag \`${tagName}\` not found in this server.`);
+
+                const canDelete = tag.authorId === ctx.user.id || ctx.member.permissions.has(PermissionFlagsBits.ManageMessages) || config.BOT_OWNERS.includes(ctx.user.id);
+                if (!canDelete) {
+                    return ctx.reply('❌ You can only delete tags you created, unless you have the **Manage Messages** permission.');
+                }
+
+                await Tag.deleteOne({ _id: tag._id });
+                return ctx.reply(`🗑️ **Tag Deleted:** Successfully removed tag \`${tagName}\`.`);
+            }
+
+            if (sub === 'info' || sub === 'stats') {
+                const tagName = ctx.args[1]?.toLowerCase();
+                if (!tagName) return ctx.reply('❌ Usage: `,tag info <tag_name>`');
+
+                const tag = await Tag.findOne({ guildId: ctx.guild.id, name: tagName });
+                if (!tag) return ctx.reply(`❌ Tag \`${tagName}\` not found.`);
+
+                const ts = Math.floor(new Date(tag.createdAt).getTime() / 1000);
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS.PRIMARY)
+                    .setTitle(`🏷️ Tag Information: ${tag.name}`)
+                    .addFields(
+                        { name: '👤 Creator', value: `<@${tag.authorId}>`, inline: true },
+                        { name: '📊 Total Uses', value: `\`${tag.uses}\` times`, inline: true },
+                        { name: '📅 Created', value: `<t:${ts}:R>`, inline: true }
+                    )
+                    .setFooter({ text: 'Starry Tag Engine' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            const tag = await Tag.findOneAndUpdate(
+                { guildId: ctx.guild.id, name: sub },
+                { $inc: { uses: 1 } },
+                { new: true }
+            );
+
+            if (tag) {
+                return ctx.reply({ content: tag.content });
+            }
+
+            return ctx.reply(`❌ Tag \`${sub}\` not found. Use \`,tag list\` to view all tags or \`,tag create ${sub} <content>\` to create it!`);
+        }
+    },
+
+    // 51. TAGS (Quick list shortcut)
+    {
+        name: 'tags',
+        aliases: ['server-tags'],
+        category: 'Utility',
+        description: 'View all saved tags for this server.',
+        usage: ',tags',
+        async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('❌ Tags can only be used inside a server.');
+            const Tag = require('../../models/Tag');
+            const tags = await Tag.find({ guildId: ctx.guild.id }).sort({ name: 1 }).limit(50);
+            if (!tags || tags.length === 0) {
+                return ctx.reply('🏷️ **No tags have been created in this server yet.** Create one with `,tag create <name> <content>`!');
+            }
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setAuthor({ name: `Custom Tags for ${ctx.guild.name}`, iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                .setTitle(`🏷️ Server Tags (${tags.length})`)
+                .setDescription(tags.map(t => `• \`${t.name}\` — used \`${t.uses}\` times`).join('\n'))
+                .setFooter({ text: 'Use ,tag <name> to view any tag' })
+                .setTimestamp();
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 52. STICKY / STICKYMESSAGE (Pinned Channel Notice Engine)
+    {
+        name: 'sticky',
+        aliases: ['stickymessage', 'stickynotice'],
+        category: 'Utility',
+        description: 'Pin a persistent notice to the bottom of the current channel that automatically stays at the bottom as members chat.',
+        usage: ',sticky set <message> | ,sticky remove | ,sticky list',
+        async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('❌ This command can only be used inside a server.');
+            const StickyMessage = require('../../models/StickyMessage');
+            const { setCachedSticky, deleteCachedSticky } = require('../../modules/stickyEngine');
+
+            const sub = ctx.args[0]?.toLowerCase();
+
+            if (!sub || sub === 'help') {
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setAuthor({ name: '📌 Pinned Sticky Notice System', iconURL: ctx.guild.iconURL({ dynamic: true }) })
+                    .setTitle('How to Use Sticky Notices')
+                    .setDescription(
+                        `Sticky messages stay automatically pinned at the bottom of a channel even when members chat!\n\n` +
+                        `• \`,sticky set <message>\` — Set a sticky notice in the current channel\n` +
+                        `• \`,sticky remove\` — Remove the sticky notice from this channel\n` +
+                        `• \`,sticky list\` — List all channels with active sticky notices\n\n` +
+                        `*Requires Manage Messages or Administrator permission.*`
+                    )
+                    .setFooter({ text: 'Starry Pinned Notice Engine' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            const canManage = ctx.member.permissions.has(PermissionFlagsBits.ManageMessages) || ctx.member.permissions.has(PermissionFlagsBits.Administrator) || config.BOT_OWNERS.includes(ctx.user.id);
+            if (!canManage) {
+                return ctx.reply('❌ You need the **Manage Messages** or **Administrator** permission to configure sticky notices.');
+            }
+
+            if (sub === 'list' || sub === 'all') {
+                const stickies = await StickyMessage.find({ guildId: ctx.guild.id });
+                if (!stickies || stickies.length === 0) {
+                    return ctx.reply('📌 **No channels in this server have an active sticky notice.** Set one with `,sticky set <message>`!');
+                }
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle(`📌 Active Sticky Notices in ${ctx.guild.name}`)
+                    .setDescription(
+                        stickies.map(s => `• <#${s.channelId}> — *" ${s.content.slice(0, 50)}${s.content.length > 50 ? '...' : ''} "*`).join('\n')
+                    )
+                    .setFooter({ text: 'Starry Sticky Engine' })
+                    .setTimestamp();
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            if (sub === 'remove' || sub === 'delete' || sub === 'del' || sub === 'clear') {
+                const existing = await StickyMessage.findOneAndDelete({ channelId: ctx.channel.id });
+                if (!existing) {
+                    return ctx.reply('❌ There is no active sticky notice in this channel.');
+                }
+                deleteCachedSticky(ctx.channel.id);
+                if (existing.lastMessageId) {
+                    try {
+                        const oldMsg = await ctx.channel.messages.fetch(existing.lastMessageId).catch(() => null);
+                        if (oldMsg) await oldMsg.delete().catch(() => {});
+                    } catch (e) {}
+                }
+                return ctx.reply('🗑️ **Sticky Notice Removed:** The sticky notice for this channel has been cleared.');
+            }
+
+            if (sub === 'set' || sub === 'add') {
+                const text = ctx.args.slice(1).join(' ');
+                if (!text || !text.trim()) {
+                    return ctx.reply('❌ Please provide the notice text: `,sticky set Remember to be respectful in this channel!`');
+                }
+
+                const previous = await StickyMessage.findOne({ channelId: ctx.channel.id });
+                if (previous && previous.lastMessageId) {
+                    try {
+                        const prevMsg = await ctx.channel.messages.fetch(previous.lastMessageId).catch(() => null);
+                        if (prevMsg) await prevMsg.delete().catch(() => {});
+                    } catch (e) {}
+                }
+
+                const noticeEmbed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setAuthor({ name: '📌 Pinned Channel Notice', iconURL: ctx.client.user.displayAvatarURL({ dynamic: true }) })
+                    .setDescription(text.trim())
+                    .setFooter({ text: 'Sticky Message • Starry Management' })
+                    .setTimestamp();
+
+                const sent = await ctx.channel.send({ embeds: [noticeEmbed] });
+
+                const doc = await StickyMessage.findOneAndUpdate(
+                    { channelId: ctx.channel.id },
+                    {
+                        guildId: ctx.guild.id,
+                        content: text.trim(),
+                        lastMessageId: sent.id,
+                        authorId: ctx.user.id
+                    },
+                    { upsert: true, new: true }
+                );
+
+                setCachedSticky(ctx.channel.id, doc);
+
+                if (ctx.isSlash) {
+                    return ctx.reply({ content: '✅ Sticky notice activated for this channel!', ephemeral: true });
+                }
+                return;
+            }
+
+            return ctx.reply('❌ Unknown sticky option. Use `,sticky set <message>`, `,sticky remove`, or `,sticky list`.');
         }
     }
 ];

@@ -468,7 +468,17 @@ commands.push(
     { name: 'daily', description: '🎁 Claim daily bonus credits ($500)' },
     { name: 'work', description: '💼 Work and earn money' },
     { name: 'slots', description: '🎰 Spin the casino slot machine', options: [{ name: 'bet', type: 4, required: false, description: 'Bet amount' }] },
-    { name: 'lyrics', description: '🎙️ Fetch lyrics for currently playing or specified song', options: [{ name: 'song', type: 3, required: false, description: 'Song title' }] }
+    { name: 'lyrics', description: '🎙️ Fetch lyrics for currently playing or specified song', options: [{ name: 'song', type: 3, required: false, description: 'Song title' }] },
+    { name: 'fish', description: '🎣 Cast your fishing rod to catch fish and aquatic treasures' },
+    { name: 'mine', description: '⛏️ Mine crystals, diamonds, and ores in the cavern' },
+    { name: 'inventory', description: '🎒 View items and treasures stored in your backpack', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
+    { name: 'sell', description: '💰 Sell gathered fish and minerals for cash credits', options: [{ name: 'item', type: 3, required: false, description: 'Item name or "all"' }] },
+    { name: 'profile', description: '👤 View complete Nekotina-style anime profile, marriage, and wealth', options: [{ name: 'user', type: 6, required: false, description: 'Target member' }] },
+    { name: 'marry', description: '💍 Propose marriage to another member', options: [{ name: 'user', type: 6, required: true, description: 'Member to marry' }] },
+    { name: 'divorce', description: '💔 End your current marriage' },
+    { name: 'ship', description: '💘 Calculate love compatibility between two members', options: [{ name: 'user', type: 6, required: true, description: 'First user' }, { name: 'user2', type: 6, required: false, description: 'Second user' }] },
+    { name: 'pet', description: '🐾 Manage, adopt, feed, and play with your companion pet', options: [{ name: 'action', type: 3, required: false, description: 'Action (adopt, feed, play)' }, { name: 'name', type: 3, required: false, description: 'Pet name or species' }] },
+    { name: 'anime', description: '📺 Search anime synopsis, scores, and episodes on AniList', options: [{ name: 'title', type: 3, required: true, description: 'Anime title' }] }
 );
 
 // 3. STRICT DEDUPLICATION ENGINE & USER APP ACTIVATION

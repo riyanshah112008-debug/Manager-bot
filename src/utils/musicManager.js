@@ -88,11 +88,48 @@ async function applyKazagumoFilter(player, filterName) {
             case 'bassboost':
                 await shoukakuPlayer.setFilters({
                     equalizer: [
-                        { band: 0, gain: 0.25 },
-                        { band: 1, gain: 0.20 },
-                        { band: 2, gain: 0.15 },
+                        { band: 0, gain: 0.28 },
+                        { band: 1, gain: 0.24 },
+                        { band: 2, gain: 0.16 },
+                        { band: 3, gain: 0.08 },
+                        { band: 5, gain: -0.06 },
+                        { band: 8, gain: 0.08 },
+                        { band: 9, gain: 0.12 },
+                        { band: 10, gain: 0.16 },
+                        { band: 11, gain: 0.12 },
+                        { band: 13, gain: 0.08 }
+                    ]
+                });
+                break;
+            case 'deepbass':
+                await shoukakuPlayer.setFilters({
+                    equalizer: [
+                        { band: 0, gain: 0.34 },
+                        { band: 1, gain: 0.28 },
+                        { band: 2, gain: 0.18 },
+                        { band: 3, gain: 0.08 },
+                        { band: 5, gain: -0.08 },
+                        { band: 8, gain: 0.10 },
+                        { band: 9, gain: 0.14 },
+                        { band: 10, gain: 0.18 },
+                        { band: 11, gain: 0.14 },
+                        { band: 13, gain: 0.10 }
+                    ]
+                });
+                break;
+            case 'vibrate':
+                await shoukakuPlayer.setFilters({
+                    equalizer: [
+                        { band: 0, gain: 0.38 },
+                        { band: 1, gain: 0.32 },
+                        { band: 2, gain: 0.20 },
                         { band: 3, gain: 0.10 },
-                        { band: 4, gain: 0.05 }
+                        { band: 5, gain: -0.10 },
+                        { band: 8, gain: 0.12 },
+                        { band: 9, gain: 0.16 },
+                        { band: 10, gain: 0.22 },
+                        { band: 11, gain: 0.16 },
+                        { band: 13, gain: 0.10 }
                     ]
                 });
                 break;

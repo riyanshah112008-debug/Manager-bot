@@ -138,12 +138,7 @@ class MultiBotManager {
                 retries: 5
             },
             ws: {
-                large_threshold: 50,
-                properties: {
-                    os: 'android',
-                    browser: 'Discord Android',
-                    device: 'Discord Android'
-                }
+                large_threshold: 50
             }
         });
 

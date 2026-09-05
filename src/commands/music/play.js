@@ -86,15 +86,32 @@ module.exports = {
           await player.playNext();
         }
 
+        const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
+        const totalDurationStr = formatTime(totalDurationMs);
+
+        const previewTracks = result.tracks.slice(0, 3).map((t, idx) => {
+          return `\`${idx + 1}.\` **[${(t.title || 'Track').substring(0, 45)}](${t.url || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` (\`${formatTime(t.duration)}\`)`;
+        }).join('\n');
+        const remainingCount = result.tracks.length > 3 ? `\n*... and **${result.tracks.length - 3}** more tracks*` : '';
+
         const embed = new EmbedBuilder()
-          .setColor(config.EMBED_COLORS.PRIMARY)
-          .setTitle('📚 Playlist Loaded')
-          .setDescription(`✅ Added **${result.tracks.length}** tracks from **${result.playlistName || 'Playlist'}** to queue!`)
-          .addFields(
-            { name: '🔠 Total Queue', value: `\`${player.queue.length}\` tracks`, inline: true },
-            { name: '👤 Requester', value: `${interaction.user}`, inline: true }
+          .setColor('#5865F2')
+          .setAuthor({ 
+            name: `📚 Playlist Enqueued • ${result.source || 'Online Stream'}`, 
+            iconURL: interaction.user.displayAvatarURL({ dynamic: true }) 
+          })
+          .setTitle(result.playlistName ? result.playlistName.substring(0, 95) : 'Loaded Playlist')
+          .setThumbnail(result.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+          .setDescription(
+            `✅ Added **${result.tracks.length}** tracks to the server queue!\n\n` +
+            `👤 **Curator / Artist:** \`${result.author || 'Featured Artist'}\`\n` +
+            `🕒 **Total Estimated Playtime:** \`${totalDurationStr}\`\n` +
+            `🔠 **Queue Status:** Currently playing • \`${player.queue.length}\` songs in queue\n` +
+            `🔊 **Mastering:** \`Empowering Hi-Fi Dynamic EQ Active\`\n\n` +
+            `📝 **Upcoming Tracks Preview:**\n` +
+            `${previewTracks}${remainingCount}`
           )
-          .setFooter({ text: 'Starry Native Audio Engine • Prefix: ,' })
+          .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,`, iconURL: interaction.user.displayAvatarURL() })
           .setTimestamp();
 
         const replyFunc = interaction.editReply || interaction.reply;
@@ -107,13 +124,19 @@ module.exports = {
         } else {
           player.queue.push(track);
           const embed = new EmbedBuilder()
-            .setColor(config.EMBED_COLORS.PRIMARY)
-            .setAuthor({ name: 'Track Queued', iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
+            .setColor('#5865F2')
+            .setAuthor({ name: 'Track Queued • Empowering Sound Active', iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
             .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
             .setURL(track.url || 'https://discord.gg')
-            .setThumbnail(track.thumbnail || 'https://i.imgur.com/8QJ8zuz.png')
-            .setDescription(`👤 **Author:** \`${track.author || 'Artist'}\`\n🕒 **Duration:** \`${formatTime(track.duration)}\`\n🔢 **Queue Position:** \`#${player.queue.length}\``)
-            .setFooter({ text: 'Use ,queue to view songs • Prefix: ,' })
+            .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+            .setDescription(
+              `👤 **Artist:** \`${track.author || 'Artist'}\`\n` +
+              `🕒 **Duration:** \`${formatTime(track.duration)}\`\n` +
+              `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
+              `🌐 **Source:** \`${track.source || 'Studio Hi-Fi'}\`\n` +
+              `🔊 **Sound Profile:** \`Empowering Master Dynamic EQ\``
+            )
+            .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,` })
             .setTimestamp();
 
           const replyFunc = interaction.editReply || interaction.reply;

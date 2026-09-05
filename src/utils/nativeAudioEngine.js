@@ -3,6 +3,7 @@
 // File Path: src/utils/nativeAudioEngine.js
 // Multi-Platform Search Resolver • Direct Stream Encoder • DSP Filters • 100% Host-Anywhere
 // ==========================================
+require('dotenv').config();
 const {
     joinVoiceChannel,
     createAudioPlayer,
@@ -15,7 +16,10 @@ const {
 const play = require('play-dl');
 const fetch = require('node-fetch');
 const spotify = require('spotify-url-info')(fetch);
+const fs = require('fs');
+const { execFile } = require('child_process');
 const prism = require('prism-media');
+const streamResolver = require('./streamResolverClient');
 const { 
     EmbedBuilder, 
     ActionRowBuilder, 
@@ -28,16 +32,68 @@ const config = require('../config');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
-// Audio DSP Filter FFmpeg argument definitions
+// Audio DSP Filter FFmpeg argument definitions (Studio Mastering with Dynamic Limiter - ZERO Crackling & 100% Intact Vocals)
 const FILTER_ARGS = {
-    clear: [],
-    bassboost: ['-af', 'equalizer=f=40:width_type=h:width=50:g=14,equalizer=f=80:width_type=h:width=50:g=10'],
-    '8d': ['-af', 'apulsator=hz=0.125'],
-    nightcore: ['-af', 'asetrate=48000*1.25,aresample=48000,atempo=1.0'],
-    daycore: ['-af', 'asetrate=48000*0.85,aresample=48000,atempo=1.0'],
-    vaporwave: ['-af', 'asetrate=48000*0.8,aresample=48000,atempo=0.9,aecho=0.8:0.88:60:0.4'],
-    treble: ['-af', 'equalizer=f=8000:width_type=h:width=1000:g=8,equalizer=f=12000:width_type=h:width=1000:g=10'],
-    pop: ['-af', 'equalizer=f=1000:width_type=h:width=500:g=5,equalizer=f=3000:width_type=h:width=1000:g=4']
+    clear: [
+        '-af',
+        'volume=0.95,' +
+        'bass=g=3.5:f=60:w=0.6,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-1.2,' +
+        'equalizer=f=1000:width_type=q:w=1.0:g=1.0,' +
+        'equalizer=f=3200:width_type=q:w=1.0:g=2.5,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
+        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
+    ],
+    empowering: [
+        '-af',
+        'volume=0.95,' +
+        'bass=g=3.5:f=60:w=0.6,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-1.2,' +
+        'equalizer=f=1000:width_type=q:w=1.0:g=1.0,' +
+        'equalizer=f=3200:width_type=q:w=1.0:g=2.5,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
+        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
+    ],
+    flat: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    bassboost: [
+        '-af',
+        'volume=0.92,' +
+        'bass=g=6.5:f=55:w=0.6,' +
+        'virtualbass=cutoff=150:strength=2.0,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-2.0,' +
+        'equalizer=f=800:width_type=q:w=1.0:g=1.5,' +
+        'equalizer=f=3200:width_type=q:w=1.0:g=3.5,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
+        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
+    ],
+    deepbass: [
+        '-af',
+        'volume=0.90,' +
+        'bass=g=8.0:f=50:w=0.6,' +
+        'virtualbass=cutoff=180:strength=2.2,' +
+        'equalizer=f=240:width_type=q:w=1.2:g=-2.5,' +
+        'equalizer=f=900:width_type=q:w=1.0:g=1.5,' +
+        'equalizer=f=3400:width_type=q:w=1.0:g=3.8,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=2.5,' +
+        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
+    ],
+    vibrate: [
+        '-af',
+        'volume=0.88,' +
+        'bass=g=10.0:f=46:w=0.65,' +
+        'virtualbass=cutoff=220:strength=2.6,' +
+        'equalizer=f=230:width_type=q:w=1.2:g=-3.0,' +
+        'equalizer=f=1000:width_type=q:w=1.0:g=2.0,' +
+        'equalizer=f=3500:width_type=q:w=1.0:g=4.2,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=2.5,' +
+        'alimiter=limit=0.98:attack=5:release=60:asc=true:level=false'
+    ],
+    '8d': ['-af', 'volume=0.95,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    nightcore: ['-af', 'volume=0.92,asetrate=48000*1.25,aresample=48000,atempo=1.0,equalizer=f=3200:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    daycore: ['-af', 'volume=0.94,asetrate=48000*0.85,aresample=48000,atempo=1.0,bass=g=3:f=60:w=0.6,equalizer=f=250:width_type=q:w=1.2:g=-1.5,equalizer=f=3200:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    vaporwave: ['-af', 'volume=0.92,asetrate=48000*0.82,aresample=48000,atempo=1.0,aecho=0.8:0.85:50:0.25,bass=g=4:f=70:w=0.7,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    treble: ['-af', 'volume=0.92,treble=g=5:f=8000:w=0.6,equalizer=f=12000:width_type=q:w=1.0:g=3.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    pop: ['-af', 'volume=0.95,equalizer=f=200:width_type=q:w=1.0:g=-1.5,equalizer=f=1000:width_type=q:w=1.0:g=2.0,equalizer=f=3200:width_type=q:w=1.0:g=4.0,equalizer=f=10000:width_type=q:w=1.0:g=2.5,crystalizer=i=1.2:c=0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false']
 };
 
 let scClientId = null;
@@ -56,6 +112,219 @@ async function refreshSoundCloudToken() {
     } catch (e) {}
 }
 refreshSoundCloudToken();
+
+// ==========================================
+// 🟢 OFFICIAL SPOTIFY API ENGINE
+// Powered by SPOTIFY_CLIENT_ID & SPOTIFY_CLIENT_SECRET
+// ==========================================
+class SpotifyEngine {
+    constructor() {
+        this.clientId = process.env.SPOTIFY_CLIENT_ID || '';
+        this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET || '';
+        this.token = null;
+        this.tokenExpiresAt = 0;
+    }
+
+    async getToken() {
+        if (this.token && Date.now() < this.tokenExpiresAt) return this.token;
+        if (!this.clientId || !this.clientSecret) return null;
+        try {
+            const auth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+            const res = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'grant_type=client_credentials'
+            });
+            const data = await res.json();
+            if (data.access_token) {
+                this.token = data.access_token;
+                this.tokenExpiresAt = Date.now() + ((data.expires_in || 3600) - 120) * 1000;
+                return this.token;
+            }
+        } catch (e) {
+            console.warn('⚠️ [Spotify Engine] Auth token error:', e.message || e);
+        }
+        return null;
+    }
+
+    async searchTracks(query, limit = 10) {
+        const token = await this.getToken();
+        if (!token) return [];
+        try {
+            const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            return data.tracks?.items || [];
+        } catch (e) {
+            console.warn('⚠️ [Spotify Engine] Search error:', e.message || e);
+            return [];
+        }
+    }
+
+    async getTrack(trackId) {
+        const token = await this.getToken();
+        if (!token) return null;
+        try {
+            const res = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) return await res.json();
+        } catch (e) {}
+        return null;
+    }
+
+    async getAlbum(albumId) {
+        const token = await this.getToken();
+        if (!token) return null;
+        try {
+            const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) return null;
+            const album = await res.json();
+            if (album && album.tracks && album.tracks.items) {
+                let nextUrl = album.tracks.next;
+                while (nextUrl && album.tracks.items.length < 300) {
+                    try {
+                        const nextRes = await fetch(nextUrl, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (!nextRes.ok) break;
+                        const nextData = await nextRes.json();
+                        if (nextData.items && nextData.items.length > 0) {
+                            album.tracks.items.push(...nextData.items);
+                            nextUrl = nextData.next;
+                        } else break;
+                    } catch (e) { break; }
+                }
+            }
+            return album;
+        } catch (e) {}
+        return null;
+    }
+
+    async getPlaylist(playlistId) {
+        const token = await this.getToken();
+        if (!token) return null;
+        try {
+            const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) return null;
+            const pl = await res.json();
+            if (pl && pl.tracks && pl.tracks.items) {
+                let nextUrl = pl.tracks.next;
+                while (nextUrl && pl.tracks.items.length < 300) {
+                    try {
+                        const nextRes = await fetch(nextUrl, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (!nextRes.ok) break;
+                        const nextData = await nextRes.json();
+                        if (nextData.items && nextData.items.length > 0) {
+                            pl.tracks.items.push(...nextData.items);
+                            nextUrl = nextData.next;
+                        } else break;
+                    } catch (e) { break; }
+                }
+            }
+            return pl;
+        } catch (e) {}
+        return null;
+    }
+
+    async getArtistTopTracks(artistId) {
+        const token = await this.getToken();
+        if (!token) return [];
+        try {
+            const res = await fetch(`https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                return data.tracks || [];
+            }
+        } catch (e) {}
+        return [];
+    }
+}
+
+const spotifyEngine = new SpotifyEngine();
+
+function scoreTrackMatch(candidate, targetDurationMs, queryTitle, targetArtist) {
+    let score = 100;
+    const name = candidate.name || candidate.title || '';
+    const lower = name.toLowerCase();
+    const qLower = (queryTitle || '').toLowerCase();
+    const artistLower = (targetArtist || '').toLowerCase();
+
+    // 1. Hard filters: preview snippets (SoundCloud Go+ <= 45s)
+    if ((candidate.durationInSec || 0) <= 45) return -1000;
+
+    // 2. Strict rejection of non-original markers unless explicitly in query
+    const nonOriginalBadWords = [
+        'cover', 'acapella', 'a capella', 'remix', 'slowed', 'reverb', 
+        'nightcore', 'daycore', 'mashup', 'lofi', 'lo-fi', 'instrumental', 
+        'karaoke', '8d', '16d', 'bass boosted', 'tribute', 'parody',
+        'audien', 'flip', 'bootleg', 'drill'
+    ];
+
+    for (const bad of nonOriginalBadWords) {
+        if (lower.includes(bad) && !qLower.includes(bad)) {
+            score -= 150;
+        }
+    }
+
+    // Penalize mashups like ' x ' or ' vs '
+    if ((lower.includes(' x ') || lower.includes(' vs ')) && !qLower.includes(' x ') && !qLower.includes(' vs ')) {
+        score -= 80;
+    }
+
+    // 3. Rewards for official / original
+    if (lower.includes('official') || lower.includes('original') || lower.includes('audio')) {
+        score += 30;
+    }
+
+    // 4. Artist affinity bonus
+    if (artistLower) {
+        const primary = artistLower.split(',')[0].trim().toLowerCase();
+        if (lower.includes(primary) || (candidate.user?.name && candidate.user.name.toLowerCase().includes(primary))) {
+            score += 40;
+        }
+    }
+
+    // 5. Duration Proximity matching against official Spotify duration
+    if (targetDurationMs && candidate.durationInSec) {
+        const diffSec = Math.abs(candidate.durationInSec * 1000 - targetDurationMs) / 1000;
+        if (diffSec <= 5) score += 60;
+        else if (diffSec <= 15) score += 35;
+        else if (diffSec <= 30) score += 10;
+        else if (diffSec > 60) score -= 50;
+        else if (diffSec > 120) score -= 100;
+    }
+
+    return score;
+}
+
+function getDirectAudioStream(videoUrl) {
+    return new Promise((resolve) => {
+        execFile('yt-dlp', [
+            '--js-runtimes', 'node',
+            '--no-playlist',
+            '-f', 'bestaudio/best',
+            '-g',
+            videoUrl
+        ], { timeout: 12000 }, (err, stdout) => {
+            if (err) return resolve(null);
+            const url = stdout.trim().split('\n')[0];
+            resolve(url || null);
+        });
+    });
+}
 
 function formatTime(ms) {
     if (!ms || isNaN(ms)) return '0:00';
@@ -98,6 +367,7 @@ class StarryGuildPlayer {
         this.isPlaying = false;
         this.playbackStartTime = 0;
         this.disconnectTimeout = null;
+        this._isSeeking = false;
 
         // Initialize Discord.js AudioPlayer
         this.player = createAudioPlayer();
@@ -118,7 +388,7 @@ class StarryGuildPlayer {
         });
 
         this.player.on(AudioPlayerStatus.Idle, () => {
-            if (this.destroyed) return;
+            if (this.destroyed || this._isSeeking) return;
             if (this.isPlaying) {
                 this.isPlaying = false;
                 this.handleTrackEnd();
@@ -141,7 +411,11 @@ class StarryGuildPlayer {
             this.disconnectTimeout = null;
         }
 
-        if (!this.connection || this.connection.state.status === VoiceConnectionStatus.Destroyed) {
+        const isDead = !this.connection || 
+            this.connection.state.status === VoiceConnectionStatus.Destroyed || 
+            this.connection.state.status === VoiceConnectionStatus.Disconnected;
+
+        if (isDead) {
             this.connection = joinVoiceChannel({
                 channelId: this.voiceChannel.id,
                 guildId: this.guildId,
@@ -150,11 +424,15 @@ class StarryGuildPlayer {
                 selfMute: false
             });
 
+            this.connection.on('stateChange', (oldState, newState) => {
+                console.log(`🎙️ [VoiceConnection ${this.guildId}] ${oldState.status} -> ${newState.status}`);
+            });
+
             this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
                 try {
                     await Promise.race([
-                        entersState(this.connection, VoiceConnectionStatus.Signalling, 3000),
-                        entersState(this.connection, VoiceConnectionStatus.Connecting, 3000)
+                        entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
+                        entersState(this.connection, VoiceConnectionStatus.Connecting, 5000)
                     ]);
                 } catch (e) {
                     if (!this.is247) {
@@ -164,14 +442,15 @@ class StarryGuildPlayer {
             });
         }
 
-        this.connection.subscribe(this.player);
-
         if (this.connection.state.status !== VoiceConnectionStatus.Ready) {
             try {
-                await entersState(this.connection, VoiceConnectionStatus.Ready, 4000);
-                this.connection.subscribe(this.player);
-            } catch (e) {}
+                await entersState(this.connection, VoiceConnectionStatus.Ready, 15000);
+            } catch (e) {
+                console.warn(`⚠️ [VoiceConnection ${this.guildId}] Handshake notice:`, e.message || e);
+            }
         }
+
+        this.connection.subscribe(this.player);
         return this.connection;
     }
 
@@ -195,25 +474,33 @@ class StarryGuildPlayer {
             // High-Intelligence Autoplay Recommendation
             if (this.autoplay && this.previousTrack) {
                 try {
-                    if (this.textChannel) {
-                        await this.textChannel.send('📻 **Autoplay:** Finding next recommended song...').catch(() => {});
-                    }
-                    const searchSeed = `${this.previousTrack.author || ''} ${this.previousTrack.title || ''}`.replace(/[^\w\s]/gi, ' ').trim();
-                    const relatedRes = await StarryAudioEngine.search(`${searchSeed} song`, this.previousTrack.requester);
-                    if (relatedRes && relatedRes.tracks && relatedRes.tracks.length > 0) {
-                        const nextSong = relatedRes.tracks.find(t => t.url !== this.previousTrack.url && !this.history.some(h => h.url === t.url)) || relatedRes.tracks[0];
-                        if (nextSong) {
-                            this.queue.push(nextSong);
-                            return this.playNext();
+                    const nextSong = await StarryAudioEngine.getAutoplayRecommendation(this.previousTrack, this.history);
+                    if (nextSong) {
+                        if (this.textChannel) {
+                            const autoEmbed = new EmbedBuilder()
+                                .setColor('#5865F2')
+                                .setAuthor({ 
+                                    name: '📻 Autoplay Recommendation • Smart Stream', 
+                                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                                })
+                                .setTitle(nextSong.title ? nextSong.title.substring(0, 90) : 'Recommended Song')
+                                .setDescription(`🎵 Playing next recommended song by **${nextSong.author}**!\n*Mastering: Empowering Hi-Fi Active*`)
+                                .setFooter({ text: 'Continuous playback active • Click 📻 in player or use ,autoplay to toggle' });
+                            this.textChannel.send({ embeds: [autoEmbed] }).catch(() => {});
                         }
+                        this.queue.push(nextSong);
+                        return this.playNext();
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('⚠️ [Autoplay Error]:', e.message || e);
+                }
             }
 
             if (hadTrack && !this.destroyed) {
                 if (this.textChannel) {
                     this.textChannel.send('📭 **The queue has ended.** Use `,play <song>` to queue more music!').catch(() => {});
                 }
+                try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
             }
 
             if (!this.is247) {
@@ -235,82 +522,66 @@ class StarryGuildPlayer {
         this.currentTrack = track;
 
         try {
-            await refreshSoundCloudToken();
-
             let targetUrl = track.url;
-            if (!targetUrl) {
-                const searchRes = await StarryAudioEngine.search(track.title, track.requester);
-                if (searchRes && searchRes.tracks && searchRes.tracks[0] && searchRes.tracks[0].url) {
-                    targetUrl = searchRes.tracks[0].url;
-                    track.url = targetUrl;
-                }
-            }
+            let audioResource = null;
 
-            if (!targetUrl) {
-                throw new Error('Could not resolve audio stream URL.');
-            }
-
-            let stream = null;
-            try {
-                stream = await play.stream(targetUrl, { quality: 2, discordPlayerCompatibility: true });
-            } catch (streamErr) {
-                console.warn(`⚠️ [Stream Fallback] "${targetUrl}" failed (${streamErr.message}). Searching fallback stream...`);
-                const altResults = await play.search(`${track.author || ''} ${track.title}`.trim(), { limit: 4 }).catch(() => []);
-                for (const alt of altResults) {
-                    if (alt.url && alt.url !== targetUrl) {
-                        try {
-                            stream = await play.stream(alt.url, { quality: 2, discordPlayerCompatibility: true });
-                            if (stream) {
-                                track.url = alt.url;
-                                break;
-                            }
-                        } catch (e) {}
+            // 1. Direct SoundCloud link
+            if (targetUrl && targetUrl.includes('soundcloud.com/')) {
+                try {
+                    await refreshSoundCloudToken();
+                    const stream = await play.stream(targetUrl, { quality: 2, discordPlayerCompatibility: true });
+                    if (stream) {
+                        audioResource = createAudioResource(stream.stream, {
+                            inputType: stream.type,
+                            inlineVolume: true
+                        });
                     }
-                }
-                if (!stream) {
-                    const scAlt = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 4 }).catch(() => []);
-                    for (const alt of scAlt) {
-                        if (alt.url && alt.url !== targetUrl) {
-                            try {
-                                stream = await play.stream(alt.url, { quality: 2, discordPlayerCompatibility: true });
-                                if (stream) {
-                                    track.url = alt.url;
-                                    break;
-                                }
-                            } catch (e) {}
-                        }
-                    }
-                }
-                if (!stream) throw streamErr;
-            }
-            let audioStream = stream.stream;
-
-            // Apply Real-time FFmpeg Audio DSP Filters
-            if (this.filter && this.filter !== 'clear' && FILTER_ARGS[this.filter]) {
-                const ffmpeg = new prism.FFmpeg({
-                    args: [
-                        '-analyzeduration', '0',
-                        '-loglevel', '0',
-                        '-i', '-',
-                        ...FILTER_ARGS[this.filter],
-                        '-f', 's16le',
-                        '-ar', '48000',
-                        '-ac', '2'
-                    ]
-                });
-                audioStream = audioStream.pipe(ffmpeg);
-
-                this.audioResource = createAudioResource(audioStream, {
-                    inputType: StreamType.Raw,
-                    inlineVolume: true
-                });
-            } else {
-                this.audioResource = createAudioResource(audioStream, {
-                    inputType: stream.type,
-                    inlineVolume: true
-                });
+                } catch (scErr) {}
             }
 
+            // 2. Primary Official Studio Audio Stream via StreamResolver Engine
+            if (!audioResource) {
+                const primaryArtist = (track.author || '').split(',')[0].trim();
+                let query = `${primaryArtist} ${track.title} Official Audio`.trim();
+                if (targetUrl && (targetUrl.includes('youtube.com/') || targetUrl.includes('youtu.be/'))) {
+                    query = targetUrl;
+                }
+
+                let resolved = await streamResolver.resolve(query);
+                if (!resolved || !resolved.file) {
+                    resolved = await streamResolver.resolve(`${primaryArtist} ${track.title}`.trim());
+                }
+                if (!resolved || !resolved.file) {
+                    resolved = await streamResolver.resolve(`${track.title} Official Audio`.trim());
+                }
+
+                if (resolved && resolved.file && fs.existsSync(resolved.file)) {
+                    track._resolvedFile = resolved.file;
+                    const activeFilter = (this.filter && FILTER_ARGS[this.filter]) 
+                        ? FILTER_ARGS[this.filter] 
+                        : FILTER_ARGS.empowering;
+
+                    const ffmpeg = new prism.FFmpeg({
+                        args: [
+                            '-i', resolved.file,
+                            ...activeFilter,
+                            '-f', 's16le',
+                            '-ar', '48000',
+                            '-ac', '2'
+                        ]
+                    });
+                    audioResource = createAudioResource(ffmpeg, {
+                        inputType: StreamType.Raw,
+                        inlineVolume: true
+                    });
+                }
+            }
+
+            if (!audioResource) {
+                throw new Error('Could not resolve audio stream for track: ' + track.title);
+            }
+
+            this.audioResource = audioResource;
             if (this.audioResource.volume) {
                 this.audioResource.volume.setVolume(this.volume / 100);
             }
@@ -321,6 +592,7 @@ class StarryGuildPlayer {
             this._pausedPosition = 0;
 
             await this.sendNowPlayingPanel(track);
+            try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
 
         } catch (err) {
             console.error(`⚠️ [Playback Exception for "${track.title}"]:`, err.message || err);
@@ -337,18 +609,17 @@ class StarryGuildPlayer {
         this.playNext();
     }
 
-    async sendNowPlayingPanel(track) {
+    async sendNowPlayingPanel(track, updateOnly = false) {
         if (!this.textChannel) return;
-
-        if (this.nowPlayingMessage) {
-            await this.nowPlayingMessage.delete().catch(() => {});
-            this.nowPlayingMessage = null;
-        }
 
         const fallbackThumb = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80';
         const trackThumb = (track.thumbnail && !track.thumbnail.includes('imgur.com')) 
             ? track.thumbnail 
             : (this.client.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
+
+        const filterName = (this.filter === 'clear' || !this.filter || this.filter === 'empowering')
+            ? 'Empowering Master (Hi-Fi)'
+            : this.filter.toUpperCase();
 
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
@@ -364,18 +635,23 @@ class StarryGuildPlayer {
                 `▶️ **Status:** ${this.paused ? '⏸️ Paused' : 'Playing'} | ⚙️ **Loop:** ${this.loop === 'none' ? 'Off' : this.loop === 'track' ? '🔂 Track' : '🔁 Queue'}\n` +
                 `🕒 **Duration:** ${formatTime(track.duration)} | 🔊 **Volume:** ${this.volume}%\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
-                `🌐 **Source:** ${track.source || 'Soundcloud / Hi-Fi'}\n` +
-                `🔠 **Queue:** \`${this.queue.length}\` songs in queue\n\n` +
-                `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
+                `🌐 **Source:** ${track.source || 'Studio Master'}\n` +
+                `🎛️ **Mastering:** \`${filterName}\`\n` +
+                `🔠 **Queue:** \`${this.queue.length}\` songs remaining\n\n` +
+                `⚙️ **Playback & Empowering DSP (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`
             )
             .setFooter({ text: `Starry Music Engine • Bot: ${this.client.user ? this.client.user.tag : 'Starry'}`, iconURL: this.client.user ? this.client.user.displayAvatarURL() : undefined });
 
         // Row 1: 4 buttons (No mobile wrapping)
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('music_pause')
+                .setEmoji(this.paused ? '▶️' : '⏸️')
+                .setLabel(this.paused ? 'Resume' : 'Pause')
+                .setStyle(this.paused ? ButtonStyle.Success : ButtonStyle.Primary),
             new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(this.loop !== 'none' ? ButtonStyle.Primary : ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
         );
 
@@ -387,8 +663,13 @@ class StarryGuildPlayer {
             new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel('Queue').setStyle(ButtonStyle.Secondary)
         );
 
-        // Row 3: 2 buttons (Voice Channel Security)
+        // Row 3: Voice Channel Security + Autoplay Smart Stream Toggle
         const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('music_autoplay')
+                .setEmoji('📻')
+                .setLabel(this.autoplay ? 'Autoplay: ON' : 'Autoplay: OFF')
+                .setStyle(this.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
         );
@@ -396,9 +677,12 @@ class StarryGuildPlayer {
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
-                { label: 'Clear Filters', description: 'Removes all active audio effects (Default)', value: 'clear', emoji: '🚫' },
-                { label: 'Bassboost', description: 'Deep, heavy bass enhancement', value: 'bassboost', emoji: '🎸' },
-                { label: '8D Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
+                { label: 'Empowering Master (Default)', description: 'Calibrated sub-bass warmth, vocal clarity & loudness', value: 'empowering', emoji: '👑' },
+                { label: 'True Vibration Bass', description: 'Deep physical vibrating sub-bass (Original clarity intact)', value: 'bassboost', emoji: '📳' },
+                { label: 'Deep 808 Sub-Bass', description: 'Sub-bass emphasis for EDM, Rap & Phonk', value: 'deepbass', emoji: '🔊' },
+                { label: 'Earthquake Vibration', description: 'Maximum physical sub-bass rumble & air vibration', value: 'vibrate', emoji: '🌋' },
+                { label: 'Flat / Pure Neutral', description: 'Raw uncolored original studio sound', value: 'flat', emoji: '🚫' },
+                { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
                 { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
                 { label: 'Daycore / Slowed', description: 'Slowed down tempo + deeper tone', value: 'daycore', emoji: '🌅' },
                 { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' },
@@ -406,6 +690,21 @@ class StarryGuildPlayer {
                 { label: 'Pop & Vocal Clarity', description: 'Enhanced vocals and clean acoustic profile', value: 'pop', emoji: '📻' }
             ])
         );
+
+        if (updateOnly && this.nowPlayingMessage) {
+            try {
+                await this.nowPlayingMessage.edit({
+                    embeds: [embed],
+                    components: [row1, row2, row3, filterRow]
+                });
+                return;
+            } catch (e) {}
+        }
+
+        if (this.nowPlayingMessage) {
+            await this.nowPlayingMessage.delete().catch(() => {});
+            this.nowPlayingMessage = null;
+        }
 
         this.nowPlayingMessage = await this.textChannel.send({
             embeds: [embed],
@@ -421,11 +720,13 @@ class StarryGuildPlayer {
             this._pausedPosition = this.position;
             this.player.pause();
             this.paused = true;
+            try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
             return true;
         } else {
             this.playbackStartTime = Date.now() - (this._pausedPosition || 0);
             this.player.unpause();
             this.paused = false;
+            try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
             return false;
         }
     }
@@ -443,6 +744,7 @@ class StarryGuildPlayer {
             this.nowPlayingMessage.delete().catch(() => {});
             this.nowPlayingMessage = null;
         }
+        try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
     }
 
     setVolume(vol) {
@@ -450,14 +752,80 @@ class StarryGuildPlayer {
         if (this.audioResource && this.audioResource.volume) {
             this.audioResource.volume.setVolume(this.volume / 100);
         }
+        try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
     }
 
     async setFilter(filterName) {
         this.filter = filterName;
-        if (this.currentTrack && this.player.state.status === AudioPlayerStatus.Playing) {
-            this.queue.unshift(this.currentTrack);
-            this.player.stop();
+        if (this.currentTrack && this.isPlaying) {
+            const currentPosSec = Math.max(0, Math.floor(this.position / 1000));
+            await this.seekTo(currentPosSec);
         }
+        if (this.currentTrack && this.nowPlayingMessage) {
+            await this.sendNowPlayingPanel(this.currentTrack, true);
+        }
+        try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
+    }
+
+    async seekTo(seconds) {
+        if (!this.currentTrack) return false;
+        try {
+            const track = this.currentTrack;
+            let file = track._resolvedFile;
+            if (!file || !fs.existsSync(file)) {
+                const primaryArtist = (track.author || '').split(',')[0].trim();
+                let query = `${primaryArtist} ${track.title} Official Audio`.trim();
+                if (track.url && (track.url.includes('youtube.com/') || track.url.includes('youtu.be/'))) {
+                    query = track.url;
+                }
+                let resolved = await streamResolver.resolve(query);
+                if (!resolved || !resolved.file) {
+                    resolved = await streamResolver.resolve(`${primaryArtist} ${track.title}`.trim());
+                }
+                if (resolved && resolved.file) {
+                    file = resolved.file;
+                    track._resolvedFile = file;
+                }
+            }
+
+            if (file && fs.existsSync(file)) {
+                const activeFilter = (this.filter && FILTER_ARGS[this.filter]) 
+                    ? FILTER_ARGS[this.filter] 
+                    : FILTER_ARGS.empowering;
+
+                const ffmpeg = new prism.FFmpeg({
+                    args: [
+                        '-ss', seconds.toString(),
+                        '-i', file,
+                        ...activeFilter,
+                        '-f', 's16le',
+                        '-ar', '48000',
+                        '-ac', '2'
+                    ]
+                });
+
+                const audioResource = createAudioResource(ffmpeg, {
+                    inputType: StreamType.Raw,
+                    inlineVolume: true
+                });
+
+                this.audioResource = audioResource;
+                if (this.audioResource.volume) {
+                    this.audioResource.volume.setVolume(this.volume / 100);
+                }
+
+                this._isSeeking = true;
+                this.player.play(this.audioResource);
+                this.paused = false;
+                this.playbackStartTime = Date.now() - (seconds * 1000);
+                this._pausedPosition = 0;
+                setTimeout(() => { this._isSeeking = false; }, 600);
+                return true;
+            }
+        } catch (e) {
+            console.warn('⚠️ [Seek / Filter Hot-Swap Notice]:', e.message || e);
+        }
+        return false;
     }
 
     shuffle() {
@@ -545,55 +913,250 @@ class StarryAudioEngine {
     static async search(rawQuery, requester) {
         const tracks = [];
         await refreshSoundCloudToken();
-        const query = rawQuery.trim();
+        let query = rawQuery.trim();
 
-        // 1. Spotify URL Handling
-        if (query.includes('spotify.com')) {
+        // 0. Resolve shortlinks / redirects (youtu.be, on.soundcloud.com, spotify.link, deezer.page.link)
+        if (query.startsWith('http://') || query.startsWith('https://')) {
+            if (query.includes('youtu.be/') || query.includes('on.soundcloud.com/') || query.includes('spotify.link/') || query.includes('deezer.page.link/')) {
+                try {
+                    const headRes = await fetch(query, { method: 'HEAD', redirect: 'follow', timeout: 6000 });
+                    if (headRes.url) query = headRes.url;
+                } catch (e) {}
+            }
+        }
+
+        // 1. YouTube Playlists (Standard public, unlisted, music.youtube, or watch?v=...&list=...)
+        if ((query.includes('youtube.com/') || query.includes('youtu.be/') || query.includes('music.youtube.com/')) && (query.includes('list=') || query.includes('/playlist'))) {
             try {
-                if (query.includes('/playlist/') || query.includes('/album/')) {
-                    const spTracks = await spotify.getTracks(query);
-                    if (spTracks && spTracks.length > 0) {
-                        for (const t of spTracks) {
-                            tracks.push({
-                                title: `${t.artists?.map(a => a.name).join(', ') || ''} - ${t.name}`,
-                                url: null,
-                                duration: (t.duration_ms || t.duration || 180) * 1000,
-                                author: t.artists?.[0]?.name || 'Spotify Artist',
-                                thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
-                                source: 'Spotify Playlist',
-                                requester
-                            });
-                        }
-                        return { type: 'PLAYLIST', tracks, playlistName: 'Spotify Playlist' };
-                    }
-                } else if (query.includes('/track/')) {
-                    const t = await spotify.getData(query);
-                    if (t) {
-                        const thumb = t.coverArt?.sources?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80';
-                        const resolvedTitle = `${t.artists?.map(a => a.name).join(', ') || ''} - ${t.name}`;
-                        
-                        let matchedUrl = null;
-                        const scRes = await play.search(resolvedTitle, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
-                        if (scRes && scRes[0]) matchedUrl = scRes[0].url;
-
+                const pl = await streamResolver.resolvePlaylist(query);
+                if (pl && pl.tracks && pl.tracks.length > 0) {
+                    for (const t of pl.tracks) {
                         tracks.push({
-                            title: resolvedTitle,
-                            url: matchedUrl,
-                            duration: (t.duration_ms || 180000),
-                            author: t.artists?.[0]?.name || 'Spotify Artist',
-                            thumbnail: thumb,
-                            source: 'Spotify',
+                            title: t.title,
+                            author: t.author || pl.author || 'YouTube Artist',
+                            url: t.url,
+                            duration: t.duration || 180000,
+                            thumbnail: t.thumbnail || pl.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                            source: 'YouTube Playlist',
                             requester
                         });
-                        return { type: 'TRACK', tracks };
                     }
+                    return {
+                        type: 'PLAYLIST',
+                        tracks,
+                        playlistName: pl.title || 'YouTube Playlist',
+                        author: pl.author || 'Curator',
+                        thumbnail: pl.thumbnail,
+                        source: 'YouTube'
+                    };
+                }
+            } catch (e) {
+                console.warn('⚠️ [YouTube Playlist Resolution Error]:', e.message || e);
+            }
+        }
+
+        // 2. YouTube Single Video URL
+        if (query.includes('youtube.com/watch') || query.includes('youtu.be/') || query.includes('youtube.com/shorts/') || query.includes('music.youtube.com/watch')) {
+            try {
+                const vInfo = await play.video_basic_info(query).catch(() => null);
+                if (vInfo && vInfo.video_details) {
+                    const d = vInfo.video_details;
+                    tracks.push({
+                        title: d.title || 'YouTube Audio',
+                        author: d.channel?.name || 'YouTube Creator',
+                        url: d.url,
+                        duration: (d.durationInSec || 180) * 1000,
+                        thumbnail: d.thumbnails?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                        source: 'YouTube',
+                        requester
+                    });
+                    return { type: 'TRACK', tracks };
                 }
             } catch (e) {}
         }
 
-        // 2. Direct SoundCloud Link or Search
-        try {
-            if (query.includes('soundcloud.com/')) {
+        // 3. Spotify URLs (Track, Playlist, Album, Artist)
+        if (query.includes('spotify.com')) {
+            try {
+                // 3a. Single Track
+                const trackMatch = query.match(/track\/([a-zA-Z0-9]+)/);
+                if (trackMatch && trackMatch[1]) {
+                    let spTrack = await spotifyEngine.getTrack(trackMatch[1]);
+                    if (spTrack) {
+                        tracks.push({
+                            title: spTrack.name,
+                            author: spTrack.artists?.map(a => a.name).join(', ') || 'Spotify Artist',
+                            album: spTrack.album?.name || 'Spotify Album',
+                            url: spTrack.external_urls?.spotify || query,
+                            duration: spTrack.duration_ms || 180000,
+                            thumbnail: spTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                            source: 'Spotify',
+                            requester
+                        });
+                        return { type: 'TRACK', tracks };
+                    } else {
+                        const sData = await spotify.getData(query).catch(() => null);
+                        if (sData) {
+                            tracks.push({
+                                title: sData.name || sData.title || query,
+                                author: sData.artists?.[0]?.name || sData.subtitle || 'Spotify Artist',
+                                album: sData.album?.name || 'Spotify Track',
+                                url: query,
+                                duration: sData.duration || 180000,
+                                thumbnail: sData.coverArt?.sources?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                                source: 'Spotify',
+                                requester
+                            });
+                            return { type: 'TRACK', tracks };
+                        }
+                    }
+                }
+
+                // 3b. Playlist (Public, Unlisted, Shared)
+                const playlistMatch = query.match(/playlist\/([a-zA-Z0-9]+)/);
+                if (playlistMatch && playlistMatch[1]) {
+                    const spPlaylist = await spotifyEngine.getPlaylist(playlistMatch[1]);
+                    if (spPlaylist && spPlaylist.tracks?.items && spPlaylist.tracks.items.length > 0) {
+                        for (const item of spPlaylist.tracks.items) {
+                            const t = item.track;
+                            if (t) {
+                                tracks.push({
+                                    title: t.name,
+                                    author: t.artists?.map(a => a.name).join(', ') || 'Spotify Artist',
+                                    album: t.album?.name || spPlaylist.name,
+                                    url: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+                                    duration: t.duration_ms || 180000,
+                                    thumbnail: t.album?.images?.[0]?.url || spPlaylist.images?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                                    source: 'Spotify Playlist',
+                                    requester
+                                });
+                            }
+                        }
+                        return {
+                            type: 'PLAYLIST',
+                            tracks,
+                            playlistName: spPlaylist.name || 'Spotify Playlist',
+                            author: spPlaylist.owner?.display_name || 'Spotify Curator',
+                            thumbnail: spPlaylist.images?.[0]?.url,
+                            source: 'Spotify'
+                        };
+                    } else {
+                        // Fallback via spotify-url-info
+                        const sInfoTracks = await spotify.getTracks(query).catch(() => []);
+                        if (sInfoTracks && sInfoTracks.length > 0) {
+                            const sData = await spotify.getData(query).catch(() => null);
+                            for (const t of sInfoTracks) {
+                                tracks.push({
+                                    title: t.name,
+                                    author: t.artist || t.artists?.[0]?.name || 'Spotify Artist',
+                                    album: sData?.name || 'Spotify Playlist',
+                                    url: t.uri ? `https://open.spotify.com/track/${t.uri.split(':').pop()}` : query,
+                                    duration: t.duration || 180000,
+                                    thumbnail: sData?.coverArt?.sources?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                                    source: 'Spotify Playlist',
+                                    requester
+                                });
+                            }
+                            return {
+                                type: 'PLAYLIST',
+                                tracks,
+                                playlistName: sData?.name || 'Spotify Playlist',
+                                author: sData?.subtitle || 'Spotify Curator',
+                                thumbnail: sData?.coverArt?.sources?.[0]?.url,
+                                source: 'Spotify'
+                            };
+                        }
+                    }
+                }
+
+                // 3c. Album
+                const albumMatch = query.match(/album\/([a-zA-Z0-9]+)/);
+                if (albumMatch && albumMatch[1]) {
+                    const spAlbum = await spotifyEngine.getAlbum(albumMatch[1]);
+                    if (spAlbum && spAlbum.tracks?.items && spAlbum.tracks.items.length > 0) {
+                        for (const t of spAlbum.tracks.items) {
+                            tracks.push({
+                                title: t.name,
+                                author: t.artists?.map(a => a.name).join(', ') || spAlbum.artists?.map(a => a.name).join(', ') || 'Spotify Artist',
+                                album: spAlbum.name,
+                                url: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+                                duration: t.duration_ms || 180000,
+                                thumbnail: spAlbum.images?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                                source: 'Spotify Album',
+                                requester
+                            });
+                        }
+                        return {
+                            type: 'PLAYLIST',
+                            tracks,
+                            playlistName: spAlbum.name || 'Spotify Album',
+                            author: spAlbum.artists?.map(a => a.name).join(', ') || 'Artist',
+                            thumbnail: spAlbum.images?.[0]?.url,
+                            source: 'Spotify'
+                        };
+                    } else {
+                        const sInfoTracks = await spotify.getTracks(query).catch(() => []);
+                        if (sInfoTracks && sInfoTracks.length > 0) {
+                            const sData = await spotify.getData(query).catch(() => null);
+                            for (const t of sInfoTracks) {
+                                tracks.push({
+                                    title: t.name,
+                                    author: t.artist || t.artists?.[0]?.name || sData?.subtitle || 'Spotify Artist',
+                                    album: sData?.name || 'Spotify Album',
+                                    url: t.uri ? `https://open.spotify.com/track/${t.uri.split(':').pop()}` : query,
+                                    duration: t.duration || 180000,
+                                    thumbnail: sData?.coverArt?.sources?.[0]?.url,
+                                    source: 'Spotify Album',
+                                    requester
+                                });
+                            }
+                            return {
+                                type: 'PLAYLIST',
+                                tracks,
+                                playlistName: sData?.name || 'Spotify Album',
+                                author: sData?.subtitle || 'Artist',
+                                thumbnail: sData?.coverArt?.sources?.[0]?.url,
+                                source: 'Spotify'
+                            };
+                        }
+                    }
+                }
+
+                // 3d. Artist Top Tracks
+                const artistMatch = query.match(/artist\/([a-zA-Z0-9]+)/);
+                if (artistMatch && artistMatch[1]) {
+                    const topTracks = await spotifyEngine.getArtistTopTracks(artistMatch[1]);
+                    if (topTracks && topTracks.length > 0) {
+                        for (const t of topTracks) {
+                            tracks.push({
+                                title: t.name,
+                                author: t.artists?.map(a => a.name).join(', ') || 'Spotify Artist',
+                                album: t.album?.name || 'Top Tracks',
+                                url: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+                                duration: t.duration_ms || 180000,
+                                thumbnail: t.album?.images?.[0]?.url,
+                                source: 'Spotify Artist',
+                                requester
+                            });
+                        }
+                        return {
+                            type: 'PLAYLIST',
+                            tracks,
+                            playlistName: `${topTracks[0]?.artists?.[0]?.name || 'Artist'} - Top Tracks`,
+                            author: topTracks[0]?.artists?.[0]?.name || 'Artist',
+                            thumbnail: topTracks[0]?.album?.images?.[0]?.url,
+                            source: 'Spotify'
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️ [Spotify Link Resolution]:', e.message || e);
+            }
+        }
+
+        // 4. SoundCloud Links (Sets, Playlists, Secret Tokens, Tracks)
+        if (query.includes('soundcloud.com/')) {
+            try {
                 const scData = await play.soundcloud(query).catch(() => null);
                 if (scData) {
                     if (scData.type === 'playlist') {
@@ -609,7 +1172,14 @@ class StarryAudioEngine {
                                 requester
                             });
                         }
-                        return { type: 'PLAYLIST', tracks, playlistName: scData.name || 'SoundCloud Playlist' };
+                        return {
+                            type: 'PLAYLIST',
+                            tracks,
+                            playlistName: scData.name || 'SoundCloud Playlist',
+                            author: scData.user?.name || 'SoundCloud Curator',
+                            thumbnail: scData.thumbnail,
+                            source: 'SoundCloud'
+                        };
                     } else {
                         tracks.push({
                             title: scData.name || scData.title || query,
@@ -623,12 +1193,156 @@ class StarryAudioEngine {
                         return { type: 'TRACK', tracks };
                     }
                 }
-            }
+            } catch (scErr) {}
+        }
 
-            // High-Speed Keyword Search via SoundCloud
-            const scSearch = await play.search(query, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+        // 5. Deezer Links (Playlist, Album, Track)
+        if (query.includes('deezer.com/')) {
+            try {
+                const dzType = await play.dz_validate(query);
+                if (dzType === 'playlist' || dzType === 'album') {
+                    const dz = await play.deezer(query);
+                    const dzTracks = await (dz.all_tracks ? dz.all_tracks() : Promise.resolve(dz.tracks || []));
+                    for (const t of dzTracks) {
+                        tracks.push({
+                            title: t.title || t.name,
+                            author: t.artist?.name || dz.artist?.name || 'Deezer Artist',
+                            url: t.link || t.url || query,
+                            duration: (t.durationInSec || t.duration || 180) * 1000,
+                            thumbnail: dz.picture || dz.cover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                            source: 'Deezer',
+                            requester
+                        });
+                    }
+                    return {
+                        type: 'PLAYLIST',
+                        tracks,
+                        playlistName: dz.title || 'Deezer Music',
+                        author: dz.artist?.name || dz.user?.name || 'Deezer Curator',
+                        thumbnail: dz.picture || dz.cover,
+                        source: 'Deezer'
+                    };
+                } else if (dzType === 'track') {
+                    const dz = await play.deezer(query);
+                    tracks.push({
+                        title: dz.title,
+                        author: dz.artist?.name || 'Deezer Artist',
+                        url: dz.link || query,
+                        duration: (dz.durationInSec || dz.duration || 180) * 1000,
+                        thumbnail: dz.cover || dz.picture || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                        source: 'Deezer',
+                        requester
+                    });
+                    return { type: 'TRACK', tracks };
+                }
+            } catch (dzErr) {
+                console.warn('⚠️ [Deezer Resolution]:', dzErr.message || dzErr);
+            }
+        }
+
+        // 6. Apple Music Links (Album, Track)
+        if (query.includes('music.apple.com/')) {
+            try {
+                let appleId = null;
+                const iMatch = query.match(/[?&]i=([0-9]+)/);
+                if (iMatch) appleId = iMatch[1];
+                else {
+                    const idMatch = query.match(/\/([0-9]{6,})/);
+                    if (idMatch) appleId = idMatch[1];
+                }
+
+                if (appleId) {
+                    const itunesRes = await fetch(`https://itunes.apple.com/lookup?id=${appleId}&entity=song`);
+                    const itunesData = await itunesRes.json();
+                    if (itunesData.results && itunesData.results.length > 0) {
+                        const first = itunesData.results[0];
+                        if (itunesData.results.length > 1 && first.wrapperType === 'collection') {
+                            for (let i = 1; i < itunesData.results.length; i++) {
+                                const item = itunesData.results[i];
+                                tracks.push({
+                                    title: item.trackName,
+                                    author: item.artistName,
+                                    album: item.collectionName,
+                                    url: item.trackViewUrl || query,
+                                    duration: item.trackTimeMillis || 180000,
+                                    thumbnail: (item.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+                                    source: 'Apple Music',
+                                    requester
+                                });
+                            }
+                            return {
+                                type: 'PLAYLIST',
+                                tracks,
+                                playlistName: first.collectionName,
+                                author: first.artistName,
+                                thumbnail: (first.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+                                source: 'Apple Music'
+                            };
+                        } else {
+                            const item = itunesData.results[0];
+                            tracks.push({
+                                title: item.trackName || item.collectionName,
+                                author: item.artistName,
+                                album: item.collectionName,
+                                url: item.trackViewUrl || query,
+                                duration: item.trackTimeMillis || 180000,
+                                thumbnail: (item.artworkUrl100 || '').replace('100x100bb', '600x600bb'),
+                                source: 'Apple Music',
+                                requester
+                            });
+                            return { type: 'TRACK', tracks };
+                        }
+                    }
+                }
+            } catch (appleErr) {
+                console.warn('⚠️ [Apple Music Resolution]:', appleErr.message || appleErr);
+            }
+        }
+
+        // 7. PRIMARY SEARCH ENGINE: OFFICIAL SPOTIFY WEB API
+        try {
+            const spResults = await spotifyEngine.searchTracks(query, 10);
+            if (spResults && spResults.length > 0) {
+                const t = spResults[0];
+                tracks.push({
+                    title: t.name,
+                    author: t.artists?.map(a => a.name).join(', ') || 'Spotify Artist',
+                    album: t.album?.name || 'Spotify Album',
+                    url: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+                    duration: t.duration_ms || 180000,
+                    thumbnail: t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                    source: 'Spotify',
+                    requester
+                });
+                return { type: 'TRACK', tracks };
+            }
+        } catch (spErr) {
+            console.warn('⚠️ [Spotify Search Error]:', spErr.message || spErr);
+        }
+
+        // 8. Fallback Official YouTube Search
+        try {
+            const ytSearch = await play.search(query, { limit: 1 }).catch(() => []);
+            if (ytSearch && ytSearch.length > 0) {
+                const item = ytSearch[0];
+                tracks.push({
+                    title: item.title || query,
+                    url: item.url,
+                    duration: (item.durationInSec || 180) * 1000,
+                    author: item.channel?.name || 'Official Artist',
+                    thumbnail: item.thumbnails?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                    source: 'YouTube',
+                    requester
+                });
+                return { type: 'TRACK', tracks };
+            }
+        } catch (ytErr) {}
+
+        // 9. Fallback SoundCloud Search
+        try {
+            const scSearch = await play.search(query, { source: { soundcloud: 'tracks' }, limit: 8 }).catch(() => []);
             if (scSearch && scSearch.length > 0) {
-                const item = scSearch[0];
+                const item = scSearch.find(t => (t.durationInSec || 0) > 45) || scSearch[0];
                 tracks.push({
                     title: item.name || item.title || query,
                     url: item.url,
@@ -642,25 +1356,95 @@ class StarryAudioEngine {
             }
         } catch (scErr) {}
 
-        // 3. Fallback YouTube Search
-        try {
-            const ytSearch = await play.search(query, { limit: 1 }).catch(() => []);
-            if (ytSearch && ytSearch.length > 0) {
-                const item = ytSearch[0];
-                tracks.push({
-                    title: item.title || query,
-                    url: item.url,
-                    duration: (item.durationInSec || 180) * 1000,
-                    author: item.channel?.name || 'Artist',
-                    thumbnail: item.thumbnails?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
-                    source: 'YouTube',
-                    requester
-                });
-                return { type: 'TRACK', tracks };
-            }
-        } catch (ytErr) {}
-
         return { type: 'TRACK', tracks: [] };
+    }
+
+    static async getAutoplayRecommendation(currentTrack, history = []) {
+        if (!currentTrack) return null;
+        const primaryArtist = (currentTrack.author || '').split(',')[0].trim();
+        const currentTitleClean = (currentTrack.title || '')
+            .replace(/[\(\[].*?[\)\]]/g, '')
+            .replace(/official|audio|video|lyrics|ft\.|feat\./gi, '')
+            .trim()
+            .toLowerCase();
+
+        const historyUrls = new Set(history.map(h => (h.url || '').toLowerCase()));
+        const historyTitles = new Set(history.map(h => (h.title || '').toLowerCase()));
+
+        const isFresh = (title, url) => {
+            if (!title) return false;
+            const tLower = title.toLowerCase();
+            if (tLower === currentTitleClean || tLower.includes(currentTitleClean) || currentTitleClean.includes(tLower)) return false;
+            if (url && historyUrls.has(url.toLowerCase())) return false;
+            for (const hTitle of historyTitles) {
+                if (tLower.includes(hTitle) || hTitle.includes(tLower)) return false;
+            }
+            return true;
+        };
+
+        // 1. Official Spotify Search: top tracks by artist
+        try {
+            const spTracks = await spotifyEngine.searchTracks(primaryArtist, 25);
+            if (spTracks && spTracks.length > 0) {
+                for (const t of spTracks) {
+                    const trackUrl = t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`;
+                    if (isFresh(t.name, trackUrl)) {
+                        return {
+                            title: t.name,
+                            author: t.artists?.map(a => a.name).join(', ') || primaryArtist,
+                            album: t.album?.name || 'Spotify Single',
+                            url: trackUrl,
+                            duration: t.duration_ms || 180000,
+                            thumbnail: t.album?.images?.[0]?.url || currentTrack.thumbnail,
+                            source: 'Spotify Autoplay',
+                            requester: currentTrack.requester
+                        };
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // 2. Official Spotify Search: artist radio & related music
+        try {
+            const spRadio = await spotifyEngine.searchTracks(`${primaryArtist} radio`, 20);
+            if (spRadio && spRadio.length > 0) {
+                for (const t of spRadio) {
+                    const trackUrl = t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`;
+                    if (isFresh(t.name, trackUrl)) {
+                        return {
+                            title: t.name,
+                            author: t.artists?.map(a => a.name).join(', ') || primaryArtist,
+                            album: t.album?.name || 'Spotify Radio',
+                            url: trackUrl,
+                            duration: t.duration_ms || 180000,
+                            thumbnail: t.album?.images?.[0]?.url || currentTrack.thumbnail,
+                            source: 'Spotify Autoplay',
+                            requester: currentTrack.requester
+                        };
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // 3. Fallback YouTube related search
+        try {
+            const ytResults = await play.search(`${primaryArtist} similar songs`, { limit: 10 }).catch(() => []);
+            for (const item of ytResults) {
+                if (isFresh(item.title, item.url)) {
+                    return {
+                        title: item.title,
+                        author: item.channel?.name || primaryArtist,
+                        url: item.url,
+                        duration: (item.durationInSec || 180) * 1000,
+                        thumbnail: item.thumbnails?.[0]?.url || currentTrack.thumbnail,
+                        source: 'YouTube Autoplay',
+                        requester: currentTrack.requester
+                    };
+                }
+            }
+        } catch (e) {}
+
+        return null;
     }
 }
 

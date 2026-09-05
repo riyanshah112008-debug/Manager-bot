@@ -4,9 +4,10 @@ const config = require('../config');
 const BASE_HELP_CATEGORIES = [
     { id: 'music', label: 'Music & Audio (33)', desc: 'Playback, filters, 24/7, queue & DJ panel', emoji: '🎵' },
     { id: 'mod', label: 'Moderation & Security (32)', desc: 'Bans, mutes, kicks, warnings, lock & purge', emoji: '🛡️' },
-    { id: 'util', label: 'Utility & Tools (28)', desc: 'Server info, whois, translate, avatar & afk', emoji: '🛠️' },
+    { id: 'util', label: 'Utility & Tools (36)', desc: 'Reminders, starboard, tempvoice, tags, sticky & whois', emoji: '🛠️' },
     { id: 'social', label: 'Social & Expressions (26)', desc: 'Hug, kiss, slap, anime GIFs & interactions', emoji: '🎭' },
-    { id: 'eco', label: 'Economy & Levels (16)', desc: 'Coins, balance, rank, daily, shop & slots', emoji: '💰' },
+    { id: 'eco', label: 'Economy & Adventure (21)', desc: 'Profile, beg, search, crime, crate, daily & shop', emoji: '💰' },
+    { id: 'game', label: 'Cosmic Arcade & Games (11)', desc: 'Blackjack, Mines, Trivia, Wordle, RPS & TicTacToe', emoji: '🎮' },
     { id: 'sys', label: 'Multi-Bot & Systems (15)', desc: 'Multi-bot cluster, giveaways, tickets & backup', emoji: '🤖' }
 ];
 
@@ -52,9 +53,16 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 `\`${prefix}setnick\`, \`${prefix}role\`, \`${prefix}addrole\`, \`${prefix}removerole\`, \`${prefix}roleall\`, \`${prefix}vckick\`, \`${prefix}vcmute\`, \`${prefix}vcunmute\`, \`${prefix}modpanel\``
             );
     } else if (catId === 'util') {
-        embed.setTitle('🛠️ Utility & Server Management Commands (28 Commands)')
+        embed.setTitle('🛠️ Utility & Server Management Commands (36 Commands)')
             .setDescription(
-                `\`${prefix}help\`, \`${prefix}ahelp\`, \`${prefix}ping\`, \`${prefix}botinfo\`, \`${prefix}serverinfo\`, \`${prefix}whois\`, \`${prefix}avatar\`, \`${prefix}banner\`, \`${prefix}membercount\`, \`${prefix}roles\`, \`${prefix}emojis\`, \`${prefix}steal\`, \`${prefix}invite\`, \`${prefix}vote\`, \`${prefix}premium\`, \`${prefix}uptime\`, \`${prefix}afk\`, \`${prefix}translate\`, \`${prefix}calculator\`, \`${prefix}poll\`, \`${prefix}announce\`, \`${prefix}embed\`, \`${prefix}say\`, \`${prefix}snipe\`, \`${prefix}editsnipe\`, \`${prefix}setlogs\`, \`${prefix}setupwelcome\`, \`${prefix}setupgoodbye\``
+                `**Server Tools & Utilities:**\n` +
+                `\`${prefix}help\`, \`${prefix}ahelp\`, \`${prefix}ping\`, \`${prefix}botinfo\`, \`${prefix}serverinfo\`, \`${prefix}whois\`, \`${prefix}avatar\`, \`${prefix}banner\`, \`${prefix}membercount\`, \`${prefix}roles\`, \`${prefix}emojis\`, \`${prefix}steal\`, \`${prefix}invite\`, \`${prefix}vote\`, \`${prefix}premium\`, \`${prefix}uptime\`, \`${prefix}afk\`, \`${prefix}translate\`, \`${prefix}calculator\`, \`${prefix}poll\`, \`${prefix}announce\`, \`${prefix}embed\`, \`${prefix}say\`, \`${prefix}snipe\`, \`${prefix}editsnipe\`, \`${prefix}setlogs\`, \`${prefix}setupwelcome\`, \`${prefix}setupgoodbye\`, \`${prefix}imagine\`, \`${prefix}nitroclaims\`\n\n` +
+                `**New Power Features:**\n` +
+                `• **Reminders:** \`${prefix}remind\`, \`${prefix}reminders\`, \`${prefix}delreminder\`\n` +
+                `• **Starboard:** \`${prefix}starboard\` (setup, stars, toggle)\n` +
+                `• **Dynamic Voice:** \`${prefix}tempvoice\` (setup, toggle)\n` +
+                `• **Custom Tags:** \`${prefix}tag\`, \`${prefix}tags\`\n` +
+                `• **Sticky Notice:** \`${prefix}sticky\` (set, remove, list)`
             );
     } else if (catId === 'social') {
         embed.setTitle('🎭 Social Actions & Anime Expressions (26 Commands)')
@@ -62,13 +70,36 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 `**Targeted Member Interactions (GIFs + Counter):**\n` +
                 `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}slap\`, \`${prefix}pat\`, \`${prefix}cuddle\`, \`${prefix}bite\`, \`${prefix}poke\`, \`${prefix}punch\`, \`${prefix}tickle\`, \`${prefix}feed\`, \`${prefix}lick\`, \`${prefix}highfive\`, \`${prefix}wave\`\n\n` +
                 `**Solo Expressions & Fun:**\n` +
-                `\`${prefix}sleep\`, \`${prefix}wakeup\`, \`${prefix}cry\`, \`${prefix}laugh\`, \`${prefix}dance\`, \`${prefix}blush\`, \`${prefix}pout\`, \`${prefix}smile\`, \`${prefix}bored\`, \`${prefix}social\`, \`${prefix}tord\`, \`${prefix}coinflip\`, \`${prefix}roll\`\n\n` +
+                `\`${prefix}sleep\`, \`${prefix}wakeup\`, \`${prefix}cry\`, \`${prefix}laugh\`, \`${prefix}dance\`, \`${prefix}blush\`, \`${prefix}pout\`, \`${prefix}smile\`, \`${prefix}bored\`, \`${prefix}social\`, \`${prefix}tord\`\n\n` +
                 `*All social action response buttons feature persistent 1-year lifetime!*`
             );
     } else if (catId === 'eco') {
-        embed.setTitle('💰 Economy, Leveling & Casino Commands (16 Commands)')
+        embed.setTitle('💰 Economy & RPG Adventure Commands (21 Commands)')
             .setDescription(
-                `\`${prefix}rank\`, \`${prefix}leaderboard\`, \`${prefix}setlevel\`, \`${prefix}balance\`, \`${prefix}daily\`, \`${prefix}weekly\`, \`${prefix}work\`, \`${prefix}beg\`, \`${prefix}deposit\`, \`${prefix}withdraw\`, \`${prefix}pay\`, \`${prefix}gamble\`, \`${prefix}slots\`, \`${prefix}rob\`, \`${prefix}shop\`, \`${prefix}buy\``
+                `**Starlight Passport & Balances:**\n` +
+                `\`${prefix}profile\` (or \`${prefix}p\`), \`${prefix}balance\` (or \`${prefix}bal\`), \`${prefix}rank\`, \`${prefix}leaderboard\`, \`${prefix}deposit\`, \`${prefix}withdraw\`, \`${prefix}pay\`\n\n` +
+                `**Adventure & Earnings:**\n` +
+                `\`${prefix}beg\` — Beg traveling cosmic merchants\n` +
+                `\`${prefix}search\` — Scavenge celestial locations (Orion, Satellites, Craters)\n` +
+                `\`${prefix}crime\` — Attempt high-risk planetary heists\n` +
+                `\`${prefix}crate\` — Unbox Cosmic Mystery Crates for rare gems & treats\n` +
+                `\`${prefix}work\`, \`${prefix}daily\`, \`${prefix}weekly\`, \`${prefix}shop\`, \`${prefix}buy\`, \`${prefix}gamble\`, \`${prefix}slots\`, \`${prefix}rob\`, \`${prefix}setlevel\``
+            );
+    } else if (catId === 'game') {
+        embed.setTitle('🎮 Cosmic Arcade & Mini-Games (11 Commands)')
+            .setDescription(
+                `**Card & Casino Games:**\n` +
+                `• \`${prefix}blackjack\` (or \`${prefix}bj\`) — Full 21-card blackjack with Hit, Stand & Double Down buttons\n` +
+                `• \`${prefix}highlow\` (or \`${prefix}hl\`) — Predict higher or lower for multiplying stardust\n` +
+                `• \`${prefix}spin\` (or \`${prefix}wheel\`) — Animated celestial wheel of fortune\n\n` +
+                `**Arcade & Logic Puzzles:**\n` +
+                `• \`${prefix}mines\` — 3x3 interactive minefield grid: reveal stars, avoid black holes, cash out!\n` +
+                `• \`${prefix}wordle\` — Secret 5-letter starlight word guessing challenge\n` +
+                `• \`${prefix}trivia\` — Timed 4-choice trivia quiz with stardust rewards\n` +
+                `• \`${prefix}tictactoe\` (or \`${prefix}ttt\`) — Interactive 3x3 button grid PvP duel\n` +
+                `• \`${prefix}rps\` — Rock-Paper-Scissors against Starry AI or challenged players\n\n` +
+                `**Casual & Mystic:**\n` +
+                `• \`${prefix}coinflip\`, \`${prefix}roll\`, \`${prefix}8ball\``
             );
     } else if (catId === 'sys') {
         embed.setTitle('🤖 Multi-Bot, Giveaways & Systems (15 Commands)')
@@ -101,12 +132,12 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 `*Strict Discord Age-Restricted channel verification active!*`
             );
     } else {
-        const totalCommands = isNsfw ? '165+' : '150+';
+        const totalCommands = isNsfw ? '190+' : '175+';
         embed.setTitle('🌟 Manager Bot & Starry Supreme Command Hub')
             .setDescription(
                 `Welcome to the ultimate Discord multi-feature bot!\n` +
                 `• **Default Prefix:** \`${prefix}\` *(Fixed standard prefix)*\n` +
-                `• **Total Commands:** \`${totalCommands}\` across ${isNsfw ? '7' : '6'} categories\n` +
+                `• **Total Commands:** \`${totalCommands}\` across ${isNsfw ? '8' : '7'} categories\n` +
                 `• **Multi-Bot Clustering:** Active and synchronized\n` +
                 `• **Embed Buttons Lifetime:** High timing up to **1 Year**\n\n` +
                 `Select a category from the dropdown menu below or click the quick action buttons.`
@@ -114,10 +145,11 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
             .addFields(
                 { name: '🎵 Music (33)', value: `\`${prefix}play\`, \`${prefix}queue\`, \`${prefix}djpanel\``, inline: true },
                 { name: '🛡️ Moderation (32)', value: `\`${prefix}ban\`, \`${prefix}mute\`, \`${prefix}modpanel\``, inline: true },
-                { name: '🛠️ Utility (28)', value: `\`${prefix}whois\`, \`${prefix}serverinfo\`, \`${prefix}steal\``, inline: true },
+                { name: '🛠️ Utility (36)', value: `\`${prefix}remind\`, \`${prefix}starboard\`, \`${prefix}sticky\``, inline: true },
+                { name: '🎮 Arcade (11)', value: `\`${prefix}blackjack\`, \`${prefix}mines\`, \`${prefix}trivia\``, inline: true },
+                { name: '💰 Economy (21)', value: `\`${prefix}profile\`, \`${prefix}search\`, \`${prefix}crime\``, inline: true },
                 { name: '🎭 Social (26)', value: `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}social\``, inline: true },
-                { name: '💰 Economy (16)', value: `\`${prefix}bal\`, \`${prefix}daily\`, \`${prefix}rank\``, inline: true },
-                { name: '🤖 Systems (15)', value: `\`${prefix}multibot\`, \`${prefix}giveaway\`, \`${prefix}ticketsetup\``, inline: true }
+                { name: '🤖 Systems (15)', value: `\`${prefix}multibot\`, \`${prefix}giveaway\`, \`${prefix}backup\``, inline: true }
             );
 
         if (isNsfw) {

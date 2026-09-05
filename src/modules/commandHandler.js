@@ -28,12 +28,21 @@ async function getGuildPrefix(guildId) {
     if (!guildId) return ',';
     if (guildPrefixCache.has(guildId)) return guildPrefixCache.get(guildId);
     try {
+        const mongoose = require('mongoose');
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            guildPrefixCache.set(guildId, ',');
+            return ',';
+        }
         const ServerSettings = require('../models/ServerSettings');
-        const settings = await ServerSettings.findOne({ guildId }).select('prefix');
+        const settings = await Promise.race([
+            ServerSettings.findOne({ guildId }).select('prefix').lean(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+        ]);
         const p = settings?.prefix || ',';
         guildPrefixCache.set(guildId, p);
         return p;
     } catch (e) {
+        guildPrefixCache.set(guildId, ',');
         return ',';
     }
 }
@@ -48,6 +57,7 @@ const moderationCommands = require('../commands/bundles/moderationCommands');
 const utilityCommands = require('../commands/bundles/utilityCommands');
 const socialCommands = require('../commands/bundles/socialCommands');
 const economyCommands = require('../commands/bundles/economyCommands');
+const gameCommands = require('../commands/bundles/gameCommands');
 const systemCommands = require('../commands/bundles/systemCommands');
 const nsfwCommands = require('../commands/bundles/nsfwCommands');
 
@@ -57,6 +67,7 @@ const allBundles = [
     ...utilityCommands,
     ...socialCommands,
     ...economyCommands,
+    ...gameCommands,
     ...systemCommands,
     ...nsfwCommands
 ];
@@ -140,6 +151,12 @@ class CommandRegistry {
         this.registerPrefixDispatcher(client);
         this.registerInteractionDispatcher(client);
 
+        // Initialize Dedicated Music Controller System
+        try {
+            const musicController = require('./musicController');
+            musicController.init(client);
+        } catch (e) {}
+
         // Connect multi-bot worker nodes if cluster is enabled
         const multiBot = require('./multiBot');
         if (multiBot && typeof multiBot.registerEventHook === 'function') {
@@ -159,6 +176,17 @@ class CommandRegistry {
     registerPrefixDispatcher(client) {
         client.on(Events.MessageCreate, async (message) => {
             if (!message || message.author?.bot || !message.content) return;
+
+            // Intercept Dedicated Music Controller Request Channel
+            if (message.guild) {
+                const musicController = require('./musicController');
+                if (musicController.isRequestChannel(message.guild.id, message.channel.id)) {
+                    const raw = message.content.trim();
+                    if (!raw.startsWith(',') && !raw.startsWith('.')) {
+                        return musicController.handleSongRequest(message, client);
+                    }
+                }
+            }
 
             let content = message.content.trim();
             const multiBot = client.multiBot || require('./multiBot');
@@ -199,26 +227,31 @@ class CommandRegistry {
                     if (!isPrimary) return; // Standard prefix handled exclusively by primary bot
 
                     const guildId = message.guild?.id;
-                    let activePrefix = ',';
-                    if (guildId) {
-                        if (guildPrefixCache.has(guildId)) {
-                            activePrefix = guildPrefixCache.get(guildId);
-                        } else {
-                            activePrefix = await getGuildPrefix(guildId);
-                        }
-                    }
-
-                    if (content.startsWith(activePrefix)) {
-                        matchedPrefix = activePrefix;
-                        commandBody = content.slice(activePrefix.length).trim();
-                    } else if (activePrefix !== ',' && content.startsWith(',')) {
-                        // Comma always works as universal fallback
+                    if (content.startsWith(',')) {
                         matchedPrefix = ',';
                         commandBody = content.slice(1).trim();
+                    } else if (guildId) {
+                        const activePrefix = guildPrefixCache.has(guildId) 
+                            ? guildPrefixCache.get(guildId) 
+                            : await getGuildPrefix(guildId);
+
+                        if (activePrefix && activePrefix !== ',' && content.startsWith(activePrefix)) {
+                            matchedPrefix = activePrefix;
+                            commandBody = content.slice(activePrefix.length).trim();
+                        } else {
+                            return; // Not a command
+                        }
                     } else if (!message.guild) {
-                        // In DMs, talk directly with Starry AI without needing a prefix (Nekotina-style)
-                        matchedPrefix = '';
-                        commandBody = 'ask ' + content;
+                        const firstWord = content.toLowerCase().split(/\s+/)[0];
+                        const isCmd = this.commands.has(firstWord) || this.aliases.has(firstWord);
+                        if (isCmd) {
+                            matchedPrefix = '';
+                            commandBody = content;
+                        } else {
+                            // In DMs, talk directly with Starry AI without needing a prefix (Nekotina-style)
+                            matchedPrefix = '';
+                            commandBody = 'ask ' + content;
+                        }
                     } else {
                         return; // Not a command
                     }
@@ -237,7 +270,13 @@ class CommandRegistry {
             const command = this.commands.get(resolvedName);
             if (!command) return;
 
+            console.log(`⚡ [Command] Executing ,${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
+
+            // Guard server-only commands when run in DMs
+            if (!message.guild && (command.category === 'Moderation' || command.category === 'Economy' || command.guildOnly)) {
+                return ctx.reply('❌ This command can only be used inside a Discord server.');
+            }
 
             try {
                 // Check permissions if in a guild
@@ -275,7 +314,8 @@ class CommandRegistry {
                         
                         // Instant 0ms defer to guarantee Discord never shows "Application did not respond"
                         if (!interaction.deferred && !interaction.replied && command.autoDefer !== false) {
-                            await interaction.deferReply({ ephemeral: !!command.ephemeral }).catch(() => {});
+                            const deferOpts = command.ephemeral ? { flags: [MessageFlags.Ephemeral] } : {};
+                            await interaction.deferReply(deferOpts).catch(() => {});
                             ctx.deferred = true;
                         }
 
@@ -376,34 +416,85 @@ class CommandRegistry {
 
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
                 if (customId.startsWith('social_') && customId.includes('_back_')) {
-                    const parts = customId.split('_');
-                    const actionKey = parts[1];
-                    const allowedTargetId = parts[3];
-                    const originalAuthorId = parts[4];
+                    const { handleSocialBackButton } = require('./socialActions');
+                    return await handleSocialBackButton(interaction);
+                }
 
-                    if (interaction.user.id !== allowedTargetId) {
+                // C2. Social Action Menu Selector Dropdown
+                if (customId === 'social_select_action') {
+                    const { handleSocialSelectMenu } = require('./socialActions');
+                    return await handleSocialSelectMenu(interaction);
+                }
+
+                // C3. Marriage Accept / Decline Buttons (Instant Global Handler)
+                if (customId.startsWith('marry_yes_') || customId.startsWith('marry_no_')) {
+                    const parts = customId.split('_');
+                    const proposerId = parts[2];
+                    const targetId = parts[3];
+
+                    if (interaction.user.id !== targetId) {
                         return interaction.reply({
-                            content: `❌ Only <@${allowedTargetId}> can use this button to action back!`,
+                            content: `❌ Only <@${targetId}> can respond to this proposal!`,
                             ephemeral: true
                         }).catch(() => {});
                     }
 
-                    const { getSocialGif } = require('../utils/animeGifs');
-                    const { incrementSocialCount } = require('../models/SocialStats');
-                    const gifUrl = getSocialGif(actionKey);
+                    const mongoose = require('mongoose');
+                    const EcoUser = mongoose.models.EcoUser;
 
-                    const totalCount = await incrementSocialCount(interaction.user.id, originalAuthorId, actionKey);
+                    if (interaction.replied || interaction.deferred) return;
 
-                    const embed = new EmbedBuilder()
-                        .setColor(config.EMBED_COLORS?.SOCIAL || '#FF9494')
-                        .setDescription(`**${interaction.user.username}** ${actionKey}s **<@${originalAuthorId}>** back!\n\n✨ That's **${totalCount}** ${actionKey}s shared together!`)
-                        .setImage(gifUrl)
-                        .setFooter({ text: `Social Actions Engine • Total: ${totalCount} • Prefix: ,` })
-                        .setTimestamp();
+                    if (customId.startsWith('marry_yes_')) {
+                        const now = new Date();
+                        if (EcoUser) {
+                            await EcoUser.updateMany({ userId: proposerId }, { $set: { marriedTo: targetId, marriedAt: now } }).catch(() => {});
+                            await EcoUser.updateMany({ userId: targetId }, { $set: { marriedTo: proposerId, marriedAt: now } }).catch(() => {});
+                        }
 
-                    return interaction.reply({ embeds: [embed] }).catch(() => {
-                        return interaction.followUp({ embeds: [embed] }).catch(() => {});
-                    });
+                        const { getAnimeAttachment, getRandomKissGif } = require('../utils/animeGifs');
+                        const anim = getAnimeAttachment('kiss');
+                        const unixTime = Math.floor(now.getTime() / 1000);
+
+                        const acceptedEmbed = new EmbedBuilder()
+                            .setColor('#FF69B4')
+                            .setTitle('💍💖 JUST MARRIED! 💖💍')
+                            .setDescription(
+                                `✨ **<@${proposerId}>** & **<@${targetId}>** have officially tied the knot! ✨\n\n` +
+                                `*“Two souls bound by love across the infinite cosmos. May your journey through the stars be filled with eternal romance, joy, and warmth!”* 🌌🥂\n\n` +
+                                `💍 **Spouses:** <@${proposerId}> ❤️ <@${targetId}>\n` +
+                                `📅 **Matrimony Date:** <t:${unixTime}:D> (<t:${unixTime}:R>)\n` +
+                                `💫 **Status:** Official & Blessed in Starry Matrimony\n\n` +
+                                `*Sealed with a passionate kiss!* 💕`
+                            )
+                            .setImage(anim ? anim.attachmentUrl : getRandomKissGif())
+                            .setFooter({ text: 'Starry Matrimony Suite • Check with /profile or ,profile' })
+                            .setTimestamp(now);
+
+                        const updatePayload = { embeds: [acceptedEmbed], components: [] };
+                        if (anim) updatePayload.files = [anim.attachment];
+                        return interaction.update(updatePayload).catch(() => {});
+                    } else {
+                        const { getAnimeAttachment, getRandomSlapGif } = require('../utils/animeGifs');
+                        const anim = getAnimeAttachment('slap');
+
+                        const declinedEmbed = new EmbedBuilder()
+                            .setColor('#ED4245')
+                            .setTitle('💔 OUCH! PROPOSAL REJECTED! ✋💥')
+                            .setDescription(
+                                `💥 **<@${targetId}>** delivered a thunderous slap and rejected **<@${proposerId}>**'s proposal!\n\n` +
+                                `*“Oof! That's gotta leave a mark... Not today, starry lover! Better luck next time!”* 🥀💔\n\n` +
+                                `💔 **Declined By:** <@${targetId}>\n` +
+                                `🩹 **Condition:** Emotional Damage (Critical Hit)\n\n` +
+                                `✨ *Don't worry <@${proposerId}>, there are billions of other shining stars in the cosmos!*`
+                            )
+                            .setImage(anim ? anim.attachmentUrl : getRandomSlapGif())
+                            .setFooter({ text: 'Starry Matrimony Suite • Proposal Declined' })
+                            .setTimestamp();
+
+                        const updatePayload = { embeds: [declinedEmbed], components: [] };
+                        if (anim) updatePayload.files = [anim.attachment];
+                        return interaction.update(updatePayload).catch(() => {});
+                    }
                 }
 
                 // D. AI Image Regenerate & Enhance Variations (1-Year Global Handler)
@@ -487,8 +578,15 @@ class CommandRegistry {
                 }
 
                 if (customId === 'nsfw_toggle_server') {
-                    if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(interaction.user.id)) {
-                        return interaction.reply({ content: '❌ Administrator permission required to toggle NSFW module.', flags: [EPHEMERAL_FLAG] });
+                    if (!interaction.guild) {
+                        return interaction.reply({ content: '❌ Server toggles cannot be used in Direct Messages. Use "Toggle My DM NSFW" instead.', flags: [EPHEMERAL_FLAG] });
+                    }
+                    const { canManageServerNsfw } = require('./nsfwModule');
+                    if (!canManageServerNsfw(interaction.user.id, interaction.guild)) {
+                        return interaction.reply({ 
+                            content: `❌ **Permission Denied:** Only the **Server Owner** (<@${interaction.guild.ownerId}>) or **Bot Owners** have authority to toggle the NSFW module for this server.`, 
+                            flags: [EPHEMERAL_FLAG] 
+                        });
                     }
                     const ServerSettings = require('../models/ServerSettings');
                     let settings = await ServerSettings.findOne({ guildId: interaction.guild.id });
@@ -499,8 +597,19 @@ class CommandRegistry {
 
                     return interaction.reply({
                         content: settings.nsfw.enabled 
-                            ? `🔞 **NSFW Module has been ENABLED for this server!**\n*Commands will execute exclusively in Age-Restricted channels.*` 
-                            : `🔒 **NSFW Module has been DISABLED for this server.**`,
+                            ? `🔞 **NSFW Module has been ENABLED for ${interaction.guild.name}!**\n*Commands will execute strictly in Age-Restricted (NSFW) channels.*` 
+                            : `🔒 **NSFW Module has been DISABLED for ${interaction.guild.name}.**`,
+                        flags: [EPHEMERAL_FLAG]
+                    });
+                }
+
+                if (customId === 'nsfw_toggle_dm') {
+                    const { toggleNsfwDm } = require('./nsfwModule');
+                    const newState = await toggleNsfwDm(interaction.user.id);
+                    return interaction.reply({
+                        content: newState
+                            ? '🔞 **Mature Anime Mode ENABLED in your DMs!**\n*You can now use mature anime commands and waifu/neko art in Direct Messages with Starry.*'
+                            : '🔒 **Mature Anime Mode DISABLED in your DMs.**',
                         flags: [EPHEMERAL_FLAG]
                     });
                 }
@@ -536,6 +645,12 @@ class CommandRegistry {
                     } catch (e) {
                         return interaction.reply({ content: '❌ Could not open DMs with you. Please enable Direct Messages in your privacy settings.', flags: [EPHEMERAL_FLAG] });
                     }
+                }
+
+                // Dedicated Music Controller Channel Interactions
+                if (customId.startsWith('ctrl_')) {
+                    const musicController = require('./musicController');
+                    return await musicController.handleButtonInteraction(interaction, client);
                 }
 
                 // G. Music & DJ Panel Global Controls (1-Year Global Handler)
@@ -617,12 +732,33 @@ class CommandRegistry {
                             await applyKazagumoFilter(kPlayer, selectedFilter);
                         }
                         if (nPlayer) {
-                            nPlayer.filter = selectedFilter;
+                            await nPlayer.setFilter(selectedFilter);
                         }
                         return interaction.reply({ 
                             content: `🎧 **Audio DSP Filter updated:** \`${selectedFilter.toUpperCase()}\``, 
                             flags: [EPHEMERAL_FLAG] 
                         }).catch(() => {});
+                    }
+
+                    // 4. Autoplay Smart Stream Toggle Button
+                    if (customId === 'music_autoplay') {
+                        if (kPlayer) {
+                            kPlayer.autoplay = !kPlayer.autoplay;
+                            return interaction.reply({
+                                content: `📻 **Autoplay is now: ${kPlayer.autoplay ? '🟢 ON' : '🔴 OFF'}**`,
+                                flags: [EPHEMERAL_FLAG]
+                            }).catch(() => {});
+                        }
+                        if (nPlayer) {
+                            nPlayer.autoplay = !nPlayer.autoplay;
+                            if (nPlayer.currentTrack) {
+                                await nPlayer.sendNowPlayingPanel(nPlayer.currentTrack, true).catch(() => {});
+                            }
+                            return interaction.reply({
+                                content: `📻 **Autoplay is now: ${nPlayer.autoplay ? '🟢 ON' : '🔴 OFF'}**`,
+                                flags: [EPHEMERAL_FLAG]
+                            }).catch(() => {});
+                        }
                     }
 
                     if (!kPlayer && !nPlayer) {
@@ -639,6 +775,9 @@ class CommandRegistry {
                             }
                             if (nPlayer) {
                                 nPlayer.pause();
+                                if (nPlayer.currentTrack) {
+                                    await nPlayer.sendNowPlayingPanel(nPlayer.currentTrack, true).catch(() => {});
+                                }
                             }
                         } else if (customId === 'music_skip' || customId === 'dj_skip') {
                             if (kPlayer) await kPlayer.skip();
@@ -653,14 +792,14 @@ class CommandRegistry {
                             }
                             if (nPlayer) {
                                 nPlayer.loop = nPlayer.loop === 'none' ? 'track' : nPlayer.loop === 'track' ? 'queue' : 'none';
+                                if (nPlayer.currentTrack) {
+                                    await nPlayer.sendNowPlayingPanel(nPlayer.currentTrack, true).catch(() => {});
+                                }
                             }
                         } else if (customId === 'dj_shuffle') {
                             if (kPlayer) kPlayer.queue.shuffle();
                             if (nPlayer) {
-                                for (let i = nPlayer.queue.length - 1; i > 0; i--) {
-                                    const j = Math.floor(Math.random() * (i + 1));
-                                    [nPlayer.queue[i], nPlayer.queue[j]] = [nPlayer.queue[j], nPlayer.queue[i]];
-                                }
+                                nPlayer.shuffle();
                             }
                         } else if (customId === 'dj_vol_down') {
                             if (kPlayer) {
@@ -669,6 +808,9 @@ class CommandRegistry {
                             }
                             if (nPlayer) {
                                 nPlayer.setVolume(Math.max(10, nPlayer.volume - 10));
+                                if (nPlayer.currentTrack) {
+                                    await nPlayer.sendNowPlayingPanel(nPlayer.currentTrack, true).catch(() => {});
+                                }
                             }
                         } else if (customId === 'dj_vol_up') {
                             if (kPlayer) {
@@ -677,6 +819,9 @@ class CommandRegistry {
                             }
                             if (nPlayer) {
                                 nPlayer.setVolume(Math.min(150, nPlayer.volume + 10));
+                                if (nPlayer.currentTrack) {
+                                    await nPlayer.sendNowPlayingPanel(nPlayer.currentTrack, true).catch(() => {});
+                                }
                             }
                         }
                     } catch (e) {}

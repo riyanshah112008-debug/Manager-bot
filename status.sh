@@ -2,7 +2,7 @@
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-if command -v pm2 >/dev/null 2>&1 && pm2 list | grep -q "starry-bot"; then
+if command -v pm2 >/dev/null 2>&1 && pm2 list | grep "starry-bot" | grep -q "online"; then
     echo "🟢 Starry Bot is RUNNING under PM2 (24/7 Mode)"
     pm2 status starry-bot
     echo "📜 Recent logs:"
