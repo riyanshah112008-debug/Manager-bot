@@ -68,7 +68,7 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
         embed.setTitle('🎭 Social Actions & Anime Expressions (26 Commands)')
             .setDescription(
                 `**Targeted Member Interactions (GIFs + Counter):**\n` +
-                `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}slap\`, \`${prefix}pat\`, \`${prefix}cuddle\`, \`${prefix}bite\`, \`${prefix}poke\`, \`${prefix}punch\`, \`${prefix}tickle\`, \`${prefix}feed\`, \`${prefix}lick\`, \`${prefix}highfive\`, \`${prefix}wave\`\n\n` +
+                `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}slap\`, \`${prefix}pat\`, \`${prefix}cuddle\`, \`${prefix}bite\`, \`${prefix}poke\`, \`${prefix}punch\`, \`${prefix}tickle\`, \`${prefix}feed\`, \`${prefix}lick\`, \`${prefix}highfive\`, \`${prefix}wave\`, \`${prefix}handshake\`\n\n` +
                 `**Solo Expressions & Fun:**\n` +
                 `\`${prefix}sleep\`, \`${prefix}wakeup\`, \`${prefix}cry\`, \`${prefix}laugh\`, \`${prefix}dance\`, \`${prefix}blush\`, \`${prefix}pout\`, \`${prefix}smile\`, \`${prefix}bored\`, \`${prefix}social\`, \`${prefix}tord\`\n\n` +
                 `*All social action response buttons feature persistent 1-year lifetime!*`

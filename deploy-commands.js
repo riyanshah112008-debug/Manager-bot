@@ -284,7 +284,7 @@ if (socialModule && socialModule.socialCommandPayload) {
 }
 
 // Direct Social Action Slash Commands (Top-Level)
-const directSocials = ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'handhold', 'bonk'];
+const directSocials = ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'handhold', 'handshake', 'bonk'];
 for (const act of directSocials) {
     commands.push(
         new SlashCommandBuilder()

@@ -27,6 +27,7 @@ const OTAKU_ACTION_MAP = {
     lick:     "lick",
     wave:     "wave",
     handhold: "handhold",
+    handshake:"handhold",
     bonk:     "smack",
     yeet:     "run",
     boop:     "nuzzle",
@@ -126,6 +127,13 @@ const ANIME_GIFS = {
     handhold: [
         "https://cdn.otakugifs.xyz/gifs/handhold/a2be9c7cbdb80d5b.gif",
         "https://cdn.otakugifs.xyz/gifs/handhold/1v0ZK48bw9.gif"
+    ],
+    handshake: [
+        "https://media.giphy.com/media/26xBI73gWquCBBCDe/giphy.gif",
+        "https://media.giphy.com/media/xT9DPIlGnuHpr2yKIU/giphy.gif",
+        "https://media.giphy.com/media/BVsKJQ4Z352AM/giphy.gif",
+        "https://cdn.otakugifs.xyz/gifs/handhold/d4570e85e7711a1f.gif",
+        "https://media.giphy.com/media/pHb82xtBPfqEg/giphy.gif"
     ],
     bonk: [
         "https://cdn.otakugifs.xyz/gifs/smack/Xhxvcdkcfx.gif",

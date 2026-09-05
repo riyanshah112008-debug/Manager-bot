@@ -36,7 +36,7 @@ const COOLDOWN_MS = 3000;
 function createSocialCommand(key, configData) {
     return {
         name: key,
-        aliases: [],
+        aliases: key === 'handshake' ? ['shake'] : [],
         category: 'Social',
         description: `${configData.verb.charAt(0).toUpperCase() + configData.verb.slice(1)} ${configData.requiresTarget ? 'a member' : 'an emotion'}`,
         usage: configData.requiresTarget ? `,${key} @user` : `,${key}`,
