@@ -5,49 +5,12 @@
 
 require('dotenv').config();
 
-// 🌐 Auto-Adaptive In-Process IPv4 DNS Resolver (Prevents ENETUNREACH on Android/Termux)
-const dns = require('dns');
+// 🌐 Modern Dual-Stack Happy Eyeballs (Auto-selects working IPv4/IPv6 on mobile/cellular networks)
 const net = require('net');
 try {
     if (typeof net.setDefaultAutoSelectFamily === 'function') {
-        net.setDefaultAutoSelectFamily(false);
+        net.setDefaultAutoSelectFamily(true);
     }
-    if (typeof dns.setDefaultResultOrder === 'function') {
-        dns.setDefaultResultOrder('ipv4first');
-    }
-    const origLookup = dns.lookup;
-    const dnsCache = new Map();
-
-    dns.lookup = function(hostname, options, callback) {
-        if (typeof options === 'function') {
-            callback = options;
-            options = { family: 4 };
-        } else if (typeof options === 'object' && options !== null) {
-            options.family = 4;
-        } else if (typeof options === 'number') {
-            options = { family: 4 };
-        }
-        const isAll = (typeof options === 'object' && options !== null && options.all);
-
-        origLookup(hostname, options, (err, res1, res2) => {
-            if (!err) {
-                if (isAll && Array.isArray(res1)) {
-                    const ipv4List = res1.filter(a => a.family === 4);
-                    return callback(null, ipv4List.length > 0 ? ipv4List : res1);
-                }
-                dnsCache.set(hostname, { address: res1, family: 4, timestamp: Date.now() });
-                return callback(null, res1, res2 || 4);
-            }
-            const cached = dnsCache.get(hostname);
-            if (cached && (Date.now() - cached.timestamp < 3600000)) {
-                if (isAll) {
-                    return callback(null, [{ address: cached.address, family: 4 }]);
-                }
-                return callback(null, cached.address, 4);
-            }
-            return callback(err, res1, res2);
-        });
-    };
 } catch (e) {}
 
 // 🔧 Polyfill for older / 32-bit Node.js versions
