@@ -331,7 +331,7 @@ setInterval(() => {
     }
 
     // 3. Check Primary Discord Gateway WebSocket & Zombie Heartbeat State
-    if (client.ws) {
+    if (client.ws && client.isReady()) {
         const isNotReady = client.ws.status !== 0;
         const ping = client.ws.ping;
         const shard = client.ws.shards?.first();
@@ -345,7 +345,7 @@ setInterval(() => {
         const isZombiePing = (ping < 0 || isNaN(ping) || ping > 20000);
         const isHeartbeatStale = (timeSinceLastPing > 85000);
 
-        if (isNotReady || (client.isReady() && (isZombiePing || isHeartbeatStale))) {
+        if (isNotReady || isZombiePing || isHeartbeatStale) {
             gatewayAbnormalCount++;
             console.warn(`⚠️ [Watchdog] Gateway abnormal (status: ${client.ws.status}, ping: ${ping}ms, lastPingAck: ${Math.round(timeSinceLastPing / 1000)}s ago) [Check ${gatewayAbnormalCount}/3]`);
             
