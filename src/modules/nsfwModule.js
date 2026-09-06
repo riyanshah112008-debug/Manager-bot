@@ -219,7 +219,7 @@ async function explainNsfwWithAI(ctx) {
     const prompt = 
         'Explain what the mature / anime NSFW module of Starry Bot contains in a polite, helpful, and concise manner. ' +
         'Detail that: ' +
-        '1) Nekotina is an all-ages bot with playful anime roleplay interactions (hug, kiss, pat, cuddle, bite, spank, lick, pinch, smack, suck), all of which Starry supports. ' +
+        '1) Starry provides rich all-ages playful anime roleplay interactions (hug, kiss, pat, cuddle, bite, spank, lick, pinch, smack, suck). ' +
         '2) Starry also includes an optional mature/NSFW anime suite (waifus, nekos, kitsunes, romantic anime gifs, ecchi artwork, and spicy social interactions). ' +
         '3) Security is paramount: In servers, ONLY the Server Owner and Bot Owners have permission to toggle NSFW on or off. ' +
         '4) Even when enabled on a server, commands strictly run ONLY inside Discord-verified Age-Restricted (NSFW) channels. ' +
@@ -252,9 +252,9 @@ async function explainNsfwWithAI(ctx) {
                 inline: false
             },
             {
-                name: '🎭 Nekotina Interactions & Anime Galleries',
+                name: '🎭 Social Interactions & Anime Galleries',
                 value: 
-                    '• **Nekotina-Style Roleplay:** All interactions (`hug`, `kiss`, `pat`, `cuddle`, `spank`, `lick`, `bite`, `suck`, `pinch`, `smack`, etc.) with reciprocal buttons.\n' +
+                    '• **Interactive Roleplay:** All interactions (`hug`, `kiss`, `pat`, `cuddle`, `spank`, `lick`, `bite`, `suck`, `pinch`, `smack`, etc.) with reciprocal buttons.\n' +
                     '• **Anime Galleries:** High-definition `waifu`, `neko`, `kitsune`, `husbando`, `trap`, `ecchi`, and `hentai` galleries.',
                 inline: false
             }

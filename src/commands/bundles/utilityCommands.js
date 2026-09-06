@@ -1117,6 +1117,86 @@ const commands = [
         }
     },
 
+    // 41B. SETLANGUAGE / SERVER LOCALIZATION CONFIGURATION
+    {
+        name: 'setlanguage',
+        aliases: ['language', 'lang', 'setlang'],
+        category: 'Settings',
+        description: 'Configure the server language or view the active language across 14 supported languages.',
+        usage: ',setlanguage [language_code]',
+        async execute(ctx) {
+            const { 
+                SUPPORTED_LANGUAGES, 
+                resolveLanguageCode, 
+                getGuildLanguage, 
+                setGuildLanguage, 
+                t, 
+                createLanguageSelectRow 
+            } = require('../../utils/i18n');
+
+            if (!ctx.guild) {
+                return ctx.reply('ℹ️ In Direct Messages, Starry defaults to English (🇬🇧).');
+            }
+
+            const currentLang = await getGuildLanguage(ctx.guild.id);
+            const currentInfo = SUPPORTED_LANGUAGES[currentLang] || SUPPORTED_LANGUAGES['en'];
+            const prefix = ctx.prefix || ',';
+
+            const langInput = ctx.options?.getString ? ctx.options.getString('language') : (ctx.args ? ctx.args.join(' ') : null);
+
+            // If no language specified, display current language + interactive dropdown
+            if (!langInput) {
+                const langListStr = Object.values(SUPPORTED_LANGUAGES)
+                    .map(l => `${l.flag} **${l.native}** (\`${l.code}\`)`)
+                    .join(' • ');
+
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS?.PRIMARY || '#9B59B6')
+                    .setTitle('🌐 ' + t(currentLang, 'setup.select_lang_title'))
+                    .setDescription(
+                        t(currentLang, 'lang.current', { lang: currentInfo.native, code: currentInfo.code, flag: currentInfo.flag }) + '\n\n' +
+                        t(currentLang, 'lang.change_hint', { prefix }) + '\n\n' +
+                        `**Supported Languages (14):**\n${langListStr}`
+                    )
+                    .setFooter({ text: 'Starry Multi-Language Localization Engine' })
+                    .setTimestamp();
+
+                const selectRow = createLanguageSelectRow(currentLang, 'starry_lang_select');
+                return ctx.reply({ embeds: [embed], components: [selectRow] });
+            }
+
+            // Check permissions
+            const hasPerm = ctx.member?.permissions?.has('ManageGuild') || 
+                            ctx.member?.permissions?.has('Administrator') || 
+                            config.BOT_OWNERS?.includes(ctx.user.id);
+
+            if (!hasPerm) {
+                return ctx.reply(t(currentLang, 'lang.no_permission'));
+            }
+
+            const targetCode = resolveLanguageCode(langInput);
+            if (!targetCode) {
+                const selectRow = createLanguageSelectRow(currentLang, 'starry_lang_select');
+                return ctx.reply({ 
+                    content: t(currentLang, 'lang.invalid'), 
+                    components: [selectRow] 
+                });
+            }
+
+            await setGuildLanguage(ctx.guild.id, targetCode);
+            const newInfo = SUPPORTED_LANGUAGES[targetCode];
+
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS?.SUCCESS || '#2ECC71')
+                .setTitle(t(targetCode, 'lang.updated_title'))
+                .setDescription(t(targetCode, 'lang.updated_desc', { lang: newInfo.native, flag: newInfo.flag, native: newInfo.native }))
+                .setFooter({ text: 'Starry Configuration • ' + newInfo.name })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
     // 42. TOP.GG VOTE REWARD COMMAND
     {
         name: 'vote',

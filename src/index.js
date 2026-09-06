@@ -314,6 +314,34 @@ client.once(Events.ClientReady, async () => {
     }
 });
 
+// 🌟 Multilingual Welcome & Setup Card on Server Join
+client.on(Events.GuildCreate, async (guild) => {
+    try {
+        if (!guild || !guild.available) return;
+        const isPrimary = !multiBot?.primaryClient || (client.user?.id === multiBot.primaryClient?.user?.id);
+        if (!isPrimary) return; // Only primary bot posts the server greeting
+
+        const { createWelcomeSetupCard } = require('./utils/i18n');
+        let targetChannel = guild.systemChannel;
+
+        if (!targetChannel || !targetChannel.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages)) {
+            targetChannel = guild.channels.cache.find(c => 
+                c.isTextBased() && 
+                c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.SendMessages)
+            );
+        }
+
+        if (targetChannel) {
+            const welcomePayload = createWelcomeSetupCard(guild, 'en', client.user);
+            await targetChannel.send(welcomePayload).catch(() => {});
+            console.log(`🌐 [i18n] Dispatched multilingual setup greeting to "${guild.name}" (#${targetChannel.name})`);
+        }
+    } catch (e) {
+        console.error('⚠️ Error sending server join setup greeting:', e.message);
+    }
+});
+
+
 // Module Initializers (Background systems)
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },

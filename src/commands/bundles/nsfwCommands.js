@@ -4,7 +4,7 @@
 // Server Owner & Bot Owners ONLY for Server Activation
 // Members Can Freely Enable / Disable in Direct Messages (DMs)
 // Strict Discord Age-Restricted (NSFW) Channel Verification
-// Anime Waifus, Nekos, Kitsunes, Husbandos, Romance GIFs & Nekotina-Style Roleplay
+// Anime Waifus, Nekos, Kitsunes, Husbandos, Romance GIFs & Anime Social Roleplay
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -236,7 +236,7 @@ const commands = [
                     `• \`,nsfw on\` / \`,nsfw off\` — Toggle server NSFW *(Server Owner / Bot Owner only)*\n` +
                     `• \`,nsfw dms on\` / \`,nsfw dms off\` — Toggle personal DM mature mode *(Any member)*\n` +
                     `• \`,nsfw info\` — **Ask Starry AI** to explain everything in this module\n` +
-                    `• \`,nsfwhelp\` — View full index of mature commands and Nekotina roleplay`
+                    `• \`,nsfwhelp\` — View full index of mature commands and anime roleplay`
                 )
                 .setFooter({ text: 'Strict Age-Restricted Verification Active • Prefix: ,' })
                 .setTimestamp();
@@ -263,7 +263,7 @@ const commands = [
         }
     },
 
-    // 2. STARRY MASCOT CHARACTER SUITE (Nekotina Style)
+    // 2. STARRY MASCOT CHARACTER SUITE
     {
         name: 'starry',
         aliases: ['character', 'mascot', 'persona', 'astraea', 'starrychan'],
@@ -687,7 +687,7 @@ const commands = [
         }
     },
 
-    // 13. SPANK (Playful Anime Spank - Nekotina Spicy Interaction)
+    // 13. SPANK (Playful Anime Spank)
     {
         name: 'spank',
         aliases: ['nsfwspank'],
@@ -726,7 +726,7 @@ const commands = [
         }
     },
 
-    // 14. NSFW LICK (Teasing Sensual Anime Lick - Nekotina Interaction)
+    // 14. NSFW LICK (Teasing Sensual Anime Lick)
     {
         name: 'nsfwlick',
         aliases: ['sensuallick'],
@@ -843,7 +843,7 @@ const commands = [
         }
     },
 
-    // 17. SUCK / NSFWSUCK (Nekotina Spicy Interaction)
+    // 17. SUCK / NSFWSUCK
     {
         name: 'nsfwsuck',
         aliases: ['suck2', 'nibble'],
@@ -882,7 +882,7 @@ const commands = [
         }
     },
 
-    // 18. PINCH / NSFWPINCH (Nekotina Interaction)
+    // 18. PINCH / NSFWPINCH
     {
         name: 'nsfwpinch',
         aliases: ['pinch2'],
@@ -921,7 +921,7 @@ const commands = [
         }
     },
 
-    // 19. SMACK / SMACK2 (Nekotina Interaction)
+    // 19. SMACK / SMACK2
     {
         name: 'nsfwsmack',
         aliases: ['smack2'],
@@ -981,7 +981,7 @@ const commands = [
             const embed = new EmbedBuilder()
                 .setColor('#FF1493')
                 .setAuthor({ name: '🔞 Starry Mature & Anime NSFW System', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
-                .setTitle('🔞 Complete Mature Anime & Nekotina Roleplay Suite')
+                .setTitle('🔞 Complete Mature Anime & Social Roleplay Suite')
                 .setDescription(
                     `**🛡️ Activation & Authorization:**\n` +
                     `• **Server Activation:** Restricted strictly to the **Server Owner** (<@${ctx.guild?.ownerId || 'Owner'}>) and **Bot Owners**.\n` +
@@ -992,9 +992,9 @@ const commands = [
                     `\`${config.DEFAULT_PREFIX}waifu\`, \`${config.DEFAULT_PREFIX}neko\`, \`${config.DEFAULT_PREFIX}kitsune\`, \`${config.DEFAULT_PREFIX}husbando\`, \`${config.DEFAULT_PREFIX}trap\`, \`${config.DEFAULT_PREFIX}ecchi\`, \`${config.DEFAULT_PREFIX}hentai\`, \`${config.DEFAULT_PREFIX}blowkiss\`\n\n` +
                     `**💋 Mature Social & Romantic Interactions:**\n` +
                     `\`${config.DEFAULT_PREFIX}nsfwkiss\`, \`${config.DEFAULT_PREFIX}nsfwhug\`, \`${config.DEFAULT_PREFIX}spank\`, \`${config.DEFAULT_PREFIX}nsfwlick\`, \`${config.DEFAULT_PREFIX}nsfwtouch\`, \`${config.DEFAULT_PREFIX}nsfwcuddle\`, \`${config.DEFAULT_PREFIX}nsfwsuck\`, \`${config.DEFAULT_PREFIX}nsfwpinch\`, \`${config.DEFAULT_PREFIX}nsfwsmack\`\n\n` +
-                    `**🎭 All-Ages Nekotina Roleplay (Usable in Any Channel):**\n` +
+                    `**🎭 All-Ages Social Roleplay (Usable in Any Channel):**\n` +
                     `\`${config.DEFAULT_PREFIX}hug\`, \`${config.DEFAULT_PREFIX}kiss\`, \`${config.DEFAULT_PREFIX}pat\`, \`${config.DEFAULT_PREFIX}cuddle\`, \`${config.DEFAULT_PREFIX}bite\`, \`${config.DEFAULT_PREFIX}lick\`, \`${config.DEFAULT_PREFIX}pinch\`, \`${config.DEFAULT_PREFIX}smack\`, \`${config.DEFAULT_PREFIX}suck\`, \`${config.DEFAULT_PREFIX}nom\`, \`${config.DEFAULT_PREFIX}slap\`, \`${config.DEFAULT_PREFIX}poke\`, \`${config.DEFAULT_PREFIX}punch\`, \`${config.DEFAULT_PREFIX}tickle\`, \`${config.DEFAULT_PREFIX}highfive\`\n\n` +
-                    `**🌟 Mascot System (Nekotina Persona Style):**\n` +
+                    `**🌟 Starry Mascot System:**\n` +
                     `\`${config.DEFAULT_PREFIX}starry\`, \`${config.DEFAULT_PREFIX}starry mood\`, \`${config.DEFAULT_PREFIX}starry affinity\`, \`${config.DEFAULT_PREFIX}starry gift\`, \`${config.DEFAULT_PREFIX}starry lore\``
                 )
                 .setFooter({ text: 'Starry Mature Suite • Prefix: ,' })

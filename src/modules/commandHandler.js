@@ -252,7 +252,7 @@ class CommandRegistry {
                             matchedPrefix = '';
                             commandBody = content;
                         } else {
-                            // In DMs, talk directly with Starry AI without needing a prefix (Nekotina-style)
+                            // In DMs, talk directly with Starry AI without needing a prefix
                             matchedPrefix = '';
                             commandBody = 'ask ' + content;
                         }
@@ -357,6 +357,58 @@ class CommandRegistry {
             // 2. Handle Global 1-Year Persistent Button & Select Menu Interactions
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
                 const customId = interaction.customId;
+
+                // 🌐 Language Select Dropdown (1-Year Global Handler)
+                if (customId === 'starry_lang_select' || customId === 'starry_setup_lang_select' || customId === 'starry_lang_welcome_select') {
+                    if (!interaction.guild) {
+                        return interaction.reply({ content: '❌ Language can only be configured in a server.', ephemeral: true }).catch(() => {});
+                    }
+                    const hasPerm = interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild) ||
+                                    interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+                                    config.BOT_OWNERS?.includes(interaction.user.id);
+                    if (!hasPerm) {
+                        const { t } = require('../utils/i18n');
+                        return interaction.reply({ content: t(interaction.guild.id, 'lang.no_permission'), ephemeral: true }).catch(() => {});
+                    }
+
+                    const selectedLang = interaction.values[0];
+                    const { setGuildLanguage, SUPPORTED_LANGUAGES, t, createWelcomeSetupCard, createSetupPromptCard } = require('../utils/i18n');
+                    await setGuildLanguage(interaction.guild.id, selectedLang);
+                    const langInfo = SUPPORTED_LANGUAGES[selectedLang] || SUPPORTED_LANGUAGES['en'];
+
+                    if (customId === 'starry_lang_welcome_select') {
+                        const updatedCard = createWelcomeSetupCard(interaction.guild, selectedLang, client.user);
+                        return await interaction.update(updatedCard).catch(() => {});
+                    } else if (customId === 'starry_setup_lang_select') {
+                        const updatedCard = createSetupPromptCard(interaction.guild, selectedLang, client.user);
+                        return await interaction.update(updatedCard).catch(() => {});
+                    } else {
+                        const embed = new EmbedBuilder()
+                            .setColor(config.EMBED_COLORS?.SUCCESS || '#2ECC71')
+                            .setTitle(t(selectedLang, 'lang.updated_title'))
+                            .setDescription(t(selectedLang, 'lang.updated_desc', { lang: langInfo.native, flag: langInfo.flag, native: langInfo.native }))
+                            .setFooter({ text: 'Starry Configuration • ' + langInfo.name })
+                            .setTimestamp();
+                        return await interaction.update({ embeds: [embed], components: [] }).catch(() => {});
+                    }
+                }
+
+                // 🚀 Welcome Setup Buttons (1-Year Global Handler)
+                if (customId === 'starry_welcome_start_setup' || customId === 'starry_welcome_sync') {
+                    if (!interaction.guild) return;
+                    const hasPerm = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+                                    interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild) ||
+                                    config.BOT_OWNERS?.includes(interaction.user.id);
+                    if (!hasPerm) {
+                        const { t } = require('../utils/i18n');
+                        return interaction.reply({ content: t(interaction.guild.id, 'common.access_denied'), ephemeral: true }).catch(() => {});
+                    }
+
+                    const { getGuildLanguage, createSetupPromptCard } = require('../utils/i18n');
+                    const currentLang = await getGuildLanguage(interaction.guild.id);
+                    const setupCard = createSetupPromptCard(interaction.guild, currentLang, client.user);
+                    return await interaction.update(setupCard).catch(() => {});
+                }
 
                 // A. Help Menu Dropdown & Navigation
                 if (customId === 'help_select' || customId.startsWith('help_btn_')) {
@@ -858,3 +910,10 @@ module.exports = registryInstance;
 module.exports.guildPrefixCache = guildPrefixCache;
 module.exports.getGuildPrefix = getGuildPrefix;
 module.exports.setCachedPrefix = setCachedPrefix;
+
+const { getGuildLanguage, getGuildLanguageSync, setGuildLanguage, t } = require('../utils/i18n');
+module.exports.getGuildLanguage = getGuildLanguage;
+module.exports.getGuildLanguageSync = getGuildLanguageSync;
+module.exports.setGuildLanguage = setGuildLanguage;
+module.exports.t = t;
+

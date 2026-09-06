@@ -596,7 +596,7 @@ const commands = [
         }
     },
 
-    // 17. FISH (Pescar - Nekotina Style)
+    // 17. FISH (Pescar)
     {
         name: 'fish',
         aliases: ['pescar'],
@@ -660,14 +660,14 @@ const commands = [
                 .addFields(
                     { name: '🎒 Backpack', value: `Total items: \`${doc.inventory.length}\` | Use \`,inv\` to view or \`,sell all\` to cash out.`, inline: false }
                 )
-                .setFooter({ text: 'Starry Gathering Engine • Nekotina Style • Prefix: ,' })
+                .setFooter({ text: 'Starry Gathering Engine • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
         }
     },
 
-    // 18. MINE (Minar - Nekotina Style)
+    // 18. MINE (Minar)
     {
         name: 'mine',
         aliases: ['minar'],
@@ -730,7 +730,7 @@ const commands = [
                 .addFields(
                     { name: '🎒 Backpack', value: `Total items: \`${doc.inventory.length}\` | Use \`,inv\` to inspect or \`,sell all\` to cash out.`, inline: false }
                 )
-                .setFooter({ text: 'Starry Mining Engine • Nekotina Style • Prefix: ,' })
+                .setFooter({ text: 'Starry Mining Engine • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -835,7 +835,7 @@ const commands = [
         }
     },
 
-    // 21. MARRY (Nekotina-Style)
+    // 21. MARRY
     {
         name: 'marry',
         aliases: ['casarse', 'propose'],
@@ -954,7 +954,7 @@ const commands = [
         }
     },
 
-    // 22. DIVORCE (Nekotina-Style)
+    // 22. DIVORCE
     {
         name: 'divorce',
         aliases: ['divorcio'],
@@ -1048,19 +1048,19 @@ const commands = [
                 .setTitle(`💘 Love Affinity: ${u1.username} & ${u2.username}`)
                 .setDescription(`**Compatibility Score:** \`${score}%\`\n${bar}\n\n${comment}`)
                 .setThumbnail('https://media.giphy.com/media/nyGFcsP0kAobm/giphy.gif')
-                .setFooter({ text: 'Starry Love Matchmaker • Nekotina Style • Prefix: ,' })
+                .setFooter({ text: 'Starry Love Matchmaker • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
         }
     },
 
-    // 24. PROFILE (Nekotina-Style)
+    // 24. PROFILE
     {
         name: 'profile',
         aliases: ['perfil', 'userinfo-eco', 'p'],
         category: 'Economy',
-        description: 'View your complete Nekotina-style anime profile, marriage, wealth, and pet.',
+        description: 'View your complete anime profile card, marriage, wealth, and pet.',
         usage: ',profile [@user]',
         async execute(ctx) {
             const target = ctx.message?.mentions?.users?.first() || ctx.options?.getUser?.('user') || ctx.user;
@@ -1128,7 +1128,7 @@ const commands = [
                         inline: false 
                     }
                 )
-                .setFooter({ text: 'Starry Profile Engine • Nekotina Style • Prefix: ,' })
+                .setFooter({ text: 'Starry Profile Engine • Prefix: ,' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -1154,7 +1154,7 @@ const commands = [
         }
     },
 
-    // 26. PET (Mascotas - Nekotina Style)
+    // 26. PET (Mascotas)
     {
         name: 'pet',
         aliases: ['mascota', 'pets'],
@@ -1202,7 +1202,7 @@ const commands = [
                     .setTitle(`🎉 Adopted ${SPECIES_AVAILABLE[speciesChoice].emoji} ${petName}!`)
                     .setDescription(`Welcome **${petName}** the **${SPECIES_AVAILABLE[speciesChoice].name}** to your family!\n\nTake good care of them! You can feed and play with them anytime.`)
                     .setImage(SPECIES_AVAILABLE[speciesChoice].image)
-                    .setFooter({ text: 'Starry Pet Engine • Nekotina Style • Prefix: ,' })
+                    .setFooter({ text: 'Starry Pet Engine • Prefix: ,' })
                     .setTimestamp();
 
                 return ctx.reply({ embeds: [embed] });
@@ -1284,7 +1284,7 @@ const commands = [
         }
     },
 
-    // 27. ANIME (AniList Search - Nekotina Style)
+    // 27. ANIME (AniList Search)
     {
         name: 'anime',
         aliases: ['searchanime', 'mal'],
@@ -1349,7 +1349,7 @@ const commands = [
                     embed.setImage(media.bannerImage);
                 }
 
-                embed.setFooter({ text: 'AniList GraphQL Engine • Nekotina Style • Prefix: ,' })
+                embed.setFooter({ text: 'AniList GraphQL Engine • Prefix: ,' })
                     .setTimestamp();
 
                 return ctx.reply({ embeds: [embed] });

@@ -2,7 +2,7 @@
 // ✨ STARRY POP & MASCOT SIGNATURE PHRASE ENGINE
 // File Path: src/modules/starryPop.js
 // "Starry Starry" Signature Trigger • Official Custom Anime Mascot GIFs • Voice Lines & Affection
-// 100% Authentic Starry (Astraea) Artwork • Nekotina-Style Mascot Pop Experience
+// 100% Authentic Starry (Astraea) Artwork • Interactive Mascot Pop Experience
 // ==========================================
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, Events } = require('discord.js');
 const path = require('path');

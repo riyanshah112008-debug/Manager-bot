@@ -473,12 +473,69 @@ commands.push(
     { name: 'mine', description: '⛏️ Mine crystals, diamonds, and ores in the cavern' },
     { name: 'inventory', description: '🎒 View items and treasures stored in your backpack', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
     { name: 'sell', description: '💰 Sell gathered fish and minerals for cash credits', options: [{ name: 'item', type: 3, required: false, description: 'Item name or "all"' }] },
-    { name: 'profile', description: '👤 View complete Nekotina-style anime profile, marriage, and wealth', options: [{ name: 'user', type: 6, required: false, description: 'Target member' }] },
+    { name: 'profile', description: '👤 View complete anime profile card, marriage, badges, and wealth', options: [{ name: 'user', type: 6, required: false, description: 'Target member' }] },
     { name: 'marry', description: '💍 Propose marriage to another member', options: [{ name: 'user', type: 6, required: true, description: 'Member to marry' }] },
     { name: 'divorce', description: '💔 End your current marriage' },
     { name: 'ship', description: '💘 Calculate love compatibility between two members', options: [{ name: 'user', type: 6, required: true, description: 'First user' }, { name: 'user2', type: 6, required: false, description: 'Second user' }] },
     { name: 'pet', description: '🐾 Manage, adopt, feed, and play with your companion pet', options: [{ name: 'action', type: 3, required: false, description: 'Action (adopt, feed, play)' }, { name: 'name', type: 3, required: false, description: 'Pet name or species' }] },
-    { name: 'anime', description: '📺 Search anime synopsis, scores, and episodes on AniList', options: [{ name: 'title', type: 3, required: true, description: 'Anime title' }] }
+    { name: 'anime', description: '📺 Search anime synopsis, scores, and episodes on AniList', options: [{ name: 'title', type: 3, required: true, description: 'Anime title' }] },
+    {
+        name: 'setlanguage',
+        description: '🌐 Change the server language or view the active language across 14 languages',
+        default_member_permissions: ADMIN,
+        options: [
+            {
+                name: 'language',
+                type: 3,
+                required: false,
+                description: 'Select server language',
+                choices: [
+                    { name: '🇬🇧 English', value: 'en' },
+                    { name: '🇪🇸 Español (Spanish)', value: 'es' },
+                    { name: '🇧🇷 Português (Portuguese)', value: 'pt' },
+                    { name: '🇯🇵 日本語 (Japanese)', value: 'ja' },
+                    { name: '🇮🇳 हिन्दी (Hindi)', value: 'hi' },
+                    { name: '🇫🇷 Français (French)', value: 'fr' },
+                    { name: '🇩🇪 Deutsch (German)', value: 'de' },
+                    { name: '🇷🇺 Русский (Russian)', value: 'ru' },
+                    { name: '🇮🇩 Bahasa Indonesia', value: 'id' },
+                    { name: '🇮🇹 Italiano (Italian)', value: 'it' },
+                    { name: '🇻🇳 Tiếng Việt (Vietnamese)', value: 'vi' },
+                    { name: '🇹🇷 Türkçe (Turkish)', value: 'tr' },
+                    { name: '🇸🇦 العربية (Arabic)', value: 'ar' },
+                    { name: '🇰🇷 한국어 (Korean)', value: 'ko' }
+                ]
+            }
+        ]
+    },
+    {
+        name: 'language',
+        description: '🌐 View or configure current server language',
+        options: [
+            {
+                name: 'language',
+                type: 3,
+                required: false,
+                description: 'Select server language',
+                choices: [
+                    { name: '🇬🇧 English', value: 'en' },
+                    { name: '🇪🇸 Español (Spanish)', value: 'es' },
+                    { name: '🇧🇷 Português (Portuguese)', value: 'pt' },
+                    { name: '🇯🇵 日本語 (Japanese)', value: 'ja' },
+                    { name: '🇮🇳 हिन्दी (Hindi)', value: 'hi' },
+                    { name: '🇫🇷 Français (French)', value: 'fr' },
+                    { name: '🇩🇪 Deutsch (German)', value: 'de' },
+                    { name: '🇷🇺 Русский (Russian)', value: 'ru' },
+                    { name: '🇮🇩 Bahasa Indonesia', value: 'id' },
+                    { name: '🇮🇹 Italiano (Italian)', value: 'it' },
+                    { name: '🇻🇳 Tiếng Việt (Vietnamese)', value: 'vi' },
+                    { name: '🇹🇷 Türkçe (Turkish)', value: 'tr' },
+                    { name: '🇸🇦 العربية (Arabic)', value: 'ar' },
+                    { name: '🇰🇷 한국어 (Korean)', value: 'ko' }
+                ]
+            }
+        ]
+    }
 );
 
 // 3. STRICT DEDUPLICATION ENGINE & USER APP ACTIVATION

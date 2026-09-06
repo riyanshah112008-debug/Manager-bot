@@ -4,6 +4,7 @@ const serverSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     prefix: { type: String, default: ',' },
     triggerWord: { type: String, default: 'Starry' },
+    language: { type: String, default: 'en' },
     
     // 🛡️ Starry Anti-Nuke & Security Guard Shield
     antinuke: {
