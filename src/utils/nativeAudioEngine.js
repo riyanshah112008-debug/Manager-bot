@@ -28,6 +28,7 @@ const {
     StringSelectMenuBuilder,
     MessageFlags
 } = require('discord.js');
+const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const config = require('../config');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -504,7 +505,8 @@ class StarryGuildPlayer {
 
             if (hadTrack && !this.destroyed) {
                 if (this.textChannel) {
-                    this.textChannel.send('📭 **The queue has ended.** Use `,play <song>` to queue more music!').catch(() => {});
+                    const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
+                    this.textChannel.send(t(lang, 'music.queue_ended', { play_cmd: '`,play <song>`' })).catch(() => {});
                 }
                 try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
             }
@@ -697,12 +699,15 @@ class StarryGuildPlayer {
             ])
         );
 
+        const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
+        const panelPayload = localizePayload({
+            embeds: [embed],
+            components: [row1, row2, row3, filterRow]
+        }, lang);
+
         if (updateOnly && this.nowPlayingMessage) {
             try {
-                await this.nowPlayingMessage.edit({
-                    embeds: [embed],
-                    components: [row1, row2, row3, filterRow]
-                });
+                await this.nowPlayingMessage.edit(panelPayload);
                 return;
             } catch (e) {}
         }
@@ -712,10 +717,7 @@ class StarryGuildPlayer {
             this.nowPlayingMessage = null;
         }
 
-        this.nowPlayingMessage = await this.textChannel.send({
-            embeds: [embed],
-            components: [row1, row2, row3, filterRow]
-        }).catch(() => null);
+        this.nowPlayingMessage = await this.textChannel.send(panelPayload).catch(() => null);
     }
 
     pause(shouldPause) {

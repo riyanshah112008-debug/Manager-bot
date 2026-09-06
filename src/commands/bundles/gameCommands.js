@@ -14,6 +14,7 @@ const {
 const mongoose = require('mongoose');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
+const { localizePayload } = require('../../utils/i18n');
 
 // Helper to get or modify user's wallet
 async function getEcoUser(userId, guildId = 'GLOBAL') {
@@ -601,7 +602,7 @@ const commands = [
                         .setDescription(`You correctly identified **${questionData.options[questionData.answer]}**!\n\n✨ **Earned:** \`+$150 Stardust Credits\``)
                         .setTimestamp();
 
-                    return i.update({ embeds: [winEmbed], components: [resultRow] });
+                    return i.update(localizePayload({ embeds: [winEmbed], components: [resultRow] }, ctx.lang));
                 } else {
                     const loseEmbed = new EmbedBuilder()
                         .setColor(config.EMBED_COLORS.DANGER)
@@ -609,7 +610,7 @@ const commands = [
                         .setDescription(`The correct answer was **${questionData.options[questionData.answer]}**!\nBetter luck on the next question!`)
                         .setTimestamp();
 
-                    return i.update({ embeds: [loseEmbed], components: [resultRow] });
+                    return i.update(localizePayload({ embeds: [loseEmbed], components: [resultRow] }, ctx.lang));
                 }
             });
 
@@ -619,7 +620,7 @@ const commands = [
                         .setColor(config.EMBED_COLORS.WARNING)
                         .setTitle('⌛ Time Expired!')
                         .setDescription(`Time ran out! The correct answer was **${questionData.options[questionData.answer]}**.`);
-                    await msg.edit({ embeds: [timeoutEmbed], components: [] }).catch(() => {});
+                    await msg.edit(localizePayload({ embeds: [timeoutEmbed], components: [] }, ctx.lang)).catch(() => {});
                 }
             });
         }

@@ -18,6 +18,7 @@ const path = require('path');
 const fs = require('fs');
 const MusicController = require('../models/MusicController');
 const { StarryAudioEngine, formatTime } = require('../utils/nativeAudioEngine');
+const { getGuildLanguageSync, t } = require('../utils/i18n');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 const BANNER_PATH = path.join(__dirname, '../assets/mascot/starry_music_banner.jpg');
@@ -57,37 +58,39 @@ class MusicControllerEngine {
         return this.cache.get(guildId) || null;
     }
 
-    buildComponents(player) {
+    buildComponents(player, guildId = null) {
         const isPlaying = !!(player && player.currentTrack);
         const isPaused = !!(player && player.paused);
         const isAutoplay = !!(player && player.autoplay);
+        const targetGuildId = guildId || player?.guildId;
+        const lang = targetGuildId ? getGuildLanguageSync(targetGuildId) : 'en';
 
         // Row 1: Playback Navigation
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('ctrl_vol_down')
                 .setEmoji('🔉')
-                .setLabel('Down')
+                .setLabel(t(lang, 'music.btn_down'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_previous')
                 .setEmoji('⏮️')
-                .setLabel('Previous')
+                .setLabel(t(lang, 'music.btn_prev'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_pause_resume')
                 .setEmoji(isPaused ? '▶️' : '⏸️')
-                .setLabel(isPaused ? 'Resume' : 'Pause')
+                .setLabel(isPaused ? t(lang, 'music.btn_resume') : t(lang, 'music.btn_pause'))
                 .setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('ctrl_skip')
                 .setEmoji('⏭️')
-                .setLabel('Skip')
+                .setLabel(t(lang, 'music.btn_skip'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_vol_up')
                 .setEmoji('🔊')
-                .setLabel('Up')
+                .setLabel(t(lang, 'music.btn_up'))
                 .setStyle(ButtonStyle.Secondary)
         );
 
@@ -96,27 +99,27 @@ class MusicControllerEngine {
             new ButtonBuilder()
                 .setCustomId('ctrl_shuffle')
                 .setEmoji('🔀')
-                .setLabel('Shuffle')
+                .setLabel(t(lang, 'music.btn_shuffle'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_autoplay')
                 .setEmoji('🔄')
-                .setLabel('AutoPlay')
+                .setLabel(t(lang, 'music.btn_autoplay'))
                 .setStyle(isAutoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_stop')
                 .setEmoji('⏹️')
-                .setLabel('Stop')
+                .setLabel(t(lang, 'music.btn_stop'))
                 .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setCustomId('ctrl_dashboard')
                 .setEmoji('🎛️')
-                .setLabel('Dashboard')
+                .setLabel(t(lang, 'music.btn_dashboard'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_queue')
                 .setEmoji('📜')
-                .setLabel('Queue')
+                .setLabel(t(lang, 'music.btn_queue'))
                 .setStyle(ButtonStyle.Secondary)
         );
 
@@ -125,34 +128,34 @@ class MusicControllerEngine {
             new ButtonBuilder()
                 .setCustomId('ctrl_like')
                 .setEmoji('❤️')
-                .setLabel('Like')
+                .setLabel(t(lang, 'music.btn_like'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_dislike')
                 .setEmoji('👎')
-                .setLabel('Not for me')
+                .setLabel(t(lang, 'music.btn_dislike'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_block')
                 .setEmoji('🚫')
-                .setLabel('Block')
+                .setLabel(t(lang, 'music.btn_block'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_next_up')
                 .setEmoji('🔮')
-                .setLabel("What's next?")
+                .setLabel(t(lang, 'music.btn_next_up'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_connect')
                 .setEmoji('▶️')
-                .setLabel('Connect Bot')
+                .setLabel(t(lang, 'music.btn_connect'))
                 .setStyle(ButtonStyle.Success)
         );
 
         // Row 4: Audio DSP Filter Dropdown
         const filterMenu = new StringSelectMenuBuilder()
             .setCustomId('ctrl_filter')
-            .setPlaceholder('🎧 Select Audio Filter / Sound FX...')
+            .setPlaceholder(t(lang, 'music.filter_placeholder'))
             .addOptions([
                 { label: 'Empowering Master (Hi-Fi)', description: 'Default dynamic warmth & vocal presence', value: 'empowering', emoji: '👑' },
                 { label: 'True Vibration Bass', description: 'Deep physical vibrating sub-bass (Vocals intact)', value: 'bassboost', emoji: '📳' },
@@ -174,20 +177,22 @@ class MusicControllerEngine {
             new ButtonBuilder()
                 .setCustomId('ctrl_premium')
                 .setEmoji('⭐')
-                .setLabel('Premium')
+                .setLabel(t(lang, 'music.btn_premium'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ctrl_vote')
                 .setEmoji('👍')
-                .setLabel('Vote')
+                .setLabel(t(lang, 'music.btn_vote'))
                 .setStyle(ButtonStyle.Secondary)
         );
 
         return [row1, row2, row3, row4, row5];
     }
 
-    buildEmbed(player, client) {
+    buildEmbed(player, client, guildId = null) {
         const track = player?.currentTrack;
+        const targetGuildId = guildId || player?.guildId;
+        const lang = targetGuildId ? getGuildLanguageSync(targetGuildId) : 'en';
 
         if (track) {
             const filterName = (player.filter === 'clear' || !player.filter || player.filter === 'empowering')
@@ -201,7 +206,7 @@ class MusicControllerEngine {
 
             return new EmbedBuilder()
                 .setColor('#5865F2')
-                .setTitle('Music Controller')
+                .setTitle(t(lang, 'music.controller_title'))
                 .setDescription(
                     `▶️ **[${(track.title || 'Audio Track').substring(0, 75)}](${track.url || 'https://discord.gg'})**\n\n` +
                     `👤 **Artist:** \`${track.author || 'Featured Artist'}\`\n` +
@@ -221,11 +226,8 @@ class MusicControllerEngine {
         // Idle / Waiting for music State
         return new EmbedBuilder()
             .setColor('#2B2D31')
-            .setTitle('Music Controller')
-            .setDescription(
-                `Waiting for music...\n` +
-                `Send the name or link of a music`
-            )
+            .setTitle(t(lang, 'music.controller_title'))
+            .setDescription(t(lang, 'music.waiting_music'))
             .setImage('attachment://starry_music_banner.jpg')
             .setFooter({ 
                 text: 'Starry Controller System',
@@ -259,8 +261,8 @@ class MusicControllerEngine {
             if (!channel) return;
 
             const player = StarryAudioEngine.getPlayer(guildId);
-            const embed = this.buildEmbed(player, client);
-            const components = this.buildComponents(player);
+            const embed = this.buildEmbed(player, client, guildId);
+            const components = this.buildComponents(player, guildId);
 
             const message = await channel.messages.fetch(config.messageId).catch(() => null);
             if (message) {
@@ -337,8 +339,8 @@ class MusicControllerEngine {
 
         // 4. Build embed and controller components
         const player = StarryAudioEngine.getPlayer(guild.id);
-        const embed = this.buildEmbed(player, client);
-        const components = this.buildComponents(player);
+        const embed = this.buildEmbed(player, client, guild.id);
+        const components = this.buildComponents(player, guild.id);
         const files = fs.existsSync(BANNER_PATH) ? [BANNER_PATH] : [];
 
         const controllerMessage = await channel.send({

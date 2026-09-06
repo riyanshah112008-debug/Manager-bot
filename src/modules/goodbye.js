@@ -3,6 +3,7 @@
 // ==========================================
 const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
 const mongoose = require('mongoose');
+const { getGuildLanguageSync, t } = require('../utils/i18n');
 
 const goodbyeSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -37,6 +38,7 @@ const goodbyeModule = (client) => {
         }
 
         const channel = interaction.options.getChannel('channel', true);
+        const lang = getGuildLanguageSync(interaction.guildId);
 
         await GoodbyeSettings.findOneAndUpdate(
             { guildId: interaction.guildId },
@@ -46,17 +48,17 @@ const goodbyeModule = (client) => {
 
         const previewEmbed = new EmbedBuilder()
             .setColor('#7289DA')
-            .setTitle(`🥀 FAREWELL, TRAVELER (Preview) 🥀`)
-            .setDescription(`👋 **${interaction.user.tag}** has departed from **${interaction.guild.name}**. We wish you the absolute best on your future adventures! 🌠`)
-            .addFields({ name: '📊 Server Census', value: `We are now down to **${interaction.guild.memberCount}** members.`, inline: false })
+            .setTitle(t(lang, 'goodbye.preview_title'))
+            .setDescription(t(lang, 'goodbye.desc', { user: interaction.user.tag, server: interaction.guild.name }))
+            .addFields({ name: t(lang, 'goodbye.census_field'), value: t(lang, 'goodbye.census_value', { count: interaction.guild.memberCount }), inline: false })
             .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
             .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-            .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Setup Preview Mode` })
+            .setFooter({ text: t(lang, 'goodbye.footer_preview') })
             .setTimestamp();
 
-        await channel.send({ content: `🕊️ Goodbye **${interaction.user.username}**! Until we meet again... *(Setup Preview)*`, embeds: [previewEmbed] }).catch(() => {});
+        await channel.send({ content: t(lang, 'goodbye.preview_content', { user: interaction.user.username }), embeds: [previewEmbed] }).catch(() => {});
 
-        return interaction.editReply({ content: `✅ **Success!** Aesthetic goodbye cards will now be sent to ${channel}!` });
+        return interaction.editReply({ content: t(lang, 'goodbye.setup_success', { channel: channel.toString() }) });
     }
 
     client.on('interactionCreate', async (interaction) => {
@@ -72,17 +74,19 @@ const goodbyeModule = (client) => {
             const channel = member.guild.channels.cache.get(config.channelId);
             if (!channel) return;
 
+            const lang = getGuildLanguageSync(member.guild.id);
+
             const aestheticEmbed = new EmbedBuilder()
                 .setColor('#7289DA')
-                .setTitle(`🥀 FAREWELL, TRAVELER 🥀`)
-                .setDescription(`👋 **${member.user.tag}** has fluttered away from **${member.guild.name}**. May our paths cross again someday! 🌠`)
-                .addFields({ name: '📊 Server Census', value: `We are now down to **${member.guild.memberCount}** members.`, inline: false })
+                .setTitle(t(lang, 'goodbye.title'))
+                .setDescription(t(lang, 'goodbye.desc', { user: member.user.tag, server: member.guild.name }))
+                .addFields({ name: t(lang, 'goodbye.census_field'), value: t(lang, 'goodbye.census_value', { count: member.guild.memberCount }), inline: false })
                 .setImage('https://media.tenor.com/images/99208a68b444b0593457a82b3d39575e/tenor.gif')
                 .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                .setFooter({ text: `🥀 Starry Aesthetic Goodbye System • Safe travels!` })
+                .setFooter({ text: t(lang, 'goodbye.footer') })
                 .setTimestamp();
 
-            await channel.send({ content: `🕊️ Goodbye **${member.user.username}**! Wishing you the best on your journey.`, embeds: [aestheticEmbed] }).catch(() => {});
+            await channel.send({ content: t(lang, 'goodbye.content', { user: member.user.username }), embeds: [aestheticEmbed] }).catch(() => {});
         } catch (error) {
             console.error('[Goodbye Engine Error]:', error);
         }

@@ -22,8 +22,9 @@ module.exports = {
             { upsert: true, new: true }
         );
 
+        const { t } = require('../../utils/i18n');
         return interaction.reply({ 
-            content: `✅ Success! My trigger word for this server has been changed to **${newName}**!`, 
+            content: t(interaction.guild.id, 'setname.success', { name: newName }), 
             ephemeral: true 
         });
     }

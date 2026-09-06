@@ -6,6 +6,7 @@
 // ==========================================
 const { MessageFlags, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
+const { getGuildLanguage, getGuildLanguageSync, localizePayload } = require('./i18n');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 const ONE_YEAR_MS = config.ONE_YEAR_MS || 2147483647;
@@ -27,6 +28,7 @@ class CommandContext {
         this.guildId = isRealGuild ? source.guild.id : null;
         this.channel = source.channel;
         this.channelId = source.channelId || (source.channel ? source.channel.id : null);
+        this.lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
         
         this.interaction = this.isSlash ? source : null;
         this.message = !this.isSlash ? source : null;
@@ -131,6 +133,14 @@ class CommandContext {
             }
         }
 
+        // Automatic Server Language Localization
+        if (this.guildId && (!this.lang || this.lang === 'en')) {
+            this.lang = await getGuildLanguage(this.guildId);
+        }
+        if (this.lang && this.lang !== 'en') {
+            payload = localizePayload(payload, this.lang);
+        }
+
         if (this.isSlash) {
             if (this.source.deferred || this.source.replied) {
                 this.replyMessage = await this.source.editReply(payload).catch(() => null);
@@ -171,6 +181,9 @@ class CommandContext {
         if (typeof options === 'string') {
             payload = { content: options };
         }
+        if (this.lang && this.lang !== 'en') {
+            payload = localizePayload(payload, this.lang);
+        }
 
         if (this.isSlash) {
             this.replyMessage = await this.source.editReply(payload).catch(() => null);
@@ -189,6 +202,9 @@ class CommandContext {
         if (typeof options === 'string') {
             payload = { content: options };
         }
+        if (this.lang && this.lang !== 'en') {
+            payload = localizePayload(payload, this.lang);
+        }
 
         if (this.isSlash) {
             return await this.source.followUp(payload).catch(() => null);
@@ -201,8 +217,15 @@ class CommandContext {
     }
 
     async send(options) {
+        let payload = options;
+        if (typeof options === 'string') {
+            payload = { content: options };
+        }
+        if (this.lang && this.lang !== 'en') {
+            payload = localizePayload(payload, this.lang);
+        }
         if (this.channel) {
-            return await this.channel.send(options).catch(() => null);
+            return await this.channel.send(payload).catch(() => null);
         }
         return null;
     }

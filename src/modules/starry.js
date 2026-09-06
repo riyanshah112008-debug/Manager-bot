@@ -491,28 +491,6 @@ module.exports = async (client) => {
             });
             await accessLog.send({ embeds: [joinEmbed] }).catch(() => {});
         }
-
-        try {
-            const config = await WelcomeSettings.findOne({ guildId: member.guild.id });
-            if (!config || !config.channelId) return;
-            const welcomeCh = member.guild.channels.cache.get(config.channelId);
-            if (!welcomeCh) return;
-
-            const welcomeEmbed = new EmbedBuilder()
-                .setColor('#FF73FA')
-                .setTitle(`✨ WELCOME TO ${member.guild.name.toUpperCase()} ✨`)
-                .setDescription(`💖 Hello <@${member.id}>! Welcome aboard! Make yourself at home, check out the community rules, and enjoy your wonderful stay here. ✨`)
-                .addFields(
-                    { name: '🌸 Member Milestone', value: `You are our stellar member **#${member.guild.memberCount}**! 🎉`, inline: false },
-                    { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
-                )
-                .setImage('https://media.tenor.com/images/5f4481d68378873724c9c22e032997aa/tenor.gif')
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-                .setFooter({ text: `✨ Starry Aesthetic Welcome System • Enjoy your journey! ✨` })
-                .setTimestamp();
-
-            await welcomeCh.send({ content: `💫 Hey <@${member.id}>! We've been expecting you! 🥂`, embeds: [welcomeEmbed] }).catch(() => {});
-        } catch (err) {}
     });
 
     client.on('guildMemberRemove', async (member) => {

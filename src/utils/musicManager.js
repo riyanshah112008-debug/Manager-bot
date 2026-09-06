@@ -2,6 +2,7 @@ const { Kazagumo } = require('kazagumo');
 const { Connectors } = require('shoukaku');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
+const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
@@ -23,49 +24,51 @@ const Nodes = [
         retryDelay: 3000
     },
     {
-        name: 'Node-3-Serenetia-SSL',
-        url: 'lavalink.serenetia.com:443',
-        auth: 'https://seretia.link/discord',
-        secure: true,
+        name: 'Node-3-Ajieblogs-NonSSL',
+        url: 'lava-v4.ajieblogs.eu.org:80',
+        auth: 'https://dsc.gg/ajidevserver',
+        secure: false,
         retryAmount: 50,
         retryDelay: 3000
     },
     {
-        name: 'Node-4-DevamOp-SSL',
-        url: 'lavalink.devamop.in:443',
-        auth: 'DevamOp',
-        secure: true,
-        retryAmount: 50,
-        retryDelay: 3000
+        name: 'Node-4-LocalFallback',
+        url: '127.0.0.1:2333',
+        auth: 'youshallnotpass',
+        secure: false,
+        retryAmount: 10,
+        retryDelay: 5000
     }
 ];
 
-function buildNowPlayingComponents() {
+function buildNowPlayingComponents(guildId = null) {
+    const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
+
     // Row 1: Primary Transport Controls (4 buttons - fits mobile without wrapping)
     const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel('Pause').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel('Loop').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel('Stop').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('music_pause').setEmoji('⏸️').setLabel(t(lang, 'music.btn_pause')).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_skip').setEmoji('⏭️').setLabel(t(lang, 'music.btn_skip')).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_loop').setEmoji('🔁').setLabel(t(lang, 'music.btn_loop')).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_stop').setEmoji('⏹️').setLabel(t(lang, 'music.btn_stop')).setStyle(ButtonStyle.Danger)
     );
 
     // Row 2: Queue & Volume Controls (4 buttons - fits mobile without wrapping)
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel('Vol -').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel('Vol +').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel('Queue').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('dj_vol_down').setEmoji('🔉').setLabel(t(lang, 'music.btn_voldown')).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_vol_up').setEmoji('🔊').setLabel(t(lang, 'music.btn_volup')).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dj_shuffle').setEmoji('🔀').setLabel(t(lang, 'music.btn_shuffle')).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel(t(lang, 'music.btn_queue')).setStyle(ButtonStyle.Secondary)
     );
 
     // Row 3: Voice Channel Security (2 buttons)
     const row3 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel(t(lang, 'music.btn_lockvc')).setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel(t(lang, 'music.btn_unlockvc')).setStyle(ButtonStyle.Success)
     );
 
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
+        new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
             { label: 'Clear Filters', description: 'Removes all active audio effects (Default)', value: 'clear', emoji: '🚫' },
             { label: 'Bassboost', description: 'Deep, heavy bass enhancement', value: 'bassboost', emoji: '🎸' },
             { label: '8D Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -308,8 +311,9 @@ function createMusicManager(client) {
             )
             .setFooter({ text: `Starry Music Engine • Bot: ${client.user ? client.user.tag : 'Starry'}`, iconURL: client.user ? client.user.displayAvatarURL() : undefined });
 
-        const components = buildNowPlayingComponents();
-        const messageData = { embeds: [embed], components };
+        const lang = player.guildId ? getGuildLanguageSync(player.guildId) : 'en';
+        const components = buildNowPlayingComponents(player.guildId);
+        const messageData = localizePayload({ embeds: [embed], components }, lang);
 
         try {
             if (interaction) {
@@ -373,7 +377,8 @@ function createMusicManager(client) {
         }
 
         if (channel) {
-            channel.send('📭 **The queue has ended.** Use `,play <song>` to queue more music!').catch(() => {});
+            const lang = player.guildId ? getGuildLanguageSync(player.guildId) : 'en';
+            channel.send(t(lang, 'music.queue_ended', { play_cmd: '`,play <song>`' })).catch(() => {});
         }
     });
 

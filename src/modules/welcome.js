@@ -14,6 +14,7 @@ const {
     SlashCommandBuilder 
 } = require('discord.js');
 const mongoose = require('mongoose');
+const { getGuildLanguageSync, getWelcomeDefaults, t } = require('../utils/i18n');
 
 const welcomeSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -73,6 +74,7 @@ async function getWelcomeControlPanel(guildId, client) {
     let settings = await WelcomeSettings.findOne({ guildId });
     if (!settings) return null;
 
+    const lang = getGuildLanguageSync(guildId);
     const channelDisplay = settings.channelId ? `<#${settings.channelId}>` : '*Not Set*';
     const pingDisplay = (settings.pingContent && settings.pingContent !== 'undefined') ? settings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
     const titleDisplay = (settings.title && settings.title !== 'undefined') ? settings.title : '✨ WELCOME TO {server} ✨';
@@ -85,7 +87,7 @@ async function getWelcomeControlPanel(guildId, client) {
 
     const panelEmbed = new EmbedBuilder()
         .setColor(colorDisplay)
-        .setTitle(`🎨 Welcome Customizer & Manager | ${guildId}`)
+        .setTitle(t(lang, 'welcome.control_panel_title', { guild: guildId }))
         .setDescription(
             `Configure and design custom welcome cards for your server.\n\n` +
             `**📍 Welcome Channel:** ${channelDisplay}\n` +
@@ -103,14 +105,14 @@ async function getWelcomeControlPanel(guildId, client) {
         .setFooter({ text: 'Use the interactive buttons below to modify each section in real time.' });
 
     const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('welc_btn_text').setLabel('Edit Title & Text').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
-        new ButtonBuilder().setCustomId('welc_btn_media').setLabel('Edit Banner & Thumb').setStyle(ButtonStyle.Secondary).setEmoji('🖼️'),
-        new ButtonBuilder().setCustomId('welc_btn_style').setLabel('Edit Style & Footer').setStyle(ButtonStyle.Secondary).setEmoji('🎨')
+        new ButtonBuilder().setCustomId('welc_btn_text').setLabel(t(lang, 'welcome.btn_text')).setStyle(ButtonStyle.Primary).setEmoji('✏️'),
+        new ButtonBuilder().setCustomId('welc_btn_media').setLabel(t(lang, 'welcome.btn_media')).setStyle(ButtonStyle.Secondary).setEmoji('🖼️'),
+        new ButtonBuilder().setCustomId('welc_btn_style').setLabel(t(lang, 'welcome.btn_style')).setStyle(ButtonStyle.Secondary).setEmoji('🎨')
     );
 
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('welc_btn_ping').setLabel('Edit Ping Header').setStyle(ButtonStyle.Secondary).setEmoji('💬'),
-        new ButtonBuilder().setCustomId('welc_btn_preview').setLabel('Test Preview Card').setStyle(ButtonStyle.Success).setEmoji('👁️')
+        new ButtonBuilder().setCustomId('welc_btn_ping').setLabel(t(lang, 'welcome.btn_ping')).setStyle(ButtonStyle.Secondary).setEmoji('💬'),
+        new ButtonBuilder().setCustomId('welc_btn_preview').setLabel(t(lang, 'welcome.btn_preview')).setStyle(ButtonStyle.Success).setEmoji('👁️')
     );
 
     return { embeds: [panelEmbed], components: [row1, row2] };
@@ -133,19 +135,21 @@ const welcomeModule = (client) => {
         }
 
         const channel = interaction.options.getChannel('channel', true);
+        const lang = getGuildLanguageSync(interaction.guildId);
 
         let settings = await WelcomeSettings.findOne({ guildId: interaction.guildId });
         if (!settings) {
+            const defs = getWelcomeDefaults(lang, interaction.guild.name);
             settings = await WelcomeSettings.create({
                 guildId: interaction.guildId,
                 channelId: channel.id,
-                title: '✨ WELCOME TO {server} ✨',
-                description: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟',
+                title: defs.title,
+                description: defs.description,
                 color: '#FF73FA',
                 image: 'https://i.imgur.com/vH1O33q.gif',
                 thumbnail: 'avatar',
-                footer: '✨ Enjoy your stellar journey in {server}! ✨',
-                pingContent: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂'
+                footer: defs.footer,
+                pingContent: defs.pingContent
             });
         } else {
             settings.channelId = channel.id;
@@ -154,7 +158,7 @@ const welcomeModule = (client) => {
 
         const panelData = await getWelcomeControlPanel(interaction.guildId, client);
         return interaction.editReply({ 
-            content: `✅ **Welcome channel set to ${channel}!** Use the Embed Manager below to customize layout:`,
+            content: t(lang, 'welcome.setup_success', { channel: channel.toString() }),
             ...panelData 
         });
     }
@@ -169,10 +173,18 @@ const welcomeModule = (client) => {
             const channel = member.guild.channels.cache.get(config.channelId);
             if (!channel) return;
 
-            const pingRaw = (config.pingContent && config.pingContent !== 'undefined') ? config.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
-            const titleRaw = (config.title && config.title !== 'undefined') ? config.title : '✨ WELCOME TO {server} ✨';
-            const descRaw = (config.description && config.description !== 'undefined') ? config.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
-            const footerRaw = (config.footer && config.footer !== 'undefined') ? config.footer : '✨ Enjoy your stellar journey in {server}! ✨';
+            const lang = getGuildLanguageSync(member.guild.id);
+            const defs = getWelcomeDefaults(lang, member.guild.name);
+
+            const isDefaultPing = !config.pingContent || config.pingContent === 'undefined' || config.pingContent.includes('Grab a seat and enjoy your stay');
+            const isDefaultTitle = !config.title || config.title === 'undefined' || config.title.includes('WELCOME TO');
+            const isDefaultDesc = !config.description || config.description === 'undefined' || config.description.includes('overjoyed to have you join our family');
+            const isDefaultFooter = !config.footer || config.footer === 'undefined' || config.footer.includes('Enjoy your stellar journey');
+
+            const pingRaw = isDefaultPing ? defs.pingContent : config.pingContent;
+            const titleRaw = isDefaultTitle ? defs.title : config.title;
+            const descRaw = isDefaultDesc ? defs.description : config.description;
+            const footerRaw = isDefaultFooter ? defs.footer : config.footer;
 
             const pingMsg = replacePlaceholders(pingRaw, member);
             const titleMsg = replacePlaceholders(titleRaw, member);
@@ -184,8 +196,8 @@ const welcomeModule = (client) => {
                 .setTitle(titleMsg.slice(0, 256))
                 .setDescription(descMsg.slice(0, 4000))
                 .addFields(
-                    { name: '🌸 Community Member', value: `You are our precious member **#${member.guild.memberCount}**! 🎉`, inline: false },
-                    { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                    { name: t(lang, 'welcome.member_field'), value: t(lang, 'welcome.member_count', { count: member.guild.memberCount }), inline: false },
+                    { name: t(lang, 'welcome.created_field'), value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
                 )
                 .setTimestamp();
 
@@ -320,10 +332,18 @@ const welcomeModule = (client) => {
                     const latestSettings = await WelcomeSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const member = interaction.member;
 
-                    const pingRaw = (latestSettings.pingContent && latestSettings.pingContent !== 'undefined') ? latestSettings.pingContent : '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂';
-                    const titleRaw = (latestSettings.title && latestSettings.title !== 'undefined') ? latestSettings.title : '✨ WELCOME TO {server} ✨';
-                    const descRaw = (latestSettings.description && latestSettings.description !== 'undefined') ? latestSettings.description : '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟';
-                    const footerRaw = (latestSettings.footer && latestSettings.footer !== 'undefined') ? latestSettings.footer : '✨ Enjoy your stellar journey in {server}! ✨';
+                    const lang = getGuildLanguageSync(interaction.guildId);
+                    const defs = getWelcomeDefaults(lang, member.guild.name);
+
+                    const isDefaultPing = !latestSettings.pingContent || latestSettings.pingContent === 'undefined' || latestSettings.pingContent.includes('Grab a seat and enjoy your stay');
+                    const isDefaultTitle = !latestSettings.title || latestSettings.title === 'undefined' || latestSettings.title.includes('WELCOME TO');
+                    const isDefaultDesc = !latestSettings.description || latestSettings.description === 'undefined' || latestSettings.description.includes('overjoyed to have you join our family');
+                    const isDefaultFooter = !latestSettings.footer || latestSettings.footer === 'undefined' || latestSettings.footer.includes('Enjoy your stellar journey');
+
+                    const pingRaw = isDefaultPing ? defs.pingContent : latestSettings.pingContent;
+                    const titleRaw = isDefaultTitle ? defs.title : latestSettings.title;
+                    const descRaw = isDefaultDesc ? defs.description : latestSettings.description;
+                    const footerRaw = isDefaultFooter ? defs.footer : latestSettings.footer;
 
                     const pingMsg = replacePlaceholders(pingRaw, member);
                     const titleMsg = replacePlaceholders(titleRaw, member);
@@ -335,8 +355,8 @@ const welcomeModule = (client) => {
                         .setTitle(titleMsg.slice(0, 256))
                         .setDescription(descMsg.slice(0, 4000))
                         .addFields(
-                            { name: '🌸 Community Member', value: `You are our precious member **#${member.guild.memberCount}**! 🎉`, inline: false },
-                            { name: '✨ Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
+                            { name: t(lang, 'welcome.member_field'), value: t(lang, 'welcome.member_count', { count: member.guild.memberCount }), inline: false },
+                            { name: t(lang, 'welcome.created_field'), value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }
                         )
                         .setTimestamp();
 

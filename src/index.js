@@ -420,6 +420,9 @@ async function startBot() {
         });
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
+        const { initLanguageCache } = require('./utils/i18n');
+        await initLanguageCache(client).catch(() => {});
+
         mongoose.connection.on('disconnected', () => {
             console.warn('⚠️ MongoDB connection lost. Attempting auto-reconnect...');
         });

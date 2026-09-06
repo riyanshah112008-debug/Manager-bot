@@ -5,7 +5,7 @@
 // ==========================================
 
 const { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
-const { getGuildLanguage, setGuildLanguage, t, createSetupPromptCard, SUPPORTED_LANGUAGES } = require('../utils/i18n');
+const { getGuildLanguage, setGuildLanguage, t, createSetupPromptCard, SUPPORTED_LANGUAGES, getWelcomeDefaults } = require('../utils/i18n');
 
 // Safely load databases
 let ServerSettings, ChestChannel, BoostChannel;
@@ -27,39 +27,75 @@ async function runServerSync(guild, client, lang = 'en') {
     // --- 1. BASIC CONFIGURATION ---
     if (ServerSettings) {
         await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { triggerWord: 'Starry' }, { upsert: true });
-        report.push(`⚙️ **Identity:** Trigger word set to \`Starry\``);
+        report.push(t(lang, 'setup.report.identity', { name: 'Starry' }));
     }
 
     // --- 2. COMMUNITY FEATURES ---
     const welcomeChan = channels.find(c => c.name.includes('welcome'));
-    if (welcomeChan) report.push(`👋 **Welcomes:** Linked to <#${welcomeChan.id}>`);
+    if (welcomeChan) {
+        try {
+            const WelcomeSettings = require('../models/WelcomeSettings');
+            const defs = getWelcomeDefaults(lang, guild.name);
+            await WelcomeSettings.findOneAndUpdate(
+                { guildId: guild.id },
+                {
+                    channelId: welcomeChan.id,
+                    title: defs.title,
+                    description: defs.description,
+                    pingContent: defs.pingContent,
+                    footer: defs.footer
+                },
+                { upsert: true, new: true }
+            );
+        } catch (e) {}
+        report.push(t(lang, 'setup.report.welcome', { channel: welcomeChan.id }));
+    }
+
+    const goodbyeChan = channels.find(c => c.name.includes('goodbye') || c.name.includes('leave') || c.name.includes('farewell'));
+    if (goodbyeChan) {
+        try {
+            const { GoodbyeSettings } = require('./goodbye');
+            if (GoodbyeSettings) {
+                await GoodbyeSettings.findOneAndUpdate(
+                    { guildId: guild.id },
+                    { channelId: goodbyeChan.id },
+                    { upsert: true, new: true }
+                );
+            }
+        } catch (e) {}
+        report.push(t(lang, 'setup.report.goodbye', { channel: goodbyeChan.id }));
+    }
     
     const starboardChan = channels.find(c => c.name.includes('starboard'));
-    if (starboardChan) report.push(`⭐ **Starboard:** Linked to <#${starboardChan.id}>`);
+    if (starboardChan) report.push(t(lang, 'setup.report.starboard', { channel: starboardChan.id }));
     
     const suggestChan = channels.find(c => c.name.includes('suggestions') || c.name.includes('ideas'));
-    if (suggestChan) report.push(`💡 **Suggestions:** Linked to <#${suggestChan.id}>`);
+    if (suggestChan) report.push(t(lang, 'setup.report.suggestions', { channel: suggestChan.id }));
 
     // --- 3. SECURITY & LOGS ---
     const verifyChan = channels.find(c => c.name.includes('verification') || c.name.includes('verify'));
-    if (verifyChan) report.push(`🛡️ **Verification:** Mapped to <#${verifyChan.id}>`);
+    if (verifyChan) report.push(t(lang, 'setup.report.verify', { channel: verifyChan.id }));
     
     const logChannels = channels.filter(c => c.name.includes('logs-'));
-    if (logChannels.size > 0) report.push(`🗂️ **Smart Logging:** Successfully mapped **${logChannels.size}** distinct log channels.`);
+    if (logChannels.size > 0) report.push(t(lang, 'setup.report.logging', { count: logChannels.size }));
 
     // --- 4. TICKETS & APPS ---
     const openTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('opened tickets'));
     const closedTicketsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('closed tickets'));
-    if (openTicketsCat && closedTicketsCat) report.push(`🎫 **Tickets:** Bound to \`${openTicketsCat.name}\` & \`${closedTicketsCat.name}\``);
+    if (openTicketsCat && closedTicketsCat) {
+        report.push(t(lang, 'setup.report.tickets', { open: openTicketsCat.name, closed: closedTicketsCat.name }));
+    }
     
     const applicationsCat = channels.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('applications'));
-    if (applicationsCat) report.push(`📝 **Applications:** Bound to category \`${applicationsCat.name}\``);
+    if (applicationsCat) {
+        report.push(t(lang, 'setup.report.apps', { category: applicationsCat.name }));
+    }
 
     // --- 5. ECONOMY & BOOSTS ---
     const booster = channels.find(c => c.name.includes('boosters') || c.name.includes('boost'));
     if (booster && BoostChannel) {
         await BoostChannel.findOneAndUpdate({ guildId: guild.id }, { channelId: booster.id }, { upsert: true });
-        report.push(`🚀 **Boost Tracker:** Linked to <#${booster.id}>`);
+        report.push(t(lang, 'setup.report.boost', { channel: booster.id }));
     }
 
     const chestTargets = channels.filter(c => c.type === ChannelType.GuildText && (c.name.includes('general') || c.name.includes('cafe-chat') || c.name.includes('international') || c.name.includes('spam')));
@@ -74,7 +110,7 @@ async function runServerSync(guild, client, lang = 'en') {
                 chestCount++;
             }
         }
-        if (chestCount > 0) report.push(`🎁 **Loot Engine:** Activated in **${chestCount}** chat channels`);
+        if (chestCount > 0) report.push(t(lang, 'setup.report.loot', { count: chestCount }));
     }
 
     return report;
