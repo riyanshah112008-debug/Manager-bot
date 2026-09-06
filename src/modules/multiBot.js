@@ -111,10 +111,15 @@ class MultiBotManager {
     }
 
     registerEventHook(fn) {
+        if (typeof fn !== 'function') return;
         this.eventHooks.push(fn);
         for (const [id, info] of this.instances.entries()) {
             if (info.client && !info.isPrimary) {
-                try { fn(info.client); } catch (e) { console.error('MultiBot Hook Run Error:', e); }
+                if (!info.client._appliedHooks) info.client._appliedHooks = new Set();
+                if (!info.client._appliedHooks.has(fn)) {
+                    info.client._appliedHooks.add(fn);
+                    try { fn(info.client); } catch (e) { console.error('MultiBot Hook Run Error:', e); }
+                }
             }
         }
     }
@@ -159,8 +164,12 @@ class MultiBotManager {
         client.on(Events.ShardReconnecting, (id) => console.log(`🔄 [${name}] Shard #${id} Reconnecting...`));
         client.on(Events.ShardResume, (id) => console.log(`✅ [${name}] Shard #${id} Resumed.`));
 
+        if (!client._appliedHooks) client._appliedHooks = new Set();
         for (const hook of this.eventHooks) {
-            try { hook(client); } catch (e) { console.error('MultiBot Hook Error:', e); }
+            if (!client._appliedHooks.has(hook)) {
+                client._appliedHooks.add(hook);
+                try { hook(client); } catch (e) { console.error('MultiBot Hook Error:', e); }
+            }
         }
 
         return client;
@@ -293,9 +302,13 @@ class MultiBotManager {
                 };
                 this.instances.set(workerClient.user.id, info);
 
-                // Run all registered event hooks on worker client
+                // Run any newly registered event hooks safely
+                if (!workerClient._appliedHooks) workerClient._appliedHooks = new Set();
                 for (const hook of this.eventHooks) {
-                    try { hook(workerClient); } catch (e) { console.error('MultiBot Ready Hook Error:', e); }
+                    if (!workerClient._appliedHooks.has(hook)) {
+                        workerClient._appliedHooks.add(hook);
+                        try { hook(workerClient); } catch (e) { console.error('MultiBot Ready Hook Error:', e); }
+                    }
                 }
 
                 this.applyPresence(workerClient, role);

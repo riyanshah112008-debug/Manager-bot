@@ -116,6 +116,10 @@ class CommandContext {
     }
 
     async reply(options) {
+        if (this.replied && this.replyMessage) {
+            return this.replyMessage;
+        }
+
         let payload = options;
         if (typeof options === 'string') {
             payload = { content: options };

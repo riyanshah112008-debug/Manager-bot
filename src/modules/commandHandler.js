@@ -51,6 +51,10 @@ function setCachedPrefix(guildId, prefix) {
     if (guildId) guildPrefixCache.set(guildId, prefix || ',');
 }
 
+// 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
+const executedMessageIds = new Set();
+const executedInteractionIds = new Set();
+
 // Load Master Bundles
 const musicCommands = require('../commands/bundles/musicCommands');
 const moderationCommands = require('../commands/bundles/moderationCommands');
@@ -97,6 +101,9 @@ class CommandRegistry {
     }
 
     init(client) {
+        if (this._initialized) return;
+        this._initialized = true;
+
         this.commands.clear();
         this.aliases.clear();
         this.categories.clear();
@@ -164,16 +171,13 @@ class CommandRegistry {
                 this.registerPrefixDispatcher(workerClient);
                 this.registerInteractionDispatcher(workerClient);
             });
-            for (const [id, info] of multiBot.instances.entries()) {
-                if (info.client && !info.isPrimary) {
-                    this.registerPrefixDispatcher(info.client);
-                    this.registerInteractionDispatcher(info.client);
-                }
-            }
         }
     }
 
     registerPrefixDispatcher(client) {
+        if (!client || client._starryPrefixDispatcherAttached) return;
+        client._starryPrefixDispatcherAttached = true;
+
         client.on(Events.MessageCreate, async (message) => {
             if (!message || message.author?.bot || !message.content) return;
 
@@ -270,6 +274,11 @@ class CommandRegistry {
             const command = this.commands.get(resolvedName);
             if (!command) return;
 
+            // 🛡️ Guaranteed Single-Execution Message Guard (Process-wide Deduplication)
+            if (executedMessageIds.has(message.id)) return;
+            executedMessageIds.add(message.id);
+            setTimeout(() => executedMessageIds.delete(message.id), 15000);
+
             console.log(`⚡ [Command] Executing ,${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
 
@@ -301,7 +310,16 @@ class CommandRegistry {
     }
 
     registerInteractionDispatcher(client) {
+        if (!client || client._starryInteractionDispatcherAttached) return;
+        client._starryInteractionDispatcherAttached = true;
+
         client.on(Events.InteractionCreate, async (interaction) => {
+            if (!interaction) return;
+
+            // 🛡️ Interaction Deduplication Guard
+            if (executedInteractionIds.has(interaction.id)) return;
+            executedInteractionIds.add(interaction.id);
+            setTimeout(() => executedInteractionIds.delete(interaction.id), 15000);
             // 1. Handle Slash Commands
             if (interaction.isChatInputCommand()) {
                 const commandName = interaction.commandName.toLowerCase();
