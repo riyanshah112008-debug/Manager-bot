@@ -378,6 +378,7 @@ class MultiBotManager {
 
     // 🎵 Intelligent Multi-VC Music Router
     getMusicWorker(guild, voiceChannel) {
+        if (!guild || !voiceChannel) return null;
         const guildId = guild.id;
         const voiceChannelId = voiceChannel.id;
 
@@ -386,12 +387,11 @@ class MultiBotManager {
             const client = info.client;
             if (!client || !client.user) continue;
 
-            const member = guild.members.cache.get(client.user.id);
+            const clientGuild = client.guilds.cache.get(guildId) || guild;
+            const member = clientGuild.members.me || clientGuild.members.cache.get(client.user.id);
             if (member && member.voice && member.voice.channelId === voiceChannelId) {
-                const player = client.manager ? client.manager.getPlayer(guildId) : null;
                 return {
                     client,
-                    player,
                     name: info.name,
                     role: info.role,
                     botMember: member,
@@ -412,13 +412,13 @@ class MultiBotManager {
             const client = info.client;
             if (!client || !client.user) continue;
 
-            const member = guild.members.cache.get(client.user.id);
+            const clientGuild = client.guilds.cache.get(guildId) || guild;
+            const member = clientGuild.members.me || clientGuild.members.cache.get(client.user.id);
             if (member) {
                 const currentVc = member.voice ? member.voice.channelId : null;
                 if (!currentVc) {
                     return {
                         client,
-                        player: null,
                         name: info.name,
                         role: info.role,
                         botMember: member,

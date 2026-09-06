@@ -677,7 +677,7 @@ class CommandRegistry {
                     const { applyKazagumoFilter } = require('../utils/musicManager');
 
                     const kPlayer = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
-                    const nPlayer = StarryAudioEngine.getPlayer(interaction.guild.id);
+                    const nPlayer = StarryAudioEngine.getPlayer(interaction.guild.id, client);
                     const voiceChannel = interaction.member?.voice?.channel;
 
                     if (!voiceChannel && customId !== 'dj_refresh_panel' && customId !== 'music_queue') {

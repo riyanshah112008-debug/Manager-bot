@@ -411,6 +411,11 @@ class StarryGuildPlayer {
             this.disconnectTimeout = null;
         }
 
+        const botId = this.client?.user?.id;
+        const botGroup = botId || 'default';
+        const clientGuild = (this.client?.guilds?.cache?.get(this.guildId)) || this.voiceChannel?.guild;
+        const adapterCreator = clientGuild?.voiceAdapterCreator || this.voiceChannel?.guild?.voiceAdapterCreator;
+
         const isDead = !this.connection || 
             this.connection.state.status === VoiceConnectionStatus.Destroyed || 
             this.connection.state.status === VoiceConnectionStatus.Disconnected;
@@ -419,13 +424,14 @@ class StarryGuildPlayer {
             this.connection = joinVoiceChannel({
                 channelId: this.voiceChannel.id,
                 guildId: this.guildId,
-                adapterCreator: this.voiceChannel.guild.voiceAdapterCreator,
+                adapterCreator: adapterCreator,
                 selfDeaf: true,
-                selfMute: false
+                selfMute: false,
+                group: botGroup
             });
 
             this.connection.on('stateChange', (oldState, newState) => {
-                console.log(`🎙️ [VoiceConnection ${this.guildId}] ${oldState.status} -> ${newState.status}`);
+                console.log(`🎙️ [VoiceConnection ${this.guildId}:${this.client?.user?.username || botGroup}] ${oldState.status} -> ${newState.status}`);
             });
 
             this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
@@ -446,7 +452,7 @@ class StarryGuildPlayer {
             try {
                 await entersState(this.connection, VoiceConnectionStatus.Ready, 15000);
             } catch (e) {
-                console.warn(`⚠️ [VoiceConnection ${this.guildId}] Handshake notice:`, e.message || e);
+                console.warn(`⚠️ [VoiceConnection ${this.guildId}:${this.client?.user?.username || botGroup}] Handshake notice:`, e.message || e);
             }
         }
 
@@ -884,26 +890,53 @@ class StarryGuildPlayer {
         this.destroyed = true;
         this.stop();
         if (this.connection) {
-            this.connection.destroy();
+            try {
+                this.connection.destroy();
+            } catch (e) {}
             this.connection = null;
         }
-        StarryAudioEngine.players.delete(this.guildId);
+        const botId = this.client?.user?.id;
+        if (botId) {
+            StarryAudioEngine.players.delete(`${this.guildId}:${botId}`);
+        }
+        if (StarryAudioEngine.players.get(this.guildId) === this) {
+            StarryAudioEngine.players.delete(this.guildId);
+        }
     }
 }
 
 class StarryAudioEngine {
     static players = new Map();
 
-    static getPlayer(guildId) {
-        return this.players.get(guildId) || null;
+    static getPlayer(guildId, client = null) {
+        if (!guildId) return null;
+        if (client?.user?.id) {
+            const botKey = `${guildId}:${client.user.id}`;
+            const player = this.players.get(botKey);
+            if (player && !player.destroyed) return player;
+        }
+        const standard = this.players.get(guildId);
+        if (standard && !standard.destroyed) return standard;
+
+        // Fallback: search for any active player in this guild
+        for (const [key, p] of this.players.entries()) {
+            if (key.startsWith(`${guildId}:`) && !p.destroyed) {
+                return p;
+            }
+        }
+        return null;
     }
 
     static getOrCreatePlayer(client, guildId, voiceChannel, textChannel) {
-        let player = this.players.get(guildId);
+        const botId = client?.user?.id;
+        const key = botId ? `${guildId}:${botId}` : guildId;
+        let player = this.players.get(key);
         if (!player || player.destroyed) {
             player = new StarryGuildPlayer(client, guildId, voiceChannel, textChannel);
+            this.players.set(key, player);
             this.players.set(guildId, player);
         } else {
+            player.client = client;
             if (voiceChannel) player.voiceChannel = voiceChannel;
             if (textChannel) player.textChannel = textChannel;
         }

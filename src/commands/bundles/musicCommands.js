@@ -23,15 +23,29 @@ function getVoiceGuard(ctx) {
         return { error: '❌ You must be connected to a voice channel first!' };
     }
 
-    const botMember = ctx.guild?.members?.me;
+    const multiBot = ctx.client.multiBot;
+    const botId = ctx.client.user?.id;
+    let botMember = ctx.guild?.members?.me || (botId ? ctx.guild?.members?.cache?.get(botId) : null);
+    let workerClient = ctx.client;
+
+    // If this bot is already active in a different VC, auto-delegate if multiBot has a free bot
     if (botMember?.voice?.channelId && botMember.voice.channelId !== voiceChannel.id) {
-        return { error: `❌ I am already active in <#${botMember.voice.channelId}>! Join my channel or wait until it is free.` };
+        if (multiBot && typeof multiBot.getMusicWorker === 'function') {
+            const candidate = multiBot.getMusicWorker(ctx.guild, voiceChannel);
+            if (candidate && candidate.client && candidate.client.user?.id !== botId) {
+                workerClient = candidate.client;
+                botMember = candidate.botMember;
+                return { voiceChannel, botMember, workerClient, delegated: true, botName: candidate.name };
+            }
+        }
+        return { error: `❌ **${botMember?.user?.username || 'Starry'}** is already active in <#${botMember.voice.channelId}>! Join that channel or use \`s2,play\` / \`s3,play\`.` };
     }
+
     return { voiceChannel, botMember, workerClient: ctx.client };
 }
 
 function getActivePlayer(client, guildId) {
-    return StarryAudioEngine.getPlayer(guildId);
+    return StarryAudioEngine.getPlayer(guildId, client);
 }
 
 const commands = [
@@ -56,7 +70,8 @@ const commands = [
 
             if (ctx.isSlash) await ctx.defer();
 
-            const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            const targetClient = guard.workerClient || ctx.client;
+            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             const connectPromise = player.connect().catch(() => {});
             const searchPromise = StarryAudioEngine.search(query, ctx.user);
 
@@ -359,7 +374,8 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            const targetClient = guard.workerClient || ctx.client;
+            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             player.connect().catch(() => {});
             player.is247 = !player.is247;
 
@@ -378,7 +394,8 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            const targetClient = guard.workerClient || ctx.client;
+            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             player.autoplay = !player.autoplay;
             if (player.currentTrack && typeof player.sendNowPlayingPanel === 'function') {
                 await player.sendNowPlayingPanel(player.currentTrack, true).catch(() => {});
@@ -717,7 +734,8 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            const targetClient = guard.workerClient || ctx.client;
+            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             await player.connect();
 
             return ctx.reply(`👋 **Joined voice channel:** <#${guard.voiceChannel.id}>`);
@@ -775,7 +793,8 @@ const commands = [
                     const chosenIdx = parseInt(i.values[0], 10);
                     const chosen = results[chosenIdx];
                     if (chosen) {
-                        const player = StarryAudioEngine.getOrCreatePlayer(ctx.client, ctx.guild.id, guard.voiceChannel, ctx.channel);
+                        const targetClient = guard.workerClient || ctx.client;
+                        const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
                         player.connect().catch(() => {});
                         const trackObj = {
                             title: chosen.name || chosen.title,
