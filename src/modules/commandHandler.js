@@ -93,6 +93,26 @@ function getFilesRecursively(dir) {
     return results;
 }
 
+// 🛡️ Global Command Safety Execution Guard (Prevents indefinite hangs on slow APIs / DB locks)
+async function executeSafely(command, ctx, client, cmdName) {
+    const TIMEOUT_MS = 30000;
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            reject(new Error(`Command Execution Timed Out (>30s)`));
+        }, TIMEOUT_MS);
+    });
+
+    try {
+        await Promise.race([
+            command.execute(ctx, client),
+            timeoutPromise
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
 class CommandRegistry {
     constructor() {
         this.commands = new Collection();
@@ -300,11 +320,15 @@ class CommandRegistry {
                 }
 
                 if (typeof command.execute === 'function') {
-                    await command.execute(ctx, client);
+                    await executeSafely(command, ctx, client, resolvedName);
                 }
             } catch (err) {
                 console.error(`❌ Error executing prefix command ,${resolvedName}:`, err);
-                await ctx.reply(`⚠️ An error occurred while executing \`,${resolvedName}\`: \`${err.message}\``).catch(() => {});
+                const isTimeout = err.message && err.message.includes('Timed Out');
+                const replyText = isTimeout
+                    ? `⚠️ **Command Timed Out:** \`,${resolvedName}\` took too long to respond. Please try again in a moment.`
+                    : `⚠️ An error occurred while executing \`,${resolvedName}\`: \`${err.message}\``;
+                await ctx.reply(replyText).catch(() => {});
             }
         });
     }
@@ -338,11 +362,14 @@ class CommandRegistry {
                         }
 
                         if (typeof command.execute === 'function') {
-                            await command.execute(ctx, client);
+                            await executeSafely(command, ctx, client, resolvedName);
                         }
                     } catch (err) {
                         console.error(`❌ Slash Command Error (/${commandName}):`, err);
-                        const msg = `⚠️ Error executing command: \`${err.message}\``;
+                        const isTimeout = err.message && err.message.includes('Timed Out');
+                        const msg = isTimeout
+                            ? `⚠️ **Command Timed Out:** \`/${commandName}\` took too long to respond. Please try again!`
+                            : `⚠️ Error executing command: \`${err.message}\``;
                         if (!interaction.replied && !interaction.deferred) {
                             await interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
                         } else {

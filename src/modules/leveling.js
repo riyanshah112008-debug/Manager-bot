@@ -288,7 +288,9 @@ module.exports = (client) => {
             if (isPrefix) return; 
         }
 
-        // XP Gain Logic
+        // XP Gain Logic - skip if MongoDB connection is temporarily unavailable
+        if (mongoose.connection?.readyState !== 1) return;
+
         const guildSettings = settingsCache.get(guildId) || { enabled: true, logChannelId: null };
         if (!guildSettings.enabled) return; 
 
@@ -320,12 +322,16 @@ module.exports = (client) => {
             }
 
             if (!logChannel && typeof client.getLogChannel === 'function') {
-                logChannel = client.getLogChannel(message.guild, 'misc');
+                try {
+                    logChannel = await client.getLogChannel(message.guild, 'misc');
+                } catch (e) {
+                    logChannel = null;
+                }
             }
 
             const levelUpEmbed = buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild);
 
-            if (logChannel) {
+            if (logChannel && typeof logChannel.send === 'function') {
                 logChannel.send({ 
                     content: `<@${userId}>`, 
                     embeds: [levelUpEmbed],

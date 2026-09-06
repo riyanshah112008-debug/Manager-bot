@@ -58,11 +58,16 @@ const KazagumoSpotify = require('kazagumo-spotify');
 // ==========================================
 // 🔋 TERMUX WAKE LOCK HELPERS
 // ==========================================
-function acquireWakeLock() {
+let lastWakeLockTime = 0;
+function acquireWakeLock(forceLog = false) {
     try {
         child_process.exec('termux-wake-lock', (err) => {
             if (!err) {
-                console.log('🔋 [Termux] Wake lock acquired (termux-wake-lock active)');
+                const now = Date.now();
+                if (forceLog || now - lastWakeLockTime > 300000) {
+                    console.log('🔋 [Termux] Wake lock active & refreshed (termux-wake-lock)');
+                    lastWakeLockTime = now;
+                }
             }
         });
     } catch (e) {}
@@ -265,21 +270,111 @@ client.on(Events.ShardResume, (id, replayedEvents) => console.log(`✅ Gateway S
 process.on('unhandledRejection', error => console.error('❌ Unhandled Promise Rejection:', error.stack || error));
 process.on('uncaughtException', error => console.error('❌ Uncaught Exception:', error.stack || error));
 
-// 🛡️ High-Reliability Gateway Health Watchdog
+// ==========================================
+// 🛡️ HIGH-RELIABILITY RECOVERY & HEALTH WATCHDOG
+// ==========================================
+mongoose.set('bufferTimeoutMS', 6000);
+
+let isReconnectingMongo = false;
+let mongoDisconnectedSince = null;
+let mongoReconnectInterval = null;
+
+async function attemptMongoReconnect() {
+    if (isReconnectingMongo || mongoose.connection.readyState === 1) return;
+    isReconnectingMongo = true;
+    console.log('🔄 [MongoDB Watchdog] Actively attempting to reconnect to MongoDB...');
+    try {
+        if (mongoose.connection.readyState !== 0) {
+            await mongoose.connection.close().catch(() => {});
+        }
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+            maxPoolSize: 10,
+            heartbeatFrequencyMS: 10000
+        });
+        console.log('🍃 [MongoDB Watchdog] Reconnected to MongoDB successfully!');
+        mongoDisconnectedSince = null;
+        if (mongoReconnectInterval) {
+            clearInterval(mongoReconnectInterval);
+            mongoReconnectInterval = null;
+        }
+    } catch (err) {
+        console.warn(`⚠️ [MongoDB Watchdog] Reconnect attempt failed: ${err.message}. Will retry...`);
+    } finally {
+        isReconnectingMongo = false;
+    }
+}
+
 let gatewayAbnormalCount = 0;
+let watchdogCycle = 0;
+
 setInterval(() => {
+    watchdogCycle++;
+
+    // 1. Maintain Termux Wake Lock Continuously (Every ~60s)
+    if (watchdogCycle % 4 === 0) {
+        acquireWakeLock();
+    }
+
+    // 2. Check MongoDB Connection Health
+    if (mongoose.connection.readyState !== 1) {
+        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+        const downtime = Math.round((Date.now() - mongoDisconnectedSince) / 1000);
+        console.warn(`⚠️ [Watchdog] MongoDB not ready (readyState: ${mongoose.connection.readyState}, down for ${downtime}s). Triggering active reconnect...`);
+        attemptMongoReconnect();
+
+        if (downtime > 60) {
+            console.error('🛑 [Watchdog] MongoDB disconnected for >60s. Restarting process to clear dead network sockets...');
+            process.exit(1);
+        }
+    }
+
+    // 3. Check Primary Discord Gateway WebSocket & Zombie Heartbeat State
     if (client.ws) {
-        if (client.ws.status !== 0) {
+        const isNotReady = client.ws.status !== 0;
+        const ping = client.ws.ping;
+        const shard = client.ws.shards?.first();
+        const lastPing = shard?.lastPingTimestamp || 0;
+        const timeSinceLastPing = lastPing > 0 ? (Date.now() - lastPing) : 0;
+
+        // Zombie socket detection:
+        // - status is not ready
+        // - ping is negative/NaN or abnormally high (>20000ms)
+        // - heartbeat ACK missing for >85s (Discord heartbeat interval is ~41.25s)
+        const isZombiePing = (ping < 0 || isNaN(ping) || ping > 20000);
+        const isHeartbeatStale = (timeSinceLastPing > 85000);
+
+        if (isNotReady || (client.isReady() && (isZombiePing || isHeartbeatStale))) {
             gatewayAbnormalCount++;
-            console.warn(`⚠️ [Watchdog] Gateway WebSocket status abnormal (${client.ws.status}) [Check ${gatewayAbnormalCount}/3]`);
+            console.warn(`⚠️ [Watchdog] Gateway abnormal (status: ${client.ws.status}, ping: ${ping}ms, lastPingAck: ${Math.round(timeSinceLastPing / 1000)}s ago) [Check ${gatewayAbnormalCount}/3]`);
+            
             if (gatewayAbnormalCount >= 3) {
-                console.error('🛑 [Watchdog] Gateway WebSocket stuck in non-ready state for >45s. Initiating restart...');
+                console.error('🛑 [Watchdog] Gateway stuck in zombie / non-ready state for >45s. Initiating restart...');
                 process.exit(1);
             }
         } else {
             gatewayAbnormalCount = 0;
         }
     }
+
+    // 4. Check Multi-Bot Cluster Worker Nodes
+    try {
+        const instances = multiBot?.instances;
+        if (instances && instances.size > 1) {
+            for (const [id, info] of instances.entries()) {
+                if (info.isPrimary || !info.client) continue;
+                const worker = info.client;
+                if (worker.ws) {
+                    const wStatus = worker.ws.status;
+                    const wPing = worker.ws.ping;
+                    if (wStatus !== 0 || (worker.isReady() && (wPing < 0 || isNaN(wPing) || wPing > 25000))) {
+                        console.warn(`⚠️ [Watchdog] Worker Bot [${info.name}] socket jitter (status: ${wStatus}, ping: ${wPing}ms).`);
+                    }
+                }
+            }
+        }
+    } catch (e) {}
 }, 15000);
 
 client.once(Events.ClientReady, async () => {
@@ -416,7 +511,8 @@ async function startBot() {
         await mongoose.connect(process.env.MONGO_URI, {
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
-            maxPoolSize: 10
+            maxPoolSize: 10,
+            heartbeatFrequencyMS: 10000
         });
         console.log('🍃 Successfully connected to MongoDB Cloud!');
 
@@ -424,10 +520,26 @@ async function startBot() {
         await initLanguageCache(client).catch(() => {});
 
         mongoose.connection.on('disconnected', () => {
-            console.warn('⚠️ MongoDB connection lost. Attempting auto-reconnect...');
+            console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
+            if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+            if (!mongoReconnectInterval) {
+                mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+            }
+            attemptMongoReconnect();
         });
         mongoose.connection.on('reconnected', () => {
             console.log('🍃 MongoDB reconnected successfully.');
+            mongoDisconnectedSince = null;
+            if (mongoReconnectInterval) {
+                clearInterval(mongoReconnectInterval);
+                mongoReconnectInterval = null;
+            }
+            // Refresh language cache after reconnection
+            const { initLanguageCache } = require('./utils/i18n');
+            initLanguageCache(client).catch(() => {});
+        });
+        mongoose.connection.on('error', (err) => {
+            console.error('❌ MongoDB Connection Error:', err.message);
         });
 
         try {

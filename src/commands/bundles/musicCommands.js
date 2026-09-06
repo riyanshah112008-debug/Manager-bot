@@ -77,7 +77,10 @@ const commands = [
             const searchPromise = StarryAudioEngine.search(query, ctx.user);
 
             try {
-                const [_, result] = await Promise.all([connectPromise, searchPromise]);
+                const [_, result] = await Promise.race([
+                    Promise.all([connectPromise, searchPromise]),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search or voice connect timed out after 20s')), 20000))
+                ]);
                 if (!result || !result.tracks || result.tracks.length === 0) {
                     return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
                 }
