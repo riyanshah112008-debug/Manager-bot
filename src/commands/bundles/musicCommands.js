@@ -16,6 +16,7 @@ const {
 const config = require('../../config');
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../../utils/contextHelper');
 const { StarryAudioEngine, formatTime, createProgressBar } = require('../../utils/nativeAudioEngine');
+const { requirePremium } = require('../../utils/premiumHelper');
 
 function getVoiceGuard(ctx) {
     const voiceChannel = ctx.member?.voice?.channel;
@@ -371,6 +372,8 @@ const commands = [
         description: 'Keep the bot inside voice channel 24/7 without disconnecting.',
         usage: ',247',
         async execute(ctx) {
+            if (!await requirePremium(ctx, '24/7 Voice Channel Mode')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -413,6 +416,8 @@ const commands = [
         description: 'Apply deep vibrating sub-bass (Original vocals & clarity intact).',
         usage: ',bassboost',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'True Vibration Bass (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -432,6 +437,8 @@ const commands = [
         description: 'Apply sub-bass low-end punch for EDM & hip-hop.',
         usage: ',deepbass',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Deep 808 Sub-Bass (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -451,6 +458,8 @@ const commands = [
         description: 'Maximum physical sub-bass rumble & ear vibration (Vocals protected).',
         usage: ',vibrate',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Earthquake Vibration (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -470,6 +479,8 @@ const commands = [
         description: 'Apply 360° rotating spatial surround sound.',
         usage: ',8d',
         async execute(ctx) {
+            if (!await requirePremium(ctx, '360° 8D Audio (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -489,6 +500,8 @@ const commands = [
         description: 'Speed up tempo and pitch up audio.',
         usage: ',nightcore',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Nightcore Remix (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -508,6 +521,8 @@ const commands = [
         description: 'Slow down tempo and lower pitch for relaxed vibe.',
         usage: ',daycore',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Daycore Reverb (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -527,6 +542,8 @@ const commands = [
         description: 'Slowed reverb + retro cassette aesthetic.',
         usage: ',vaporwave',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Vaporwave Lo-Fi (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -546,6 +563,8 @@ const commands = [
         description: 'Boost high frequencies for crystal clear audio.',
         usage: ',treble',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Treble Boost (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -565,6 +584,8 @@ const commands = [
         description: 'Enhance vocal clarity and acoustic profile.',
         usage: ',pop',
         async execute(ctx) {
+            if (!await requirePremium(ctx, 'Vocal & Pop Clarity (Studio DSP Filter)')) return;
+
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 

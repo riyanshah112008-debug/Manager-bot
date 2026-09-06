@@ -32,6 +32,13 @@ module.exports = {
         try {
             await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
 
+            const { isServerOrUserPremium, createPremiumLockPayload } = require('../../utils/premiumHelper');
+            const isPrem = await isServerOrUserPremium(interaction.guildId, interaction.user.id, client);
+            if (!isPrem) {
+                const payload = createPremiumLockPayload('Web Captcha Anti-Bot Verification Gateway', '/');
+                return interaction.editReply(payload);
+            }
+
             const channel = interaction.options.getChannel('channel');
             const role = interaction.options.getRole('role');
 

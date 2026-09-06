@@ -12,6 +12,7 @@ const {
 } = require('discord.js');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
+const { requirePremium } = require('../../utils/premiumHelper');
 
 const commands = [
     // 1. MULTIBOT / BOTS / CLUSTER
@@ -100,6 +101,8 @@ const commands = [
 
             // 2. Admin Add Token Subcommand
             if (sub === 'add') {
+                if (!await requirePremium(ctx, 'Multi-Bot Custom Worker Nodes')) return;
+
                 if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
                     return ctx.reply('❌ Only Bot Owners / Server Owners can connect new secondary bot tokens.');
                 }
@@ -469,6 +472,7 @@ const commands = [
             if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ Administrator permission required.');
             }
+            if (!await requirePremium(ctx, 'Web Captcha Anti-Bot Verification Gateway')) return;
 
             const embed = new EmbedBuilder()
                 .setColor('#2ECC71')
@@ -538,6 +542,7 @@ const commands = [
             if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ Administrator permission required.');
             }
+            if (!await requirePremium(ctx, 'Server Cloud Backup Engine')) return;
             const backupId = Math.random().toString(36).substring(2, 10).toUpperCase();
             return ctx.reply(`💾 **Server Backup Created Successfully!**\nBackup ID: \`#${backupId}\`\n*Use \`,restore ${backupId}\` to restore if needed.*`);
         }
@@ -554,6 +559,7 @@ const commands = [
             if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ Administrator permission required.');
             }
+            if (!await requirePremium(ctx, 'Server Instant Restore Engine')) return;
             const backupId = ctx.args[0];
             if (!backupId) return ctx.reply('❌ Please provide the Backup ID: `,restore <ID>`');
             return ctx.reply(`⏳ **Restoring server from Backup \`${backupId}\`...**`);

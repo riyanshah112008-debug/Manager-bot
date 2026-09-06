@@ -717,6 +717,14 @@ class CommandRegistry {
                     }
                 }
 
+                // Starry Premium View Perks Modal / Ephemeral Card
+                if (customId === 'premium_view_perks_btn') {
+                    const { createPremiumPerksPayload } = require('../utils/premiumHelper');
+                    const guildPrefix = await getGuildPrefix(interaction.guildId);
+                    const perksPayload = createPremiumPerksPayload(guildPrefix);
+                    return interaction.reply({ ...perksPayload, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
+
                 // Dedicated Music Controller Channel Interactions
                 if (customId.startsWith('ctrl_')) {
                     const musicController = require('./musicController');
@@ -798,6 +806,15 @@ class CommandRegistry {
                     // 3. Audio Filter Dropdown
                     if (customId === 'music_filter') {
                         const selectedFilter = interaction.values[0] || 'clear';
+                        if (selectedFilter !== 'clear') {
+                            const { isServerOrUserPremium, createPremiumLockPayload } = require('../utils/premiumHelper');
+                            const isPermitted = await isServerOrUserPremium(interaction.guildId, interaction.user.id, client);
+                            if (!isPermitted) {
+                                const guildPrefix = await getGuildPrefix(interaction.guildId);
+                                const lockPayload = createPremiumLockPayload('Studio DSP Hi-Fi Audio Filters', guildPrefix);
+                                return interaction.reply({ ...lockPayload, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                            }
+                        }
                         if (kPlayer) {
                             await applyKazagumoFilter(kPlayer, selectedFilter);
                         }

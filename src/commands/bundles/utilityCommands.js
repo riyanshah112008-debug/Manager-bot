@@ -17,6 +17,7 @@ const {
 const os = require('os');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
+const { requirePremium } = require('../../utils/premiumHelper');
 
 // Channel message snipe memory cache
 const snipes = new Map();
@@ -542,6 +543,7 @@ const commands = [
             if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuildExpressions) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ You need **Manage Emojis & Stickers** permission.');
             }
+            if (!await requirePremium(ctx, 'Bulk Emoji & Animated Sticker Stealer')) return;
             const raw = ctx.args[0];
             if (!raw) return ctx.reply('❌ Provide an emoji or image URL to steal: `,steal :custom_emoji:`');
 
@@ -609,24 +611,23 @@ const commands = [
         }
     },
 
-    // 15. PREMIUM
+    // 15. DONATE
     {
-        name: 'premium',
-        aliases: ['donate', 'patreon'],
+        name: 'donate',
+        aliases: ['patreon', 'support', 'sponsor'],
         category: 'Utility',
-        description: 'Check active premium status and perks.',
-        usage: ',premium',
+        description: 'Support the ongoing development and hosting of Starry Bot.',
+        usage: ',donate',
         async execute(ctx) {
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.ECONOMY)
-                .setTitle('👑 Premium Status: ACTIVE ✨')
-                .setDescription('This server currently enjoys all Starry Premium perks unlimitedly!')
+                .setTitle('⭐ Support Starry Bot Development')
+                .setDescription('Thank you for considering supporting Starry! Your contributions keep our 24/7 high-fidelity music nodes, AI servers, and low-latency clusters running smoothly.')
                 .addFields(
-                    { name: '🎵 Music Master', value: '24/7 Stay Mode, 8D Audio, Nightcore & Lossless Bitrate', inline: false },
-                    { name: '🛡️ Security Suite', value: 'Instant Starry Guard Security Engine sync, anti-nuke & backups', inline: false },
-                    { name: '🤖 Multi-Bot Clustering', value: 'Access to secondary worker bots and high-capacity nodes', inline: false }
+                    { name: '👑 Starry Premium', value: 'Unlock 24/7 voice persistence, studio DSP audio filters, cloud backups, and multi-bot workers with `,premium`!', inline: false },
+                    { name: '🌐 Web Store', value: 'Check out our official dashboard at https://starry-bot.loca.lt', inline: false }
                 )
-                .setFooter({ text: 'Starry Premium Architecture' });
+                .setFooter({ text: 'Starry Bot • Handcrafted with love' });
             return ctx.reply({ embeds: [embed] });
         }
     },
@@ -1028,13 +1029,20 @@ const commands = [
         name: 'premium',
         aliases: ['perks', 'vip'],
         category: 'Utility',
-        description: 'View server premium status, perks, and pricing tiers.',
-        usage: ',premium',
+        description: 'View server premium status, full 12-feature catalog, and pricing tiers.',
+        usage: ',premium [perks]',
         async execute(ctx) {
+            const { isServerOrUserPremium, createPremiumPerksPayload } = require('../../utils/premiumHelper');
+            const sub = ctx.args[0]?.toLowerCase();
+            if (sub === 'perks' || sub === 'features' || sub === 'all' || sub === 'list') {
+                const perksPayload = createPremiumPerksPayload(ctx.prefix || ',');
+                return ctx.reply(perksPayload);
+            }
+
             const ServerSettings = require('../../models/ServerSettings');
-            const settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
-            const isPrem = settings?.premium?.isPremium || false;
-            const tier = settings?.premium?.tier || 'none';
+            const settings = ctx.guild ? await ServerSettings.findOne({ guildId: ctx.guild.id }) : null;
+            const isPrem = await isServerOrUserPremium(ctx.guild?.id, ctx.user?.id, ctx.client);
+            const tier = settings?.premium?.tier || (isPrem ? 'Shield Plus' : 'none');
             const expires = settings?.premium?.expiresAt;
 
             let webUrl = 'https://starry-bot.loca.lt';
@@ -1045,23 +1053,35 @@ const commands = [
 
             const embed = new EmbedBuilder()
                 .setColor(isPrem ? '#F59E0B' : config.EMBED_COLORS.PRIMARY)
-                .setAuthor({ name: `Starry Premium Status • ${ctx.guild.name}`, iconURL: ctx.guild.iconURL({ dynamic: true }) })
-                .setTitle(isPrem ? `👑 Premium Active: ${tier.toUpperCase()} TIER` : '⭐ Upgrade to Starry Premium')
+                .setAuthor({ 
+                    name: `Starry Premium Status • ${ctx.guild?.name || 'Starry Cloud'}`, 
+                    iconURL: ctx.guild?.iconURL?.({ dynamic: true }) || 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                })
+                .setTitle(isPrem ? `👑 Premium Active: ${tier.toUpperCase()}` : '⭐ Upgrade to Starry Premium')
                 .setDescription(
                     isPrem 
-                        ? `✅ This server has an active **${tier.toUpperCase()}** subscription!\n🕒 **Expires:** \`${expires ? expires.toLocaleDateString() : 'Permanent Lifetime'}\``
-                        : `Supercharge your server with 24/7 Voice, God-Mode Anti-Nuke, and Web Captcha Gateways!`
+                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 12 Studio & Security features are fully unlocked.*`
+                        : `Supercharge your server with 24/7 Voice persistence, Studio DSP Audio Filters, Cloud Disaster Backups, and Multi-Bot Worker Nodes!`
                 )
                 .addFields(
-                    { name: '🛡️ Shield Plus ($4.99/mo | ₹399)', value: '• 24/7 Voice Mode\n• Anti-Nuke Protection\n• Cloud Backups\n• Web Captcha Gate', inline: true },
-                    { name: '🌟 Pro Cluster ($12.99/mo | ₹999)', value: '• 3 Servers Included\n• Custom Bot Branding\n• 3-Room Music Suite\n• Gemini AI AutoMod', inline: true },
-                    { name: '👑 Lifetime VIP ($39.99 | ₹3,299)', value: '• Permanent Access\n• Unlimited Servers\n• Golden VIP Badge\n• Top Priority FLAC Nodes', inline: true }
+                    { name: '🛡️ Shield Plus ($4.99/mo | ₹399)', value: '• 24/7 Voice Channel Mode\n• 9 Studio DSP Hi-Fi Filters\n• Server Cloud Backup & Restore\n• Web Captcha Gateway\n• Emergency Lockdown Shield', inline: true },
+                    { name: '🌟 Pro Cluster ($12.99/mo | ₹999)', value: '• Everything in Shield Plus\n• Multi-Bot Worker Nodes\n• 3-Room Simultaneous Playback\n• 2x Economy XP & Loot Multiplier\n• Flag Neural Translator', inline: true },
+                    { name: '👑 Lifetime VIP ($39.99 | ₹3,299)', value: '• Permanent Lifetime Access\n• Unlimited Server Transfers\n• Golden Crown VIP Badge\n• Top-Priority FLAC Nodes\n• VIP Game Packs & Appeal Portal', inline: true }
                 )
-                .setFooter({ text: 'Get your license on the dashboard or use ,redeem <key>' })
+                .setFooter({ text: `Use ,premium perks to view full breakdown • ,redeem <key> to activate` })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setLabel('🛒 View Store & Checkout').setStyle(ButtonStyle.Link).setURL(webUrl + '/#premium')
+                new ButtonBuilder()
+                    .setCustomId('premium_view_perks_btn')
+                    .setLabel('View All 12 Perks')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('👑'),
+                new ButtonBuilder()
+                    .setLabel('🛒 Web Store & Checkout')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(webUrl + '/#premium')
+                    .setEmoji('🌐')
             );
 
             return ctx.reply({ embeds: [embed], components: [row] });
@@ -1622,6 +1642,7 @@ const commands = [
             }
 
             if (sub === 'setup' || sub === 'set') {
+                if (!await requirePremium(ctx, 'Dynamic Orbit Voice Room Custom Bitrate')) return;
                 const targetChannel = ctx.message?.mentions?.channels?.first() || ctx.guild.channels.cache.get(ctx.args[1]) || ctx.member.voice?.channel;
                 if (!targetChannel || targetChannel.type !== ChannelType.GuildVoice) {
                     return ctx.reply('❌ Please mention or provide the ID of a voice channel to use as the Join-to-Create lobby, or join one and run `,tempvoice setup`.');

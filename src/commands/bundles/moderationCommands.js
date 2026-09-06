@@ -15,6 +15,7 @@ const {
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const ModCase = require('../../models/ModCase');
+const { requirePremium } = require('../../utils/premiumHelper');
 
 // Helper to parse duration string like 10m, 1h, 1d to ms
 function parseDuration(str) {
@@ -517,6 +518,7 @@ const commands = [
             if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ Administrator permissions required for server-wide lockdown.');
             }
+            if (!await requirePremium(ctx, 'Emergency Server Lockdown Shield')) return;
             let count = 0;
             for (const ch of ctx.guild.channels.cache.values()) {
                 if (ch.type === ChannelType.GuildText) {
@@ -540,6 +542,7 @@ const commands = [
             if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ Administrator permissions required.');
             }
+            if (!await requirePremium(ctx, 'Emergency Server Lockdown Shield')) return;
             let count = 0;
             for (const ch of ctx.guild.channels.cache.values()) {
                 if (ch.type === ChannelType.GuildText) {
