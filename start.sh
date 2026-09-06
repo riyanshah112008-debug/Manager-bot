@@ -8,6 +8,11 @@ if command -v termux-wake-lock >/dev/null 2>&1; then
     echo "🔋 Termux Wake Lock active (prevents Android CPU from sleeping)."
 fi
 
+# 1b. Auto-Update Antigravity CLI
+if command -v agy >/dev/null 2>&1; then
+    agy update -y >/dev/null 2>&1 &
+fi
+
 # 2. Check and initialize .env
 if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     cp .env.example .env

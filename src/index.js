@@ -363,7 +363,19 @@ const MODULE_INITIALIZERS = [
     { name: 'Starlight Reminder Engine', fn: () => { const { initReminderWorker } = require('./modules/reminderEngine.js'); initReminderWorker(client); } },
     { name: 'Celestial Starboard Engine', fn: () => { const { initStarboard } = require('./modules/starboardEngine.js'); initStarboard(client); } },
     { name: 'Dynamic Orbit Voice Engine', fn: () => { const { initTempVoice } = require('./modules/tempVoice.js'); initTempVoice(client); } },
-    { name: 'Pinned Channel Sticky Notice Engine', fn: () => { const { initSticky } = require('./modules/stickyEngine.js'); initSticky(client); } }
+    { name: 'Pinned Channel Sticky Notice Engine', fn: () => { const { initSticky } = require('./modules/stickyEngine.js'); initSticky(client); } },
+    { name: 'Antigravity CLI Auto-Updater', fn: () => {
+        const { exec } = require('child_process');
+        const runAgyUpdate = () => {
+            exec('agy update -y', (err, stdout) => {
+                if (!err && stdout && stdout.includes('Update completed')) {
+                    console.log('✨ [Antigravity Engine] Successfully updated to the latest Antigravity CLI version!');
+                }
+            });
+        };
+        setTimeout(runAgyUpdate, 15000);
+        setInterval(runAgyUpdate, 6 * 60 * 60 * 1000);
+    }}
 ];
 
 async function startBot() {
