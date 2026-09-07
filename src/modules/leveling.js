@@ -279,7 +279,7 @@ async function buildLeaderboardData(guildId, guild, type = 'xp') {
     return { embeds: [embed], components: [row] };
 }
 
-module.exports = (client) => {
+const levelingModule = (client) => {
     const config = require('../config');
     const PREFIX = config.DEFAULT_PREFIX || ',';
 
