@@ -56,13 +56,6 @@ const masterModule = safeRequire(['./src/modules/starry', './modules/starry', '.
 if (masterModule) {
     if (masterModule.modMasterPayload) masterPayloads.push(masterModule.modMasterPayload);
     if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
-    if (masterModule.moderateMasterPayload) masterPayloads.push(masterModule.moderateMasterPayload);
-    if (masterModule.verifySetupPayload) masterPayloads.push(masterModule.verifySetupPayload);
-    if (masterModule.emergencyNukePayload) masterPayloads.push(masterModule.emergencyNukePayload);
-    if (masterModule.emergencyLockdownPayload) masterPayloads.push(masterModule.emergencyLockdownPayload);
-    if (masterModule.emergencySecurePayload) masterPayloads.push(masterModule.emergencySecurePayload);
-    if (masterModule.emergencyUnbanPayload) masterPayloads.push(masterModule.emergencyUnbanPayload);
-    if (masterModule.policyVotePayload) masterPayloads.push(masterModule.policyVotePayload);
 }
 
 // Tracker Payload
@@ -71,33 +64,16 @@ if (trackerModule && trackerModule.data) {
     masterPayloads.push(trackerModule.data.toJSON ? trackerModule.data.toJSON() : trackerModule.data);
 }
 
-// Counting Module
-const countModule = safeRequire(['./src/modules/count', './modules/count']);
-if (countModule && countModule.countSlashCommands) {
-    masterPayloads.push(...countModule.countSlashCommands);
-}
-
 // AFK Command Payload
 const afkModule = safeRequire(['./src/modules/afk', './modules/afk']);
 if (afkModule && afkModule.afkPayload) {
     masterPayloads.push(afkModule.afkPayload);
 }
 
-// Bump Engine Payloads
+// Bump Engine Payload (Server Promotion)
 const bumpModule = safeRequire(['./src/modules/bumpEngine', './modules/bumpEngine']);
-if (bumpModule && bumpModule.bumpSlashCommands) {
-    masterPayloads.push(...bumpModule.bumpSlashCommands);
-}
-
-// Backup Engine Payload
-const backupModule = safeRequire([
-    './src/modules/serverBackupManager', 
-    './modules/serverBackupManager', 
-    './src/modules/backupEngine', 
-    './modules/backupEngine'
-]);
-if (backupModule && backupModule.backupCommandPayload) {
-    masterPayloads.push(backupModule.backupCommandPayload);
+if (bumpModule && bumpModule.bumpPayload) {
+    masterPayloads.push(bumpModule.bumpPayload);
 }
 
 // Confession Engine Payload
@@ -118,9 +94,7 @@ const socialModule = safeRequire(['./src/modules/socialActions', './modules/soci
 const commands = [
     ...masterPayloads,
 
-    // TELEMETRY & VOICE
-    { name: 'telemetry', description: '📡 Bot Owner Only: Receive an immediate telemetry report in your DMs.', default_member_permissions: '8' },
-    { name: 'callstarry', description: '📞 Call Starry for a private 1-on-1 human-like AI voice call! (Premium Only)' },
+    // VOICE HUB
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
 
     // MUSIC COMMANDS
@@ -210,18 +184,6 @@ const commands = [
         )
         .toJSON(),
 
-    // 🎫 TICKET & APPLICATION SETUP SLASH COMMANDS
-    new SlashCommandBuilder()
-        .setName('ticketsetup')
-        .setDescription('🎫 Create the support ticket panel in this channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .toJSON(),
-
-    new SlashCommandBuilder()
-        .setName('applysetup')
-        .setDescription('📋 Create the staff & partner application panel in this channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .toJSON(),
 
     // 🎨 AI IMAGE GENERATION SLASH COMMANDS (Usable in Guilds, DMs, & Group Chats)
     new SlashCommandBuilder()
@@ -282,18 +244,28 @@ if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
 
-// Direct Social Action Slash Commands (Top-Level)
-const directSocials = ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'handhold', 'handshake', 'bonk'];
-for (const act of directSocials) {
-    commands.push(
-        new SlashCommandBuilder()
-            .setName(act)
-            .setDescription(`${act.charAt(0).toUpperCase() + act.slice(1)} a member with an animated anime GIF!`)
-            .setContexts([0, 1, 2])
-            .setIntegrationTypes([0, 1])
-            .addUserOption(opt => opt.setName('target').setDescription('Target member').setRequired(true))
-            .toJSON()
-    );
+// Direct Social Action Slash Commands (All 43 Top-Level User-Installable Actions)
+if (socialModule && socialModule.ACTION_CONFIG) {
+    for (const [act, conf] of Object.entries(socialModule.ACTION_CONFIG)) {
+        const isTargeted = conf.requiresTarget !== false;
+        const desc = isTargeted
+            ? `${conf.verb.charAt(0).toUpperCase() + conf.verb.slice(1)} a member with an animated anime GIF!`
+            : `${conf.verb.charAt(0).toUpperCase() + conf.verb.slice(1)} (Anime Reaction)`;
+        
+        commands.push(
+            new SlashCommandBuilder()
+                .setName(act)
+                .setDescription(desc.slice(0, 100))
+                .setContexts([0, 1, 2])
+                .setIntegrationTypes([0, 1])
+                .addUserOption(opt => 
+                    opt.setName('target')
+                       .setDescription(isTargeted ? 'Target member' : 'Optional target member')
+                       .setRequired(isTargeted)
+                )
+                .toJSON()
+        );
+    }
 }
 
 // ✨ AI, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
@@ -335,64 +307,12 @@ commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
     { name: 'prestige', description: 'Reset your level to gain Prestige 👑 and permanent bonus multipliers!' },
-    { name: 'pet', description: 'Manage your virtual pets!', options: [{ name: 'status', description: 'Check active pet', type: 1 }, { name: 'equip', description: 'Equip a pet', type: 1, options: [{ name: 'name', description: 'Pet name', type: 3, required: true }] }] },
-    { name: 'shop-admin', description: 'Manage the server economy shop (Admins Only)', default_member_permissions: '8', options: [{ name: 'add-role', description: 'Add role to shop', type: 1, options: [{ name: 'role', description: 'Role', type: 8, required: true }, { name: 'price', description: 'Price', type: 10, required: true }, { name: 'description', description: 'Description', type: 3, required: true }] }] },
-    { name: 'chest-setup', description: 'Enable or disable automatic chest drops', default_member_permissions: '8', options: [{ name: 'enable', description: 'Enable chest drops', type: 1, options: [{ name: 'channel', description: 'Channel', type: 7, required: true }] }] },
-    { 
-        name: 'chest-toggle', 
-        description: 'Toggle or configure automatic chest drops for your server or a channel', 
-        default_member_permissions: '8', 
-        options: [
-            { 
-                name: 'server', 
-                description: 'Toggle chest drops across this server', 
-                type: 1, 
-                options: [
-                    { 
-                        name: 'action', 
-                        description: 'Enable, disable or check status', 
-                        type: 3, 
-                        required: false, 
-                        choices: [
-                            { name: '🟢 Enable Everywhere', value: 'enable' },
-                            { name: '🔴 Disable Everywhere', value: 'disable' },
-                            { name: '📊 Check Status', value: 'status' }
-                        ] 
-                    }
-                ] 
-            },
-            { 
-                name: 'channel', 
-                description: 'Toggle chest drops for a specific channel', 
-                type: 1, 
-                options: [
-                    { name: 'target', description: 'Select the channel', type: 7, required: true },
-                    { 
-                        name: 'action', 
-                        description: 'Enable or disable in this channel', 
-                        type: 3, 
-                        required: false, 
-                        choices: [
-                            { name: '🟢 Enable Channel', value: 'enable' },
-                            { name: '🔴 Disable Channel', value: 'disable' }
-                        ] 
-                    }
-                ] 
-            }
-        ] 
-    },
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
         default_member_permissions: '8',
         options: [{ name: 'prompt', type: 3, required: false, description: 'Describe your server theme' }]
     },
-    { name: 'ahelp', description: 'Displays the complete Admin & Moderation Command Menu', default_member_permissions: '8192' },
-    { name: 'set-name', description: 'Change the bot trigger word/name for this server (Admins Only)', default_member_permissions: '8', options: [{ name: 'name', description: 'New trigger word', type: 3, required: true }] },
-    { name: 'boost-setup', description: 'Set the channel for server boost announcements (Admins Only)', default_member_permissions: '8', options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
-    { name: 'setup-server', description: 'Automatically generates a professional server layout!', default_member_permissions: '8' },
-    { name: 'modpanel', description: 'Open the interactive moderation dashboard', default_member_permissions: MODERATE_MEMBERS, options: [{ name: 'user', type: 6, required: true, description: 'User' }] },
-    { name: 'devpanel', description: '💻 Open the interactive developer control panel' },
     autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     
@@ -446,7 +366,6 @@ commands.push(
     { name: 'help', description: 'Show bot command list with 100+ commands' },
     { name: 'ping', description: 'Check bot latency and multi-bot cluster status' },
     { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] },
-    { name: 'multibot', description: '🤖 View Multi-Bot cluster status, worker instances, and online nodes' },
     { name: 'avatar', description: '🖼️ Display user profile avatar in high resolution', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
     { name: 'banner', description: '🎨 Display user or server profile banner', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
     { name: 'rank', description: '👑 Check user level and XP ranking', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
@@ -454,12 +373,7 @@ commands.push(
     { name: 'balance', description: '💰 View your cash wallet and bank balance' },
     { name: 'daily', description: '🎁 Claim daily bonus credits ($500)' },
     { name: 'work', description: '💼 Work and earn money' },
-    { name: 'slots', description: '🎰 Spin the casino slot machine', options: [{ name: 'bet', type: 4, required: false, description: 'Bet amount' }] },
-    { name: 'lyrics', description: '🎙️ Fetch lyrics for currently playing or specified song', options: [{ name: 'song', type: 3, required: false, description: 'Song title' }] },
-    { name: 'fish', description: '🎣 Cast your fishing rod to catch fish and aquatic treasures' },
-    { name: 'mine', description: '⛏️ Mine crystals, diamonds, and ores in the cavern' },
     { name: 'inventory', description: '🎒 View items and treasures stored in your backpack', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
-    { name: 'sell', description: '💰 Sell gathered fish and minerals for cash credits', options: [{ name: 'item', type: 3, required: false, description: 'Item name or "all"' }] },
     { name: 'profile', description: '👤 View complete anime profile card, marriage, badges, and wealth', options: [{ name: 'user', type: 6, required: false, description: 'Target member' }] },
     { name: 'marry', description: '💍 Propose marriage to another member', options: [{ name: 'user', type: 6, required: true, description: 'Member to marry' }] },
     { name: 'divorce', description: '💔 End your current marriage' },

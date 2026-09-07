@@ -54,20 +54,18 @@ function createSocialCommand(key, configData) {
             userSocialCooldowns.set(authorIdStr, now);
 
             let target = null;
+            if (ctx.options?.getUser) {
+                target = ctx.options.getUser('target');
+            } else if (ctx.message?.reference?.messageId) {
+                try {
+                    const refMsg = await ctx.channel.messages.fetch(ctx.message.reference.messageId);
+                    target = refMsg.author;
+                } catch (e) {}
+            } else if (ctx.message?.mentions?.users?.first()) {
+                target = ctx.message.mentions.users.first();
+            }
 
             if (configData.requiresTarget) {
-                target = ctx.options?.getUser ? ctx.options.getUser('target') : null;
-                if (!target) {
-                    if (ctx.message?.reference?.messageId) {
-                        try {
-                            const refMsg = await ctx.channel.messages.fetch(ctx.message.reference.messageId);
-                            target = refMsg.author;
-                        } catch (e) {}
-                    } else if (ctx.message?.mentions?.users?.first()) {
-                        target = ctx.message.mentions.users.first();
-                    }
-                }
-
                 if (!target) {
                     return ctx.reply(`❌ Please mention someone or reply to their message to ${key} them!\n*Usage: \`,${key} @user\`*`);
                 }
@@ -75,6 +73,8 @@ function createSocialCommand(key, configData) {
                 if (String(target.id) === authorIdStr) {
                     return ctx.reply(`❌ You cannot ${key} yourself! Please mention someone else.`);
                 }
+            } else if (target && String(target.id) === authorIdStr) {
+                target = null;
             }
 
             const targetIdStr = target ? String(target.id) : null;
@@ -85,7 +85,11 @@ function createSocialCommand(key, configData) {
 
             let desc = `**${author.username}** ${configData.verb}`;
             if (target) {
-                desc += ` **${target.username}**!\n\n✨ That's **${totalCount}** ${countWord} shared together! ${configData.emoji}`;
+                if (configData.requiresTarget) {
+                    desc += ` **${target.username}**!\n\n✨ That's **${totalCount}** ${countWord} shared together! ${configData.emoji}`;
+                } else {
+                    desc += ` with **${target.username}**!\n\n✨ That's **${totalCount}** ${countWord} shared together! ${configData.emoji}`;
+                }
             } else {
                 desc += `\n\n✨ Personal ${key} count: **${totalCount}** ${configData.emoji}`;
             }
