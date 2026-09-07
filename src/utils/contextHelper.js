@@ -141,6 +141,35 @@ class CommandContext {
             payload = localizePayload(payload, this.lang);
         }
 
+        // Automatic Server Embed Theme Visuality Application
+        if (this.guildId && payload.embeds && Array.isArray(payload.embeds)) {
+            try {
+                const { getGuildThemeSync } = require('../modules/embedVisuality');
+                const theme = getGuildThemeSync(this.guildId);
+                if (theme && (theme.color || theme.footer)) {
+                    for (const emb of payload.embeds) {
+                        const targetData = emb.data || emb;
+                        if (theme.color && (!targetData.color || targetData.color === 5793266 || targetData.color === 0x5865F2)) {
+                            if (typeof emb.setColor === 'function') {
+                                emb.setColor(theme.color);
+                            } else {
+                                targetData.color = parseInt(theme.color.replace('#', ''), 16);
+                            }
+                        }
+                        if (theme.footer && (!targetData.footer || !targetData.footer.text)) {
+                            const footerObj = { text: theme.footer };
+                            if (theme.footerIcon) footerObj.iconURL = theme.footerIcon;
+                            if (typeof emb.setFooter === 'function') {
+                                emb.setFooter(footerObj);
+                            } else {
+                                targetData.footer = footerObj;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
         if (this.isSlash) {
             if (this.source.deferred || this.source.replied) {
                 this.replyMessage = await this.source.editReply(payload).catch(() => null);

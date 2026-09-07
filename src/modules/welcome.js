@@ -112,7 +112,9 @@ async function getWelcomeControlPanel(guildId, client) {
 
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('welc_btn_ping').setLabel(t(lang, 'welcome.btn_ping')).setStyle(ButtonStyle.Secondary).setEmoji('💬'),
-        new ButtonBuilder().setCustomId('welc_btn_preview').setLabel(t(lang, 'welcome.btn_preview')).setStyle(ButtonStyle.Success).setEmoji('👁️')
+        new ButtonBuilder().setCustomId('welc_btn_preview').setLabel(t(lang, 'welcome.btn_preview')).setStyle(ButtonStyle.Success).setEmoji('👁️'),
+        new ButtonBuilder().setCustomId('welc_btn_reset').setLabel('Reset Defaults').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
+        new ButtonBuilder().setCustomId('visuality_btn_studio').setLabel('Studio Hub').setStyle(ButtonStyle.Secondary).setEmoji('🎨')
     );
 
     return { embeds: [panelEmbed], components: [row1, row2] };
@@ -389,6 +391,31 @@ const welcomeModule = (client) => {
                     }).catch(() => {});
                 }
             }
+
+            // RESET TO DEFAULTS HANDLER
+            if (interaction.customId === 'welc_btn_reset') {
+                const lang = getGuildLanguageSync(interaction.guildId);
+                const defs = getWelcomeDefaults(lang, interaction.guild.name);
+                await WelcomeSettings.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    {
+                        title: defs.title,
+                        description: defs.description,
+                        color: '#FF73FA',
+                        image: 'https://i.imgur.com/vH1O33q.gif',
+                        thumbnail: 'avatar',
+                        footer: defs.footer,
+                        pingContent: defs.pingContent
+                    },
+                    { upsert: true }
+                );
+                await interaction.reply({ content: '🔄 **Welcome embed visuality has been reset to default!**', ephemeral: true });
+                const panelData = await getWelcomeControlPanel(interaction.guildId, client);
+                if (interaction.message && panelData) {
+                    await interaction.message.edit(panelData).catch(() => {});
+                }
+                return;
+            }
         }
 
         // ==========================================
@@ -447,4 +474,5 @@ const welcomeModule = (client) => {
 
 welcomeModule.WelcomeSettings = WelcomeSettings;
 welcomeModule.setupWelcomeData = setupWelcomeCommand;
+welcomeModule.getWelcomeControlPanel = getWelcomeControlPanel;
 module.exports = welcomeModule;

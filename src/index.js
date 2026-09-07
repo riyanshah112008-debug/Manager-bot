@@ -471,6 +471,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Emoji Stealer', fn: () => require('./modules/steal.js')(client, app) },
     { name: 'Welcome System', fn: () => require('./modules/welcome.js')(client, app) },
     { name: 'Goodbye System', fn: () => require('./modules/goodbye.js')(client, app) },
+    { name: 'Embed Visuality Studio', fn: () => require('./modules/embedVisuality.js')(client, app) },
     { name: 'Server Backup Engine', fn: () => require('./modules/backupEngine.js')(client, app) },
     { name: 'Role Manager', fn: () => require('./modules/roleManager.js')(client, app) },
     { name: 'Anti-Abuse', fn: () => require('./modules/antiAbuse.js')(client, app) },

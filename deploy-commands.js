@@ -159,6 +159,52 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
+    // 🎨 MASTER EMBED VISUALITY STUDIO
+    new SlashCommandBuilder()
+        .setName('customize')
+        .setDescription('Universal Embed Visuality Studio - Customize welcome, goodbye, levels & server theme')
+        .addStringOption(option =>
+            option.setName('feature')
+                .setDescription('Select specific feature visualizer to open')
+                .setRequired(false)
+                .addChoices(
+                    { name: '🌸 Welcome Embeds', value: 'welcome' },
+                    { name: '🥀 Goodbye Embeds', value: 'goodbye' },
+                    { name: '📊 Level-Up Cards', value: 'levels' },
+                    { name: '🎨 Server Embed Theme', value: 'theme' }
+                )
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
+
+    // 🌸 CUSTOMIZE WELCOME
+    new SlashCommandBuilder()
+        .setName('customizewelcome')
+        .setDescription('Interactive visual customizer for welcome cards & greeting embeds')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
+
+    // 🥀 CUSTOMIZE GOODBYE
+    new SlashCommandBuilder()
+        .setName('customizegoodbye')
+        .setDescription('Interactive visual customizer for goodbye cards & farewell embeds')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
+
+    // 📊 CUSTOMIZE LEVELS
+    new SlashCommandBuilder()
+        .setName('customizelevels')
+        .setDescription('Interactive visual customizer for level-up cards & headers')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
+
+    // 🎨 SERVER EMBED THEME
+    new SlashCommandBuilder()
+        .setName('embedtheme')
+        .setDescription('Interactive visual customizer for server embed theme (colors, headers, footers)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .toJSON(),
+
     // 🔍 GLOBAL USER APP WHOIS COMMAND
     new SlashCommandBuilder()
         .setName('whois')

@@ -13,6 +13,19 @@ const {
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const { requirePremium } = require('../../utils/premiumHelper');
+const embedVisualityModule = require('../../modules/embedVisuality');
+const welcomeModule = require('../../modules/welcome');
+const goodbyeModule = require('../../modules/goodbye');
+const levelingModule = require('../../modules/leveling');
+
+function hasManagePerms(ctx) {
+    if (!ctx.guild) return false;
+    if (config.BOT_OWNERS && config.BOT_OWNERS.includes(ctx.user.id)) return true;
+    if (ctx.user.id === ctx.guild.ownerId) return true;
+    if (ctx.member?.permissions?.has(PermissionFlagsBits.ManageGuild)) return true;
+    if (ctx.member?.permissions?.has(PermissionFlagsBits.Administrator)) return true;
+    return false;
+}
 
 const commands = [
     // 1. MULTIBOT / BOTS / CLUSTER
@@ -859,6 +872,130 @@ const commands = [
             const currentDoc = await getOrCreateTelemetry(ctx.guild);
             const embed = buildServerTelemetryEmbed(ctx.guild, currentDoc, ctx.client);
             return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 16. MASTER VISUALITY STUDIO & EMBED DESIGNER
+    {
+        name: 'customize',
+        aliases: ['embedset', 'embeddesign', 'visuality', 'embedcustomizer', 'customizembed'],
+        category: 'Systems',
+        description: 'Universal Embed Visuality Studio - Customize colors, banners, avatars, headers & text for Welcome, Goodbye, Levels & Server Theme.',
+        usage: ',customize [welcome | goodbye | levels | theme]',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            if (!ctx.guild) {
+                return ctx.reply('❌ This command can only be used within a server.');
+            }
+            if (!hasManagePerms(ctx)) {
+                return ctx.reply('❌ You need **Manage Server** or **Administrator** permissions to customize embed designs.');
+            }
+
+            const target = (ctx.args[0] || '').toLowerCase().trim();
+
+            if (target === 'welcome' || target === 'greet') {
+                const panel = await welcomeModule.getWelcomeControlPanel(ctx.guild.id, ctx.client);
+                return ctx.reply(panel);
+            }
+            if (target === 'goodbye' || target === 'leave' || target === 'farewell') {
+                const panel = await goodbyeModule.getGoodbyeControlPanel(ctx.guild.id, ctx.client);
+                return ctx.reply(panel);
+            }
+            if (target === 'level' || target === 'levels' || target === 'rank' || target === 'levelup') {
+                const panel = await levelingModule.getLevelControlPanel(ctx.guild.id, ctx.client);
+                return ctx.reply(panel);
+            }
+            if (target === 'theme' || target === 'color' || target === 'server' || target === 'branding') {
+                const panel = await embedVisualityModule.getThemeControlPanel(ctx.guild.id, ctx.client);
+                return ctx.reply(panel);
+            }
+
+            const studio = await embedVisualityModule.getMasterVisualityStudio(ctx.guild.id, ctx.client);
+            return ctx.reply(studio);
+        }
+    },
+
+    // 17. CUSTOMIZE WELCOME VISUALITY
+    {
+        name: 'customizewelcome',
+        aliases: ['welcomeset', 'setwelcome', 'welcomedesign', 'welcomestudio'],
+        category: 'Systems',
+        description: 'Interactive visual customizer for welcome cards, banner GIFs, typography, and greeting headers.',
+        usage: ',customizewelcome',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            if (!ctx.guild) {
+                return ctx.reply('❌ This command can only be used within a server.');
+            }
+            if (!hasManagePerms(ctx)) {
+                return ctx.reply('❌ You need **Manage Server** or **Administrator** permissions to customize embed designs.');
+            }
+
+            const panel = await welcomeModule.getWelcomeControlPanel(ctx.guild.id, ctx.client);
+            return ctx.reply(panel);
+        }
+    },
+
+    // 18. CUSTOMIZE GOODBYE VISUALITY
+    {
+        name: 'customizegoodbye',
+        aliases: ['goodbyeset', 'setgoodbye', 'goodbyedesign', 'goodbyestudio'],
+        category: 'Systems',
+        description: 'Interactive visual customizer for goodbye cards, departure banners, typography, and farewell headers.',
+        usage: ',customizegoodbye',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            if (!ctx.guild) {
+                return ctx.reply('❌ This command can only be used within a server.');
+            }
+            if (!hasManagePerms(ctx)) {
+                return ctx.reply('❌ You need **Manage Server** or **Administrator** permissions to customize embed designs.');
+            }
+
+            const panel = await goodbyeModule.getGoodbyeControlPanel(ctx.guild.id, ctx.client);
+            return ctx.reply(panel);
+        }
+    },
+
+    // 19. CUSTOMIZE LEVELS VISUALITY
+    {
+        name: 'customizelevels',
+        aliases: ['levelset', 'setuplevels', 'levelvisuality', 'leveldesign', 'levelstudio'],
+        category: 'Systems',
+        description: 'Interactive visual customizer for level-up announcement cards, author tags, typography, and headers.',
+        usage: ',customizelevels',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            if (!ctx.guild) {
+                return ctx.reply('❌ This command can only be used within a server.');
+            }
+            if (!hasManagePerms(ctx)) {
+                return ctx.reply('❌ You need **Manage Server** or **Administrator** permissions to customize embed designs.');
+            }
+
+            const panel = await levelingModule.getLevelControlPanel(ctx.guild.id, ctx.client);
+            return ctx.reply(panel);
+        }
+    },
+
+    // 20. CUSTOMIZE SERVER EMBED THEME
+    {
+        name: 'embedtheme',
+        aliases: ['settheme', 'colortheme', 'servertheme', 'themedesign', 'themestudio'],
+        category: 'Systems',
+        description: 'Interactive visual customizer for server embed theme (brand color, global footer, author header).',
+        usage: ',embedtheme',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            if (!ctx.guild) {
+                return ctx.reply('❌ This command can only be used within a server.');
+            }
+            if (!hasManagePerms(ctx)) {
+                return ctx.reply('❌ You need **Manage Server** or **Administrator** permissions to customize embed designs.');
+            }
+
+            const panel = await embedVisualityModule.getThemeControlPanel(ctx.guild.id, ctx.client);
+            return ctx.reply(panel);
         }
     }
 ];

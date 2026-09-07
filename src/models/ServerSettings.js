@@ -102,6 +102,15 @@ const serverSettingsSchema = new mongoose.Schema({
         expiresAt: { type: Date, default: null },
         activatedBy: { type: String, default: null },
         customBotToken: { type: String, default: null }
+    },
+
+    // 🎨 Embed Visuality & Theme Settings
+    embedTheme: {
+        color: { type: String, default: '#5865F2' },
+        footer: { type: String, default: '' },
+        footerIcon: { type: String, default: '' },
+        authorName: { type: String, default: '' },
+        authorIcon: { type: String, default: '' }
     }
 }, { timestamps: true });
 
