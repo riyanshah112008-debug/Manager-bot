@@ -90,6 +90,10 @@ if (translatorModule) {
 }
 
 const socialModule = safeRequire(['./src/modules/socialActions', './modules/socialActions']);
+const vcmodModule = safeRequire(['./src/commands/moderation/vcmod', './commands/moderation/vcmod']);
+if (vcmodModule && vcmodModule.data) {
+    masterPayloads.push(vcmodModule.data.toJSON ? vcmodModule.data.toJSON() : vcmodModule.data);
+}
 
 const commands = [
     ...masterPayloads,

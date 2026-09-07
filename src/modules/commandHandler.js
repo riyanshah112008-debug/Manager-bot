@@ -178,6 +178,11 @@ class CommandRegistry {
         this.registerPrefixDispatcher(client);
         this.registerInteractionDispatcher(client);
 
+        try {
+            const { setupAutoDisconnect } = require('./voiceModerator');
+            setupAutoDisconnect(client);
+        } catch (e) {}
+
         // Initialize Dedicated Music Controller System
         try {
             const musicController = require('./musicController');
@@ -509,6 +514,58 @@ class CommandRegistry {
                         .setFooter({ text: 'Starry Loot Engine', iconURL: client.user.displayAvatarURL() });
 
                     return await interaction.message.edit({ embeds: [claimedEmbed], components: [] }).catch(() => {});
+                }
+
+                // C0. Voice Moderation Incident & Panel Action Buttons
+                if (customId.startsWith('vcmod_')) {
+                    const { 
+                        handleVoiceModButton, 
+                        startVoiceModeration, 
+                        stopVoiceModeration, 
+                        getGuildVoiceModConfig, 
+                        updateGuildConfigCache 
+                    } = require('./voiceModerator');
+
+                    const handled = await handleVoiceModButton(interaction);
+                    if (handled) return;
+
+                    // Panel Join Button
+                    if (customId === 'vcmod_panel_join') {
+                        const targetChannel = interaction.member?.voice?.channel;
+                        if (!targetChannel) {
+                            return interaction.reply({ content: '❌ Please join a voice channel first to start monitoring!', ephemeral: true });
+                        }
+                        await startVoiceModeration(interaction.guild, targetChannel, interaction.client);
+                        return interaction.reply({ content: `🎙️ Starry is now monitoring **<#${targetChannel.id}>** in real-time!`, ephemeral: true });
+                    }
+
+                    // Panel Leave Button
+                    if (customId === 'vcmod_panel_leave') {
+                        stopVoiceModeration(interaction.guild.id);
+                        return interaction.reply({ content: '⏹️ Stopped voice channel moderation and disconnected.', ephemeral: true });
+                    }
+
+                    // Panel Toggle Action Button
+                    if (customId === 'vcmod_panel_toggle_action') {
+                        const VoiceModerationConfig = require('../models/VoiceModerationConfig');
+                        const conf = await getGuildVoiceModConfig(interaction.guild.id);
+                        const actions = ['warn', 'mute', 'disconnect', 'timeout', 'log'];
+                        const nextIdx = (actions.indexOf(conf.action || 'warn') + 1) % actions.length;
+                        conf.action = actions[nextIdx];
+                        await VoiceModerationConfig.findOneAndUpdate({ guildId: interaction.guild.id }, { action: conf.action }, { upsert: true });
+                        updateGuildConfigCache(interaction.guild.id, conf);
+                        return interaction.reply({ content: `⚖️ Voice moderation penalty updated to: **${conf.action.toUpperCase()}**`, ephemeral: true });
+                    }
+
+                    // Panel Toggle Audio Warning Button
+                    if (customId === 'vcmod_panel_toggle_warning') {
+                        const VoiceModerationConfig = require('../models/VoiceModerationConfig');
+                        const conf = await getGuildVoiceModConfig(interaction.guild.id);
+                        conf.audioWarning = !conf.audioWarning;
+                        await VoiceModerationConfig.findOneAndUpdate({ guildId: interaction.guild.id }, { audioWarning: conf.audioWarning }, { upsert: true });
+                        updateGuildConfigCache(interaction.guild.id, conf);
+                        return interaction.reply({ content: `🗣️ In-VC Spoken Voice Warning is now: **${conf.audioWarning ? 'ENABLED' : 'DISABLED'}**`, ephemeral: true });
+                    }
                 }
 
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
