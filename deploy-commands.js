@@ -177,34 +177,6 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-    // 🌸 CUSTOMIZE WELCOME
-    new SlashCommandBuilder()
-        .setName('customizewelcome')
-        .setDescription('Interactive visual customizer for welcome cards & greeting embeds')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .toJSON(),
-
-    // 🥀 CUSTOMIZE GOODBYE
-    new SlashCommandBuilder()
-        .setName('customizegoodbye')
-        .setDescription('Interactive visual customizer for goodbye cards & farewell embeds')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .toJSON(),
-
-    // 📊 CUSTOMIZE LEVELS
-    new SlashCommandBuilder()
-        .setName('customizelevels')
-        .setDescription('Interactive visual customizer for level-up cards & headers')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .toJSON(),
-
-    // 🎨 SERVER EMBED THEME
-    new SlashCommandBuilder()
-        .setName('embedtheme')
-        .setDescription('Interactive visual customizer for server embed theme (colors, headers, footers)')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .toJSON(),
-
     // 🔍 GLOBAL USER APP WHOIS COMMAND
     new SlashCommandBuilder()
         .setName('whois')
@@ -252,25 +224,6 @@ const commands = [
         .toJSON(),
 
     // 🎨 AI IMAGE GENERATION SLASH COMMANDS (Usable in Guilds, DMs, & Group Chats)
-    new SlashCommandBuilder()
-        .setName('imagine')
-        .setDescription('🎨 Generate stunning high-resolution AI art and images using Flux/SDXL neural engines')
-        .setIntegrationTypes(
-            ApplicationIntegrationType.GuildInstall, 
-            ApplicationIntegrationType.UserInstall
-        )
-        .setContexts(
-            InteractionContextType.Guild, 
-            InteractionContextType.BotDM, 
-            InteractionContextType.PrivateChannel
-        )
-        .addStringOption(option => 
-            option.setName('prompt')
-                .setDescription('Detailed text description of the image to generate')
-                .setRequired(true)
-        )
-        .toJSON(),
-
     new SlashCommandBuilder()
         .setName('image')
         .setDescription('🎨 Generate AI images and artwork from text prompts')
@@ -345,18 +298,6 @@ for (const act of directSocials) {
 
 // ✨ AI, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
 commands.push(
-    new SlashCommandBuilder()
-        .setName('ask')
-        .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons!')
-        .setContexts([0, 1, 2])
-        .setIntegrationTypes([0, 1])
-        .addStringOption(option => 
-            option.setName('question')
-                .setDescription('The question or prompt for Starry AI')
-                .setRequired(true)
-        )
-        .toJSON(),
-
     new SlashCommandBuilder()
         .setName('ai')
         .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons!')
@@ -529,34 +470,6 @@ commands.push(
         name: 'setlanguage',
         description: '🌐 Change the server language or view the active language across 14 languages',
         default_member_permissions: ADMIN,
-        options: [
-            {
-                name: 'language',
-                type: 3,
-                required: false,
-                description: 'Select server language',
-                choices: [
-                    { name: '🇬🇧 English', value: 'en' },
-                    { name: '🇪🇸 Español (Spanish)', value: 'es' },
-                    { name: '🇧🇷 Português (Portuguese)', value: 'pt' },
-                    { name: '🇯🇵 日本語 (Japanese)', value: 'ja' },
-                    { name: '🇮🇳 हिन्दी (Hindi)', value: 'hi' },
-                    { name: '🇫🇷 Français (French)', value: 'fr' },
-                    { name: '🇩🇪 Deutsch (German)', value: 'de' },
-                    { name: '🇷🇺 Русский (Russian)', value: 'ru' },
-                    { name: '🇮🇩 Bahasa Indonesia', value: 'id' },
-                    { name: '🇮🇹 Italiano (Italian)', value: 'it' },
-                    { name: '🇻🇳 Tiếng Việt (Vietnamese)', value: 'vi' },
-                    { name: '🇹🇷 Türkçe (Turkish)', value: 'tr' },
-                    { name: '🇸🇦 العربية (Arabic)', value: 'ar' },
-                    { name: '🇰🇷 한국어 (Korean)', value: 'ko' }
-                ]
-            }
-        ]
-    },
-    {
-        name: 'language',
-        description: '🌐 View or configure current server language',
         options: [
             {
                 name: 'language',
