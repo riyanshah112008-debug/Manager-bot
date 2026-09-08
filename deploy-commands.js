@@ -95,6 +95,21 @@ if (vcmodModule && vcmodModule.data) {
     masterPayloads.push(vcmodModule.data.toJSON ? vcmodModule.data.toJSON() : vcmodModule.data);
 }
 
+const portalModule = safeRequire(['./src/commands/utility/portal', './commands/utility/portal']);
+if (portalModule && portalModule.data) {
+    masterPayloads.push(portalModule.data.toJSON ? portalModule.data.toJSON() : portalModule.data);
+}
+
+const pulseModule = safeRequire(['./src/commands/utility/pulse', './commands/utility/pulse']);
+if (pulseModule && pulseModule.data) {
+    masterPayloads.push(pulseModule.data.toJSON ? pulseModule.data.toJSON() : pulseModule.data);
+}
+
+const sparkModule = safeRequire(['./src/commands/utility/spark', './commands/utility/spark']);
+if (sparkModule && sparkModule.data) {
+    masterPayloads.push(sparkModule.data.toJSON ? sparkModule.data.toJSON() : sparkModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -103,13 +118,10 @@ const commands = [
 
     // MUSIC COMMANDS
     { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
-    { name: 'pause', description: 'Pause the currently playing song' },
-    { name: 'resume', description: 'Resume the paused song' },
     { name: 'skip', description: 'Skip the current song' },
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View and interactively manage the current music queue' },
     { name: 'volume', description: 'Change the music volume', options: [{ name: 'amount', type: 4, required: true, description: 'Volume from 1 to 100', min_value: 1, max_value: 100 }] },
-    { name: 'autoplay', description: 'Toggles automatic music playback (Premium Only)' },
 
     // 🌟 SETUP WELCOME COMMAND
     new SlashCommandBuilder()

@@ -183,6 +183,13 @@ class CommandRegistry {
             setupAutoDisconnect(client);
         } catch (e) {}
 
+        // Initialize Astral Cross-Server Portals
+        try {
+            const { initAstralPortals, setupPortalDispatcher } = require('./astralPortal');
+            initAstralPortals(client);
+            setupPortalDispatcher(client);
+        } catch (e) {}
+
         // Initialize Dedicated Music Controller System
         try {
             const musicController = require('./musicController');
@@ -565,6 +572,37 @@ class CommandRegistry {
                         await VoiceModerationConfig.findOneAndUpdate({ guildId: interaction.guild.id }, { audioWarning: conf.audioWarning }, { upsert: true });
                         updateGuildConfigCache(interaction.guild.id, conf);
                         return interaction.reply({ content: `🗣️ In-VC Spoken Voice Warning is now: **${conf.audioWarning ? 'ENABLED' : 'DISABLED'}**`, ephemeral: true });
+                    }
+                }
+
+                // C0-B. Chat Spark Dilemma Vote Buttons
+                if (customId.startsWith('spark_vote_')) {
+                    const { handleSparkVote } = require('./chatSpark');
+                    const handled = await handleSparkVote(interaction);
+                    if (handled) return;
+                }
+
+                // C0-C. Quantum Server Pulse Action Buttons
+                if (customId.startsWith('pulse_')) {
+                    if (customId === 'pulse_refresh') {
+                        await interaction.deferUpdate().catch(() => {});
+                        const { generateServerPulse } = require('./serverPulse');
+                        const { embed, row } = await generateServerPulse(interaction.guild, interaction.client);
+                        return await interaction.editReply({ embeds: [embed], components: [row] }).catch(() => {});
+                    }
+                    if (customId === 'pulse_spark') {
+                        await interaction.deferReply().catch(() => {});
+                        const { createChatSpark } = require('./chatSpark');
+                        const { embed, row } = await createChatSpark(interaction.channel, interaction.user);
+                        return await interaction.editReply({ embeds: [embed], components: [row] }).catch(() => {});
+                    }
+                    if (customId === 'pulse_drop') {
+                        const chestModule = require('./chestDrop');
+                        if (chestModule && typeof chestModule.triggerManualDrop === 'function') {
+                            await chestModule.triggerManualDrop(interaction.channel);
+                            return interaction.reply({ content: '🎁 **Starlight Loot Chest Dropped!** Claim it before others do!', ephemeral: true });
+                        }
+                        return interaction.reply({ content: '🎁 A Starlight blessing has fallen upon this channel!', ephemeral: true });
                     }
                 }
 
