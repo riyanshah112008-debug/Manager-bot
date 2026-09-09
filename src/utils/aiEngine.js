@@ -52,18 +52,72 @@ function getGenAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-async function generateStarryResponse(prompt, userId = null, isDM = false) {
+async function callOpenAIFast(fullPrompt) {
+    try {
+        const res = await fetch('https://text.pollinations.ai/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messages: [{ role: 'user', content: fullPrompt }],
+                model: 'openai-fast'
+            }),
+            signal: AbortSignal.timeout(12000)
+        });
+        if (res.ok) {
+            const text = await res.text();
+            if (text && text.trim().length > 0 && !text.includes('"error":')) {
+                return text.trim();
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+async function generateStarryResponse(prompt, userId = null, isDM = false, preferredModel = null) {
     let conversation = [];
 
     if (userId && dmConversationHistory.has(userId)) {
         conversation = dmConversationHistory.get(userId).slice(-8); // Keep last 8 turns
     }
 
-    const fullPrompt = `${SYSTEM_PERSONA_PROMPT}\n\nUser Question/Message: "${prompt}"`;
+    let cleanPrompt = prompt;
+    let targetTier = preferredModel;
 
-    // Try Google GenAI SDK (Gemini 2.5 Flash -> Gemini 2.0 Flash)
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-    for (const modelName of models) {
+    // Detect model flags in prompt: --pro, --openai, --gpt, --flash
+    if (!targetTier) {
+        if (/--pro\b/i.test(cleanPrompt)) {
+            targetTier = 'pro';
+            cleanPrompt = cleanPrompt.replace(/--pro\b/gi, '').trim();
+        } else if (/--(?:openai|gpt)\b/i.test(cleanPrompt)) {
+            targetTier = 'openai';
+            cleanPrompt = cleanPrompt.replace(/--(?:openai|gpt)\b/gi, '').trim();
+        } else if (/--flash\b/i.test(cleanPrompt)) {
+            targetTier = 'flash';
+            cleanPrompt = cleanPrompt.replace(/--flash\b/gi, '').trim();
+        }
+    }
+
+    const fullPrompt = `${SYSTEM_PERSONA_PROMPT}\n\nUser Question/Message: "${cleanPrompt}"`;
+
+    // 1. If OpenAI requested explicitly
+    if (targetTier === 'openai') {
+        const openAIText = await callOpenAIFast(fullPrompt);
+        if (openAIText) {
+            if (userId) {
+                conversation.push({ role: 'user', content: cleanPrompt });
+                conversation.push({ role: 'assistant', content: openAIText });
+                dmConversationHistory.set(userId, conversation.slice(-10));
+            }
+            return { text: openAIText, model: 'OpenAI GPT-4o Cloud' };
+        }
+    }
+
+    // 2. Google DeepMind Gemini Multi-Model Ensemble
+    const geminiModels = targetTier === 'pro' 
+        ? ['gemini-2.5-pro', 'gemini-pro-latest', 'gemini-2.5-flash']
+        : ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-2.5-pro'];
+
+    for (const modelName of geminiModels) {
         try {
             const ai = getGenAIClient();
             if (ai) {
@@ -74,7 +128,7 @@ async function generateStarryResponse(prompt, userId = null, isDM = false) {
                 if (response && response.text && response.text.trim().length > 0) {
                     const replyText = response.text.trim();
                     if (userId) {
-                        conversation.push({ role: 'user', content: prompt });
+                        conversation.push({ role: 'user', content: cleanPrompt });
                         conversation.push({ role: 'assistant', content: replyText });
                         dmConversationHistory.set(userId, conversation.slice(-10));
                     }
@@ -82,13 +136,24 @@ async function generateStarryResponse(prompt, userId = null, isDM = false) {
                 }
             }
         } catch (err) {
-            console.warn(`[AI Engine] Model ${modelName} warning:`, err.message);
+            console.warn(`[Multi-AI Engine] Model ${modelName} warning:`, err.message);
         }
     }
 
-    // High-Speed Fallback AI
+    // 3. Resilient Cloud Fallback (OpenAI Fast Engine)
+    const fallbackText = await callOpenAIFast(fullPrompt);
+    if (fallbackText) {
+        if (userId) {
+            conversation.push({ role: 'user', content: cleanPrompt });
+            conversation.push({ role: 'assistant', content: fallbackText });
+            dmConversationHistory.set(userId, conversation.slice(-10));
+        }
+        return { text: fallbackText, model: 'OpenAI Cloud (Auto-Failover)' };
+    }
+
+    // 4. High-Speed Heuristic Core (Offline Safe)
     return {
-        text: `✨ **Starry is here!** 🌟\n\nI received your message: *"${prompt.length > 200 ? prompt.substring(0, 197) + '...' : prompt}"*!\n\nI am currently operating in resilient cosmic mode. Feel free to ask me anything about server setup, music, economy, games, or chat with me anytime in DMs! 💫`,
+        text: `✨ **Starry is here!** 🌟\n\nI received your message: *"${cleanPrompt.length > 200 ? cleanPrompt.substring(0, 197) + '...' : cleanPrompt}"*!\n\nI am currently operating in resilient cosmic mode. Feel free to ask me anything about server setup, music, economy, games, or chat with me anytime in DMs! 💫`,
         model: 'Starry Cosmic Core'
     };
 }
