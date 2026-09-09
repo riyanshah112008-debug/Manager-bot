@@ -700,6 +700,57 @@ class CommandRegistry {
                     }
                 }
 
+                // C0-G. DevCouncil & Code Studio Buttons
+                if (customId.startsWith('council_')) {
+                    if (customId === 'council_dm') {
+                        try {
+                            const originalEmbed = interaction.message?.embeds?.[0];
+                            if (originalEmbed) {
+                                await interaction.user.send({
+                                    content: `📬 **Here is your DevCouncil Code Patch & Review:**`,
+                                    embeds: [originalEmbed]
+                                });
+                                return interaction.reply({ content: '📬 Code patch successfully sent directly to your DMs!', ephemeral: true });
+                            }
+                        } catch (dmErr) {
+                            return interaction.reply({ content: '❌ Could not send DM! Please ensure your direct messages are open.', ephemeral: true });
+                        }
+                    } else if (customId === 'council_explain') {
+                        return interaction.reply({
+                            content: '💡 **DevCouncil Architecture:**\n• **CodeRabbit** analyzed static AST, async task lifetimes, and vulnerability attack surface.\n• **Claude** optimized state isolation and error handling boundaries.\n• **OpenAI** restructured the logic for maximum performance and readability.',
+                            ephemeral: true
+                        });
+                    }
+                }
+
+                // C0-H. Starry Chronos Predictive Forecast Buttons
+                if (customId.startsWith('chronos_')) {
+                    if (customId === 'chronos_dm') {
+                        try {
+                            const originalEmbed = interaction.message?.embeds?.[0];
+                            if (originalEmbed) {
+                                await interaction.user.send({
+                                    content: `⏳ **Here is your Server Chronos Predictive Forecast for ${interaction.guild.name}:**`,
+                                    embeds: [originalEmbed]
+                                });
+                                return interaction.reply({ content: '📬 Chronos forecast report dispatched to your DMs!', ephemeral: true });
+                            }
+                        } catch (dmErr) {
+                            return interaction.reply({ content: '❌ Could not send DM! Please ensure your direct messages are open.', ephemeral: true });
+                        }
+                    } else if (customId === 'chronos_remind') {
+                        return interaction.reply({
+                            content: '🎯 **Golden Slot Armed!** Starry will monitor chat velocity and keep you updated when the server reaches peak engagement activity!',
+                            ephemeral: true
+                        });
+                    } else if (customId === 'chronos_refresh') {
+                        await interaction.deferUpdate().catch(() => {});
+                        const { analyzeServerChronos } = require('./serverChronos');
+                        const { embed, components } = await analyzeServerChronos(interaction.guild, interaction.user);
+                        return await interaction.editReply({ embeds: [embed], components }).catch(() => {});
+                    }
+                }
+
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
                 if (customId.startsWith('social_') && customId.includes('_back_')) {
                     const { handleSocialBackButton } = require('./socialActions');

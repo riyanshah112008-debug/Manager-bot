@@ -125,6 +125,11 @@ if (pentestModule && pentestModule.data) {
     masterPayloads.push(pentestModule.data.toJSON ? pentestModule.data.toJSON() : pentestModule.data);
 }
 
+const chronosModule = safeRequire(['./src/commands/utility/chronos', './commands/utility/chronos']);
+if (chronosModule && chronosModule.data) {
+    masterPayloads.push(chronosModule.data.toJSON ? chronosModule.data.toJSON() : chronosModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -315,7 +320,6 @@ commands.push(
 );
 
 commands.push(
-    { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
