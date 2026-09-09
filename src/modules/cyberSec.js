@@ -158,16 +158,17 @@ async function auditServerSecurity(guild, requester) {
     }
 
     // C. Audit Bots & Privilege Escalation Risks
-    const bots = guild.members.cache.filter(m => m.user.bot);
+    const allMembers = Array.from(guild.members?.cache?.values() || []);
+    const bots = allMembers.filter(m => m.user?.bot);
     let adminBots = 0;
     let unverifiedAdminBots = [];
 
     bots.forEach(bot => {
-        if (bot.permissions.has(PermissionFlagsBits.Administrator)) {
+        if (bot.permissions && bot.permissions.has(PermissionFlagsBits.Administrator)) {
             adminBots++;
             const isVerified = bot.user.flags && (bot.user.flags.bitfield & (1 << 16) || bot.user.flags.bitfield & (1 << 19));
-            if (!isVerified && bot.user.id !== guild.client.user.id) {
-                unverifiedAdminBots.push(bot.user.tag);
+            if (!isVerified && bot.user.id !== guild.client?.user?.id) {
+                unverifiedAdminBots.push(bot.user.tag || bot.user.username);
             }
         }
     });
@@ -302,7 +303,7 @@ Keep it strictly professional, technical, urgent, and formatted in clean markdow
     const embed = new EmbedBuilder()
         .setColor(gradeColor)
         .setTitle(`🛡️ White-Hat Pentest & Loophole Audit: ${guild.name}`)
-        .setDescription(`**Defensive Rating:** \`${grade}\`\n**Security Score:** \`${score}/100\` • **Audited Entities:** \`${channels.length}\` Channels, \`${guild.roles.cache.size}\` Roles, \`${bots.size}\` Bots\n\n*Executed by Starry Autonomous CyberSec Engine (100% Discord API & ToS Compliant)*`)
+        .setDescription(`**Defensive Rating:** \`${grade}\`\n**Security Score:** \`${score}/100\` • **Audited Entities:** \`${channels.length}\` Channels, \`${guild.roles?.cache?.size || 0}\` Roles, \`${bots.length}\` Bots\n\n*Executed by Starry Autonomous CyberSec Engine (100% Discord API & ToS Compliant)*`)
         .addFields(
             {
                 name: '🧮 Vulnerability Assessment Matrix',
