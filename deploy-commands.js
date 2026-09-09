@@ -120,6 +120,11 @@ if (catchupModule && catchupModule.data) {
     masterPayloads.push(catchupModule.data.toJSON ? catchupModule.data.toJSON() : catchupModule.data);
 }
 
+const pentestModule = safeRequire(['./src/commands/utility/pentest', './commands/utility/pentest']);
+if (pentestModule && pentestModule.data) {
+    masterPayloads.push(pentestModule.data.toJSON ? pentestModule.data.toJSON() : pentestModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -310,7 +315,6 @@ commands.push(
 );
 
 commands.push(
-    { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
     { 
         name: 'setup-starry', 

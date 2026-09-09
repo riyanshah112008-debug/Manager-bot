@@ -637,6 +637,51 @@ class CommandRegistry {
                     }
                 }
 
+                // C0-F. White-Hat Pentest & Security Intelligence Buttons
+                if (customId.startsWith('pentest_')) {
+                    if (customId === 'pentest_dm') {
+                        try {
+                            const originalEmbed = interaction.message?.embeds?.[0];
+                            if (originalEmbed) {
+                                await interaction.user.send({
+                                    content: `🛡️ **Forensic Pentest & Loophole Audit Report for ${interaction.guild.name}:**`,
+                                    embeds: [originalEmbed]
+                                });
+                                return interaction.reply({ content: '📬 Pentest audit report successfully dispatched to your DMs!', ephemeral: true });
+                            }
+                        } catch (dmErr) {
+                            return interaction.reply({ content: '❌ Could not send DM! Please make sure your DMs are open to server members.', ephemeral: true });
+                        }
+                    } else if (customId === 'pentest_blueprint') {
+                        const { EmbedBuilder } = require('discord.js');
+                        const blueprintEmbed = new EmbedBuilder()
+                            .setColor('#3498DB')
+                            .setTitle('🔒 Starry Zero-Day Server Hardening Blueprint')
+                            .setDescription('Follow these surgical steps in Discord Server Settings to harden your defense against raids, nukes, and rogue bots:')
+                            .addFields(
+                                {
+                                    name: '1. Neutralize Dangerous @everyone Overrides',
+                                    value: '• Go to **Server Settings > Roles > @everyone**\n• Disable `Mention @everyone, @here, and All Roles`\n• Disable `Manage Webhooks` and `Manage Messages`\n• Ensure `Attach Files` & `Embed Links` are disabled in announcement/rule channels.'
+                                },
+                                {
+                                    name: '2. Quarantine Rogue Bot Permissions',
+                                    value: '• Inspect every bot role in **Server Settings > Integrations / Roles**\n• Strip `Administrator` from utility bots that do not explicitly require it.\n• Move the bot role below human moderator roles to prevent privilege escalation.'
+                                },
+                                {
+                                    name: '3. Enforce Server-Level Gateways',
+                                    value: '• Set **Verification Level** to at least **Medium** (Registered > 5 mins).\n• Set **Explicit Media Content Filter** to **Scan media from all members**.\n• Enable **Require 2FA for Moderation** to prevent staff account takeovers.'
+                                }
+                            )
+                            .setFooter({ text: 'Starry White-Hat Security Blueprint' });
+                        return interaction.reply({ embeds: [blueprintEmbed], ephemeral: true });
+                    } else if (customId === 'pentest_refresh') {
+                        await interaction.deferUpdate().catch(() => {});
+                        const { auditServerSecurity } = require('./cyberSec');
+                        const { embed, components } = await auditServerSecurity(interaction.guild, interaction.user);
+                        return await interaction.editReply({ embeds: [embed], components }).catch(() => {});
+                    }
+                }
+
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
                 if (customId.startsWith('social_') && customId.includes('_back_')) {
                     const { handleSocialBackButton } = require('./socialActions');
