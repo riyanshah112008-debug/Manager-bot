@@ -164,9 +164,27 @@ class CommandRegistry {
                 const name = (cmdModule?.data?.name || cmdModule?.name || path.basename(file, '.js')).toLowerCase();
                 
                 // Do not overwrite working master bundled commands with stubs
-                if (!this.commands.has(name) && typeof cmdModule.execute === 'function') {
-                    this.commands.set(name, cmdModule);
-                    client.commands.set(name, cmdModule);
+                if (typeof cmdModule.execute === 'function') {
+                    if (!this.commands.has(name)) {
+                        this.commands.set(name, cmdModule);
+                        client.commands.set(name, cmdModule);
+                        client.prefixCommands.set(name, cmdModule);
+
+                        if (cmdModule.category) {
+                            if (!this.categories.has(cmdModule.category)) this.categories.set(cmdModule.category, []);
+                            this.categories.get(cmdModule.category).push(cmdModule);
+                        }
+                    }
+
+                    // Register all aliases for standalone commands
+                    if (cmdModule.aliases && Array.isArray(cmdModule.aliases)) {
+                        for (const alias of cmdModule.aliases) {
+                            const cleanAlias = alias.toLowerCase();
+                            this.aliases.set(cleanAlias, name);
+                            client.aliases.set(cleanAlias, name);
+                            client.prefixCommands.set(cleanAlias, cmdModule);
+                        }
+                    }
                 }
             } catch (err) {
                 // Ignore non-command utility scripts
