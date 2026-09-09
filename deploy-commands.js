@@ -110,6 +110,11 @@ if (sparkModule && sparkModule.data) {
     masterPayloads.push(sparkModule.data.toJSON ? sparkModule.data.toJSON() : sparkModule.data);
 }
 
+const raidModule = safeRequire(['./src/commands/game/raid', './commands/game/raid']);
+if (raidModule && raidModule.data) {
+    masterPayloads.push(raidModule.data.toJSON ? raidModule.data.toJSON() : raidModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -165,26 +170,6 @@ const commands = [
                 )
         )
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .toJSON(),
-
-    // 🔍 GLOBAL USER APP WHOIS COMMAND
-    new SlashCommandBuilder()
-        .setName('whois')
-        .setDescription('🔍 Lookup detailed information and permissions for a user')
-        .setIntegrationTypes(
-            ApplicationIntegrationType.GuildInstall, 
-            ApplicationIntegrationType.UserInstall
-        )
-        .setContexts(
-            InteractionContextType.Guild, 
-            InteractionContextType.BotDM, 
-            InteractionContextType.PrivateChannel
-        )
-        .addUserOption(option => 
-            option.setName('target')
-                .setDescription('Select the member you want to look up')
-                .setRequired(false)
-        )
         .toJSON(),
 
     // 📊 SINGLE LEVELING SLASH COMMAND

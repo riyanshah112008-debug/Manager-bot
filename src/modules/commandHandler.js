@@ -606,6 +606,13 @@ class CommandRegistry {
                     }
                 }
 
+                // C0-D. Astral Co-Op Raid Boss Combat Actions
+                if (customId.startsWith('raid_')) {
+                    const actionType = customId.replace('raid_', '');
+                    const { handleRaidCombatAction } = require('./astralRaidEngine');
+                    return await handleRaidCombatAction(interaction, actionType);
+                }
+
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
                 if (customId.startsWith('social_') && customId.includes('_back_')) {
                     const { handleSocialBackButton } = require('./socialActions');
