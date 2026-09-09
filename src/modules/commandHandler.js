@@ -613,6 +613,30 @@ class CommandRegistry {
                     return await handleRaidCombatAction(interaction, actionType);
                 }
 
+                // C0-E. AI Channel Catch-Up Buttons
+                if (customId.startsWith('catchup_')) {
+                    if (customId === 'catchup_dm') {
+                        try {
+                            const originalEmbed = interaction.message?.embeds?.[0];
+                            if (originalEmbed) {
+                                await interaction.user.send({
+                                    content: `📬 **Here is your personal copy of the channel catch-up from ${interaction.guild.name}:**`,
+                                    embeds: [originalEmbed]
+                                });
+                                return interaction.reply({ content: '📬 Catch-Up summary sent directly to your DMs!', ephemeral: true });
+                            }
+                        } catch (dmErr) {
+                            return interaction.reply({ content: '❌ Could not send DM! Please ensure your direct messages are open.', ephemeral: true });
+                        }
+                    } else if (customId.startsWith('catchup_refresh_')) {
+                        const hours = parseInt(customId.replace('catchup_refresh_', ''), 10) || 6;
+                        await interaction.deferUpdate().catch(() => {});
+                        const { generateChannelCatchup } = require('./chatCatchup');
+                        const { embed, components } = await generateChannelCatchup(interaction.channel, { hours, user: interaction.user });
+                        return await interaction.editReply({ embeds: [embed], components }).catch(() => {});
+                    }
+                }
+
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
                 if (customId.startsWith('social_') && customId.includes('_back_')) {
                     const { handleSocialBackButton } = require('./socialActions');

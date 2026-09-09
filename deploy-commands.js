@@ -115,6 +115,11 @@ if (raidModule && raidModule.data) {
     masterPayloads.push(raidModule.data.toJSON ? raidModule.data.toJSON() : raidModule.data);
 }
 
+const catchupModule = safeRequire(['./src/commands/utility/catchup', './commands/utility/catchup']);
+if (catchupModule && catchupModule.data) {
+    masterPayloads.push(catchupModule.data.toJSON ? catchupModule.data.toJSON() : catchupModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -307,7 +312,6 @@ commands.push(
 commands.push(
     { name: 'chest', description: 'Claim your timed loot chest for free XP and Credits!' },
     { name: 'shop', description: 'Open the server shop to buy exclusive roles with your Credits!' },
-    { name: 'prestige', description: 'Reset your level to gain Prestige 👑 and permanent bonus multipliers!' },
     { 
         name: 'setup-starry', 
         description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
