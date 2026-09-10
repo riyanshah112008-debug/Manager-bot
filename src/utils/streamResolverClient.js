@@ -28,7 +28,14 @@ class StreamResolverClient {
             line = line.trim();
             if (line === 'READY') {
                 this.ready = true;
+                this.consecutiveFailures = 0;
                 console.log('⚡ [Stream Resolver Engine] Python daemon ready for original studio audio resolution.');
+                return;
+            }
+            if (line === 'UNAVAILABLE') {
+                this.ready = false;
+                this.disabled = true;
+                console.log('⚡ [Stream Resolver Engine] Cloud host detected: yt-dlp unavailable. Using native Lavalink cluster.');
                 return;
             }
             try {
@@ -43,13 +50,22 @@ class StreamResolverClient {
         });
 
         this.process.on('close', (code) => {
-            console.warn(`⚠️ [Stream Resolver Engine] Worker exited (${code}). Respawning...`);
             this.ready = false;
-            setTimeout(() => this.init(), 2000);
+            if (this.disabled || code === 0) return; // Clean voluntary exit or disabled
+
+            this.consecutiveFailures = (this.consecutiveFailures || 0) + 1;
+            if (this.consecutiveFailures >= 3) {
+                this.disabled = true;
+                console.warn('⚠️ [Stream Resolver Engine] Python worker failed 3 times. Falling back to native Lavalink audio.');
+                return;
+            }
+            console.warn(`⚠️ [Stream Resolver Engine] Worker exited (${code}). Retrying in 5s...`);
+            setTimeout(() => this.init(), 5000);
         });
 
         this.process.on('error', (err) => {
-            console.warn('⚠️ [Stream Resolver Engine] Process error:', err.message);
+            this.disabled = true;
+            console.warn('⚠️ [Stream Resolver Engine] Process error (native Lavalink will be used):', err.message);
         });
     }
 

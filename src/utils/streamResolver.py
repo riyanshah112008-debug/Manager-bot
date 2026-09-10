@@ -4,7 +4,18 @@ import sys
 import json
 import glob
 import time
-import yt_dlp
+try:
+    import yt_dlp
+except ImportError:
+    import subprocess
+    try:
+        # Attempt auto-installation for cloud hosts (Render, Railway, Heroku)
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp", "--quiet", "--no-warn-script-location"])
+        import yt_dlp
+    except Exception:
+        # Gracefully step aside without throwing an unhandled traceback
+        print('UNAVAILABLE', flush=True)
+        sys.exit(0)
 
 CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '.audio_cache'))
 os.makedirs(CACHE_DIR, exist_ok=True)
