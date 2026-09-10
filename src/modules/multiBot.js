@@ -220,8 +220,9 @@ class MultiBotManager {
         }
         for (let i = 2; i <= 20; i++) {
             const tok = process.env[`TOKEN_${i}`] || process.env[`BOT_TOKEN_${i}`] || process.env[`DISCORD_TOKEN_${i}`];
-            if (tok && tok.trim() && !envTokens.includes(tok.trim())) {
-                envTokens.push(tok.trim());
+            const cleanTok = (tok || '').replace(/[\r\n\t]/g, '').trim().replace(/^[\"\']|[\"\']$/g, '').replace(/^Bot\s+/i, '');
+            if (cleanTok && !envTokens.includes(cleanTok)) {
+                envTokens.push(cleanTok);
             }
         }
 

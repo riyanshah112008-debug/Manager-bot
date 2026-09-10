@@ -444,7 +444,8 @@ const finalPayload = Array.from(commandMap.values());
 
 // 4. GLOBAL DEPLOYMENT FUNCTION
 async function deployCommands(client) {
-    const token = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
+    const rawToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN || '';
+    const token = rawToken.replace(/[\r\n\t]/g, '').trim().replace(/^[\"\']|[\"\']$/g, '').replace(/^Bot\s+/i, '');
     let clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID;
 
     if (!token) throw new Error('🛑 CRITICAL: DISCORD_TOKEN, BOT_TOKEN, or TOKEN environment variable must be set.');

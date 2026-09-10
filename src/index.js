@@ -503,7 +503,8 @@ const MODULE_INITIALIZERS = [
 ];
 
 async function startBot() {
-    const primaryToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
+    const rawToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN || '';
+    const primaryToken = rawToken.replace(/[\r\n\t]/g, '').trim().replace(/^[\"\']|[\"\']$/g, '').replace(/^Bot\s+/i, '');
     if (!process.env.MONGO_URI || !primaryToken) {
         console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
         process.exit(1);
