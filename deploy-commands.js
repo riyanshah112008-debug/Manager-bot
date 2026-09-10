@@ -130,6 +130,11 @@ if (chronosModule && chronosModule.data) {
     masterPayloads.push(chronosModule.data.toJSON ? chronosModule.data.toJSON() : chronosModule.data);
 }
 
+const gazetteModule = safeRequire(['./src/commands/utility/gazette', './commands/utility/gazette']);
+if (gazetteModule && gazetteModule.data) {
+    masterPayloads.push(gazetteModule.data.toJSON ? gazetteModule.data.toJSON() : gazetteModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -309,13 +314,6 @@ commands.push(
                 .setDescription('The new prefix (e.g. ! or ? or -)')
                 .setRequired(true)
         )
-        .toJSON(),
-
-    new SlashCommandBuilder()
-        .setName('vote')
-        .setDescription('⭐ Vote for Starry on Top.gg to earn free Credits and XP boosts!')
-        .setContexts([0, 1, 2])
-        .setIntegrationTypes([0, 1])
         .toJSON()
 );
 

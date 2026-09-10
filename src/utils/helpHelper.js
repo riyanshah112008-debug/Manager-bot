@@ -53,16 +53,16 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 `\`${prefix}setnick\`, \`${prefix}role\`, \`${prefix}addrole\`, \`${prefix}removerole\`, \`${prefix}roleall\`, \`${prefix}vckick\`, \`${prefix}vcmute\`, \`${prefix}vcunmute\`, \`${prefix}modpanel\``
             );
     } else if (catId === 'util') {
-        embed.setTitle('🛠️ Utility & Server Management Commands (36 Commands)')
+        embed.setTitle('🛠️ Utility & Server Management Commands (40+ Commands)')
             .setDescription(
                 `**Server Tools & Utilities:**\n` +
                 `\`${prefix}help\`, \`${prefix}ahelp\`, \`${prefix}ping\`, \`${prefix}botinfo\`, \`${prefix}serverinfo\`, \`${prefix}whois\`, \`${prefix}avatar\`, \`${prefix}banner\`, \`${prefix}membercount\`, \`${prefix}roles\`, \`${prefix}emojis\`, \`${prefix}steal\`, \`${prefix}invite\`, \`${prefix}vote\`, \`${prefix}premium\`, \`${prefix}uptime\`, \`${prefix}afk\`, \`${prefix}translate\`, \`${prefix}calculator\`, \`${prefix}poll\`, \`${prefix}announce\`, \`${prefix}embed\`, \`${prefix}say\`, \`${prefix}snipe\`, \`${prefix}editsnipe\`, \`${prefix}setlogs\`, \`${prefix}setupwelcome\`, \`${prefix}setupgoodbye\`, \`${prefix}imagine\`, \`${prefix}nitroclaims\`\n\n` +
-                `**New Power Features:**\n` +
-                `• **Reminders:** \`${prefix}remind\`, \`${prefix}reminders\`, \`${prefix}delreminder\`\n` +
-                `• **Starboard:** \`${prefix}starboard\` (setup, stars, toggle)\n` +
-                `• **Dynamic Voice:** \`${prefix}tempvoice\` (setup, toggle)\n` +
-                `• **Custom Tags:** \`${prefix}tag\`, \`${prefix}tags\`\n` +
-                `• **Sticky Notice:** \`${prefix}sticky\` (set, remove, list)`
+                `**🌟 World-First AI Server Innovations:**\n` +
+                `• 🗞️ **Starlight Gazette:** \`${prefix}gazette\`, \`${prefix}digest\` *(Autonomous community newspaper & MVP digest)*\n` +
+                `• ⏳ **Server Chronos:** \`${prefix}chronos\`, \`${prefix}goldenhour\` *(Circadian heatmaps & peak timing)*\n` +
+                `• 🛡️ **CyberSec Pentest:** \`${prefix}pentest\`, \`${prefix}audit\` *(White-hat security loophole scanner)*\n` +
+                `• 📰 **Channel Catch-Up:** \`${prefix}catchup\`, \`${prefix}tldr\` *(AI conversation catch-up & DM briefings)*\n` +
+                `• 🎛️ **Reminders & Starboard:** \`${prefix}remind\`, \`${prefix}starboard\`, \`${prefix}tempvoice\`, \`${prefix}tag\`, \`${prefix}sticky\``
             );
     } else if (catId === 'social') {
         embed.setTitle('🎭 Social Actions & Anime Expressions (26 Commands)')

@@ -751,6 +751,50 @@ class CommandRegistry {
                     }
                 }
 
+                // C0-I. Starry Starlight Gazette Pagination & Delivery Buttons
+                if (customId.startsWith('gazette_')) {
+                    if (customId.startsWith('gazette_dm_')) {
+                        try {
+                            const originalEmbed = interaction.message?.embeds?.[0];
+                            if (originalEmbed) {
+                                await interaction.user.send({
+                                    content: `🗞️ **Here is your personal copy of The Starry Starlight Gazette from ${interaction.guild?.name || 'the server'}:**`,
+                                    embeds: [originalEmbed]
+                                });
+                                return interaction.reply({ content: '📬 Gazette page successfully delivered to your DMs!', ephemeral: true });
+                            }
+                        } catch (dmErr) {
+                            return interaction.reply({ content: '❌ Could not send DM! Please ensure your direct messages are open.', ephemeral: true });
+                        }
+                    }
+
+                    // Navigation Buttons: First, Prev, Next
+                    const parts = customId.split('_');
+                    // Format: gazette_action_guildId_pageIndex_days
+                    // e.g. gazette_first_12345_7 or gazette_next_12345_0_7
+                    const action = parts[1];
+                    let targetPage = 0;
+                    let days = 7;
+
+                    if (action === 'first') {
+                        targetPage = 0;
+                        days = parseInt(parts[3], 10) || 7;
+                    } else if (action === 'prev') {
+                        const cur = parseInt(parts[3], 10) || 0;
+                        targetPage = Math.max(0, cur - 1);
+                        days = parseInt(parts[4], 10) || 7;
+                    } else if (action === 'next') {
+                        const cur = parseInt(parts[3], 10) || 0;
+                        targetPage = Math.min(4, cur + 1);
+                        days = parseInt(parts[4], 10) || 7;
+                    }
+
+                    await interaction.deferUpdate().catch(() => {});
+                    const { generateServerGazette } = require('./serverGazette');
+                    const { embed, components } = await generateServerGazette(interaction.guild, interaction.user, { days, page: targetPage });
+                    return await interaction.editReply({ embeds: [embed], components }).catch(() => {});
+                }
+
                 // C. Social Action Back Buttons (Instant 0ms Global Handler with DB tracking)
                 if (customId.startsWith('social_') && customId.includes('_back_')) {
                     const { handleSocialBackButton } = require('./socialActions');
