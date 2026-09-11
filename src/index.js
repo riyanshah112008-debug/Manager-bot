@@ -331,31 +331,36 @@ setInterval(() => {
     }
 
     // 3. Check Primary Discord Gateway WebSocket & Zombie Heartbeat State
-    if (client.ws && client.isReady()) {
+    // Provide a 3-minute startup grace period for Discord heartbeat cycles and shard latency negotiation
+    if (client.ws && client.isReady() && client.uptime > 180000) {
         const isNotReady = client.ws.status !== 0;
         const ping = client.ws.ping;
         const shard = client.ws.shards?.first();
         const lastPing = shard?.lastPingTimestamp || 0;
         const timeSinceLastPing = lastPing > 0 ? (Date.now() - lastPing) : 0;
 
-        // Zombie socket detection:
-        // - status is not ready
-        // - ping is negative/NaN or abnormally high (>20000ms)
-        // - heartbeat ACK missing for >85s (Discord heartbeat interval is ~41.25s)
-        const isZombiePing = (ping < 0 || isNaN(ping) || ping > 20000);
-        const isHeartbeatStale = (timeSinceLastPing > 85000);
+        // True Zombie socket detection:
+        // - WebSocket status is not ready (status !== 0)
+        // - Ping is abnormally astronomical (>30000ms)
+        // - Heartbeat ACK missing for >120s (Discord heartbeat interval is ~41.25s)
+        const isZombiePing = (ping > 30000);
+        const isHeartbeatStale = (lastPing > 0 && timeSinceLastPing > 120000);
 
         if (isNotReady || isZombiePing || isHeartbeatStale) {
             gatewayAbnormalCount++;
-            console.warn(`⚠️ [Watchdog] Gateway abnormal (status: ${client.ws.status}, ping: ${ping}ms, lastPingAck: ${Math.round(timeSinceLastPing / 1000)}s ago) [Check ${gatewayAbnormalCount}/3]`);
+            console.warn(`⚠️ [Watchdog] Gateway abnormal (status: ${client.ws.status}, ping: ${ping}ms, lastPingAck: ${Math.round(timeSinceLastPing / 1000)}s ago) [Check ${gatewayAbnormalCount}/6]`);
             
-            if (gatewayAbnormalCount >= 3) {
-                console.error('🛑 [Watchdog] Gateway stuck in zombie / non-ready state for >45s. Initiating restart...');
+            if (gatewayAbnormalCount >= 6) {
+                console.error('🛑 [Watchdog] Gateway stuck in dead/disconnected state for >90s. Initiating recovery restart...');
+                gatewayAbnormalCount = 0;
                 process.exit(1);
             }
         } else {
             gatewayAbnormalCount = 0;
         }
+    } else {
+        // Startup grace period active or bot not ready yet
+        gatewayAbnormalCount = 0;
     }
 
     // 4. Check Multi-Bot Cluster Worker Nodes
@@ -365,10 +370,10 @@ setInterval(() => {
             for (const [id, info] of instances.entries()) {
                 if (info.isPrimary || !info.client) continue;
                 const worker = info.client;
-                if (worker.ws) {
+                if (worker.ws && worker.isReady() && worker.uptime > 180000) {
                     const wStatus = worker.ws.status;
                     const wPing = worker.ws.ping;
-                    if (wStatus !== 0 || (worker.isReady() && (wPing < 0 || isNaN(wPing) || wPing > 25000))) {
+                    if (wStatus !== 0 || (wPing > 30000)) {
                         console.warn(`⚠️ [Watchdog] Worker Bot [${info.name}] socket jitter (status: ${wStatus}, ping: ${wPing}ms).`);
                     }
                 }
