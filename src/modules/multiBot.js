@@ -7,6 +7,7 @@ const { Client, GatewayIntentBits, Partials, Collection, Events, ActivityType } 
 const mongoose = require('mongoose');
 const config = require('../config');
 const { createMusicManager } = require('../utils/musicManager');
+const { cleanToken, maskToken } = require('../utils/tokenSanitizer');
 
 let MultiBotToken;
 try {
@@ -215,12 +216,12 @@ class MultiBotManager {
         // 2. Gather tokens from .env
         const envTokens = [];
         if (process.env.BOT_TOKENS) {
-            const rawTokens = process.env.BOT_TOKENS.split(',').map(t => t.trim()).filter(Boolean);
+            const rawTokens = process.env.BOT_TOKENS.split(',').map(t => cleanToken(t)).filter(Boolean);
             envTokens.push(...rawTokens);
         }
         for (let i = 2; i <= 20; i++) {
             const tok = process.env[`TOKEN_${i}`] || process.env[`BOT_TOKEN_${i}`] || process.env[`DISCORD_TOKEN_${i}`];
-            const cleanTok = (tok || '').replace(/[\r\n\t]/g, '').trim().replace(/^[\"\']|[\"\']$/g, '').replace(/^Bot\s+/i, '');
+            const cleanTok = cleanToken(tok);
             if (cleanTok && !envTokens.includes(cleanTok)) {
                 envTokens.push(cleanTok);
             }

@@ -444,8 +444,18 @@ const finalPayload = Array.from(commandMap.values());
 
 // 4. GLOBAL DEPLOYMENT FUNCTION
 async function deployCommands(client) {
-    const rawToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN || '';
-    const token = rawToken.replace(/[\r\n\t]/g, '').trim().replace(/^[\"\']|[\"\']$/g, '').replace(/^Bot\s+/i, '');
+    let cleanTokenFn = (t) => {
+        if (!t) return '';
+        let s = String(t).trim();
+        if (s.includes('=')) s = s.split('=').slice(1).join('=').trim();
+        return s.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').replace(/[\r\n\t]/g, '').trim().replace(/^["'`\u201C\u201D\u2018\u2019]+|["'`\u201C\u201D\u2018\u2019]+$/g, '').replace(/^Bot\s+/i, '');
+    };
+    try {
+        const sanitizer = require('./src/utils/tokenSanitizer') || require('./utils/tokenSanitizer');
+        if (sanitizer && sanitizer.cleanToken) cleanTokenFn = sanitizer.cleanToken;
+    } catch (e) {}
+
+    const token = cleanTokenFn(process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN || '');
     let clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID;
 
     if (!token) throw new Error('🛑 CRITICAL: DISCORD_TOKEN, BOT_TOKEN, or TOKEN environment variable must be set.');

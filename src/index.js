@@ -502,13 +502,48 @@ const MODULE_INITIALIZERS = [
     }}
 ];
 
+const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
+
 async function startBot() {
-    const rawToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN || '';
-    const primaryToken = rawToken.replace(/[\r\n\t]/g, '').trim().replace(/^[\"\']|[\"\']$/g, '').replace(/^Bot\s+/i, '');
+    let sourceVar = 'DISCORD_TOKEN';
+    let rawToken = process.env.DISCORD_TOKEN;
+    if (!rawToken && process.env.BOT_TOKEN) {
+        rawToken = process.env.BOT_TOKEN;
+        sourceVar = 'BOT_TOKEN';
+    } else if (!rawToken && process.env.TOKEN) {
+        rawToken = process.env.TOKEN;
+        sourceVar = 'TOKEN';
+    }
+
+    const primaryToken = cleanToken(rawToken);
     if (!process.env.MONGO_URI || !primaryToken) {
         console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
+        console.error(`- MONGO_URI: ${process.env.MONGO_URI ? 'Present' : 'MISSING'}`);
+        console.error(`- Bot Token (${sourceVar}): ${primaryToken ? 'Present' : 'MISSING'}`);
         process.exit(1);
     }
+
+    console.log(`🔑 Bot Token detected from ${sourceVar}: ${maskToken(primaryToken)}`);
+
+    // Pre-flight REST verification with Discord API
+    console.log('📡 Verifying bot token with Discord REST API...');
+    const preflight = await verifyDiscordToken(primaryToken);
+    if (!preflight.valid) {
+        console.error('🛑 DISCORD TOKEN VERIFICATION FAILED!');
+        console.error(`Status: ${preflight.status || 'Network/Fetch error'}`);
+        console.error(`Response from Discord: ${preflight.error || preflight.networkError}`);
+        console.error(`Masked token in environment: ${maskToken(primaryToken)}`);
+        console.error('------------------------------------------------------------------');
+        console.error('👉 ACTION REQUIRED ON RENDER DASHBOARD:');
+        console.error('1. Open https://dashboard.render.com and select your service.');
+        console.error('2. Go to the "Environment" tab.');
+        console.error('3. Ensure DISCORD_TOKEN is set strictly to your bot token string');
+        console.error('   without "DISCORD_TOKEN=" in the value box and without quotes.');
+        console.error('------------------------------------------------------------------');
+    } else {
+        console.log(`✨ Discord Token Verified! Bot identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'} (ID: ${preflight.bot.id})`);
+    }
+
     try {
         await mongoose.connect(process.env.MONGO_URI, {
             serverSelectionTimeoutMS: 5000,
