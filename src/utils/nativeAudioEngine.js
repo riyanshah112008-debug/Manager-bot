@@ -687,6 +687,14 @@ class StarryGuildPlayer {
     async sendNowPlayingPanel(track, updateOnly = false) {
         if (!this.textChannel) return;
 
+        try {
+            const musicController = require('../modules/musicController');
+            if (musicController.isRequestChannel(this.guildId, this.textChannel.id)) {
+                await musicController.update(this.guildId, this.client).catch(() => {});
+                return;
+            }
+        } catch (ctrlErr) {}
+
         const fallbackThumb = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80';
         const trackThumb = (track.thumbnail && !track.thumbnail.includes('imgur.com')) 
             ? track.thumbnail 

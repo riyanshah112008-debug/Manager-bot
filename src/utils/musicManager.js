@@ -1,4 +1,9 @@
-const { Kazagumo } = require('kazagumo');
+const { Kazagumo, KazagumoPlayer } = require('kazagumo');
+if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
+    KazagumoPlayer.prototype.search = function(query, options) {
+        return this.kazagumo.search(query, options);
+    };
+}
 const { Connectors } = require('shoukaku');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
@@ -261,6 +266,15 @@ function createMusicManager(client) {
     manager.on('playerStart', async (player, track) => {
         player.data.set('previousTrack', track);
 
+        // Dedicated Request Channel Integration: Update controller in-place, never duplicate
+        try {
+            const musicController = require('../modules/musicController');
+            if (musicController.isRequestChannel(player.guildId, player.textId)) {
+                await musicController.update(player.guildId, client).catch(() => {});
+                return;
+            }
+        } catch (ctrlErr) {}
+
         const channel = client.channels.cache.get(player.textId);
         const interaction = player.data.get('interaction');
         player.data.delete('interaction');
@@ -344,6 +358,14 @@ function createMusicManager(client) {
     });
 
     manager.on('playerEmpty', async player => {
+        try {
+            const musicController = require('../modules/musicController');
+            if (musicController.isRequestChannel(player.guildId, player.textId)) {
+                await musicController.update(player.guildId, client).catch(() => {});
+                return;
+            }
+        } catch (ctrlErr) {}
+
         const channel = client.channels.cache.get(player.textId);
         const isAutoplay = player.data.get('autoplay');
 

@@ -121,7 +121,17 @@ const commands = [
                     const existingNative = StarryAudioEngine.getPlayer(ctx.guild.id);
                     if (existingNative) existingNative.destroy();
 
-                    const res = await manager.search(query, { requester: ctx.user });
+                    const isUrl = /^https?:\/\//i.test(query);
+                    let res = null;
+                    if (!isUrl) {
+                        try {
+                            res = await manager.search(query, { requester: ctx.user, engine: 'spotify' });
+                        } catch (spErr) {}
+                    }
+                    if (!res || !res.tracks || res.tracks.length === 0) {
+                        res = await manager.search(query, { requester: ctx.user });
+                    }
+
                     if (res && res.tracks && res.tracks.length > 0) {
                         let player = manager.getPlayer(ctx.guild.id);
                         if (!player) {
@@ -139,16 +149,29 @@ const commands = [
                         player.textId = ctx.channel.id;
 
                         const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
+                        let replyText = '';
                         if (!isSearch && res.type === 'PLAYLIST') {
                             for (const track of res.tracks) player.queue.add(track);
                             if (!player.playing && !player.paused) player.play();
-                            return ctx.reply(`✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`);
+                            replyText = `✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`;
                         } else {
                             const track = res.tracks[0];
                             player.queue.add(track);
                             if (!player.playing && !player.paused) player.play();
-                            return ctx.reply(`🎵 Queued **${track.title}** by \`${track.author}\` • 320kbps Hi-Fi`);
+                            const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
+                            replyText = `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi`;
                         }
+
+                        const replyMsg = await ctx.reply(replyText);
+                        try {
+                            const musicController = require('../../modules/musicController');
+                            if (musicController.isRequestChannel(ctx.guild.id, ctx.channel.id)) {
+                                if (replyMsg && typeof replyMsg.delete === 'function') {
+                                    setTimeout(() => replyMsg.delete().catch(() => {}), 3500);
+                                }
+                            }
+                        } catch (ctrlErr) {}
+                        return replyMsg;
                     }
                 } catch (lavalinkErr) {
                     console.warn('⚠️ [Lavalink Play Error, falling back to Native Audio]:', lavalinkErr.message);

@@ -75,7 +75,17 @@ module.exports = {
         const existingNative = StarryAudioEngine.getPlayer(interaction.guild.id);
         if (existingNative) existingNative.destroy();
 
-        const res = await manager.search(query, { requester: interaction.user });
+        const isUrl = /^https?:\/\//i.test(query);
+        let res = null;
+        if (!isUrl) {
+          try {
+            res = await manager.search(query, { requester: interaction.user, engine: 'spotify' });
+          } catch (spErr) {}
+        }
+        if (!res || !res.tracks || res.tracks.length === 0) {
+          res = await manager.search(query, { requester: interaction.user });
+        }
+
         if (res && res.tracks && res.tracks.length > 0) {
           let player = manager.getPlayer(interaction.guild.id);
           if (!player) {
@@ -102,7 +112,8 @@ module.exports = {
             const track = res.tracks[0];
             player.queue.add(track);
             if (!player.playing && !player.paused) player.play();
-            return replyFunc.call(interaction, `🎵 Queued **${track.title}** by \`${track.author}\` • 320kbps Hi-Fi`);
+            const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
+            return replyFunc.call(interaction, `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi`);
           }
         }
       } catch (lavalinkErr) {

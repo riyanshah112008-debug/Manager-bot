@@ -190,19 +190,36 @@ class MusicControllerEngine {
     }
 
     buildEmbed(player, client, guildId = null) {
-        const track = player?.currentTrack;
+        let track = player?.currentTrack;
+        if (!track && player?.queue?.current) {
+            const cur = player.queue.current;
+            track = {
+                title: cur.title,
+                author: cur.author,
+                url: cur.uri,
+                duration: cur.length,
+                thumbnail: cur.thumbnail,
+                requester: cur.requester,
+                source: cur.sourceName ? (cur.sourceName.charAt(0).toUpperCase() + cur.sourceName.slice(1)) : 'Spotify'
+            };
+        }
+
         const targetGuildId = guildId || player?.guildId;
         const lang = targetGuildId ? getGuildLanguageSync(targetGuildId) : 'en';
 
         if (track) {
-            const filterName = (player.filter === 'clear' || !player.filter || player.filter === 'empowering')
+            const rawFilter = player.filter || player.data?.get('activeFilter') || 'clear';
+            const filterName = (rawFilter === 'clear' || !rawFilter || rawFilter === 'empowering')
                 ? 'Empowering Master (Hi-Fi)'
-                : player.filter.toUpperCase();
+                : rawFilter.toUpperCase();
 
             const fallbackThumb = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80';
             const trackThumb = (track.thumbnail && !track.thumbnail.includes('imgur.com')) 
                 ? track.thumbnail 
-                : fallbackThumb;
+                : (client?.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
+
+            const queueLen = player.queue ? (player.queue.totalSize !== undefined ? player.queue.size : player.queue.length) : 0;
+            const volumeVal = player.volume || 100;
 
             return new EmbedBuilder()
                 .setColor('#5865F2')
@@ -210,10 +227,10 @@ class MusicControllerEngine {
                 .setDescription(
                     `▶️ **[${(track.title || 'Audio Track').substring(0, 75)}](${track.url || 'https://discord.gg'})**\n\n` +
                     `👤 **Artist:** \`${track.author || 'Featured Artist'}\`\n` +
-                    `🕒 **Duration:** \`${formatTime(track.duration)}\` | 🔊 **Volume:** \`${player.volume}%\`\n` +
+                    `🕒 **Duration:** \`${formatTime(track.duration)}\` | 🔊 **Volume:** \`${volumeVal}%\`\n` +
                     `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
-                    `🌐 **Source:** \`${track.source || 'Studio Master'}\` | 🎛️ **Master:** \`${filterName}\`\n` +
-                    `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
+                    `🌐 **Source:** \`${track.source || 'Spotify'}\` | 🎛️ **Master:** \`${filterName}\`\n` +
+                    `🔠 **Queue:** \`${queueLen}\` songs in queue\n\n` +
                     `*Send any song name or link in this channel to add to queue!*`
                 )
                 .setImage(trackThumb)
@@ -260,7 +277,19 @@ class MusicControllerEngine {
                 await client.channels.fetch(config.channelId).catch(() => null);
             if (!channel) return;
 
-            const player = StarryAudioEngine.getPlayer(guildId);
+            let player = client.manager?.getPlayer(guildId);
+            if (!player && client.multiBot?.instances) {
+                for (const inst of client.multiBot.instances.values()) {
+                    if (inst.client?.manager) {
+                        const p = inst.client.manager.getPlayer(guildId);
+                        if (p) { player = p; break; }
+                    }
+                }
+            }
+            if (!player) {
+                player = StarryAudioEngine.getPlayer(guildId);
+            }
+
             const embed = this.buildEmbed(player, client, guildId);
             const components = this.buildComponents(player, guildId);
 
@@ -402,11 +431,81 @@ class MusicControllerEngine {
             }
         }
 
-        // Get or initialize player
+        const manager = client.manager;
+        const hasLavalink = manager && Array.from(manager.shoukaku?.nodes?.values() || []).some(n => n.state === 1);
+
+        if (hasLavalink) {
+            try {
+                // Clean up any conflicting native audio session
+                const existingNative = StarryAudioEngine.getPlayer(message.guild.id);
+                if (existingNative) existingNative.destroy();
+
+                const isUrl = /^https?:\/\//i.test(content);
+                let res = null;
+                if (!isUrl) {
+                    try {
+                        res = await manager.search(content, { requester: message.author, engine: 'spotify' });
+                    } catch (spErr) {}
+                }
+                if (!res || !res.tracks || res.tracks.length === 0) {
+                    res = await manager.search(content, { requester: message.author });
+                }
+
+                if (!res || !res.tracks || res.tracks.length === 0) {
+                    const temp = await message.channel.send({
+                        content: `❌ No audio results found for: \`${content.substring(0, 50)}\``
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+                    return;
+                }
+
+                let player = manager.getPlayer(message.guild.id);
+                if (!player) {
+                    player = await manager.createPlayer({
+                        guildId: message.guild.id,
+                        voiceId: voiceChannel.id,
+                        textId: message.channel.id,
+                        deaf: true
+                    });
+                }
+
+                if (player.voiceId !== voiceChannel.id) {
+                    player.setVoiceChannel(voiceChannel.id);
+                }
+                player.textId = message.channel.id;
+
+                const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
+                if (!isSearch && res.type === 'PLAYLIST') {
+                    for (const track of res.tracks) player.queue.add(track);
+                    if (!player.playing && !player.paused) player.play();
+                    const temp = await message.channel.send({
+                        content: `📚 **Enqueued Playlist:** \`${(res.playlistName || 'Playlist').substring(0, 45)}\` (**${res.tracks.length}** tracks) • ${message.author}`
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+                } else {
+                    const track = res.tracks[0];
+                    player.queue.add(track);
+                    if (!player.playing && !player.paused) player.play();
+                    const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
+                    const temp = await message.channel.send({
+                        content: `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${sourceName} Hi-Fi • ${message.author}`
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 3500);
+                }
+
+                // Update controller in-place
+                await this.update(message.guild.id, client);
+                return;
+
+            } catch (lavalinkErr) {
+                console.warn('⚠️ [Music Controller Lavalink Error, falling back to Native]:', lavalinkErr.message);
+            }
+        }
+
+        // Secondary Fallback: Native Audio Engine
         const player = StarryAudioEngine.getOrCreatePlayer(client, message.guild.id, voiceChannel, message.channel);
         player.connect().catch(() => {});
 
-        // Resolve track or playlist
         try {
             const result = await StarryAudioEngine.search(content, message.author);
             if (!result || !result.tracks || result.tracks.length === 0) {
@@ -418,13 +517,8 @@ class MusicControllerEngine {
             }
 
             if (result.type === 'PLAYLIST') {
-                for (const t of result.tracks) {
-                    player.queue.push(t);
-                }
-                if (!player.currentTrack) {
-                    await player.playNext();
-                }
-
+                for (const t of result.tracks) player.queue.push(t);
+                if (!player.currentTrack) await player.playNext();
                 const temp = await message.channel.send({
                     content: `📚 **Enqueued Playlist:** \`${(result.playlistName || 'Playlist').substring(0, 45)}\` (**${result.tracks.length}** tracks) • ${message.author}`
                 }).catch(() => null);
@@ -432,19 +526,14 @@ class MusicControllerEngine {
             } else {
                 const track = result.tracks[0];
                 player.queue.push(track);
-                if (!player.currentTrack) {
-                    await player.playNext();
-                }
-
+                if (!player.currentTrack) await player.playNext();
                 const temp = await message.channel.send({
                     content: `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${message.author}`
                 }).catch(() => null);
                 if (temp) setTimeout(() => temp.delete().catch(() => {}), 3500);
             }
 
-            // Sync controller embed
             await this.update(message.guild.id, client);
-
         } catch (err) {
             console.error('❌ [Music Controller Request Error]:', err);
             const temp = await message.channel.send({
@@ -459,7 +548,19 @@ class MusicControllerEngine {
         const guildId = interaction.guild?.id;
         if (!guildId) return false;
 
-        const player = StarryAudioEngine.getPlayer(guildId);
+        let player = (interaction.client.manager ? interaction.client.manager.getPlayer(guildId) : null) || (client.manager ? client.manager.getPlayer(guildId) : null);
+        if (!player && client.multiBot?.instances) {
+            for (const inst of client.multiBot.instances.values()) {
+                if (inst.client?.manager) {
+                    const p = inst.client.manager.getPlayer(guildId);
+                    if (p) { player = p; break; }
+                }
+            }
+        }
+        const isKazagumo = !!player;
+        if (!player) {
+            player = StarryAudioEngine.getPlayer(guildId);
+        }
         const voiceChannel = interaction.member?.voice?.channel;
 
         // 1. Connect Bot
@@ -470,8 +571,12 @@ class MusicControllerEngine {
                     flags: [EPHEMERAL_FLAG] 
                 }).catch(() => {});
             }
-            const p = StarryAudioEngine.getOrCreatePlayer(client, guildId, voiceChannel, interaction.channel);
-            await p.connect().catch(() => {});
+            if (isKazagumo) {
+                player.setVoiceChannel(voiceChannel.id);
+            } else {
+                const p = StarryAudioEngine.getOrCreatePlayer(client, guildId, voiceChannel, interaction.channel);
+                await p.connect().catch(() => {});
+            }
             await this.update(guildId, client);
             return interaction.reply({ 
                 content: `👋 **Connected to voice channel:** <#${voiceChannel.id}>`, 
@@ -481,34 +586,53 @@ class MusicControllerEngine {
 
         // 2. Queue Viewer
         if (customId === 'ctrl_queue') {
-            if (!player || (!player.currentTrack && player.queue.length === 0)) {
-                return interaction.reply({ content: '❌ Queue is currently empty.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            if (isKazagumo) {
+                const current = player.queue?.current;
+                const tracks = player.queue ? player.queue.slice(0, 10) : [];
+                if (!current && tracks.length === 0) {
+                    return interaction.reply({ content: '❌ Queue is currently empty.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
+                let qList = tracks.map((t, idx) => `\`${idx + 1}.\` **${(t.title || 'Track').substring(0, 55)}** (\`${formatTime(t.length)})\``).join('\n');
+                if (!qList) qList = '*No upcoming songs.*';
+
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle(`🎵 Current Music Queue • ${player.queue.length} Tracks`)
+                    .setDescription(`▶️ **Now Playing:**\n**${current ? current.title : 'None'}**\n\n📜 **Upcoming Tracks:**\n${qList}`)
+                    .setFooter({ text: 'Starry Controller System' });
+
+                return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            } else {
+                if (!player || (!player.currentTrack && player.queue.length === 0)) {
+                    return interaction.reply({ content: '❌ Queue is currently empty.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
+                const current = player.currentTrack;
+                const tracks = player.queue.slice(0, 10);
+                let qList = tracks.map((t, idx) => `\`${idx + 1}.\` **${(t.title || 'Track').substring(0, 55)}** (\`${formatTime(t.duration)}\`)`).join('\n');
+                if (!qList) qList = '*No upcoming songs.*';
+
+                const embed = new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setTitle(`🎵 Current Music Queue • ${player.queue.length} Tracks`)
+                    .setDescription(`▶️ **Now Playing:**\n**${current ? current.title : 'None'}**\n\n📜 **Upcoming Tracks:**\n${qList}`)
+                    .setFooter({ text: 'Starry Controller System' });
+
+                return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
-            const current = player.currentTrack;
-            const tracks = player.queue.slice(0, 10);
-            let qList = tracks.map((t, idx) => `\`${idx + 1}.\` **${(t.title || 'Track').substring(0, 55)}** (\`${formatTime(t.duration)}\`)`).join('\n');
-            if (!qList) qList = '*No upcoming songs.*';
-
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setTitle(`🎵 Current Music Queue • ${player.queue.length} Tracks`)
-                .setDescription(`▶️ **Now Playing:**\n**${current ? current.title : 'None'}**\n\n📜 **Upcoming Tracks:**\n${qList}`)
-                .setFooter({ text: 'Starry Controller System' });
-
-            return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 3. What's Next
         if (customId === 'ctrl_next_up') {
-            const nextTrack = player?.queue[0];
+            const nextTrack = isKazagumo ? player.queue[0] : player?.queue[0];
             if (!nextTrack) {
                 return interaction.reply({ 
                     content: '🔮 **What\'s Next:** *No upcoming tracks in queue.* Send a song name in this channel to add more!', 
                     flags: [EPHEMERAL_FLAG] 
                 }).catch(() => {});
             }
+            const durStr = formatTime(isKazagumo ? nextTrack.length : nextTrack.duration);
             return interaction.reply({ 
-                content: `🔮 **What's Next:** \`${nextTrack.title}\` by \`${nextTrack.author || 'Artist'}\` (\`${formatTime(nextTrack.duration)}\`)`, 
+                content: `🔮 **What's Next:** \`${nextTrack.title}\` by \`${nextTrack.author || 'Artist'}\` (\`${durStr}\`)`, 
                 flags: [EPHEMERAL_FLAG] 
             }).catch(() => {});
         }
@@ -547,7 +671,8 @@ class MusicControllerEngine {
         }
 
         // Active Player Guards
-        if (!player || !player.currentTrack) {
+        const hasTrack = isKazagumo ? (player.playing || !!player.queue?.current) : (player && !!player.currentTrack);
+        if (!player || !hasTrack) {
             return interaction.reply({ content: '❌ No active music session playing right now.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
@@ -557,16 +682,20 @@ class MusicControllerEngine {
 
         // 5. Volume Down
         if (customId === 'ctrl_vol_down') {
-            const newVol = Math.max(0, player.volume - 10);
-            player.setVolume(newVol);
+            const curVol = player.volume || 100;
+            const newVol = Math.max(10, curVol - 10);
+            if (isKazagumo) await player.setVolume(newVol);
+            else player.setVolume(newVol);
             await this.update(guildId, client);
             return interaction.reply({ content: `🔉 **Volume decreased to:** \`${newVol}%\``, flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 6. Volume Up
         if (customId === 'ctrl_vol_up') {
-            const newVol = Math.min(200, player.volume + 10);
-            player.setVolume(newVol);
+            const curVol = player.volume || 100;
+            const newVol = Math.min(150, curVol + 10);
+            if (isKazagumo) await player.setVolume(newVol);
+            else player.setVolume(newVol);
             await this.update(guildId, client);
             return interaction.reply({ content: `🔊 **Volume increased to:** \`${newVol}%\``, flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
@@ -574,11 +703,13 @@ class MusicControllerEngine {
         // 7. Pause / Resume
         if (customId === 'ctrl_pause_resume') {
             if (player.paused) {
-                player.pause(false);
+                if (isKazagumo) await player.pause(false);
+                else player.pause(false);
                 await this.update(guildId, client);
                 return interaction.reply({ content: '▶️ **Resumed audio playback!**', flags: [EPHEMERAL_FLAG] }).catch(() => {});
             } else {
-                player.pause(true);
+                if (isKazagumo) await player.pause(true);
+                else player.pause(true);
                 await this.update(guildId, client);
                 return interaction.reply({ content: '⏸️ **Paused audio playback!**', flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
@@ -586,15 +717,15 @@ class MusicControllerEngine {
 
         // 8. Skip
         if (customId === 'ctrl_skip') {
-            const skipped = player.currentTrack;
+            const skippedTitle = (isKazagumo ? player.queue?.current?.title : player.currentTrack?.title) || 'Current Track';
             player.skip();
             await this.update(guildId, client);
-            return interaction.reply({ content: `⏭️ **Skipped:** \`${skipped.title.substring(0, 50)}\``, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.reply({ content: `⏭️ **Skipped:** \`${skippedTitle.substring(0, 50)}\``, flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 9. Previous
         if (customId === 'ctrl_previous') {
-            if (player.previous()) {
+            if (!isKazagumo && player.previous && player.previous()) {
                 await this.update(guildId, client);
                 return interaction.reply({ content: '⏮️ **Playing previous song from history!**', flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
@@ -603,31 +734,51 @@ class MusicControllerEngine {
 
         // 10. Shuffle
         if (customId === 'ctrl_shuffle') {
-            player.shuffle();
+            if (isKazagumo) player.queue.shuffle();
+            else player.shuffle();
+            const qCount = isKazagumo ? player.queue.length : player.queue.length;
             await this.update(guildId, client);
-            return interaction.reply({ content: `🔀 **Shuffled ${player.queue.length} songs in queue!**`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.reply({ content: `🔀 **Shuffled ${qCount} songs in queue!**`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 11. Autoplay
         if (customId === 'ctrl_autoplay') {
-            player.autoplay = !player.autoplay;
+            let isAp = false;
+            if (isKazagumo) {
+                const cur = player.data.get('autoplay') || false;
+                player.data.set('autoplay', !cur);
+                isAp = !cur;
+            } else {
+                player.autoplay = !player.autoplay;
+                isAp = player.autoplay;
+            }
             await this.update(guildId, client);
             return interaction.reply({ 
-                content: `📻 **Autoplay Smart Stream is now: ${player.autoplay ? '🟢 ON' : '🔴 OFF'}**`, 
+                content: `📻 **Autoplay Smart Stream is now: ${isAp ? '🟢 ON' : '🔴 OFF'}**`, 
                 flags: [EPHEMERAL_FLAG] 
             }).catch(() => {});
         }
 
         // 12. Stop
         if (customId === 'ctrl_stop') {
-            player.stop();
+            if (isKazagumo) await player.destroy();
+            else player.stop();
             await this.update(guildId, client);
             return interaction.reply({ content: '⏹️ **Stopped music playback and cleared the queue.**', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 13. Like Track
         if (customId === 'ctrl_like') {
-            const track = player.currentTrack;
+            const track = isKazagumo ? {
+                title: player.queue.current?.title,
+                author: player.queue.current?.author,
+                url: player.queue.current?.uri,
+                thumbnail: player.queue.current?.thumbnail,
+                duration: player.queue.current?.length
+            } : player.currentTrack;
+
+            if (!track || !track.title) return interaction.reply({ content: '❌ No active track to like.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+
             try {
                 const embed = new EmbedBuilder()
                     .setColor('#E91E63')
@@ -648,28 +799,33 @@ class MusicControllerEngine {
 
         // 14. Dislike / Not for me
         if (customId === 'ctrl_dislike') {
-            const track = player.currentTrack;
+            const trackTitle = (isKazagumo ? player.queue.current?.title : player.currentTrack?.title) || 'Current Song';
             player.skip();
             await this.update(guildId, client);
-            return interaction.reply({ content: `👎 **Skipped "${track.title}" (Marked: Not for me)**`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.reply({ content: `👎 **Skipped "${trackTitle}" (Marked: Not for me)**`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 15. Block Track
         if (customId === 'ctrl_block') {
-            const track = player.currentTrack;
+            const trackTitle = (isKazagumo ? player.queue.current?.title : player.currentTrack?.title) || 'Current Song';
             await MusicController.updateOne(
                 { guildId },
-                { $push: { blockedTracks: { query: track.title, blockedBy: interaction.user.id } } }
+                { $push: { blockedTracks: { query: trackTitle, blockedBy: interaction.user.id } } }
             ).catch(() => {});
             player.skip();
             await this.update(guildId, client);
-            return interaction.reply({ content: `🚫 **Blocked "${track.title}" from playing on this server.**`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.reply({ content: `🚫 **Blocked "${trackTitle}" from playing on this server.**`, flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
         // 16. DSP Filter Dropdown
         if (customId === 'ctrl_filter') {
             const selected = interaction.values[0] || 'empowering';
-            await player.setFilter(selected);
+            if (isKazagumo) {
+                const { applyKazagumoFilter } = require('../utils/musicManager');
+                await applyKazagumoFilter(player, selected);
+            } else {
+                await player.setFilter(selected);
+            }
             await this.update(guildId, client);
             return interaction.reply({ 
                 content: `🎧 **Updated Audio DSP Filter:** \`${selected.toUpperCase()}\``, 
