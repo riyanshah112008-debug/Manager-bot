@@ -7,7 +7,7 @@ const { Client, GatewayIntentBits, Partials, Collection, Events, ActivityType } 
 const mongoose = require('mongoose');
 const config = require('../config');
 const { createMusicManager } = require('../utils/musicManager');
-const { cleanToken, maskToken } = require('../utils/tokenSanitizer');
+const { cleanToken, maskToken, verifyDiscordToken } = require('../utils/tokenSanitizer');
 
 let MultiBotToken;
 try {
@@ -227,24 +227,37 @@ class MultiBotManager {
             }
         }
 
-        const allExtraMap = new Map();
+        // 3. Deduplicate candidate tokens across DB and Environment
+        const candidateMap = new Map(); // token -> role
         envTokens.forEach((t, i) => {
-            if (t !== primaryToken) {
+            if (t && t !== primaryToken) {
                 const envRole = process.env[`TOKEN_${i + 2}_ROLE`] || 'all';
-                allExtraMap.set(t, { token: t, name: `Physical Worker Bot #${i + 1}`, role: envRole });
+                candidateMap.set(t, envRole);
             }
         });
         dbTokens.forEach(doc => {
-            if (doc.token && doc.token !== primaryToken) {
-                allExtraMap.set(doc.token, { token: doc.token, name: doc.name || 'Secondary Bot', role: doc.role || 'all' });
+            const cleanDocTok = cleanToken(doc.token);
+            if (cleanDocTok && cleanDocTok !== primaryToken) {
+                candidateMap.set(cleanDocTok, doc.role || 'all');
             }
         });
 
-        console.log(`🤖 [Multi-Bot Cluster] Activated 6 Virtual Worker Sub-Bots on Primary Token + ${allExtraMap.size} secondary physical worker tokens.`);
+        console.log(`🤖 [Multi-Bot Cluster] Activated 6 Virtual Worker Sub-Bots on Primary Token + ${candidateMap.size} unique candidate physical worker tokens.`);
 
-        for (const item of allExtraMap.values()) {
+        // 4. Validate and Spawn each candidate physical worker
+        for (const [token, role] of candidateMap.entries()) {
             try {
-                await this.spawnWorker(item.token, item.name, item.role);
+                const check = await verifyDiscordToken(token);
+                if (!check.valid) {
+                    console.warn(`⚠️ [Multi-Bot Worker] Skipped invalid candidate token (${maskToken(token)}): ${check.error || check.status || 'Unauthorized'}`);
+                    continue;
+                }
+                const botId = check.bot.id;
+                if (botId === primaryClient.user?.id) continue;
+                if (this.instances.has(botId)) continue; // Avoid duplicate instance
+
+                console.log(`🚀 [Multi-Bot Worker] Pre-verified: ${check.bot.username}#${check.bot.discriminator || '0'} (ID: ${botId}). Spawning worker...`);
+                await this.spawnWorker(token, check.bot.username, role);
             } catch (err) {
                 console.error(`❌ Failed to spawn secondary bot instance:`, err.message);
             }
@@ -288,12 +301,26 @@ class MultiBotManager {
 
     async spawnWorker(token, name = 'Worker Bot', role = 'all') {
         if (!token || token === this.primaryToken) return null;
-        if (this.instances.has(token)) return this.instances.get(token);
+        const existing = Array.from(this.instances.values()).find(i => i.token === token);
+        if (existing) return existing;
 
         const workerClient = this.createClientInstance(token, name, false, role);
 
         return new Promise((resolve) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    console.warn(`⚠️ Secondary Bot [${name}] login timed out after 25s.`);
+                    resolve(null);
+                }
+            }, 25000);
+
             workerClient.once(Events.ClientReady, async () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+
                 const info = {
                     client: workerClient,
                     name: `${workerClient.user.username} (${name})`,
@@ -329,8 +356,12 @@ class MultiBotManager {
             });
 
             workerClient.login(token).catch(err => {
-                console.error(`❌ Secondary Bot Login Failed for [${name}]:`, err.message);
-                resolve(null);
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timer);
+                    console.error(`❌ Secondary Bot Login Failed for [${name}]:`, err.message);
+                    resolve(null);
+                }
             });
         });
     }

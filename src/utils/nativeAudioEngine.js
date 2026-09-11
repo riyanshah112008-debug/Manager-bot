@@ -547,42 +547,106 @@ class StarryGuildPlayer {
                 } catch (scErr) {}
             }
 
-            // 2. Primary Official Studio Audio Stream via StreamResolver Engine
+            // 2. Local Studio Audio Stream via StreamResolver Engine (if available)
+            if (!audioResource && streamResolver && !streamResolver.disabled) {
+                try {
+                    const primaryArtist = (track.author || '').split(',')[0].trim();
+                    let query = `${primaryArtist} ${track.title} Official Audio`.trim();
+                    if (targetUrl && (targetUrl.includes('youtube.com/') || targetUrl.includes('youtu.be/'))) {
+                        query = targetUrl;
+                    }
+
+                    let resolved = await streamResolver.resolve(query);
+                    if (!resolved || !resolved.file) {
+                        resolved = await streamResolver.resolve(`${primaryArtist} ${track.title}`.trim());
+                    }
+                    if (!resolved || !resolved.file) {
+                        resolved = await streamResolver.resolve(`${track.title} Official Audio`.trim());
+                    }
+
+                    if (resolved && resolved.file && fs.existsSync(resolved.file)) {
+                        track._resolvedFile = resolved.file;
+                        const activeFilter = (this.filter && FILTER_ARGS[this.filter]) 
+                            ? FILTER_ARGS[this.filter] 
+                            : FILTER_ARGS.empowering;
+
+                        const ffmpeg = new prism.FFmpeg({
+                            args: [
+                                '-i', resolved.file,
+                                ...activeFilter,
+                                '-f', 's16le',
+                                '-ar', '48000',
+                                '-ac', '2'
+                            ]
+                        });
+                        audioResource = createAudioResource(ffmpeg, {
+                            inputType: StreamType.Raw,
+                            inlineVolume: true
+                        });
+                    }
+                } catch (srErr) {}
+            }
+
+            // 3. Primary Cloud Streamer: Pure JS SoundCloud Streaming via play-dl (320kbps Hi-Fi)
             if (!audioResource) {
-                const primaryArtist = (track.author || '').split(',')[0].trim();
-                let query = `${primaryArtist} ${track.title} Official Audio`.trim();
-                if (targetUrl && (targetUrl.includes('youtube.com/') || targetUrl.includes('youtu.be/'))) {
-                    query = targetUrl;
+                try {
+                    await refreshSoundCloudToken();
+                    const primaryArtist = (track.author || '').split(',')[0].trim();
+                    const searchQuery = `${primaryArtist} ${track.title}`.trim();
+                    const scResults = await play.search(searchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    if (scResults && scResults[0] && scResults[0].url) {
+                        const stream = await play.stream(scResults[0].url, { quality: 2, discordPlayerCompatibility: true });
+                        if (stream && stream.stream) {
+                            audioResource = createAudioResource(stream.stream, {
+                                inputType: stream.type,
+                                inlineVolume: true
+                            });
+                        }
+                    }
+                } catch (scErr) {
+                    console.warn('⚠️ [SoundCloud Streamer Fallback]:', scErr.message || scErr);
                 }
+            }
 
-                let resolved = await streamResolver.resolve(query);
-                if (!resolved || !resolved.file) {
-                    resolved = await streamResolver.resolve(`${primaryArtist} ${track.title}`.trim());
+            // 4. Secondary Cloud Streamer: YouTube Audio via play-dl or @distube/ytdl-core
+            if (!audioResource) {
+                try {
+                    let ytUrl = targetUrl;
+                    if (!ytUrl || (!ytUrl.includes('youtube.com/') && !ytUrl.includes('youtu.be/'))) {
+                        const ytSearch = await play.search(`${track.author || ''} ${track.title}`.trim(), { limit: 1 }).catch(() => []);
+                        if (ytSearch && ytSearch[0]) ytUrl = ytSearch[0].url;
+                    }
+                    if (ytUrl) {
+                        try {
+                            const stream = await play.stream(ytUrl, { quality: 2, discordPlayerCompatibility: true });
+                            if (stream && stream.stream) {
+                                audioResource = createAudioResource(stream.stream, {
+                                    inputType: stream.type,
+                                    inlineVolume: true
+                                });
+                            }
+                        } catch (pErr) {
+                            const ytdl = require('@distube/ytdl-core');
+                            const ytdlStream = ytdl(ytUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+                            audioResource = createAudioResource(ytdlStream, {
+                                inputType: StreamType.Arbitrary,
+                                inlineVolume: true
+                            });
+                        }
+                    }
+                } catch (ytErr) {
+                    console.warn('⚠️ [YouTube Streamer Fallback]:', ytErr.message || ytErr);
                 }
-                if (!resolved || !resolved.file) {
-                    resolved = await streamResolver.resolve(`${track.title} Official Audio`.trim());
-                }
+            }
 
-                if (resolved && resolved.file && fs.existsSync(resolved.file)) {
-                    track._resolvedFile = resolved.file;
-                    const activeFilter = (this.filter && FILTER_ARGS[this.filter]) 
-                        ? FILTER_ARGS[this.filter] 
-                        : FILTER_ARGS.empowering;
-
-                    const ffmpeg = new prism.FFmpeg({
-                        args: [
-                            '-i', resolved.file,
-                            ...activeFilter,
-                            '-f', 's16le',
-                            '-ar', '48000',
-                            '-ac', '2'
-                        ]
-                    });
-                    audioResource = createAudioResource(ffmpeg, {
-                        inputType: StreamType.Raw,
+            // 5. Direct Media URL Fallback (mp3, wav, ogg, m4a)
+            if (!audioResource && targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.wav') || targetUrl.endsWith('.ogg') || targetUrl.endsWith('.m4a'))) {
+                try {
+                    audioResource = createAudioResource(targetUrl, {
+                        inputType: StreamType.Arbitrary,
                         inlineVolume: true
                     });
-                }
+                } catch (urlErr) {}
             }
 
             if (!audioResource) {
@@ -604,6 +668,9 @@ class StarryGuildPlayer {
 
         } catch (err) {
             console.error(`⚠️ [Playback Exception for "${track.title}"]:`, err.message || err);
+            if (this.textChannel) {
+                this.textChannel.send(`⚠️ Could not stream **${track.title}**: ${err.message || 'Source stream unreachable'}`).catch(() => {});
+            }
             this.handleTrackEnd();
         }
     }
