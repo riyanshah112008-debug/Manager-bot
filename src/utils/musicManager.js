@@ -1,13 +1,93 @@
-const { Kazagumo, KazagumoPlayer } = require('kazagumo');
+const { Kazagumo, KazagumoPlayer, KazagumoTrack } = require('kazagumo');
+const { Connectors } = require('shoukaku');
+const KazagumoSpotify = require('kazagumo-spotify');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
+const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
+
+// 🛡️ Ensure KazagumoPlayer has .search() for internal delegates
 if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
     KazagumoPlayer.prototype.search = function(query, options) {
         return this.kazagumo.search(query, options);
     };
 }
-const { Connectors } = require('shoukaku');
-const KazagumoSpotify = require('kazagumo-spotify');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
-const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
+
+// 🛡️ Monkey patch KazagumoSpotify so it produces root KazagumoTrack (v3.4+) instances instead of nested v2.4
+if (KazagumoSpotify && KazagumoSpotify.prototype) {
+    KazagumoSpotify.prototype.buildKazagumoTrack = function(spotifyTrack, requester, thumbnail) {
+        return new KazagumoTrack({
+            track: '',
+            info: {
+                sourceName: 'spotify',
+                identifier: spotifyTrack.id,
+                isSeekable: true,
+                author: spotifyTrack.artists?.[0]?.name || 'Unknown',
+                length: spotifyTrack.duration_ms,
+                isStream: false,
+                position: 0,
+                title: spotifyTrack.name,
+                uri: `https://open.spotify.com/track/${spotifyTrack.id}`,
+                thumbnail: thumbnail || spotifyTrack.album?.images?.[0]?.url
+            }
+        }, requester);
+    };
+}
+
+// 🛡️ Patch getTrack on both root and any nested KazagumoTrack classes to ensure seamless Lavalink v4 resolution
+const trackClasses = [KazagumoTrack];
+try {
+    const nested = require('kazagumo-spotify/node_modules/kazagumo/dist/Managers/Supports/KazagumoTrack');
+    if (nested && nested.KazagumoTrack && !trackClasses.includes(nested.KazagumoTrack)) {
+        trackClasses.push(nested.KazagumoTrack);
+    }
+} catch (e) {}
+
+for (const TrackClass of trackClasses) {
+    if (!TrackClass || !TrackClass.prototype) continue;
+    TrackClass.prototype.getTrack = async function(player) {
+        if (!this.kazagumo) throw new Error('Kazagumo is not set');
+        const query = [this.author, this.title].filter(Boolean).join(' - ');
+        
+        let searchResult = null;
+        if (player) {
+            try {
+                searchResult = await player.search(`scsearch:${query}`, { requester: this.requester });
+            } catch (_) {}
+            if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
+                try {
+                    searchResult = await player.search(query, { requester: this.requester });
+                } catch (_) {}
+            }
+        } else {
+            try {
+                searchResult = await this.kazagumo.search(`scsearch:${query}`, { requester: this.requester });
+            } catch (_) {}
+            if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
+                try {
+                    searchResult = await this.kazagumo.search(query, { requester: this.requester });
+                } catch (_) {}
+            }
+        }
+        
+        if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
+            throw new Error(`No tracks found for ${query}`);
+        }
+        
+        const found = searchResult.tracks[0];
+        return {
+            encoded: found.track,
+            track: found.track,
+            info: {
+                title: found.title,
+                author: found.author,
+                length: found.length,
+                identifier: found.identifier,
+                isSeekable: found.isSeekable,
+                isStream: found.isStream,
+                uri: found.realUri || found.uri
+            }
+        };
+    };
+}
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
@@ -199,6 +279,29 @@ function createMusicManager(client) {
             soundcloud: "scsearch", 
             youtube: "scsearch" 
         },
+        trackResolver: async function(options) {
+            try {
+                if (this.readyToPlay) return true;
+                const query = [this.author, this.title].filter(Boolean).join(' - ');
+                let searchRes = await this.kazagumo.search(`scsearch:${query}`, { requester: this.requester });
+                if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
+                    searchRes = await this.kazagumo.search(query, { requester: this.requester });
+                }
+                if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
+                    searchRes = await this.kazagumo.search(`ytsearch:${query}`, { requester: this.requester });
+                }
+                if (searchRes && searchRes.tracks && searchRes.tracks.length > 0) {
+                    const found = searchRes.tracks[0];
+                    this.track = found.track;
+                    this.realUri = found.realUri || found.uri;
+                    if (!this.thumbnail && found.thumbnail) this.thumbnail = found.thumbnail;
+                    return true;
+                }
+            } catch (e) {
+                console.warn('⚠️ [Kazagumo trackResolver Warning]:', e.message);
+            }
+            return false;
+        },
         plugins: [
             new KazagumoSpotify({ 
                 clientId: process.env.SPOTIFY_CLIENT_ID || 'dummy_id', 
@@ -350,11 +453,23 @@ function createMusicManager(client) {
         }
     });
 
+    manager.on('playerResolveError', (player, track, message) => {
+        console.warn(`⚠️ [Music PlayerResolveError] Guild ${player?.guildId}: ${track?.title} - ${message}`);
+    });
+
     manager.on('playerException', async (player, track, exception) => {
-        console.warn('⚠️ [Music Player Exception]:', exception?.message || exception || 'Node failover event');
+        console.warn(`⚠️ [Music Player Exception] Guild ${player?.guildId}:`, exception?.message || exception || 'Node failover event');
         if (player && player.queue && player.queue.length > 0) {
             player.skip();
         }
+    });
+
+    manager.on('playerEnd', (player, track, reason) => {
+        console.log(`ℹ️ [Music PlayerEnd] Guild ${player?.guildId}: ${track?.title} (Reason: ${reason})`);
+    });
+
+    manager.on('playerClosed', (player, data) => {
+        console.warn(`⚠️ [Music PlayerClosed] Guild ${player?.guildId}: Code ${data?.code}, Reason: ${data?.reason}`);
     });
 
     manager.on('playerEmpty', async player => {

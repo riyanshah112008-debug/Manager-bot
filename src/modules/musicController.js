@@ -465,7 +465,8 @@ class MusicControllerEngine {
                         guildId: message.guild.id,
                         voiceId: voiceChannel.id,
                         textId: message.channel.id,
-                        deaf: true
+                        deaf: true,
+                        shardId: message.guild.shardId || 0
                     });
                 }
 
@@ -477,18 +478,25 @@ class MusicControllerEngine {
                 const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
                 if (!isSearch && res.type === 'PLAYLIST') {
                     for (const track of res.tracks) player.queue.add(track);
-                    if (!player.playing && !player.paused) player.play();
+                    if (!player.playing && !player.paused) {
+                        await player.play().catch(e => console.error('Player play error:', e));
+                    }
                     const temp = await message.channel.send({
                         content: `📚 **Enqueued Playlist:** \`${(res.playlistName || 'Playlist').substring(0, 45)}\` (**${res.tracks.length}** tracks) • ${message.author}`
                     }).catch(() => null);
                     if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
                 } else {
                     const track = res.tracks[0];
+                    const isCurrentlyPlaying = player.playing || player.paused;
                     player.queue.add(track);
-                    if (!player.playing && !player.paused) player.play();
+                    if (!isCurrentlyPlaying) {
+                        await player.play().catch(e => console.error('Player play error:', e));
+                    }
                     const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
                     const temp = await message.channel.send({
-                        content: `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${sourceName} Hi-Fi • ${message.author}`
+                        content: isCurrentlyPlaying
+                            ? `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${sourceName} Hi-Fi • ${message.author}`
+                            : `▶️ **Loading:** \`${track.title.substring(0, 55)}\` • ${sourceName} Hi-Fi • ${message.author}`
                     }).catch(() => null);
                     if (temp) setTimeout(() => temp.delete().catch(() => {}), 3500);
                 }

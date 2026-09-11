@@ -139,7 +139,8 @@ const commands = [
                                 guildId: ctx.guild.id,
                                 voiceId: guard.voiceChannel.id,
                                 textId: ctx.channel.id,
-                                deaf: true
+                                deaf: true,
+                                shardId: ctx.guild.shardId || 0
                             });
                         }
 
@@ -152,14 +153,21 @@ const commands = [
                         let replyText = '';
                         if (!isSearch && res.type === 'PLAYLIST') {
                             for (const track of res.tracks) player.queue.add(track);
-                            if (!player.playing && !player.paused) player.play();
+                            if (!player.playing && !player.paused) {
+                                await player.play().catch(e => console.error('Player play error:', e));
+                            }
                             replyText = `✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`;
                         } else {
                             const track = res.tracks[0];
+                            const isCurrentlyPlaying = player.playing || player.paused;
                             player.queue.add(track);
-                            if (!player.playing && !player.paused) player.play();
+                            if (!isCurrentlyPlaying) {
+                                await player.play().catch(e => console.error('Player play error:', e));
+                            }
                             const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
-                            replyText = `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi`;
+                            replyText = isCurrentlyPlaying
+                                ? `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi (Position #${player.queue.size})`
+                                : `▶️ Loading **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi...`;
                         }
 
                         const replyMsg = await ctx.reply(replyText);

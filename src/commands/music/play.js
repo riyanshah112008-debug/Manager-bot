@@ -93,7 +93,8 @@ module.exports = {
               guildId: interaction.guild.id,
               voiceId: voiceChannel.id,
               textId: interaction.channel.id,
-              deaf: true
+              deaf: true,
+              shardId: interaction.guild.shardId || 0
             });
           }
 
@@ -106,14 +107,22 @@ module.exports = {
           const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
           if (!isSearch && res.type === 'PLAYLIST') {
             for (const track of res.tracks) player.queue.add(track);
-            if (!player.playing && !player.paused) player.play();
+            if (!player.playing && !player.paused) {
+              await player.play().catch(e => console.error('Player play error:', e));
+            }
             return replyFunc.call(interaction, `✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`);
           } else {
             const track = res.tracks[0];
+            const isCurrentlyPlaying = player.playing || player.paused;
             player.queue.add(track);
-            if (!player.playing && !player.paused) player.play();
+            if (!isCurrentlyPlaying) {
+              await player.play().catch(e => console.error('Player play error:', e));
+            }
             const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
-            return replyFunc.call(interaction, `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi`);
+            const msg = isCurrentlyPlaying
+              ? `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi (Position #${player.queue.size})`
+              : `▶️ Loading **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi...`;
+            return replyFunc.call(interaction, msg);
           }
         }
       } catch (lavalinkErr) {
