@@ -1047,7 +1047,15 @@ class CommandRegistry {
                     const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
                     const { applyKazagumoFilter } = require('../utils/musicManager');
 
-                    const kPlayer = client.manager ? client.manager.getPlayer(interaction.guild.id) : null;
+                    let kPlayer = (interaction.client.manager ? interaction.client.manager.getPlayer(interaction.guild.id) : null) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
+                    if (!kPlayer && client.multiBot?.instances) {
+                        for (const inst of client.multiBot.instances.values()) {
+                            if (inst.client?.manager) {
+                                const p = inst.client.manager.getPlayer(interaction.guild.id);
+                                if (p) { kPlayer = p; break; }
+                            }
+                        }
+                    }
                     const nPlayer = StarryAudioEngine.getPlayer(interaction.guild.id, client);
                     const voiceChannel = interaction.member?.voice?.channel;
 

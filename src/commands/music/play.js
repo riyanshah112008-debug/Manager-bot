@@ -67,6 +67,49 @@ module.exports = {
         await interaction.deferReply().catch(() => {});
     }
 
+    const manager = client.manager;
+    const hasLavalink = manager && Array.from(manager.shoukaku?.nodes?.values() || []).some(n => n.state === 1);
+
+    if (hasLavalink) {
+      try {
+        const existingNative = StarryAudioEngine.getPlayer(interaction.guild.id);
+        if (existingNative) existingNative.destroy();
+
+        const res = await manager.search(query, { requester: interaction.user });
+        if (res && res.tracks && res.tracks.length > 0) {
+          let player = manager.getPlayer(interaction.guild.id);
+          if (!player) {
+            player = await manager.createPlayer({
+              guildId: interaction.guild.id,
+              voiceId: voiceChannel.id,
+              textId: interaction.channel.id,
+              deaf: true
+            });
+          }
+
+          if (player.voiceId !== voiceChannel.id) {
+            player.setVoiceChannel(voiceChannel.id);
+          }
+          player.textId = interaction.channel.id;
+
+          const replyFunc = interaction.editReply || interaction.reply;
+          const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
+          if (!isSearch && res.type === 'PLAYLIST') {
+            for (const track of res.tracks) player.queue.add(track);
+            if (!player.playing && !player.paused) player.play();
+            return replyFunc.call(interaction, `✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`);
+          } else {
+            const track = res.tracks[0];
+            player.queue.add(track);
+            if (!player.playing && !player.paused) player.play();
+            return replyFunc.call(interaction, `🎵 Queued **${track.title}** by \`${track.author}\` • 320kbps Hi-Fi`);
+          }
+        }
+      } catch (lavalinkErr) {
+        console.warn('⚠️ [Lavalink play.js Error, falling back to Native Audio]:', lavalinkErr.message);
+      }
+    }
+
     try {
       const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
       // ⚡ Instantly join voice channel in 0.1s without waiting for search

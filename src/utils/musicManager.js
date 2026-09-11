@@ -16,14 +16,6 @@ const Nodes = [
         retryDelay: 3000
     },
     {
-        name: 'Node-2-Ajieblogs-v4',
-        url: 'lavalink-v4.ajieblogs.eu.org:80',
-        auth: 'https://dsc.gg/ajidevserver',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
         name: 'Node-3-Ajieblogs-NonSSL',
         url: 'lava-v4.ajieblogs.eu.org:80',
         auth: 'https://dsc.gg/ajidevserver',
@@ -36,8 +28,8 @@ const Nodes = [
         url: '127.0.0.1:2333',
         auth: 'youshallnotpass',
         secure: false,
-        retryAmount: 10,
-        retryDelay: 5000
+        retryAmount: 5,
+        retryDelay: 10000
     }
 ];
 
@@ -214,7 +206,12 @@ function createMusicManager(client) {
         ],
         send: (guildId, payload) => {
             const guild = client.guilds.cache.get(guildId);
-            if (guild) guild.shard.send(payload);
+            if (guild && guild.shard) {
+                guild.shard.send(payload);
+            } else if (client.ws?.shards) {
+                const shard = client.ws.shards.first?.() || client.ws.shards.get(0);
+                if (shard) shard.send(payload);
+            }
         }
     }, new Connectors.DiscordJS(client), Nodes, {
         moveOnDisconnect: true,
@@ -250,6 +247,15 @@ function createMusicManager(client) {
     manager.shoukaku.on('disconnect', (name, count) => {
         console.warn(`⚠️ [Lavalink] Node [${name}] disconnected (Retry: ${count})`);
     });
+
+    // If client is already ready or logged in, connect nodes immediately
+    if (client.isReady?.() || client.user) {
+        try {
+            manager.shoukaku.connector.ready(Nodes);
+        } catch (readyErr) {
+            console.warn(`⚠️ [Lavalink Attach] (${client.user ? client.user.username : 'Bot'}):`, readyErr.message);
+        }
+    }
 
     // Player Start Event
     manager.on('playerStart', async (player, track) => {

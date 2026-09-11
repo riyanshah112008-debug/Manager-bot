@@ -46,6 +46,46 @@ function getVoiceGuard(ctx) {
 }
 
 function getActivePlayer(client, guildId) {
+    let kPlayer = client.manager?.getPlayer(guildId);
+    if (!kPlayer && client.multiBot?.instances) {
+        for (const inst of client.multiBot.instances.values()) {
+            if (inst.client?.manager) {
+                const p = inst.client.manager.getPlayer(guildId);
+                if (p) { kPlayer = p; break; }
+            }
+        }
+    }
+    if (kPlayer) {
+        const { applyKazagumoFilter } = require('../../utils/musicManager');
+        return {
+            isKazagumo: true,
+            player: kPlayer,
+            currentTrack: kPlayer.queue.current ? {
+                title: kPlayer.queue.current.title,
+                author: kPlayer.queue.current.author,
+                url: kPlayer.queue.current.uri,
+                duration: kPlayer.queue.current.length,
+                thumbnail: kPlayer.queue.current.thumbnail,
+                requester: kPlayer.queue.current.requester
+            } : null,
+            queue: kPlayer.queue,
+            position: kPlayer.position || 0,
+            paused: kPlayer.paused,
+            playing: kPlayer.playing,
+            volume: kPlayer.volume || 100,
+            loop: kPlayer.loop,
+            filter: kPlayer.data?.get('activeFilter') || 'clear',
+            pause: () => kPlayer.pause(true),
+            resume: () => kPlayer.pause(false),
+            skip: () => kPlayer.skip(),
+            stop: () => kPlayer.destroy(),
+            destroy: () => kPlayer.destroy(),
+            setVolume: (v) => kPlayer.setVolume(v),
+            setLoop: (l) => kPlayer.setLoop(l),
+            shuffle: () => kPlayer.queue.shuffle(),
+            setFilter: (f) => applyKazagumoFilter(kPlayer, f)
+        };
+    }
     return StarryAudioEngine.getPlayer(guildId, client);
 }
 
@@ -72,6 +112,50 @@ const commands = [
             if (ctx.isSlash) await ctx.defer();
 
             const targetClient = guard.workerClient || ctx.client;
+            const manager = targetClient.manager || ctx.client.manager;
+            const hasLavalink = manager && Array.from(manager.shoukaku?.nodes?.values() || []).some(n => n.state === 1);
+
+            // 1. High-Performance Primary Route: Cloud Lavalink v4 Audio Cluster
+            if (hasLavalink) {
+                try {
+                    const existingNative = StarryAudioEngine.getPlayer(ctx.guild.id);
+                    if (existingNative) existingNative.destroy();
+
+                    const res = await manager.search(query, { requester: ctx.user });
+                    if (res && res.tracks && res.tracks.length > 0) {
+                        let player = manager.getPlayer(ctx.guild.id);
+                        if (!player) {
+                            player = await manager.createPlayer({
+                                guildId: ctx.guild.id,
+                                voiceId: guard.voiceChannel.id,
+                                textId: ctx.channel.id,
+                                deaf: true
+                            });
+                        }
+
+                        if (player.voiceId !== guard.voiceChannel.id) {
+                            player.setVoiceChannel(guard.voiceChannel.id);
+                        }
+                        player.textId = ctx.channel.id;
+
+                        const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
+                        if (!isSearch && res.type === 'PLAYLIST') {
+                            for (const track of res.tracks) player.queue.add(track);
+                            if (!player.playing && !player.paused) player.play();
+                            return ctx.reply(`✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`);
+                        } else {
+                            const track = res.tracks[0];
+                            player.queue.add(track);
+                            if (!player.playing && !player.paused) player.play();
+                            return ctx.reply(`🎵 Queued **${track.title}** by \`${track.author}\` • 320kbps Hi-Fi`);
+                        }
+                    }
+                } catch (lavalinkErr) {
+                    console.warn('⚠️ [Lavalink Play Error, falling back to Native Audio]:', lavalinkErr.message);
+                }
+            }
+
+            // 2. Secondary Autonomous Route: Native Audio Engine
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             const connectPromise = player.connect().catch(() => {});
             const searchPromise = StarryAudioEngine.search(query, ctx.user);
