@@ -14,7 +14,7 @@ if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
 // 🛡️ Monkey patch KazagumoSpotify so it produces root KazagumoTrack (v3.4+) instances instead of nested v2.4
 if (KazagumoSpotify && KazagumoSpotify.prototype) {
     KazagumoSpotify.prototype.buildKazagumoTrack = function(spotifyTrack, requester, thumbnail) {
-        return new KazagumoTrack({
+        const track = new KazagumoTrack({
             track: '',
             info: {
                 sourceName: 'spotify',
@@ -29,6 +29,8 @@ if (KazagumoSpotify && KazagumoSpotify.prototype) {
                 thumbnail: thumbnail || spotifyTrack.album?.images?.[0]?.url
             }
         }, requester);
+        if (this.kazagumo) track.setKazagumo(this.kazagumo);
+        return track;
     };
 }
 
@@ -44,28 +46,23 @@ try {
 for (const TrackClass of trackClasses) {
     if (!TrackClass || !TrackClass.prototype) continue;
     TrackClass.prototype.getTrack = async function(player) {
-        if (!this.kazagumo) throw new Error('Kazagumo is not set');
         const query = [this.author, this.title].filter(Boolean).join(' - ');
+        const searcher = player || this.kazagumo;
+        if (!searcher) throw new Error('Neither player nor kazagumo is available');
         
         let searchResult = null;
-        if (player) {
+        try {
+            searchResult = await searcher.search(`ytmsearch:${query}`, { requester: this.requester });
+        } catch (_) {}
+        if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
             try {
-                searchResult = await player.search(`scsearch:${query}`, { requester: this.requester });
+                searchResult = await searcher.search(`ytsearch:${query}`, { requester: this.requester });
             } catch (_) {}
-            if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
-                try {
-                    searchResult = await player.search(query, { requester: this.requester });
-                } catch (_) {}
-            }
-        } else {
+        }
+        if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
             try {
-                searchResult = await this.kazagumo.search(`scsearch:${query}`, { requester: this.requester });
+                searchResult = await searcher.search(query, { requester: this.requester });
             } catch (_) {}
-            if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
-                try {
-                    searchResult = await this.kazagumo.search(query, { requester: this.requester });
-                } catch (_) {}
-            }
         }
         
         if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
@@ -93,17 +90,25 @@ const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
 const Nodes = [
     {
-        name: 'Node-1-Jirayu-Primary',
-        url: 'lavalink.jirayu.net:13592',
+        name: 'Node-1-Serenetia-SSL',
+        url: 'lavalink.serenetia.com:443',
         auth: 'youshallnotpass',
+        secure: true,
+        retryAmount: 50,
+        retryDelay: 3000
+    },
+    {
+        name: 'Node-2-Ajieblogs-NonSSL',
+        url: 'lava-v4.ajieblogs.eu.org:80',
+        auth: 'https://dsc.gg/ajidevserver',
         secure: false,
         retryAmount: 50,
         retryDelay: 3000
     },
     {
-        name: 'Node-3-Ajieblogs-NonSSL',
-        url: 'lava-v4.ajieblogs.eu.org:80',
-        auth: 'https://dsc.gg/ajidevserver',
+        name: 'Node-3-Jirayu-Failover',
+        url: 'lavalink.jirayu.net:13592',
+        auth: 'youshallnotpass',
         secure: false,
         retryAmount: 50,
         retryDelay: 3000
@@ -273,22 +278,22 @@ function createMusicManager(client) {
     if (client.manager) return client.manager;
 
     const manager = new Kazagumo({
-        defaultSearchEngine: "soundcloud",
+        defaultSearchEngine: "youtube_music",
         searchFallbacks: { 
-            spotify: "scsearch", 
-            soundcloud: "scsearch", 
-            youtube: "scsearch" 
+            spotify: "ytmsearch", 
+            soundcloud: "ytmsearch", 
+            youtube: "ytsearch" 
         },
         trackResolver: async function(options) {
             try {
                 if (this.readyToPlay) return true;
                 const query = [this.author, this.title].filter(Boolean).join(' - ');
-                let searchRes = await this.kazagumo.search(`scsearch:${query}`, { requester: this.requester });
-                if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
-                    searchRes = await this.kazagumo.search(query, { requester: this.requester });
-                }
+                let searchRes = await this.kazagumo.search(`ytmsearch:${query}`, { requester: this.requester });
                 if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
                     searchRes = await this.kazagumo.search(`ytsearch:${query}`, { requester: this.requester });
+                }
+                if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
+                    searchRes = await this.kazagumo.search(query, { requester: this.requester });
                 }
                 if (searchRes && searchRes.tracks && searchRes.tracks.length > 0) {
                     const found = searchRes.tracks[0];
@@ -309,7 +314,7 @@ function createMusicManager(client) {
                 playlistPageLimit: 5, 
                 albumPageLimit: 3, 
                 searchMarket: 'US', 
-                searchPrefix: 'scsearch:' 
+                searchPrefix: 'ytmsearch:' 
             })
         ],
         send: (guildId, payload) => {
@@ -382,6 +387,13 @@ function createMusicManager(client) {
         const interaction = player.data.get('interaction');
         player.data.delete('interaction');
 
+        // Delete any prior loading placeholder message
+        const loadingMsg = player.data.get('loadingMessage');
+        if (loadingMsg) {
+            await loadingMsg.delete().catch(() => {});
+            player.data.delete('loadingMessage');
+        }
+
         try {
             const guild = client.guilds.cache.get(player.guildId);
             if (guild && client.vcLocks && client.vcLocks.get(guild.id)) {
@@ -427,7 +439,7 @@ function createMusicManager(client) {
                 `▶️ **Status:** Playing | ⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? '🔂 Track' : '🔁 Queue'}\n` +
                 `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)} | 🔊 **Volume:** ${player.volume || 100}%\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
-                `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Soundcloud'}\n` +
+                `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Spotify'}\n` +
                 `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
                 `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`
@@ -440,7 +452,8 @@ function createMusicManager(client) {
 
         try {
             if (interaction) {
-                await interaction.editReply(messageData).catch(() => {});
+                const msg = await interaction.editReply(messageData).catch(() => {});
+                if (msg) player.data.set('nowPlayingMessage', msg);
             } else if (channel) {
                 const msg = await channel.send(messageData).catch(() => {});
                 if (msg) player.data.set('nowPlayingMessage', msg);
@@ -496,7 +509,7 @@ function createMusicManager(client) {
                     let result = await manager.search(searchQuery, { requester: previousTrack.requester });
 
                     if (!result || !result.tracks || !result.tracks.length) {
-                        const fallbackQuery = `scsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
+                        const fallbackQuery = `ytmsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
                         result = await manager.search(fallbackQuery, { requester: previousTrack.requester });
                     }
 
@@ -517,6 +530,12 @@ function createMusicManager(client) {
         if (oldMsg) {
             await oldMsg.delete().catch(() => {});
             player.data.delete('nowPlayingMessage');
+        }
+
+        const loadingMsg = player.data.get('loadingMessage');
+        if (loadingMsg) {
+            await loadingMsg.delete().catch(() => {});
+            player.data.delete('loadingMessage');
         }
 
         if (channel) {

@@ -83,6 +83,11 @@ module.exports = {
           } catch (spErr) {}
         }
         if (!res || !res.tracks || res.tracks.length === 0) {
+          try {
+            res = await manager.search(query, { requester: interaction.user, engine: 'youtube_music' });
+          } catch (_) {}
+        }
+        if (!res || !res.tracks || res.tracks.length === 0) {
           res = await manager.search(query, { requester: interaction.user });
         }
 
@@ -122,11 +127,18 @@ module.exports = {
             const msg = isCurrentlyPlaying
               ? `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi (Position #${player.queue.size})`
               : `▶️ Loading **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi...`;
-            return replyFunc.call(interaction, msg);
+            const sent = await replyFunc.call(interaction, msg).catch(() => null);
+            if (!isCurrentlyPlaying && sent) {
+              player.data.set('loadingMessage', sent);
+            }
+            return sent;
           }
+        } else {
+          const replyFunc = interaction.editReply || interaction.reply;
+          return replyFunc.call(interaction, `❌ No audio results found for \`${query}\`. Please check the song name or link!`);
         }
       } catch (lavalinkErr) {
-        console.warn('⚠️ [Lavalink play.js Error, falling back to Native Audio]:', lavalinkErr.message);
+        console.warn('⚠️ [Lavalink play.js Error]:', lavalinkErr.message);
       }
     }
 

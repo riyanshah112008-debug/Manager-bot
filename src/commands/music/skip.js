@@ -15,7 +15,7 @@ module.exports = {
             return interaction.reply({ content: '❌ Nothing is currently playing in this server.', flags: [EPHEMERAL_FLAG] });
         }
 
-        const title = player.currentTrack?.title || 'Current Track';
+        const title = player.currentTrack?.title || player.queue?.current?.title || 'Current Track';
         player.skip();
         return interaction.reply(`⏭️ **Skipped:** \`${title}\``);
     }
