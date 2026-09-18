@@ -140,6 +140,16 @@ function setupDashboardRoutes(app, client) {
         next();
     };
 
+    // 🛡️ Middleware: Require Authenticated Discord User
+    const requireAuth = (req, res, next) => {
+        const session = getSession(req);
+        if (!session) {
+            return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
+        }
+        req.session = session;
+        next();
+    };
+
     // ==========================================
     // 🔐 DISCORD OAUTH2 AUTHENTICATION APIS
     // ==========================================
