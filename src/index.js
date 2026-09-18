@@ -452,6 +452,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Leveling', fn: () => require('./modules/leveling.js')(client, app) },
     { name: 'Starry Protocol', fn: () => require('./modules/starry.js')(client, app) },
     { name: 'Boost Tracker', fn: () => require('./modules/boostTracker.js')(client, app) },
+    { name: 'Booster Synergy Engine', fn: () => require('./modules/boosterRoleEngine.js')(client, app) },
     { name: 'Truth or Dare', fn: () => require('./modules/truthOrDare.js')(client, app) },
     { name: 'Support Tickets', fn: () => {
         try { return require('./modules/tickets.js')(client, app); } catch (e) {

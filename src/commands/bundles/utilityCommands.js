@@ -2014,6 +2014,144 @@ const commands = [
 
             return ctx.reply({ embeds: [embed] });
         }
+    },
+
+    // 53. APPROVEORDER (Bot Owner Only)
+    {
+        name: 'approveorder',
+        aliases: ['approvepay', 'orderapprove'],
+        category: 'Utility',
+        description: 'Approve a payment order, issue license key, and auto-activate premium.',
+        usage: ',approveorder <orderId>',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS?.includes(ctx.user.id)) {
+                return ctx.reply('❌ This command is restricted to Bot Owners.');
+            }
+            const orderId = ctx.args[0];
+            if (!orderId) {
+                return ctx.reply('❌ Usage: `,approveorder <orderId>` (e.g. `,approveorder ORD-M2K8P-7A3F`)');
+            }
+            const { approvePaymentOrder } = require('../../utils/paymentHelper');
+            const res = await approvePaymentOrder(orderId, `${ctx.user.username} (Discord Command)`, ctx.client);
+            if (!res.success) {
+                return ctx.reply(`❌ Failed to approve order: ${res.error}`);
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor('#2ECC71')
+                .setTitle(`✅ Order [${orderId.toUpperCase()}] Approved!`)
+                .setDescription(
+                    `• **Status:** \`COMPLETED\`\n` +
+                    `• **Tier:** **${res.tier.toUpperCase()}**\n` +
+                    `• **License Key:** \`${res.key}\`\n` +
+                    `• **Target Server:** ${res.guildId ? `\`${res.guildId}\` (Auto-Activated: ${res.autoActivated ? 'YES ✅' : 'NO ❌'})` : '*None*'}\n\n` +
+                    `*Customer has been notified via DM if accessible.*`
+                )
+                .setTimestamp();
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 54. REJECTORDER (Bot Owner Only)
+    {
+        name: 'rejectorder',
+        aliases: ['orderreject'],
+        category: 'Utility',
+        description: 'Reject a pending/verifying payment order.',
+        usage: ',rejectorder <orderId> [reason]',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS?.includes(ctx.user.id)) {
+                return ctx.reply('❌ This command is restricted to Bot Owners.');
+            }
+            const orderId = ctx.args[0];
+            if (!orderId) {
+                return ctx.reply('❌ Usage: `,rejectorder <orderId> [reason]`');
+            }
+            const reason = ctx.args.slice(1).join(' ') || 'Payment verification failed.';
+            const { rejectPaymentOrder } = require('../../utils/paymentHelper');
+            const res = await rejectPaymentOrder(orderId, `${ctx.user.username} (Discord Command)`, reason, ctx.client);
+            if (!res.success) {
+                return ctx.reply(`❌ Failed to reject order: ${res.error}`);
+            }
+            return ctx.reply(`✅ Order \`${orderId.toUpperCase()}\` has been marked as **REJECTED**.\n*Reason:* ${reason}`);
+        }
+    },
+
+    // 55. ORDERS (Bot Owner Only)
+    {
+        name: 'orders',
+        aliases: ['orderlist', 'paymentorders'],
+        category: 'Utility',
+        description: 'List recent payment orders and their verification status.',
+        usage: ',orders [verifying | pending | completed | rejected]',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS?.includes(ctx.user.id)) {
+                return ctx.reply('❌ This command is restricted to Bot Owners.');
+            }
+            const PaymentOrder = require('../../models/PaymentOrder');
+            const filter = ctx.args[0]?.toLowerCase();
+            const query = filter && ['verifying', 'pending', 'completed', 'rejected'].includes(filter) ? { status: filter } : {};
+            const orders = await PaymentOrder.find(query).sort({ createdAt: -1 }).limit(10).lean();
+
+            if (!orders.length) {
+                return ctx.reply(`ℹ️ No orders found${filter ? ` with status '${filter}'` : ''}.`);
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setTitle(`🛒 Recent Payment Orders (${orders.length})`)
+                .setDescription(
+                    orders.map(o => {
+                        const statusEmoji = o.status === 'completed' ? '✅' : o.status === 'verifying' ? '⏳' : o.status === 'rejected' ? '❌' : '🕒';
+                        return `• ${statusEmoji} **\`${o.orderId}\`** | **${o.tierName}** (₹${o.amountInr} / $${o.amountUsd})\n  Status: \`${o.status.toUpperCase()}\` | Method: \`${o.method.toUpperCase()}\`\n  UTR: \`${o.utr || 'None'}\` | User: ${o.userId ? `<@${o.userId}>` : o.userTag}\n  Time: <t:${Math.floor(new Date(o.createdAt).getTime() / 1000)}:R>`;
+                    }).join('\n\n')
+                )
+                .setFooter({ text: 'Use ,approveorder <orderId> to approve an order' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 56. GENKEY (Bot Owner Only)
+    {
+        name: 'genkey',
+        aliases: ['generatekey', 'createkey'],
+        category: 'Utility',
+        description: 'Generate an administrative Starry Premium License Key.',
+        usage: ',genkey <shield_plus | pro_cluster | lifetime> [durationDays]',
+        async execute(ctx) {
+            if (!config.BOT_OWNERS?.includes(ctx.user.id)) {
+                return ctx.reply('❌ This command is restricted to Bot Owners.');
+            }
+            const tierInput = ctx.args[0]?.toLowerCase();
+            const daysInput = ctx.args[1] ? parseInt(ctx.args[1]) : null;
+            const validTiers = ['shield_plus', 'pro_cluster', 'lifetime'];
+
+            if (!tierInput || !validTiers.includes(tierInput)) {
+                return ctx.reply('❌ Please specify a valid tier: `shield_plus`, `pro_cluster`, or `lifetime`.\n*Usage: `,genkey pro_cluster 30` or `,genkey lifetime`*');
+            }
+
+            const { generateStandaloneKey } = require('../../utils/paymentHelper');
+            const result = await generateStandaloneKey({
+                tier: tierInput,
+                durationDays: daysInput,
+                createdBy: `Owner [${ctx.user.username}]`
+            });
+
+            const embed = new EmbedBuilder()
+                .setColor('#F59E0B')
+                .setTitle('👑 Admin Premium License Key Generated')
+                .setDescription(
+                    `• **License Key:** \`${result.key}\`\n` +
+                    `• **Tier:** **${result.tier.toUpperCase()}**\n` +
+                    `• **Duration:** \`${result.durationDays === -1 ? 'Lifetime' : result.durationDays + ' Days'}\`\n\n` +
+                    `*Redeem in Discord via \`,redeem ${result.key}\` or via web dashboard.*`
+                )
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
     }
 ];
 

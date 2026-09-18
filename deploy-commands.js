@@ -56,6 +56,8 @@ const masterModule = safeRequire(['./src/modules/starry', './modules/starry', '.
 if (masterModule) {
     if (masterModule.modMasterPayload) masterPayloads.push(masterModule.modMasterPayload);
     if (masterModule.autoModMasterPayload) masterPayloads.push(masterModule.autoModMasterPayload);
+    if (masterModule.ignorePayload) masterPayloads.push(masterModule.ignorePayload);
+    if (masterModule.unignorePayload) masterPayloads.push(masterModule.unignorePayload);
 }
 
 // Tracker Payload

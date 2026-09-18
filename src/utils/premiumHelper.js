@@ -27,8 +27,8 @@ const ALL_PREMIUM_FEATURES = [
         name: 'Studio DSP Hi-Fi Audio Filters',
         category: 'Music & Audio',
         tier: 'Shield Plus / Pro Cluster / Lifetime',
-        commands: [',bassboost', ',deepbass', ',vibrate', ',8d', ',nightcore', ',daycore', ',vaporwave', ',treble', ',pop'],
-        description: 'Access 9 studio-grade audio DSP effects: True Vibration Bass, Deep 808 Sub-Bass, Earthquake Rumble, 360° Binaural 8D Audio, Nightcore, Daycore, Lo-Fi Vaporwave, and Vocal Clarity.'
+        commands: [',bass', ',8d', ',nightcore', ',daycore', ',vaporwave', ',lofi', ',reverb', ',karaoke', ',surround', ',electronic', ',soft', ',radio', ',treble', ',pop', ',filter'],
+        description: 'Access 15 studio-grade audio DSP effects: Physical Vibration Bass, 360° 8D Audio, Lo-Fi Chill, Slowed & Reverb, Karaoke Vocal Remover, 3D Surround, EDM/Club Master, Soft Chill, Retro Radio, Nightcore, Daycore, Vaporwave, Treble Boost, and Pop Clarity.'
     },
     {
         id: 'cloud_backups',

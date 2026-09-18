@@ -1,25 +1,14 @@
+// ==========================================
+// 🛡️ STARRY SUPREME AUTOMOD PRO ENGINE
+// File Path: src/modules/automod.js
+// Advanced Channel-Level & Server-Level Link & Emoji Spam Protection
+// ==========================================
 const { PermissionsBitField, Events } = require('discord.js');
 const mongoose = require('mongoose');
+const config = require('../config');
+const automodHelper = require('../utils/automodHelper');
 
-const OWNER_ID = '1465049039153135639,1257676837249617971';
-
-// ==========================================
-// 🍃 MONGOOSE SCHEMAS & MODELS (BUILT-IN)
-// ==========================================
-const automodGuildSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true }
-});
-
-const automodChannelSchema = new mongoose.Schema({
-    channelId: { type: String, required: true, unique: true },
-    links: { type: Boolean, default: false },   // true = ignore/allow links
-    emojis: { type: Boolean, default: false }   // true = ignore/allow emojis
-});
-
-// Reuse existing models if registered to avoid overwrite errors
-const AutomodGuild = mongoose.models.AutomodGuild || mongoose.model('AutomodGuild', automodGuildSchema);
-const AutomodChannel = mongoose.models.AutomodChannel || mongoose.model('AutomodChannel', automodChannelSchema);
+const OWNER_IDS = Array.isArray(config.BOT_OWNERS) ? config.BOT_OWNERS : ['1465049039153135639', '1257676837249617971'];
 
 // ==========================================
 // 🔗 ULTIMATE MEDIA & GIF URL CHECKER
@@ -62,27 +51,15 @@ function isAllowedUrl(linkString) {
 // 🚀 MAIN AUTOMOD MODULE EXPORT
 // ==========================================
 module.exports = (client) => {
-    // High-speed In-Memory Cache
-    const guildCache = new Map();
-    const channelCache = new Map();
+    client.automod = automodHelper;
 
     const linkPattern = /https?:\/\/\S+/g;
     const emojiPattern = /<a?:[a-zA-Z0-9_]+:[0-9]+>|[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
 
     // Load DB Caches once Discord Bot connects
     client.once(Events.ClientReady || 'clientReady', async () => {
-        try {
-            // Bulk sync Guild & Channel rules into fast memory
-            const gSettings = await AutomodGuild.find().lean();
-            gSettings.forEach(s => guildCache.set(s.guildId, s.enabled));
-
-            const cSettings = await AutomodChannel.find().lean();
-            cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
-            
-            console.log('✅ Automod Engine Ready (MongoDB Connected & Caches Synced)');
-        } catch (err) {
-            console.error('❌ Error synchronizing Automod MongoDB cache:', err);
-        }
+        await automodHelper.initAutomodCaches();
+        console.log('✅ Automod Engine Ready (MongoDB Connected & Caches Synced)');
     });
 
     // ==========================================
@@ -95,55 +72,106 @@ module.exports = (client) => {
         const validCommands = ['automod', 'ignore', 'unignore'];
         if (!validCommands.includes(interaction.commandName)) return;
 
-        const isOwner = typeof client.isOwner === 'function' ? client.isOwner(interaction.user.id) : interaction.user.id === OWNER_ID;
-        const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+        const isOwner = typeof client.isOwner === 'function' 
+            ? client.isOwner(interaction.user.id) 
+            : OWNER_IDS.includes(interaction.user.id);
+        const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+                        interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
 
         if (!isAdmin && !isOwner) {
-            return interaction.reply({ content: '❌ You need **Administrator** permissions to manage Automod settings.', ephemeral: true }).catch(() => {});
+            return interaction.reply({ 
+                content: '❌ You need **Administrator** or **Manage Server** permissions to manage Automod settings.', 
+                ephemeral: true 
+            }).catch(() => {});
         }
 
         const guildId = interaction.guildId;
 
         // /automod Command
         if (interaction.commandName === 'automod') {
-            const action = interaction.options.getString('action');
+            const sub = interaction.options.getSubcommand(false);
 
-            if (action === 'status') {
-                const isEnabled = guildCache.has(guildId) ? guildCache.get(guildId) : true;
-                return interaction.reply({ content: `📢 **Server-Wide Automod Status:** ${isEnabled ? '🟢 Enabled' : '🔴 Disabled'}`, ephemeral: true }).catch(() => {});
+            // Subcommand: toggle (server-wide)
+            if (sub === 'toggle') {
+                const action = interaction.options.getString('action', true);
+                const targetState = action === 'enable';
+                await automodHelper.setGuildStatus(guildId, targetState);
+                return interaction.reply({
+                    content: `${targetState ? '✅' : '🚫'} Server-wide Automod is now **${action.toUpperCase()}D**.`
+                }).catch(() => {});
             }
 
-            const targetState = action === 'enable';
-            
-            // Atomic DB write + Cache sync
-            await AutomodGuild.findOneAndUpdate({ guildId }, { enabled: targetState }, { upsert: true, new: true });
-            guildCache.set(guildId, targetState);
+            // Subcommand: status
+            if (sub === 'status') {
+                const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+                const settings = await automodHelper.getChannelSettings(targetChannel.id, guildId);
+                const isGuildEnabled = automodHelper.getGuildStatus(guildId);
+                const embed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, settings);
 
-            return interaction.reply({ content: `${targetState ? '✅' : '🚫'} Server-wide Automod is now **${action.toUpperCase()}D**.` }).catch(() => {});
+                return interaction.reply({
+                    embeds: [embed],
+                    components: [buttons]
+                }).catch(() => {});
+            }
+
+            // Subcommand: channel (or default)
+            const action = interaction.options.getString('action') || 'status';
+            const filter = interaction.options.getString('filter') || 'all';
+            const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+            if (action === 'status') {
+                const settings = await automodHelper.getChannelSettings(targetChannel.id, guildId);
+                const isGuildEnabled = automodHelper.getGuildStatus(guildId);
+                const embed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, settings);
+
+                return interaction.reply({
+                    embeds: [embed],
+                    components: [buttons]
+                }).catch(() => {});
+            }
+
+            const shouldEnable = action === 'enable';
+            const updated = await automodHelper.setChannelFilter(targetChannel.id, guildId, filter, shouldEnable);
+            const isGuildEnabled = automodHelper.getGuildStatus(guildId);
+            const embed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+            const filterLabel = filter === 'all' ? 'All filters (links & emojis)' : `Filter **${filter}**`;
+            return interaction.reply({
+                content: `${shouldEnable ? '✅' : '🚫'} ${filterLabel} is now **${shouldEnable ? 'ENABLED' : 'DISABLED'}** in <#${targetChannel.id}>.`,
+                embeds: [embed],
+                components: [buttons]
+            }).catch(() => {});
         }
 
         // /ignore and /unignore Commands
         if (interaction.commandName === 'ignore' || interaction.commandName === 'unignore') {
-            const type = interaction.options.getString('type');
+            const filter = interaction.options.getString('type') || interaction.options.getString('filter') || 'all';
             const channel = interaction.options.getChannel('channel') || interaction.channel;
             const channelId = channel.id;
 
-            let cSettings = channelCache.get(channelId) || { links: false, emojis: false };
-
-            if (type === 'status' && interaction.commandName === 'ignore') {
-                return interaction.reply({ content: `📢 **Automod Status for <#${channelId}>:**\n🔗 Links: ${cSettings.links ? '❌ Ignored' : '✅ Active'}\n😀 Emojis: ${cSettings.emojis ? '❌ Ignored' : '✅ Active'}`, ephemeral: true }).catch(() => {});
+            if (filter === 'status' && interaction.commandName === 'ignore') {
+                const settings = await automodHelper.getChannelSettings(channelId, guildId);
+                const isGuildEnabled = automodHelper.getGuildStatus(guildId);
+                const embed = automodHelper.buildChannelAutomodEmbed(interaction.guild, channel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(channelId, settings);
+                return interaction.reply({ embeds: [embed], components: [buttons], ephemeral: true }).catch(() => {});
             }
 
-            const targetState = interaction.commandName === 'ignore';
-            if (type === 'links' || type === 'all') cSettings.links = targetState;
-            if (type === 'emojis' || type === 'all') cSettings.emojis = targetState;
+            const shouldEnable = interaction.commandName === 'unignore';
+            const updated = await automodHelper.setChannelFilter(channelId, guildId, filter, shouldEnable);
+            const isGuildEnabled = automodHelper.getGuildStatus(guildId);
+            const embed = automodHelper.buildChannelAutomodEmbed(interaction.guild, channel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(channelId, updated);
 
-            // Atomic DB write + Cache sync
-            await AutomodChannel.findOneAndUpdate({ channelId }, { links: cSettings.links, emojis: cSettings.emojis }, { upsert: true, new: true });
-            channelCache.set(channelId, cSettings);
-
-            const typeName = type === 'all' ? '**All** Automod filters are' : `Automod **${type}** filter is`;
-            return interaction.reply({ content: `${targetState ? '🚫' : '✅'} ${typeName} now **${targetState ? 'DISABLED' : 'ENABLED'}** in <#${channelId}>.` }).catch(() => {});
+            const filterLabel = filter === 'all' ? 'All Automod filters' : `Automod **${filter}** filter`;
+            return interaction.reply({
+                content: `${shouldEnable ? '✅' : '🚫'} ${filterLabel} is now **${shouldEnable ? 'ENABLED' : 'DISABLED'}** in <#${channelId}>.`,
+                embeds: [embed],
+                components: [buttons]
+            }).catch(() => {});
         }
     });
 
@@ -159,35 +187,29 @@ module.exports = (client) => {
             message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers) ||
             message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)
         );
-        const isOwner = typeof client.isOwner === 'function' ? client.isOwner(message.author.id) : message.author.id === OWNER_ID;
+        const isOwner = typeof client.isOwner === 'function' 
+            ? client.isOwner(message.author.id) 
+            : OWNER_IDS.includes(message.author.id);
 
-        const config = require('../config');
-        const prefix = config.DEFAULT_PREFIX || ',';
-        if (message.content.startsWith(prefix) || message.content.startsWith('.')) return; // Prefix command bypass
+        if (isStaff || isOwner) return;
+
+        const configPrefix = config.DEFAULT_PREFIX || ',';
+        if (message.content.startsWith(configPrefix) || message.content.startsWith('.')) return; // Prefix command bypass
 
         // 1. Check Server Automod Status
-        const isServerEnabled = guildCache.has(message.guild.id) ? guildCache.get(message.guild.id) : true;
+        const isServerEnabled = automodHelper.getGuildStatus(message.guild.id);
         if (!isServerEnabled) return;
 
-        // 2. Fetch Channel Settings (From Memory Cache with DB fallback)
-        let channelSettings = channelCache.get(message.channel.id);
-        if (!channelSettings) {
-            try {
-                const dbSetting = await AutomodChannel.findOne({ channelId: message.channel.id }).lean();
-                channelSettings = dbSetting ? { links: dbSetting.links, emojis: dbSetting.emojis } : { links: false, emojis: false };
-                channelCache.set(message.channel.id, channelSettings);
-            } catch {
-                channelSettings = { links: false, emojis: false };
-            }
-        }
+        // 2. Fetch Channel Settings (From In-Memory Cache with DB fallback)
+        const channelSettings = await automodHelper.getChannelSettings(message.channel.id, message.guild.id);
 
         // 3. Match Content
         const rawLinks = message.content.match(linkPattern) || [];
         const unauthorizedLinks = rawLinks.filter(link => !isAllowedUrl(link));
         const emojis = message.content.match(emojiPattern) || [];
 
-        const isLinkSpam = !channelSettings.links && unauthorizedLinks.length >= 1;
-        const isEmojiSpam = !channelSettings.emojis && emojis.length >= 5;
+        const isLinkSpam = channelSettings.linksActive && unauthorizedLinks.length >= 1;
+        const isEmojiSpam = channelSettings.emojisActive && emojis.length >= 5;
 
         // 4. Action Execution
         if (isLinkSpam || isEmojiSpam) {

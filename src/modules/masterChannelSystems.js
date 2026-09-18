@@ -237,8 +237,101 @@ const modMasterCommand = new SlashCommandBuilder()
     .addSubcommand(sub => sub.setName('warn').setDescription('Warn member').addUserOption(o => o.setName('target').setDescription('User').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)));
 
 const autoModMasterCommand = new SlashCommandBuilder()
-    .setName('automod').setDescription('⚙️ AutoMod Hub').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addSubcommand(sub => sub.setName('status').setDescription('Status'));
+    .setName('automod')
+    .setDescription('⚙️ AutoMod Hub • Channel & Server Protection')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub => 
+        sub.setName('channel')
+            .setDescription('Configure AutoMod protection for a channel')
+            .addStringOption(o => 
+                o.setName('action')
+                    .setDescription('Enable, disable, or check status')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Enable Filter', value: 'enable' },
+                        { name: 'Disable Filter', value: 'disable' },
+                        { name: 'Check Status', value: 'status' }
+                    )
+            )
+            .addStringOption(o => 
+                o.setName('filter')
+                    .setDescription('Filter type to configure')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Links & Invites', value: 'links' },
+                        { name: 'Emoji Spam (5+)', value: 'emojis' },
+                        { name: 'All Filters (Both)', value: 'all' }
+                    )
+            )
+            .addChannelOption(o => 
+                o.setName('channel')
+                    .setDescription('Target channel (defaults to current)')
+                    .setRequired(false)
+            )
+    )
+    .addSubcommand(sub => 
+        sub.setName('status')
+            .setDescription('View AutoMod status for a channel')
+            .addChannelOption(o => 
+                o.setName('channel')
+                    .setDescription('Target channel (defaults to current)')
+                    .setRequired(false)
+            )
+    )
+    .addSubcommand(sub => 
+        sub.setName('toggle')
+            .setDescription('Toggle server-wide AutoMod engine')
+            .addStringOption(o => 
+                o.setName('action')
+                    .setDescription('Enable or disable server-wide')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Enable', value: 'enable' },
+                        { name: 'Disable', value: 'disable' }
+                    )
+            )
+    );
+
+const ignoreCommand = new SlashCommandBuilder()
+    .setName('ignore')
+    .setDescription('🚫 Disable/ignore AutoMod links or emojis in a channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(o => 
+        o.setName('type')
+            .setDescription('Filter to ignore')
+            .setRequired(true)
+            .addChoices(
+                { name: 'Links & Invites', value: 'links' },
+                { name: 'Emoji Spam', value: 'emojis' },
+                { name: 'All Filters', value: 'all' },
+                { name: 'Check Status', value: 'status' }
+            )
+    )
+    .addChannelOption(o => 
+        o.setName('channel')
+            .setDescription('Target channel (defaults to current)')
+            .setRequired(false)
+    );
+
+const unignoreCommand = new SlashCommandBuilder()
+    .setName('unignore')
+    .setDescription('✅ Re-enable/unignore AutoMod links or emojis in a channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(o => 
+        o.setName('type')
+            .setDescription('Filter to unignore/activate')
+            .setRequired(true)
+            .addChoices(
+                { name: 'Links & Invites', value: 'links' },
+                { name: 'Emoji Spam', value: 'emojis' },
+                { name: 'All Filters', value: 'all' }
+            )
+    )
+    .addChannelOption(o => 
+        o.setName('channel')
+            .setDescription('Target channel (defaults to current)')
+            .setRequired(false)
+    );
 
 const moderateMasterCommand = new SlashCommandBuilder()
     .setName('moderate').setDescription('⚙️ Toggle advanced security modules').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -356,5 +449,7 @@ module.exports.executeFullGuildBackup = executeFullGuildBackup;
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
 module.exports.modMasterPayload = modMasterCommand.toJSON();
 module.exports.autoModMasterPayload = autoModMasterCommand.toJSON();
+module.exports.ignorePayload = ignoreCommand.toJSON();
+module.exports.unignorePayload = unignoreCommand.toJSON();
 module.exports.moderateMasterPayload = moderateMasterCommand.toJSON();
 module.exports.verifySetupPayload = verifySetupCommand.toJSON();

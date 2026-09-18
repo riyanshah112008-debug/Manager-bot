@@ -111,6 +111,17 @@ const serverSettingsSchema = new mongoose.Schema({
         footerIcon: { type: String, default: '' },
         authorName: { type: String, default: '' },
         authorIcon: { type: String, default: '' }
+    },
+
+    // 🚀 Starry Shared Booster Role Engine ("Booster Synergy")
+    boosterRoleSystem: {
+        enabled: { type: Boolean, default: true },
+        anchorRoleId: { type: String, default: '' },      // Upper boundary role in hierarchy
+        logChannelId: { type: String, default: '' },      // Log channel for booster role events
+        defaultMaxShares: { type: Number, default: 1 },   // Free tier max friends per booster
+        premiumMaxShares: { type: Number, default: 5 },   // Premium server max friends per booster
+        allowIcons: { type: Boolean, default: true },      // Allow role icons
+        gracePeriodDays: { type: Number, default: 3 }     // Grace days when boost is cancelled
     }
 }, { timestamps: true });
 

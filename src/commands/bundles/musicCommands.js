@@ -516,25 +516,72 @@ const commands = [
             if (guard.error) return ctx.reply(guard.error);
 
             const targetClient = guard.workerClient || ctx.client;
-            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            player.autoplay = !player.autoplay;
-            if (player.currentTrack && typeof player.sendNowPlayingPanel === 'function') {
-                await player.sendNowPlayingPanel(player.currentTrack, true).catch(() => {});
+            let kPlayer = targetClient.manager?.getPlayer(ctx.guild.id);
+            if (!kPlayer && targetClient.multiBot?.instances) {
+                for (const inst of targetClient.multiBot.instances.values()) {
+                    if (inst.client?.manager) {
+                        const p = inst.client.manager.getPlayer(ctx.guild.id);
+                        if (p) { kPlayer = p; break; }
+                    }
+                }
             }
 
-            return ctx.reply(`📻 Autoplay Smart Stream is now: **${player.autoplay ? '🟢 ENABLED' : '🔴 DISABLED'}**!`);
+            let newState = false;
+            if (kPlayer) {
+                const cur = Boolean(kPlayer.data?.get('autoplay') || kPlayer.autoplay);
+                newState = !cur;
+                kPlayer.data?.set('autoplay', newState);
+                kPlayer.autoplay = newState;
+
+                // Live update the now-playing embed components
+                const nowMsg = kPlayer.data?.get('nowPlayingMessage');
+                if (nowMsg && typeof nowMsg.edit === 'function') {
+                    const { buildNowPlayingComponents } = require('../../utils/musicManager');
+                    nowMsg.edit({ components: buildNowPlayingComponents(ctx.guild.id, newState) }).catch(() => {});
+                }
+            } else {
+                const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
+                player.autoplay = !player.autoplay;
+                newState = player.autoplay;
+                if (player.currentTrack && typeof player.sendNowPlayingPanel === 'function') {
+                    await player.sendNowPlayingPanel(player.currentTrack, true).catch(() => {});
+                }
+            }
+
+            // Sync controller if deployed
+            try {
+                const musicController = require('../../modules/musicController');
+                musicController.update(ctx.guild.id, targetClient).catch(() => {});
+            } catch (e) {}
+
+            const embed = new EmbedBuilder()
+                .setColor(newState ? '#57F287' : '#ED4245')
+                .setAuthor({ 
+                    name: '📻 Autoplay Smart Stream Engine', 
+                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                })
+                .setTitle(newState ? '🟢 Autoplay Smart Stream: ENABLED' : '🔴 Autoplay Smart Stream: DISABLED')
+                .setDescription(
+                    newState
+                        ? `Starry will automatically fetch and queue matching recommended songs from Spotify & YouTube when the playlist ends!\n\n` +
+                          `✨ **Pro-Tip:** You can also click the 📻 **AutoPlay** button on the player embed for 1-click toggling.`
+                        : `Playback will stop when the current queue reaches the end.`
+                )
+                .setFooter({ text: 'Starry Hi-Fi Audio Engine • Continuous Streaming' });
+
+            return ctx.reply({ embeds: [embed] });
         }
     },
 
-    // 13. BASSBOOST
+    // 13. BASS (Physical Vibration Sub-Bass)
     {
-        name: 'bassboost',
-        aliases: ['bb', 'bass'],
+        name: 'bass',
+        aliases: ['bb', 'bassboost', 'vibrate', 'vibration', 'deepbass', 'subwoofer'],
         category: 'Music',
-        description: 'Apply deep vibrating sub-bass (Original vocals & clarity intact).',
-        usage: ',bassboost',
+        description: 'Apply deep physical vibration sub-bass (Vocals & clarity 100% intact).',
+        usage: ',bass',
         async execute(ctx) {
-            if (!await requirePremium(ctx, 'True Vibration Bass (Studio DSP Filter)')) return;
+            if (!await requirePremium(ctx, 'Bass (Physical Vibration DSP Filter)')) return;
 
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
@@ -542,57 +589,15 @@ const commands = [
             const player = getActivePlayer(ctx.client, ctx.guild.id);
             if (!player) return ctx.reply('❌ No active audio stream.');
 
-            await player.setFilter('bassboost');
-            return ctx.reply('📳 **Applied Audio Filter: TRUE VIBRATION BASS (Original Clarity Intact)**');
-        }
-    },
-
-    // 13B. DEEP BASS
-    {
-        name: 'deepbass',
-        aliases: ['db'],
-        category: 'Music',
-        description: 'Apply sub-bass low-end punch for EDM & hip-hop.',
-        usage: ',deepbass',
-        async execute(ctx) {
-            if (!await requirePremium(ctx, 'Deep 808 Sub-Bass (Studio DSP Filter)')) return;
-
-            const guard = getVoiceGuard(ctx);
-            if (guard.error) return ctx.reply(guard.error);
-
-            const player = getActivePlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active audio stream.');
-
-            await player.setFilter('deepbass');
-            return ctx.reply('🔊 **Applied Audio Filter: DEEP 808 SUB-BASS (Hi-Fi Mastered)**');
-        }
-    },
-
-    // 13C. EARTHQUAKE VIBRATION
-    {
-        name: 'vibrate',
-        aliases: ['vibration', 'earthquake', 'subvibe'],
-        category: 'Music',
-        description: 'Maximum physical sub-bass rumble & ear vibration (Vocals protected).',
-        usage: ',vibrate',
-        async execute(ctx) {
-            if (!await requirePremium(ctx, 'Earthquake Vibration (Studio DSP Filter)')) return;
-
-            const guard = getVoiceGuard(ctx);
-            if (guard.error) return ctx.reply(guard.error);
-
-            const player = getActivePlayer(ctx.client, ctx.guild.id);
-            if (!player) return ctx.reply('❌ No active audio stream.');
-
-            await player.setFilter('vibrate');
-            return ctx.reply('🌋 **Applied Audio Filter: EARTHQUAKE VIBRATION (Max Sub-Bass Rumble • Vocals Intact)**');
+            await player.setFilter('bass');
+            return ctx.reply('🔊 **Applied Audio Filter: BASS (Deep Physical Subwoofer Vibration • 100% Intact Clarity)**');
         }
     },
 
     // 14. 8D AUDIO
     {
         name: '8d',
-        aliases: [],
+        aliases: ['binaural'],
         category: 'Music',
         description: 'Apply 360° rotating spatial surround sound.',
         usage: ',8d',
@@ -606,7 +611,7 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('8d');
-            return ctx.reply('🌀 **Applied Audio Filter: 8D AUDIO (360° Surround)**');
+            return ctx.reply('🌀 **Applied Audio Filter: 8D SPATIAL AUDIO (360° Binaural Surround)**');
         }
     },
 
@@ -636,7 +641,7 @@ const commands = [
         name: 'daycore',
         aliases: ['slowed'],
         category: 'Music',
-        description: 'Slow down tempo and lower pitch for relaxed vibe.',
+        description: 'Slow down tempo and lower pitch with warm acoustics.',
         usage: ',daycore',
         async execute(ctx) {
             if (!await requirePremium(ctx, 'Daycore Reverb (Studio DSP Filter)')) return;
@@ -648,7 +653,7 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('daycore');
-            return ctx.reply('🌅 **Applied Audio Filter: DAYCORE (Slowed + Reverb Profile)**');
+            return ctx.reply('🌅 **Applied Audio Filter: DAYCORE (Slowed Tempo + Deep Warmth)**');
         }
     },
 
@@ -669,7 +674,154 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('vaporwave');
-            return ctx.reply('🪩 **Applied Audio Filter: VAPORWAVE (Lo-Fi Reverb)**');
+            return ctx.reply('🪩 **Applied Audio Filter: VAPORWAVE (Retro Cassette + Dreamy Reverb)**');
+        }
+    },
+
+    // 17B. LO-FI CHILL
+    {
+        name: 'lofi',
+        aliases: ['lo-fi', 'chill'],
+        category: 'Music',
+        description: 'Warm analog vinyl tape flutter & mellow acoustic tone.',
+        usage: ',lofi',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, 'Lo-Fi Chill (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('lofi');
+            return ctx.reply('☕ **Applied Audio Filter: LO-FI CHILL (Vintage Vinyl Warmth + Tape Flutter)**');
+        }
+    },
+
+    // 17C. SLOWED & REVERB
+    {
+        name: 'reverb',
+        aliases: ['slowreverb', 'hall', 'echo'],
+        category: 'Music',
+        description: 'Immersive stadium & cathedral concert reverb.',
+        usage: ',reverb',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, 'Slowed & Reverb (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('reverb');
+            return ctx.reply('🌌 **Applied Audio Filter: SLOWED & REVERB (Cathedral Concert Hall Atmosphere)**');
+        }
+    },
+
+    // 17D. KARAOKE / VOCAL REMOVER
+    {
+        name: 'karaoke',
+        aliases: ['vocalremover', 'vocalcut', 'instrumental'],
+        category: 'Music',
+        description: 'Attenuate center lead vocals for sing-along or instrumental.',
+        usage: ',karaoke',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, 'Karaoke Vocal Remover (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('karaoke');
+            return ctx.reply('🎤 **Applied Audio Filter: KARAOKE (Center Lead Vocal Cancellation)**');
+        }
+    },
+
+    // 17E. 3D SURROUND SOUND
+    {
+        name: 'surround',
+        aliases: ['3d', 'spatial'],
+        category: 'Music',
+        description: 'Wide immersive cinematic surround soundstage.',
+        usage: ',surround',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, '3D Surround Sound (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('surround');
+            return ctx.reply('🎧 **Applied Audio Filter: 3D SURROUND (Wide Panoramic Soundstage)**');
+        }
+    },
+
+    // 17F. ELECTRONIC / CLUB MASTER
+    {
+        name: 'electronic',
+        aliases: ['edm', 'club'],
+        category: 'Music',
+        description: 'High-energy dance punch & crisp sizzling hats for EDM & Phonk.',
+        usage: ',electronic',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, 'EDM & Club Master (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('electronic');
+            return ctx.reply('⚡ **Applied Audio Filter: EDM & CLUB (Heavy Kick Punch • Sizzling Top End)**');
+        }
+    },
+
+    // 17G. SOFT & MELLOW
+    {
+        name: 'soft',
+        aliases: ['mellow', 'relax'],
+        category: 'Music',
+        description: 'Non-fatiguing smooth sound for late night study & relaxation.',
+        usage: ',soft',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, 'Soft & Mellow (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('soft');
+            return ctx.reply('🍃 **Applied Audio Filter: SOFT & MELLOW (Fatigue-Free Smooth Acoustics)**');
+        }
+    },
+
+    // 17H. RETRO RADIO
+    {
+        name: 'radio',
+        aliases: ['vintage'],
+        category: 'Music',
+        description: 'Vintage 1950s AM telephone receiver sound.',
+        usage: ',radio',
+        async execute(ctx) {
+            if (!await requirePremium(ctx, 'Retro Radio (Studio DSP Filter)')) return;
+
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('radio');
+            return ctx.reply('📻 **Applied Audio Filter: RETRO RADIO (Vintage AM Telephone Bandpass)**');
         }
     },
 
@@ -690,7 +842,7 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('treble');
-            return ctx.reply('🔊 **Applied Audio Filter: TREBLE BOOST**');
+            return ctx.reply('💎 **Applied Audio Filter: TREBLE BOOST (Crystal Clear Highs)**');
         }
     },
 
@@ -711,16 +863,16 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('pop');
-            return ctx.reply('📻 **Applied Audio Filter: VOCAL & POP CLARITY**');
+            return ctx.reply('🎙️ **Applied Audio Filter: POP & VOCAL CLARITY (Forward Intelligible Vocals)**');
         }
     },
 
     // 20. CLEAR FILTERS
     {
         name: 'clearfilters',
-        aliases: ['resetfilters', 'cf'],
+        aliases: ['resetfilters', 'cf', 'clearfilter'],
         category: 'Music',
-        description: 'Reset all active audio filters back to normal.',
+        description: 'Reset all active audio filters back to normal studio master.',
         usage: ',clearfilters',
         async execute(ctx) {
             const guard = getVoiceGuard(ctx);
@@ -730,7 +882,112 @@ const commands = [
             if (!player) return ctx.reply('❌ No active audio stream.');
 
             await player.setFilter('clear');
-            return ctx.reply('🚫 **All audio filters cleared (Standard High-Fi).**');
+            return ctx.reply('🚫 **All audio filters cleared (Standard Hi-Fi Flat Master).**');
+        }
+    },
+
+    // 20B. MASTER FILTER HUB
+    {
+        name: 'filter',
+        aliases: ['filters', 'dsp'],
+        category: 'Music',
+        description: 'View or select from all 15 studio-grade DSP audio filters.',
+        usage: ',filter <name> or ,filters',
+        async execute(ctx) {
+            const requested = (ctx.args[0] || '').toLowerCase().trim();
+
+            const filterMap = {
+                bass: 'bass',
+                bb: 'bass',
+                bassboost: 'bass',
+                vibrate: 'bass',
+                vibration: 'bass',
+                deepbass: 'bass',
+                subwoofer: 'bass',
+                '8d': '8d',
+                binaural: '8d',
+                nightcore: 'nightcore',
+                nc: 'nightcore',
+                daycore: 'daycore',
+                slowed: 'daycore',
+                vaporwave: 'vaporwave',
+                vw: 'vaporwave',
+                lofi: 'lofi',
+                'lo-fi': 'lofi',
+                chill: 'lofi',
+                reverb: 'reverb',
+                slowreverb: 'reverb',
+                hall: 'reverb',
+                echo: 'reverb',
+                karaoke: 'karaoke',
+                vocalremover: 'karaoke',
+                instrumental: 'karaoke',
+                vocalcut: 'karaoke',
+                surround: 'surround',
+                '3d': 'surround',
+                spatial: 'surround',
+                electronic: 'electronic',
+                edm: 'electronic',
+                club: 'electronic',
+                soft: 'soft',
+                mellow: 'soft',
+                relax: 'soft',
+                radio: 'radio',
+                vintage: 'radio',
+                treble: 'treble',
+                pop: 'pop',
+                clear: 'clear',
+                reset: 'clear',
+                off: 'clear',
+                none: 'clear'
+            };
+
+            if (requested && filterMap[requested]) {
+                const targetFilter = filterMap[requested];
+                const guard = getVoiceGuard(ctx);
+                if (guard.error) return ctx.reply(guard.error);
+
+                const player = getActivePlayer(ctx.client, ctx.guild.id);
+                if (!player) return ctx.reply('❌ No active audio stream.');
+
+                if (targetFilter !== 'clear') {
+                    if (!await requirePremium(ctx, `${targetFilter.toUpperCase()} (Studio DSP Filter)`)) return;
+                }
+
+                await player.setFilter(targetFilter);
+                return ctx.reply(`🎧 **Applied Audio Filter:** \`${targetFilter.toUpperCase()}\``);
+            }
+
+            // Overview Embed of all 15 studio filters
+            const embed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setAuthor({ 
+                    name: 'Starry Hi-Fi Studio DSP Audio Engine', 
+                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                })
+                .setTitle('🎛️ 15 Studio-Grade DSP Audio Filters')
+                .setDescription(
+                    `Switch audio filters dynamically in real time using \`,filter <name>\` or dedicated commands:\n\n` +
+                    `🔊 **\`,bass\`** — Deep physical subwoofer vibration (Earphones rattle • Vocals clear)\n` +
+                    `🌀 **\`,8d\`** — 360° binaural rotating spatial surround\n` +
+                    `✨ **\`,nightcore\`** — Upbeat sped-up tempo + higher pitch\n` +
+                    `🌅 **\`,daycore\`** — Relaxed slowed down tempo + acoustic warmth\n` +
+                    `🪩 **\`,vaporwave\`** — Retro slowed cassette tape vibe with dreamy tremolo\n` +
+                    `☕ **\`,lofi\`** — Vintage analog vinyl tape flutter & softened highs\n` +
+                    `🌌 **\`,reverb\`** — Immersive stadium & concert hall reverberation\n` +
+                    `🎤 **\`,karaoke\`** — Center lead vocal cancellation for sing-along\n` +
+                    `🎧 **\`,surround\`** — Wide panoramic 3D cinematic soundstage\n` +
+                    `⚡ **\`,electronic\`** — High-energy EDM & club master with thumping kick\n` +
+                    `🍃 **\`,soft\`** — Fatigue-free mellow listening with rounded highs\n` +
+                    `📻 **\`,radio\`** — Vintage 1950s AM telephone receiver bandpass\n` +
+                    `💎 **\`,treble\`** — Crisp crystal clear high frequencies\n` +
+                    `🎙️ **\`,pop\`** — Enhanced vocal presence & acoustic sheen\n` +
+                    `🚫 **\`,clearfilters\`** — Reset all filters back to studio flat\n\n` +
+                    `*💡 Pro-Tip: You can also use the interactive dropdown menu on the player embed or web dashboard!*`
+                )
+                .setFooter({ text: 'Starry Hi-Fi Audio Suite • Real-Time DSP Mastering' });
+
+            return ctx.reply({ embeds: [embed] });
         }
     },
 
@@ -1157,4 +1414,8 @@ const commands = [
     }
 ];
 
+const spotifyCommand = require('../music/spotify');
+commands.push(spotifyCommand);
+
 module.exports = commands;
+

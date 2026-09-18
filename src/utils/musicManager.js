@@ -104,26 +104,10 @@ const Nodes = [
         secure: false,
         retryAmount: 50,
         retryDelay: 3000
-    },
-    {
-        name: 'Node-3-Jirayu-Failover',
-        url: 'lavalink.jirayu.net:13592',
-        auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-4-LocalFallback',
-        url: '127.0.0.1:2333',
-        auth: 'youshallnotpass',
-        secure: false,
-        retryAmount: 5,
-        retryDelay: 10000
     }
 ];
 
-function buildNowPlayingComponents(guildId = null) {
+function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
 
     // Row 1: Primary Transport Controls (4 buttons - fits mobile without wrapping)
@@ -142,8 +126,14 @@ function buildNowPlayingComponents(guildId = null) {
         new ButtonBuilder().setCustomId('music_queue').setEmoji('📜').setLabel(t(lang, 'music.btn_queue')).setStyle(ButtonStyle.Secondary)
     );
 
-    // Row 3: Voice Channel Security (2 buttons)
+    // Row 3: Voice Channel Security, Autoplay & Spotify (4 buttons)
     const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('music_autoplay')
+            .setEmoji('📻')
+            .setLabel(isAutoplay ? 'AutoPlay: ON' : 'AutoPlay: OFF')
+            .setStyle(isAutoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('ctrl_spotify').setEmoji('🟢').setLabel('My Spotify').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel(t(lang, 'music.btn_lockvc')).setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel(t(lang, 'music.btn_unlockvc')).setStyle(ButtonStyle.Success)
     );
@@ -151,14 +141,21 @@ function buildNowPlayingComponents(guildId = null) {
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
-            { label: 'Clear Filters', description: 'Removes all active audio effects (Default)', value: 'clear', emoji: '🚫' },
-            { label: 'Bassboost', description: 'Deep, heavy bass enhancement', value: 'bassboost', emoji: '🎸' },
-            { label: '8D Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
+            { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
+            { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
+            { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
             { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
             { label: 'Daycore / Slowed', description: 'Slowed down tempo + deeper tone', value: 'daycore', emoji: '🌅' },
             { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' },
-            { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '🔊' },
-            { label: 'Pop & Vocal Clarity', description: 'Enhanced vocals and clean acoustic profile', value: 'pop', emoji: '📻' }
+            { label: 'Lo-Fi Chill', description: 'Warm vinyl tape flutter & mellow acoustic tone', value: 'lofi', emoji: '☕' },
+            { label: 'Slowed & Reverb', description: 'Immersive stadium & cathedral concert reverb', value: 'reverb', emoji: '🌌' },
+            { label: 'Karaoke', description: 'Attenuates center vocals for sing-along', value: 'karaoke', emoji: '🎤' },
+            { label: '3D Surround', description: 'Wide immersive cinematic surround soundstage', value: 'surround', emoji: '🎧' },
+            { label: 'EDM & Club', description: 'High-energy dance punch & crisp sizzling hats', value: 'electronic', emoji: '⚡' },
+            { label: 'Soft & Mellow', description: 'Non-fatiguing smooth sound for late night chill', value: 'soft', emoji: '🍃' },
+            { label: 'Retro Radio', description: 'Vintage 1950s AM telephone receiver sound', value: 'radio', emoji: '📻' },
+            { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '💎' },
+            { label: 'Pop & Vocal Clarity', description: 'Enhanced vocal presence with clean highs', value: 'pop', emoji: '🎙️' }
         ])
     );
 
@@ -169,104 +166,429 @@ async function applyKazagumoFilter(player, filterName) {
     if (!player || !player.shoukaku) return false;
     try {
         const shoukakuPlayer = player.shoukaku;
-        switch (filterName) {
+        const normalized = (filterName || 'clear').toLowerCase().trim();
+
+        switch (normalized) {
+            case 'bass':
             case 'bassboost':
+            case 'vibrate':
+            case 'vibration':
+            case 'deepbass':
+            case 'subwoofer':
+                // 🔊 TRUE SUBWOOFER PHYSICAL VIBRATION BASS:
+                // Fundamental sub-bass (25Hz & 40Hz) + tactile driver vibration (63Hz) + kick impact (100Hz)
+                // Mud-scoop around 160Hz-250Hz eliminates boxiness, while 1kHz-4kHz maintains pristine vocal clarity.
+                // Volume at 0.84 provides dynamic excursion headroom without digital clipping.
                 await shoukakuPlayer.setFilters({
+                    volume: 0.84,
                     equalizer: [
-                        { band: 0, gain: 0.28 },
-                        { band: 1, gain: 0.24 },
-                        { band: 2, gain: 0.16 },
-                        { band: 3, gain: 0.08 },
-                        { band: 5, gain: -0.06 },
-                        { band: 8, gain: 0.08 },
-                        { band: 9, gain: 0.12 },
-                        { band: 10, gain: 0.16 },
-                        { band: 11, gain: 0.12 },
-                        { band: 13, gain: 0.08 }
-                    ]
+                        { band: 0, gain: 0.85 },  // 25 Hz - Sub-harmonic rumble
+                        { band: 1, gain: 0.85 },  // 40 Hz - Subwoofer physical vibration
+                        { band: 2, gain: 0.72 },  // 63 Hz - Headphone tactile vibration
+                        { band: 3, gain: 0.42 },  // 100 Hz - Punchy 808/kick transient
+                        { band: 4, gain: -0.06 }, // 160 Hz - Transition scoop
+                        { band: 5, gain: -0.18 }, // 250 Hz - Mud & boxiness reduction
+                        { band: 6, gain: -0.10 }, // 400 Hz - Lower-mid vocal separation
+                        { band: 7, gain: 0.00 },  // 630 Hz
+                        { band: 8, gain: 0.06 },  // 1.0 kHz - Vocal core
+                        { band: 9, gain: 0.08 },  // 1.6 kHz - Vocal articulation
+                        { band: 10, gain: 0.12 }, // 2.5 kHz - Vocal presence
+                        { band: 11, gain: 0.14 }, // 4.0 kHz - Snare snap & bite
+                        { band: 12, gain: 0.08 }, // 6.3 kHz - Clarity
+                        { band: 13, gain: 0.05 }  // 10.0 kHz - High shimmer
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
                 });
                 break;
-            case 'deepbass':
+
+            case '8d':
+                // 🌀 360° Rotating Binaural Surround Sound
                 await shoukakuPlayer.setFilters({
+                    volume: 0.94,
+                    rotation: { rotationHz: 0.22 },
                     equalizer: [
-                        { band: 0, gain: 0.34 },
-                        { band: 1, gain: 0.28 },
-                        { band: 2, gain: 0.18 },
-                        { band: 3, gain: 0.08 },
+                        { band: 0, gain: 0.15 },
+                        { band: 1, gain: 0.12 },
+                        { band: 10, gain: 0.10 },
+                        { band: 11, gain: 0.14 }
+                    ],
+                    timescale: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'nightcore':
+                // ✨ Upbeat tempo + pitched vocal remix with de-essed highs
+                await shoukakuPlayer.setFilters({
+                    volume: 0.92,
+                    timescale: { speed: 1.25, pitch: 1.25, rate: 1.0 },
+                    equalizer: [
+                        { band: 0, gain: 0.15 },
+                        { band: 1, gain: 0.12 },
+                        { band: 10, gain: -0.06 },
+                        { band: 11, gain: -0.08 }
+                    ],
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'daycore':
+            case 'slowed':
+                // 🌅 Relaxed slowed tempo + deep acoustic body
+                await shoukakuPlayer.setFilters({
+                    volume: 0.94,
+                    timescale: { speed: 0.85, pitch: 0.85, rate: 1.0 },
+                    equalizer: [
+                        { band: 0, gain: 0.35 },
+                        { band: 1, gain: 0.30 },
+                        { band: 2, gain: 0.20 },
+                        { band: 11, gain: -0.08 },
+                        { band: 12, gain: -0.10 }
+                    ],
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'vaporwave':
+                // 🪩 Retro slowed cassette tape vibe with subtle tremolo
+                await shoukakuPlayer.setFilters({
+                    volume: 0.90,
+                    timescale: { speed: 0.80, pitch: 0.80, rate: 1.0 },
+                    tremolo: { frequency: 2.2, depth: 0.18 },
+                    equalizer: [
+                        { band: 0, gain: 0.30 },
+                        { band: 1, gain: 0.25 },
+                        { band: 2, gain: 0.15 },
+                        { band: 10, gain: -0.15 },
+                        { band: 11, gain: -0.20 }
+                    ],
+                    rotation: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'lofi':
+            case 'lo-fi':
+            case 'chill':
+                // ☕ Warm analog vinyl tape flutter & softened highs
+                await shoukakuPlayer.setFilters({
+                    volume: 0.92,
+                    lowPass: { smoothing: 16.0 },
+                    timescale: { speed: 0.96, pitch: 0.96, rate: 1.0 },
+                    vibrato: { frequency: 1.8, depth: 0.12 },
+                    equalizer: [
+                        { band: 0, gain: 0.20 },
+                        { band: 1, gain: 0.25 },
+                        { band: 2, gain: 0.20 },
+                        { band: 3, gain: 0.15 },
+                        { band: 10, gain: -0.25 },
+                        { band: 11, gain: -0.35 },
+                        { band: 12, gain: -0.40 },
+                        { band: 13, gain: -0.45 }
+                    ],
+                    rotation: null,
+                    tremolo: null,
+                    karaoke: null,
+                    channelMix: null,
+                    distortion: null
+                });
+                break;
+
+            case 'reverb':
+            case 'slowreverb':
+            case 'hall':
+            case 'echo':
+                // 🌌 Massive concert hall / arena spatial reverberation
+                await shoukakuPlayer.setFilters({
+                    volume: 0.92,
+                    timescale: { speed: 0.88, pitch: 0.88, rate: 1.0 },
+                    tremolo: { frequency: 1.6, depth: 0.14 },
+                    channelMix: { leftToLeft: 0.82, leftToRight: 0.28, rightToLeft: 0.28, rightToRight: 0.82 },
+                    equalizer: [
+                        { band: 0, gain: 0.25 },
+                        { band: 1, gain: 0.20 },
+                        { band: 8, gain: 0.10 },
+                        { band: 9, gain: 0.15 },
+                        { band: 10, gain: 0.18 }
+                    ],
+                    rotation: null,
+                    vibrato: null,
+                    karaoke: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'karaoke':
+            case 'vocalremover':
+            case 'instrumental':
+            case 'vocalcut':
+                // 🎤 Center vocal cancellation for sing-along / instrumental
+                await shoukakuPlayer.setFilters({
+                    volume: 0.95,
+                    karaoke: {
+                        level: 1.0,
+                        monoLevel: 1.0,
+                        filterBand: 220.0,
+                        filterWidth: 100.0
+                    },
+                    equalizer: [],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'surround':
+            case '3d':
+            case 'spatial':
+                // 🎧 Wide 3D soundstage with panoramic channel crossfeed
+                await shoukakuPlayer.setFilters({
+                    volume: 0.94,
+                    channelMix: {
+                        leftToLeft: 0.85,
+                        leftToRight: 0.28,
+                        rightToLeft: 0.28,
+                        rightToRight: 0.85
+                    },
+                    equalizer: [
+                        { band: 0, gain: 0.15 },
+                        { band: 1, gain: 0.12 },
+                        { band: 10, gain: 0.15 },
+                        { band: 11, gain: 0.20 },
+                        { band: 12, gain: 0.22 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'electronic':
+            case 'edm':
+            case 'club':
+                // ⚡ High-energy club master with thumping kick & sizzling highs
+                await shoukakuPlayer.setFilters({
+                    volume: 0.88,
+                    equalizer: [
+                        { band: 0, gain: 0.65 },
+                        { band: 1, gain: 0.60 },
+                        { band: 2, gain: 0.48 },
+                        { band: 3, gain: 0.25 },
+                        { band: 4, gain: -0.10 },
+                        { band: 5, gain: -0.15 },
+                        { band: 6, gain: -0.05 },
+                        { band: 10, gain: 0.20 },
+                        { band: 11, gain: 0.32 },
+                        { band: 12, gain: 0.35 },
+                        { band: 13, gain: 0.30 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'soft':
+            case 'mellow':
+            case 'relax':
+                // 🍃 Non-fatiguing smooth sound with rolled-off treble
+                await shoukakuPlayer.setFilters({
+                    volume: 0.95,
+                    lowPass: { smoothing: 10.0 },
+                    equalizer: [
+                        { band: 0, gain: 0.10 },
+                        { band: 1, gain: 0.12 },
+                        { band: 2, gain: 0.08 },
+                        { band: 10, gain: -0.15 },
+                        { band: 11, gain: -0.22 },
+                        { band: 12, gain: -0.28 },
+                        { band: 13, gain: -0.32 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    distortion: null
+                });
+                break;
+
+            case 'radio':
+            case 'vintage':
+                // 📻 Retro 1950s AM telephone receiver bandpass filter
+                await shoukakuPlayer.setFilters({
+                    volume: 0.90,
+                    equalizer: [
+                        { band: 0, gain: -0.25 },
+                        { band: 1, gain: -0.25 },
+                        { band: 2, gain: -0.20 },
+                        { band: 3, gain: -0.15 },
+                        { band: 6, gain: 0.35 },
+                        { band: 7, gain: 0.45 },
+                        { band: 8, gain: 0.45 },
+                        { band: 9, gain: 0.30 },
+                        { band: 10, gain: -0.20 },
+                        { band: 11, gain: -0.25 },
+                        { band: 12, gain: -0.25 },
+                        { band: 13, gain: -0.25 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'treble':
+                // 💎 Crisp, crystal clear high-frequency sparkle
+                await shoukakuPlayer.setFilters({
+                    volume: 0.90,
+                    equalizer: [
+                        { band: 0, gain: -0.15 },
+                        { band: 1, gain: -0.10 },
+                        { band: 2, gain: -0.05 },
+                        { band: 9, gain: 0.20 },
+                        { band: 10, gain: 0.28 },
+                        { band: 11, gain: 0.35 },
+                        { band: 12, gain: 0.40 },
+                        { band: 13, gain: 0.42 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'pop':
+                // 🎙️ Modern vocal forward pop master with clean lows
+                await shoukakuPlayer.setFilters({
+                    volume: 0.94,
+                    equalizer: [
+                        { band: 0, gain: 0.12 },
+                        { band: 1, gain: 0.10 },
+                        { band: 4, gain: -0.08 },
+                        { band: 5, gain: -0.12 },
+                        { band: 7, gain: 0.15 },
+                        { band: 8, gain: 0.22 },
+                        { band: 9, gain: 0.25 },
+                        { band: 10, gain: 0.20 },
+                        { band: 11, gain: 0.15 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
+                break;
+
+            case 'empowering':
+                await shoukakuPlayer.setFilters({
+                    volume: 0.96,
+                    equalizer: [
+                        { band: 0, gain: 0.22 },
+                        { band: 1, gain: 0.18 },
+                        { band: 2, gain: 0.10 },
                         { band: 5, gain: -0.08 },
                         { band: 8, gain: 0.10 },
-                        { band: 9, gain: 0.14 },
-                        { band: 10, gain: 0.18 },
-                        { band: 11, gain: 0.14 },
-                        { band: 13, gain: 0.10 }
-                    ]
+                        { band: 9, gain: 0.12 },
+                        { band: 11, gain: 0.10 }
+                    ],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
                 });
                 break;
-            case 'vibrate':
-                await shoukakuPlayer.setFilters({
-                    equalizer: [
-                        { band: 0, gain: 0.38 },
-                        { band: 1, gain: 0.32 },
-                        { band: 2, gain: 0.20 },
-                        { band: 3, gain: 0.10 },
-                        { band: 5, gain: -0.10 },
-                        { band: 8, gain: 0.12 },
-                        { band: 9, gain: 0.16 },
-                        { band: 10, gain: 0.22 },
-                        { band: 11, gain: 0.16 },
-                        { band: 13, gain: 0.10 }
-                    ]
-                });
-                break;
-            case '8d':
-                await shoukakuPlayer.setFilters({
-                    rotation: { rotationHz: 0.2 }
-                });
-                break;
-            case 'nightcore':
-                await shoukakuPlayer.setFilters({
-                    timescale: { speed: 1.25, pitch: 1.25, rate: 1.0 }
-                });
-                break;
-            case 'daycore':
-                await shoukakuPlayer.setFilters({
-                    timescale: { speed: 0.85, pitch: 0.85, rate: 1.0 }
-                });
-                break;
-            case 'vaporwave':
-                await shoukakuPlayer.setFilters({
-                    timescale: { speed: 0.8, pitch: 0.85, rate: 1.0 },
-                    tremolo: { frequency: 4.0, depth: 0.2 }
-                });
-                break;
-            case 'treble':
-                await shoukakuPlayer.setFilters({
-                    equalizer: [
-                        { band: 10, gain: 0.2 },
-                        { band: 11, gain: 0.25 },
-                        { band: 12, gain: 0.3 },
-                        { band: 13, gain: 0.35 }
-                    ]
-                });
-                break;
-            case 'pop':
-                await shoukakuPlayer.setFilters({
-                    equalizer: [
-                        { band: 0, gain: -0.05 },
-                        { band: 1, gain: -0.02 },
-                        { band: 2, gain: 0.02 },
-                        { band: 3, gain: 0.12 },
-                        { band: 4, gain: 0.2 },
-                        { band: 5, gain: 0.15 }
-                    ]
-                });
-                break;
+
             case 'clear':
+            case 'flat':
             default:
-                await shoukakuPlayer.setFilters({});
+                await shoukakuPlayer.setFilters({
+                    volume: 1.0,
+                    equalizer: [],
+                    timescale: null,
+                    rotation: null,
+                    tremolo: null,
+                    vibrato: null,
+                    karaoke: null,
+                    channelMix: null,
+                    lowPass: null,
+                    distortion: null
+                });
                 break;
         }
-        player.data.set('activeFilter', filterName);
+
+        const canonicalFilter = ['bassboost', 'vibrate', 'vibration', 'deepbass', 'subwoofer'].includes(normalized) ? 'bass' : normalized;
+        player.data.set('activeFilter', canonicalFilter);
+
+        // Keep Music Controller request channel synced
+        try {
+            const musicController = require('../modules/musicController');
+            if (player.guildId) {
+                musicController.update(player.guildId, player.kazagumo?.client).catch(() => {});
+            }
+        } catch (ctrlErr) {}
+
         return true;
     } catch (e) {
         console.warn('⚠️ Could not apply Lavalink filter:', e.message);
@@ -424,6 +746,7 @@ function createMusicManager(client) {
             : (client.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
 
         const activeFilter = player.data.get('activeFilter') || 'Clear';
+        const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
 
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
@@ -436,18 +759,22 @@ function createMusicManager(client) {
             .setThumbnail(trackThumb)
             .setDescription(
                 `ℹ️ **Song Details**\n` +
-                `▶️ **Status:** Playing | ⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? '🔂 Track' : '🔁 Queue'}\n` +
-                `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)} | 🔊 **Volume:** ${player.volume || 100}%\n` +
+                `▶️ **Status:** Playing | 📻 **Autoplay:** ${isAutoplay ? '🟢 Enabled' : '🔴 Disabled'}\n` +
+                `⚙️ **Loop:** ${player.loop === 'none' ? 'Off' : player.loop === 'track' ? '🔂 Track' : '🔁 Queue'} | 🔊 **Volume:** ${player.volume || 100}%\n` +
+                `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Spotify'}\n` +
                 `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
                 `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`
             )
-            .setFooter({ text: `Starry Music Engine • Bot: ${client.user ? client.user.tag : 'Starry'}`, iconURL: client.user ? client.user.displayAvatarURL() : undefined });
+            .setFooter({ 
+                text: `Starry Hi-Fi Music Engine • Loop: ${player.loop.toUpperCase()} • Autoplay: ${isAutoplay ? 'ON' : 'OFF'} • Volume: ${player.volume || 100}%`, 
+                iconURL: client.user ? client.user.displayAvatarURL() : undefined 
+            });
 
         const lang = player.guildId ? getGuildLanguageSync(player.guildId) : 'en';
-        const components = buildNowPlayingComponents(player.guildId);
+        const components = buildNowPlayingComponents(player.guildId, isAutoplay);
         const messageData = localizePayload({ embeds: [embed], components }, lang);
 
         try {
@@ -486,37 +813,109 @@ function createMusicManager(client) {
     });
 
     manager.on('playerEmpty', async player => {
-        try {
-            const musicController = require('../modules/musicController');
-            if (musicController.isRequestChannel(player.guildId, player.textId)) {
-                await musicController.update(player.guildId, client).catch(() => {});
-                return;
-            }
-        } catch (ctrlErr) {}
-
         const channel = client.channels.cache.get(player.textId);
-        const isAutoplay = player.data.get('autoplay');
+        const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
 
+        // 📻 HIGH-INTELLIGENCE AUTOPLAY RECOMMENDATION ENGINE
         if (isAutoplay) {
             const previousTrack = player.data.get('previousTrack');
             if (previousTrack) {
                 try {
-                    if (channel) {
-                        await channel.send('📻 **Autoplay Active:** Fetching recommended songs...').catch(() => {});
+                    let result = null;
+                    const cleanTitle = (previousTrack.title || '')
+                        .replace(/[\(\[].*?[\)\]]/g, '')
+                        .replace(/official|audio|video|lyrics|ft\.|feat\./gi, '')
+                        .trim();
+                    const primaryArtist = (previousTrack.author || '').split(',')[0].trim();
+
+                    // Tier 1: If YouTube source with 11-char ID, use YouTube Mix
+                    if (previousTrack.sourceName === 'youtube' && previousTrack.identifier && previousTrack.identifier.length === 11) {
+                        const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
+                        result = await manager.search(searchQuery, { requester: previousTrack.requester }).catch(() => null);
                     }
 
-                    const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
-                    let result = await manager.search(searchQuery, { requester: previousTrack.requester });
-
+                    // Tier 2: Spotify Search via Kazagumo Spotify plugin
                     if (!result || !result.tracks || !result.tracks.length) {
-                        const fallbackQuery = `ytmsearch:${previousTrack.author || ''} ${previousTrack.title} related`;
-                        result = await manager.search(fallbackQuery, { requester: previousTrack.requester });
+                        try {
+                            result = await manager.search(`${primaryArtist} ${cleanTitle}`, { 
+                                requester: previousTrack.requester, 
+                                engine: 'spotify' 
+                            });
+                        } catch (spErr) {}
+                    }
+
+                    // Tier 3: Artist Radio / Popular tracks
+                    if (!result || !result.tracks || !result.tracks.length) {
+                        try {
+                            result = await manager.search(`${primaryArtist} top tracks`, { 
+                                requester: previousTrack.requester, 
+                                engine: 'spotify' 
+                            });
+                        } catch (e) {}
+                    }
+
+                    // Tier 4: General keyword search fallback
+                    if (!result || !result.tracks || !result.tracks.length) {
+                        result = await manager.search(`${primaryArtist} ${cleanTitle} related`, { 
+                            requester: previousTrack.requester 
+                        });
+                    }
+
+                    // Tier 5: Soundcloud fallback
+                    if (!result || !result.tracks || !result.tracks.length) {
+                        result = await manager.search(`${primaryArtist} ${cleanTitle}`, { 
+                            requester: previousTrack.requester, 
+                            engine: 'soundcloud' 
+                        });
                     }
 
                     if (result && result.tracks && result.tracks.length > 0) {
-                        const nextTrack = result.tracks.find(t => t.identifier !== previousTrack.identifier) || result.tracks[0];
+                        // Pick next track that isn't the identical track
+                        const nextTrack = result.tracks.find(t => 
+                            t.identifier !== previousTrack.identifier && 
+                            t.title.toLowerCase() !== previousTrack.title.toLowerCase()
+                        ) || result.tracks[0];
+
                         player.queue.add(nextTrack);
                         await player.play();
+
+                        if (channel) {
+                            const formatDuration = (ms) => {
+                                if (!ms || isNaN(ms)) return '0:00';
+                                const sec = Math.floor(ms / 1000);
+                                const m = Math.floor(sec / 60);
+                                const s = sec % 60;
+                                return `${m}m ${s.toString().padStart(2, '0')}s`;
+                            };
+
+                            const autoEmbed = new EmbedBuilder()
+                                .setColor('#5865F2')
+                                .setAuthor({ 
+                                    name: '📻 Autoplay Smart Stream • Next Song', 
+                                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                                })
+                                .setTitle(nextTrack.title ? nextTrack.title.substring(0, 85) : 'Recommended Track')
+                                .setURL(nextTrack.uri || 'https://discord.gg')
+                                .setDescription(
+                                    `🎵 **Continuous Smart Autoplay Active**\n` +
+                                    `▶️ **Now Streaming:** **[${nextTrack.title}](${nextTrack.uri || 'https://discord.gg'})**\n` +
+                                    `👤 **Artist:** \`${nextTrack.author || primaryArtist}\` | 🕒 **Duration:** \`${formatDuration(nextTrack.length)}\`\n\n` +
+                                    `*Autoplay is on. Click 📻 on the player embed or use \`,autoplay\` to disable.*`
+                                )
+                                .setFooter({ text: 'Starry Hi-Fi Audio Engine • Continuous Stream' });
+                            
+                            const notifyMsg = await channel.send({ embeds: [autoEmbed] }).catch(() => null);
+                            if (notifyMsg) {
+                                setTimeout(() => notifyMsg.delete().catch(() => {}), 15000);
+                            }
+                        }
+
+                        // Update controller if active
+                        try {
+                            const musicController = require('../modules/musicController');
+                            await musicController.update(player.guildId, client).catch(() => {});
+                        } catch (e) {}
+
                         return;
                     }
                 } catch (err) {
@@ -524,6 +923,15 @@ function createMusicManager(client) {
                 }
             }
         }
+
+        // Dedicated Request Channel Integration: Update controller in-place
+        try {
+            const musicController = require('../modules/musicController');
+            if (musicController.isRequestChannel(player.guildId, player.textId)) {
+                await musicController.update(player.guildId, client).catch(() => {});
+                return;
+            }
+        } catch (ctrlErr) {}
 
         // Clean up now playing message
         const oldMsg = player.data.get('nowPlayingMessage');

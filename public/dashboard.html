@@ -229,6 +229,106 @@
             box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
             z-index: 1000;
         }
+
+        /* Booster Studio Styling */
+        .booster-studio-card {
+            background: rgba(16, 19, 29, 0.95);
+            border: 1px solid rgba(255, 115, 250, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin-top: 30px;
+            box-shadow: 0 0 25px rgba(255, 115, 250, 0.08);
+        }
+        .booster-studio-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .badge-booster {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 115, 250, 0.15);
+            color: #FF73FA;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            border: 1px solid rgba(255, 115, 250, 0.3);
+        }
+        .mock-discord-chat {
+            background: #313338;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            font-size: 0.95rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .mock-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .mock-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+            flex-wrap: wrap;
+        }
+        .role-tag {
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .color-presets {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .color-dot {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.15s;
+        }
+        .color-dot:hover {
+            transform: scale(1.2);
+            border-color: #fff;
+        }
+        .friend-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin: 4px;
+        }
+        .btn-remove-friend {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -285,6 +385,92 @@
                 <button class="btn btn-primary" onclick="saveSettings()">💾 Save Server Settings</button>
                 <button class="btn btn-secondary" onclick="openEmbedSender()">📢 Send Custom Embed</button>
             </div>
+
+            <!-- 🚀 Booster Synergy Studio Component -->
+            <div class="booster-studio-card">
+                <div class="booster-studio-header">
+                    <div>
+                        <h4 style="font-size:1.2rem; font-weight:800; color:#FF73FA; display:flex; align-items:center; gap:8px;">
+                            🚀 Booster Synergy Studio
+                        </h4>
+                        <p style="font-size:0.85rem; color:var(--text-muted); margin-top:2px;">
+                            Customize your vanity role & share it with your inner circle of friends!
+                        </p>
+                    </div>
+                    <span id="boosterStatusBadge" class="badge-booster">Checking boost status...</span>
+                </div>
+
+                <!-- Live Discord Mock Chat Preview -->
+                <label class="form-label">✨ Live Role Appearance Preview</label>
+                <div class="mock-discord-chat">
+                    <img id="mockChatAvatar" src="https://cdn.discordapp.com/embed/avatars/0.png" class="mock-avatar" alt="Avatar">
+                    <div style="flex:1;">
+                        <div class="mock-header">
+                            <span id="mockChatUsername" style="color: #FF73FA; font-weight:700;">Booster</span>
+                            <span id="mockRoleTag" class="role-tag" style="background: rgba(255,115,250,0.15); color: #FF73FA; border: 1px solid #FF73FA;">
+                                <span style="font-size:10px;">★</span> <span id="mockRoleTagName">VIP Booster</span>
+                            </span>
+                            <span style="font-size:0.75rem; color:#94a3b8;">Today at 4:20 PM</span>
+                        </div>
+                        <div style="color:#dbdee1; font-size:0.95rem;">
+                            Loving my custom vanity booster role powered by Starry! ✨
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Role Customization Controls -->
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">🏷️ Custom Role Name</label>
+                        <input type="text" id="brRoleNameInput" class="form-input" placeholder="e.g. Starlight VIP" oninput="updateLivePreview()">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">🎨 Role Hex Color</label>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <input type="color" id="brColorPicker" value="#FF73FA" style="width:48px; height:44px; border:none; border-radius:8px; cursor:pointer; background:none;" oninput="syncColorInput(this.value)">
+                            <input type="text" id="brColorHexInput" class="form-input" value="#FF73FA" placeholder="#FF73FA" maxlength="7" oninput="syncPickerInput(this.value)">
+                        </div>
+                        <div class="color-presets">
+                            <span class="color-dot" style="background:#FF73FA;" onclick="applyColorPreset('#FF73FA')" title="Boost Pink"></span>
+                            <span class="color-dot" style="background:#00F2FE;" onclick="applyColorPreset('#00F2FE')" title="Cyber Cyan"></span>
+                            <span class="color-dot" style="background:#FF5252;" onclick="applyColorPreset('#FF5252')" title="Crimson Red"></span>
+                            <span class="color-dot" style="background:#F59E0B;" onclick="applyColorPreset('#F59E0B')" title="Solar Gold"></span>
+                            <span class="color-dot" style="background:#10B981;" onclick="applyColorPreset('#10B981')" title="Emerald Green"></span>
+                            <span class="color-dot" style="background:#A855F7;" onclick="applyColorPreset('#A855F7')" title="Cosmic Purple"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+                    <button id="saveBoosterRoleBtn" class="btn btn-primary" onclick="saveBoosterRole()">✨ Save Custom Booster Role</button>
+                    <button id="deleteBoosterRoleBtn" class="btn btn-secondary" style="color:#ef4444;" onclick="deleteBoosterRole()">🗑️ Delete Role</button>
+                </div>
+
+                <!-- Shared Friends Delegation -->
+                <div style="border-top: 1px solid var(--border); padding-top: 20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <label class="form-label" style="margin-bottom:0;">👥 Shared Friend Slots</label>
+                        <span id="friendSlotCount" style="font-size:0.85rem; color:var(--cyan); font-weight:700;">0 / 1 Used</span>
+                    </div>
+                    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:14px;">
+                        Share your custom vanity role with your friends! They'll receive your exact role and color tag.
+                    </p>
+
+                    <div style="display:flex; gap:10px; margin-bottom:16px;">
+                        <input type="text" id="friendIdInput" class="form-input" placeholder="Enter Friend's Discord User ID (e.g. 1234567890)">
+                        <button class="btn btn-secondary" style="white-space:nowrap;" onclick="shareWithFriend()">💜 Share Role</button>
+                    </div>
+
+                    <div id="sharedFriendsList" style="display:flex; flex-wrap:wrap; gap:8px;">
+                        <span style="color:var(--text-muted); font-size:0.85rem;">No friends shared yet.</span>
+                    </div>
+
+                    <div style="margin-top:16px; padding:12px; background:rgba(88,101,242,0.1); border-radius:10px; border:1px solid rgba(88,101,242,0.2); font-size:0.85rem; color:#c7d2fe;">
+                        💎 <strong>Pro Tip:</strong> Upgrade this server to <strong>Starry Premium</strong> to unlock up to <strong>5 shared friend slots</strong> & custom role icons!
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -292,6 +478,8 @@
 
     <script>
         let currentGuildId = null;
+        let currentUser = null;
+        let currentBoosterRole = null;
 
         async function initDashboard() {
             try {
@@ -299,10 +487,13 @@
                 const userData = await userRes.json();
 
                 if (userData.authenticated) {
+                    currentUser = userData.user;
                     document.getElementById('loginBtn').style.display = 'none';
                     document.getElementById('userContainer').style.display = 'flex';
                     document.getElementById('userName').innerText = userData.user.username;
                     document.getElementById('userAvatar').src = userData.user.avatar;
+                    document.getElementById('mockChatUsername').innerText = userData.user.username;
+                    document.getElementById('mockChatAvatar').src = userData.user.avatar;
                 }
 
                 const guildsRes = await fetch('/api/guilds');
@@ -340,8 +531,190 @@
                 }
             } catch (err) {}
 
+            await loadBoosterStudio(guildId);
+
             document.getElementById('settingsPanel').style.display = 'block';
             document.getElementById('settingsPanel').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function loadBoosterStudio(guildId) {
+            try {
+                const res = await fetch(`/api/guild/${guildId}/booster-roles`);
+                const data = await res.json();
+                if (!data.success) return;
+
+                const badge = document.getElementById('boosterStatusBadge');
+                if (data.isBooster) {
+                    badge.innerText = '🌟 Active Server Booster';
+                    badge.style.color = '#10B981';
+                    badge.style.borderColor = 'rgba(16,185,129,0.3)';
+                    badge.style.background = 'rgba(16,185,129,0.15)';
+                } else {
+                    badge.innerText = '⚪ Not Boosting Server';
+                    badge.style.color = '#94A3B8';
+                    badge.style.borderColor = 'rgba(255,255,255,0.1)';
+                    badge.style.background = 'rgba(255,255,255,0.05)';
+                }
+
+                currentBoosterRole = data.myRole;
+                if (data.myRole) {
+                    document.getElementById('brRoleNameInput').value = data.myRole.name;
+                    applyColorPreset(data.myRole.color || '#FF73FA');
+                    document.getElementById('deleteBoosterRoleBtn').style.display = 'inline-flex';
+
+                    const max = data.myRole.maxShares || (data.isPremium ? 5 : 1);
+                    const used = data.myRole.sharedWith?.length || 0;
+                    document.getElementById('friendSlotCount').innerText = `${used} / ${max} Used`;
+
+                    renderSharedFriends(data.myRole.sharedWith || []);
+                } else {
+                    document.getElementById('brRoleNameInput').value = '';
+                    applyColorPreset('#FF73FA');
+                    document.getElementById('deleteBoosterRoleBtn').style.display = 'none';
+                    document.getElementById('friendSlotCount').innerText = `0 / ${data.isPremium ? 5 : 1} Used`;
+                    renderSharedFriends([]);
+                }
+
+                updateLivePreview();
+            } catch (e) {
+                console.error('Error loading booster studio:', e);
+            }
+        }
+
+        function renderSharedFriends(friends) {
+            const list = document.getElementById('sharedFriendsList');
+            if (!friends || friends.length === 0) {
+                list.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">No friends shared yet.</span>';
+                return;
+            }
+
+            list.innerHTML = friends.map(id => `
+                <div class="friend-pill">
+                    <span>👤 <code style="color:#00F2FE;">${id}</code></span>
+                    <button class="btn-remove-friend" onclick="unshareFriend('${id}')" title="Revoke role">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function updateLivePreview() {
+            const name = document.getElementById('brRoleNameInput').value.trim() || 'VIP Booster';
+            const color = document.getElementById('brColorHexInput').value.trim() || '#FF73FA';
+
+            document.getElementById('mockChatUsername').style.color = color;
+            const tag = document.getElementById('mockRoleTag');
+            tag.style.color = color;
+            tag.style.borderColor = color;
+            tag.style.background = color + '22';
+            document.getElementById('mockRoleTagName').innerText = name;
+        }
+
+        function syncColorInput(val) {
+            document.getElementById('brColorHexInput').value = val.toUpperCase();
+            updateLivePreview();
+        }
+
+        function syncPickerInput(val) {
+            if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                document.getElementById('brColorPicker').value = val;
+            }
+            updateLivePreview();
+        }
+
+        function applyColorPreset(hex) {
+            document.getElementById('brColorPicker').value = hex;
+            document.getElementById('brColorHexInput').value = hex;
+            updateLivePreview();
+        }
+
+        async function saveBoosterRole() {
+            if (!currentGuildId) return;
+            const name = document.getElementById('brRoleNameInput').value.trim();
+            const color = document.getElementById('brColorHexInput').value.trim();
+
+            if (!name) return alert('Please provide a role name.');
+
+            const endpoint = currentBoosterRole ? `/api/guild/${currentGuildId}/booster-roles/update` : `/api/guild/${currentGuildId}/booster-roles/create`;
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.message || '✨ Booster role saved!');
+                    await loadBoosterStudio(currentGuildId);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            }
+        }
+
+        async function shareWithFriend() {
+            if (!currentGuildId) return;
+            const friendId = document.getElementById('friendIdInput').value.trim();
+            if (!friendId) return alert('Please enter your friend\'s Discord User ID.');
+
+            try {
+                const res = await fetch(`/api/guild/${currentGuildId}/booster-roles/share`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ friendId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('💜 Role shared with friend!');
+                    document.getElementById('friendIdInput').value = '';
+                    await loadBoosterStudio(currentGuildId);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            }
+        }
+
+        async function unshareFriend(friendId) {
+            if (!currentGuildId) return;
+            try {
+                const res = await fetch(`/api/guild/${currentGuildId}/booster-roles/unshare`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ friendId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('➖ Role revoked from friend.');
+                    await loadBoosterStudio(currentGuildId);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            }
+        }
+
+        async function deleteBoosterRole() {
+            if (!currentGuildId) return;
+            if (!confirm('Are you sure you want to permanently delete your custom booster role?')) return;
+
+            try {
+                const res = await fetch(`/api/guild/${currentGuildId}/booster-roles`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('🗑️ Booster role deleted.');
+                    await loadBoosterStudio(currentGuildId);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
+            }
         }
 
         function closeSettings() {

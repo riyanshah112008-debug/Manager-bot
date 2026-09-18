@@ -54,6 +54,18 @@ function setCachedPrefix(guildId, prefix) {
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
+const mongoose = require('mongoose');
+const ExecutionLock = require('../models/ExecutionLock');
+
+function isPrimaryBotClient(client) {
+    if (client.isPrimary === false) return false;
+    if (client.isPrimary === true) return true;
+    const multiBot = client.multiBot || require('./multiBot');
+    if (multiBot?.primaryClient) {
+        return client === multiBot.primaryClient || (client.user?.id && client.user.id === multiBot.primaryClient.user?.id);
+    }
+    return true;
+}
 
 // Load Master Bundles
 const musicCommands = require('../commands/bundles/musicCommands');
@@ -64,6 +76,7 @@ const economyCommands = require('../commands/bundles/economyCommands');
 const gameCommands = require('../commands/bundles/gameCommands');
 const systemCommands = require('../commands/bundles/systemCommands');
 const nsfwCommands = require('../commands/bundles/nsfwCommands');
+const boosterCommands = require('../commands/bundles/boosterCommands');
 
 const allBundles = [
     ...musicCommands,
@@ -73,7 +86,8 @@ const allBundles = [
     ...economyCommands,
     ...gameCommands,
     ...systemCommands,
-    ...nsfwCommands
+    ...nsfwCommands,
+    ...boosterCommands
 ];
 
 function getFilesRecursively(dir) {
@@ -191,7 +205,7 @@ class CommandRegistry {
             }
         }
 
-        console.log(`✅ [Master Command Registry] Loaded ${this.commands.size} base commands (${this.commands.size + this.aliases.size} with aliases) across 6 categories!`);
+        console.log(`✅ [Master Command Registry] Loaded ${this.commands.size} base commands (${this.commands.size + this.aliases.size} with aliases) across ${this.categories.size} categories!`);
 
         this.registerPrefixDispatcher(client);
         this.registerInteractionDispatcher(client);
@@ -231,10 +245,16 @@ class CommandRegistry {
         client.on(Events.MessageCreate, async (message) => {
             if (!message || message.author?.bot || !message.content) return;
 
+            // Instant in-memory check to discard rapid re-delivery within the same process
+            if (executedMessageIds.has(message.id)) return;
+
+            const isPrimary = isPrimaryBotClient(client);
+
             // Intercept Dedicated Music Controller Request Channel
             if (message.guild) {
                 const musicController = require('./musicController');
                 if (musicController.isRequestChannel(message.guild.id, message.channel.id)) {
+                    if (!isPrimary) return;
                     const raw = message.content.trim();
                     if (!raw.startsWith(',') && !raw.startsWith('.')) {
                         return musicController.handleSongRequest(message, client);
@@ -244,8 +264,7 @@ class CommandRegistry {
 
             let content = message.content.trim();
             const multiBot = client.multiBot || require('./multiBot');
-            const primaryId = multiBot?.primaryClient?.user?.id || client.user?.id;
-            const isPrimary = (client.user?.id === primaryId) || (!multiBot?.primaryClient);
+            const primaryId = multiBot?.primaryClient?.user?.id || (isPrimary ? client.user?.id : null);
 
             let matchedPrefix = null;
             let commandBody = '';
@@ -278,7 +297,7 @@ class CommandRegistry {
                 // C. Single Comma (,) Default Prefix & Custom Server Prefix
                 else {
                     if (content.startsWith('<@')) return;
-                    if (!isPrimary) return; // Standard prefix handled exclusively by primary bot
+                    if (!isPrimary) return; // Standard prefix handled EXCLUSIVELY by primary bot! Secondary worker bots never respond here!
 
                     const guildId = message.guild?.id;
                     if (content.startsWith(',')) {
@@ -324,10 +343,22 @@ class CommandRegistry {
             const command = this.commands.get(resolvedName);
             if (!command) return;
 
-            // 🛡️ Guaranteed Single-Execution Message Guard (Process-wide Deduplication)
+            // 🛡️ Guaranteed Single-Execution Message Guard (Process-wide In-Memory Deduplication)
             if (executedMessageIds.has(message.id)) return;
             executedMessageIds.add(message.id);
-            setTimeout(() => executedMessageIds.delete(message.id), 15000);
+            setTimeout(() => executedMessageIds.delete(message.id), 20000);
+
+            // 🛡️ Guaranteed Distributed Single-Execution Lock (Multi-Process / Cloud + Termux Deduplication)
+            if (mongoose.connection.readyState === 1) {
+                try {
+                    await ExecutionLock.create({ _id: message.id, instance: client.user?.id || 'primary' });
+                } catch (lockErr) {
+                    if (lockErr.code === 11000) {
+                        console.log(`🛡️ [Deduplication] Dropped duplicate command message ${message.id} (already locked by peer instance)`);
+                        return;
+                    }
+                }
+            }
 
             console.log(`⚡ [Command] Executing ,${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
@@ -370,10 +401,18 @@ class CommandRegistry {
         client.on(Events.InteractionCreate, async (interaction) => {
             if (!interaction) return;
 
-            // 🛡️ Interaction Deduplication Guard
+            // 🛡️ Interaction Deduplication Guard (In-Memory + Distributed ExecutionLock)
             if (executedInteractionIds.has(interaction.id)) return;
             executedInteractionIds.add(interaction.id);
-            setTimeout(() => executedInteractionIds.delete(interaction.id), 15000);
+            setTimeout(() => executedInteractionIds.delete(interaction.id), 20000);
+
+            if (mongoose.connection.readyState === 1) {
+                try {
+                    await ExecutionLock.create({ _id: interaction.id, instance: client.user?.id || 'primary' });
+                } catch (lockErr) {
+                    if (lockErr.code === 11000) return;
+                }
+            }
             // 1. Handle Slash Commands
             if (interaction.isChatInputCommand()) {
                 const commandName = interaction.commandName.toLowerCase();
@@ -483,7 +522,96 @@ class CommandRegistry {
                     }).catch(() => {});
                 }
 
-                // B. Chest Claim Buttons (1-Year Global Handler)
+                // B. Payment Order Approval / Rejection Buttons (Bot Owners)
+                if (customId.startsWith('approve_order_') || customId.startsWith('reject_order_')) {
+                    const isOwner = (config.BOT_OWNERS || []).includes(interaction.user.id);
+                    if (!isOwner) {
+                        return await interaction.reply({
+                            content: '❌ Only Bot Owners can approve or reject payment orders.',
+                            flags: EPHEMERAL_FLAG
+                        }).catch(() => {});
+                    }
+
+                    const { approvePaymentOrder, rejectPaymentOrder } = require('../utils/paymentHelper');
+                    if (customId.startsWith('approve_order_')) {
+                        const orderId = customId.replace('approve_order_', '');
+                        await interaction.deferUpdate().catch(() => {});
+                        const res = await approvePaymentOrder(orderId, `${interaction.user.username} (Discord Button)`, interaction.client);
+                        if (res.success) {
+                            return await interaction.editReply({
+                                content: `✅ **Order \`${orderId}\` APPROVED by ${interaction.user.username}**\n🔑 **Issued Key:** \`${res.key}\`${res.autoActivated ? `\n🎉 **Auto-Activated for Server:** \`${res.guildId}\`` : ''}`,
+                                embeds: [],
+                                components: []
+                            }).catch(() => {});
+                        } else {
+                            return await interaction.followUp({
+                                content: `❌ Error approving order \`${orderId}\`: ${res.error}`,
+                                flags: EPHEMERAL_FLAG
+                            }).catch(() => {});
+                        }
+                    } else if (customId.startsWith('reject_order_')) {
+                        const orderId = customId.replace('reject_order_', '');
+                        await interaction.deferUpdate().catch(() => {});
+                        const res = await rejectPaymentOrder(orderId, `${interaction.user.username} (Discord Button)`, 'Payment verification rejected by owner.', interaction.client);
+                        if (res.success) {
+                            return await interaction.editReply({
+                                content: `❌ **Order \`${orderId}\` REJECTED by ${interaction.user.username}**`,
+                                embeds: [],
+                                components: []
+                            }).catch(() => {});
+                        } else {
+                            return await interaction.followUp({
+                                content: `❌ Error rejecting order: ${res.error}`,
+                                flags: EPHEMERAL_FLAG
+                            }).catch(() => {});
+                        }
+                    }
+                }
+
+                // AutoMod Channel Interactive Buttons (1-Year Global Handler)
+                if (customId.startsWith('am_toggle_links_') || customId.startsWith('am_toggle_emojis_') || customId.startsWith('am_refresh_')) {
+                    if (!interaction.guild) {
+                        return interaction.reply({ content: '❌ AutoMod can only be configured in a server.', ephemeral: true }).catch(() => {});
+                    }
+
+                    const automodHelper = require('../utils/automodHelper');
+                    if (!automodHelper.canManageAutomod(interaction.member, interaction.user, interaction.guild)) {
+                        return interaction.reply({
+                            content: '❌ You need **Administrator** or **Manage Server** permissions to configure AutoMod settings.',
+                            ephemeral: true
+                        }).catch(() => {});
+                    }
+
+                    const channelId = customId.replace(/^(am_toggle_links_|am_toggle_emojis_|am_refresh_)/, '');
+                    const targetChannel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+                    if (!targetChannel) {
+                        return interaction.reply({
+                            content: '❌ Target channel could not be found or has been deleted.',
+                            ephemeral: true
+                        }).catch(() => {});
+                    }
+
+                    const current = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
+
+                    if (customId.startsWith('am_toggle_links_')) {
+                        await automodHelper.setChannelFilter(channelId, interaction.guild.id, 'links', !current.linksActive);
+                    } else if (customId.startsWith('am_toggle_emojis_')) {
+                        await automodHelper.setChannelFilter(channelId, interaction.guild.id, 'emojis', !current.emojisActive);
+                    }
+
+                    const updatedSettings = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
+                    const isGuildEnabled = automodHelper.getGuildStatus(interaction.guild.id);
+                    const newEmbed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, updatedSettings, isGuildEnabled);
+                    const newButtons = automodHelper.createChannelAutomodButtons(channelId, updatedSettings);
+
+                    return await interaction.update({
+                        embeds: [newEmbed],
+                        components: [newButtons]
+                    }).catch(() => {});
+                }
+
+                // C. Chest Claim Buttons (1-Year Global Handler)
                 if (customId === 'claim_chest' || customId === 'claim_wild_chest') {
                     await interaction.deferUpdate().catch(() => {});
 
@@ -1037,7 +1165,7 @@ class CommandRegistry {
                 }
 
                 // Dedicated Music Controller Channel Interactions
-                if (customId.startsWith('ctrl_')) {
+                if (customId.startsWith('ctrl_') || customId.startsWith('spotify_')) {
                     const musicController = require('./musicController');
                     return await musicController.handleButtonInteraction(interaction, client);
                 }
@@ -1149,19 +1277,42 @@ class CommandRegistry {
                     // 4. Autoplay Smart Stream Toggle Button
                     if (customId === 'music_autoplay') {
                         if (kPlayer) {
-                            kPlayer.autoplay = !kPlayer.autoplay;
+                            const cur = Boolean(kPlayer.data?.get('autoplay') || kPlayer.autoplay);
+                            const next = !cur;
+                            kPlayer.data?.set('autoplay', next);
+                            kPlayer.autoplay = next;
+
+                            // Live update the player embed components so the button turns Green/Grey in real time
+                            const { buildNowPlayingComponents } = require('../utils/musicManager');
+                            const newComponents = buildNowPlayingComponents(interaction.guildId, next);
+
+                            if (interaction.message && typeof interaction.message.edit === 'function') {
+                                interaction.message.edit({ components: newComponents }).catch(() => {});
+                            }
+
+                            try {
+                                const musicController = require('./musicController');
+                                musicController.update(interaction.guildId, client).catch(() => {});
+                            } catch (e) {}
+
                             return interaction.reply({
-                                content: `📻 **Autoplay is now: ${kPlayer.autoplay ? '🟢 ON' : '🔴 OFF'}**`,
+                                content: `📻 **Autoplay Smart Stream is now: ${next ? '🟢 ENABLED' : '🔴 DISABLED'}**\n*Continuous playback will automatically stream matching recommended songs when the queue ends!*`,
                                 flags: [EPHEMERAL_FLAG]
                             }).catch(() => {});
                         }
                         if (nPlayer) {
                             nPlayer.autoplay = !nPlayer.autoplay;
+                            const next = nPlayer.autoplay;
                             if (nPlayer.currentTrack) {
                                 await nPlayer.sendNowPlayingPanel(nPlayer.currentTrack, true).catch(() => {});
                             }
+                            try {
+                                const musicController = require('./musicController');
+                                musicController.update(interaction.guildId, client).catch(() => {});
+                            } catch (e) {}
+
                             return interaction.reply({
-                                content: `📻 **Autoplay is now: ${nPlayer.autoplay ? '🟢 ON' : '🔴 OFF'}**`,
+                                content: `📻 **Autoplay Smart Stream is now: ${next ? '🟢 ENABLED' : '🔴 DISABLED'}**\n*Continuous playback will automatically stream matching recommended songs when the queue ends!*`,
                                 flags: [EPHEMERAL_FLAG]
                             }).catch(() => {});
                         }

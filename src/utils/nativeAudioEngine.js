@@ -35,16 +35,8 @@ const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.E
 
 // Audio DSP Filter FFmpeg argument definitions (Studio Mastering with Dynamic Limiter - ZERO Crackling & 100% Intact Vocals)
 const FILTER_ARGS = {
-    clear: [
-        '-af',
-        'volume=0.95,' +
-        'bass=g=3.5:f=60:w=0.6,' +
-        'equalizer=f=250:width_type=q:w=1.2:g=-1.2,' +
-        'equalizer=f=1000:width_type=q:w=1.0:g=1.0,' +
-        'equalizer=f=3200:width_type=q:w=1.0:g=2.5,' +
-        'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
-        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
-    ],
+    clear: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    flat: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
     empowering: [
         '-af',
         'volume=0.95,' +
@@ -55,47 +47,59 @@ const FILTER_ARGS = {
         'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
         'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
     ],
-    flat: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    bassboost: [
+    // 🔊 TRUE SUBWOOFER PHYSICAL VIBRATION BASS:
+    // Physical sub-bass rumble (38Hz-52Hz) + punchy kick attack (75Hz) + mud scoop (220Hz) + vocal clarity (1.2kHz-3.5kHz).
+    // Volume at 0.82 ensures dynamic excursion headroom without digital clipping.
+    bass: [
         '-af',
-        'volume=0.92,' +
-        'bass=g=6.5:f=55:w=0.6,' +
-        'virtualbass=cutoff=150:strength=2.0,' +
-        'equalizer=f=250:width_type=q:w=1.2:g=-2.0,' +
-        'equalizer=f=800:width_type=q:w=1.0:g=1.5,' +
-        'equalizer=f=3200:width_type=q:w=1.0:g=3.5,' +
-        'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
-        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
+        'volume=0.82,' +
+        'bass=g=12:f=52:w=0.65,' +
+        'equalizer=f=38:width_type=q:w=1.2:g=8.5,' +
+        'equalizer=f=75:width_type=q:w=1.0:g=6.0,' +
+        'equalizer=f=220:width_type=q:w=1.5:g=-3.5,' +
+        'equalizer=f=400:width_type=q:w=1.2:g=-1.8,' +
+        'equalizer=f=1200:width_type=q:w=1.0:g=1.2,' +
+        'equalizer=f=3500:width_type=q:w=1.0:g=2.5,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=1.5,' +
+        'alimiter=limit=0.96:attack=5:release=60:asc=true:level=false'
     ],
-    deepbass: [
-        '-af',
-        'volume=0.90,' +
-        'bass=g=8.0:f=50:w=0.6,' +
-        'virtualbass=cutoff=180:strength=2.2,' +
-        'equalizer=f=240:width_type=q:w=1.2:g=-2.5,' +
-        'equalizer=f=900:width_type=q:w=1.0:g=1.5,' +
-        'equalizer=f=3400:width_type=q:w=1.0:g=3.8,' +
-        'equalizer=f=12000:width_type=q:w=1.0:g=2.5,' +
-        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
-    ],
-    vibrate: [
-        '-af',
-        'volume=0.88,' +
-        'bass=g=10.0:f=46:w=0.65,' +
-        'virtualbass=cutoff=220:strength=2.6,' +
-        'equalizer=f=230:width_type=q:w=1.2:g=-3.0,' +
-        'equalizer=f=1000:width_type=q:w=1.0:g=2.0,' +
-        'equalizer=f=3500:width_type=q:w=1.0:g=4.2,' +
-        'equalizer=f=12000:width_type=q:w=1.0:g=2.5,' +
-        'alimiter=limit=0.98:attack=5:release=60:asc=true:level=false'
-    ],
-    '8d': ['-af', 'volume=0.95,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    nightcore: ['-af', 'volume=0.92,asetrate=48000*1.25,aresample=48000,atempo=1.0,equalizer=f=3200:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    daycore: ['-af', 'volume=0.94,asetrate=48000*0.85,aresample=48000,atempo=1.0,bass=g=3:f=60:w=0.6,equalizer=f=250:width_type=q:w=1.2:g=-1.5,equalizer=f=3200:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    vaporwave: ['-af', 'volume=0.92,asetrate=48000*0.82,aresample=48000,atempo=1.0,aecho=0.8:0.85:50:0.25,bass=g=4:f=70:w=0.7,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    treble: ['-af', 'volume=0.92,treble=g=5:f=8000:w=0.6,equalizer=f=12000:width_type=q:w=1.0:g=3.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    pop: ['-af', 'volume=0.95,equalizer=f=200:width_type=q:w=1.0:g=-1.5,equalizer=f=1000:width_type=q:w=1.0:g=2.0,equalizer=f=3200:width_type=q:w=1.0:g=4.0,equalizer=f=10000:width_type=q:w=1.0:g=2.5,crystalizer=i=1.2:c=0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false']
+    '8d': ['-af', 'volume=0.94,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    nightcore: ['-af', 'volume=0.92,asetrate=48000*1.25,aresample=48000,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    daycore: ['-af', 'volume=0.94,asetrate=48000*0.85,aresample=48000,atempo=1.0,bass=g=5:f=55:w=0.6,equalizer=f=250:width_type=q:w=1.2:g=-1.2,equalizer=f=3200:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    vaporwave: ['-af', 'volume=0.90,asetrate=48000*0.80,aresample=48000,atempo=1.0,aecho=0.8:0.85:60:0.25,bass=g=4:f=70:w=0.7,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    lofi: ['-af', 'volume=0.92,lowpass=f=4200,bass=g=4:f=95:w=0.6,equalizer=f=250:width_type=q:w=1.0:g=1.5,tremolo=f=1.5:d=0.10,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    reverb: ['-af', 'volume=0.90,asetrate=48000*0.88,aresample=48000,atempo=1.0,aecho=0.8:0.88:80|160:0.35|0.22,bass=g=3:f=60:w=0.6,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    karaoke: ['-af', 'volume=0.95,stereotools=mlev=0.0:slev=1.2,equalizer=f=1000:width_type=q:w=1.5:g=-4.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    surround: ['-af', 'volume=0.92,extrastereo=m=1.65,equalizer=f=3500:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    electronic: ['-af', 'volume=0.88,bass=g=9:f=60:w=0.6,treble=g=5:f=9000:w=0.6,equalizer=f=280:width_type=q:w=1.2:g=-2.5,alimiter=limit=0.96:attack=5:release=50:asc=true:level=false'],
+    soft: ['-af', 'volume=0.94,equalizer=f=7500:width_type=q:w=1.0:g=-3.5,equalizer=f=12000:width_type=q:w=1.0:g=-5.0,equalizer=f=120:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    radio: ['-af', 'volume=0.90,highpass=f=450,lowpass=f=3200,equalizer=f=1400:width_type=q:w=1.0:g=4.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    treble: ['-af', 'volume=0.90,treble=g=6:f=8000:w=0.6,equalizer=f=12000:width_type=q:w=1.0:g=4.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    pop: ['-af', 'volume=0.94,equalizer=f=220:width_type=q:w=1.2:g=-2.0,equalizer=f=1200:width_type=q:w=1.0:g=1.8,equalizer=f=3200:width_type=q:w=1.0:g=3.2,equalizer=f=10000:width_type=q:w=1.0:g=2.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false']
 };
+
+// Aliases for seamless backwards compatibility
+FILTER_ARGS.bassboost = FILTER_ARGS.bass;
+FILTER_ARGS.vibrate = FILTER_ARGS.bass;
+FILTER_ARGS.vibration = FILTER_ARGS.bass;
+FILTER_ARGS.deepbass = FILTER_ARGS.bass;
+FILTER_ARGS.subwoofer = FILTER_ARGS.bass;
+FILTER_ARGS.slowed = FILTER_ARGS.daycore;
+FILTER_ARGS['lo-fi'] = FILTER_ARGS.lofi;
+FILTER_ARGS.chill = FILTER_ARGS.lofi;
+FILTER_ARGS.slowreverb = FILTER_ARGS.reverb;
+FILTER_ARGS.hall = FILTER_ARGS.reverb;
+FILTER_ARGS.echo = FILTER_ARGS.reverb;
+FILTER_ARGS.vocalremover = FILTER_ARGS.karaoke;
+FILTER_ARGS.instrumental = FILTER_ARGS.karaoke;
+FILTER_ARGS.vocalcut = FILTER_ARGS.karaoke;
+FILTER_ARGS['3d'] = FILTER_ARGS.surround;
+FILTER_ARGS.spatial = FILTER_ARGS.surround;
+FILTER_ARGS.edm = FILTER_ARGS.electronic;
+FILTER_ARGS.club = FILTER_ARGS.electronic;
+FILTER_ARGS.mellow = FILTER_ARGS.soft;
+FILTER_ARGS.relax = FILTER_ARGS.soft;
+FILTER_ARGS.vintage = FILTER_ARGS.radio;
 
 let scClientId = null;
 let lastTokenRefresh = 0;
@@ -760,17 +764,21 @@ class StarryGuildPlayer {
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
-                { label: 'Empowering Master (Default)', description: 'Calibrated sub-bass warmth, vocal clarity & loudness', value: 'empowering', emoji: '👑' },
-                { label: 'True Vibration Bass', description: 'Deep physical vibrating sub-bass (Original clarity intact)', value: 'bassboost', emoji: '📳' },
-                { label: 'Deep 808 Sub-Bass', description: 'Sub-bass emphasis for EDM, Rap & Phonk', value: 'deepbass', emoji: '🔊' },
-                { label: 'Earthquake Vibration', description: 'Maximum physical sub-bass rumble & air vibration', value: 'vibrate', emoji: '🌋' },
-                { label: 'Flat / Pure Neutral', description: 'Raw uncolored original studio sound', value: 'flat', emoji: '🚫' },
+                { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
+                { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
                 { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
                 { label: 'Daycore / Slowed', description: 'Slowed down tempo + deeper tone', value: 'daycore', emoji: '🌅' },
                 { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' },
-                { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '🔊' },
-                { label: 'Pop & Vocal Clarity', description: 'Enhanced vocals and clean acoustic profile', value: 'pop', emoji: '📻' }
+                { label: 'Lo-Fi Chill', description: 'Warm vinyl tape flutter & mellow acoustic tone', value: 'lofi', emoji: '☕' },
+                { label: 'Slowed & Reverb', description: 'Immersive stadium & cathedral concert reverb', value: 'reverb', emoji: '🌌' },
+                { label: 'Karaoke', description: 'Attenuates center vocals for sing-along', value: 'karaoke', emoji: '🎤' },
+                { label: '3D Surround', description: 'Wide immersive cinematic surround soundstage', value: 'surround', emoji: '🎧' },
+                { label: 'EDM & Club', description: 'High-energy dance punch & crisp sizzling hats', value: 'electronic', emoji: '⚡' },
+                { label: 'Soft & Mellow', description: 'Non-fatiguing smooth sound for late night chill', value: 'soft', emoji: '🍃' },
+                { label: 'Retro Radio', description: 'Vintage 1950s AM telephone receiver sound', value: 'radio', emoji: '📻' },
+                { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '💎' },
+                { label: 'Pop & Vocal Clarity', description: 'Enhanced vocal presence with clean highs', value: 'pop', emoji: '🎙️' }
             ])
         );
 

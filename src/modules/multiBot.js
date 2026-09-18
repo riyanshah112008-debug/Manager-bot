@@ -157,6 +157,7 @@ class MultiBotManager {
         client.voiceCalls = new Map();
         client.vcLocks = new Map();
         client.botRole = role;
+        client.isPrimary = Boolean(isPrimary);
 
         client.on(Events.Error, err => console.error(`❌ [${name}] Discord Error:`, err?.message || err));
         client.on(Events.Warn, warn => console.warn(`⚠️ [${name}] Warning:`, warn));
@@ -180,6 +181,7 @@ class MultiBotManager {
         this.primaryClient = primaryClient;
         this.primaryToken = primaryToken;
         primaryClient.multiBot = this;
+        primaryClient.isPrimary = true;
         primaryClient.botRole = process.env.PRIMARY_BOT_ROLE || 'all';
 
         // Initialize Primary Music Manager

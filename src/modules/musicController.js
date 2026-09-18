@@ -157,23 +157,32 @@ class MusicControllerEngine {
             .setCustomId('ctrl_filter')
             .setPlaceholder(t(lang, 'music.filter_placeholder'))
             .addOptions([
-                { label: 'Empowering Master (Hi-Fi)', description: 'Default dynamic warmth & vocal presence', value: 'empowering', emoji: '👑' },
-                { label: 'True Vibration Bass', description: 'Deep physical vibrating sub-bass (Vocals intact)', value: 'bassboost', emoji: '📳' },
-                { label: 'Deep 808 Sub-Bass', description: 'Sub-bass emphasis for EDM, Rap & Phonk', value: 'deepbass', emoji: '🔊' },
-                { label: 'Earthquake Vibration', description: 'Maximum physical rumble (Air vibration)', value: 'vibrate', emoji: '🌋' },
-                { label: 'Flat / Pure Neutral', description: 'Raw uncolored original studio sound', value: 'flat', emoji: '🚫' },
+                { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio sound', value: 'clear', emoji: '🚫' },
+                { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
-                { label: 'Pop & Vocal Clarity', description: 'Enhanced vocal presence and acoustic sheen', value: 'pop', emoji: '📻' },
-                { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '🔊' },
                 { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
                 { label: 'Daycore / Slowed', description: 'Slowed down tempo + deeper tone', value: 'daycore', emoji: '🌅' },
-                { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' }
+                { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' },
+                { label: 'Lo-Fi Chill', description: 'Warm vinyl tape flutter & mellow acoustic tone', value: 'lofi', emoji: '☕' },
+                { label: 'Slowed & Reverb', description: 'Immersive stadium & cathedral concert reverb', value: 'reverb', emoji: '🌌' },
+                { label: 'Karaoke', description: 'Attenuates center vocals for sing-along', value: 'karaoke', emoji: '🎤' },
+                { label: '3D Surround', description: 'Wide immersive cinematic surround soundstage', value: 'surround', emoji: '🎧' },
+                { label: 'EDM & Club', description: 'High-energy dance punch & crisp sizzling hats', value: 'electronic', emoji: '⚡' },
+                { label: 'Soft & Mellow', description: 'Non-fatiguing smooth sound for late night chill', value: 'soft', emoji: '🍃' },
+                { label: 'Retro Radio', description: 'Vintage 1950s AM telephone receiver sound', value: 'radio', emoji: '📻' },
+                { label: 'Treble Boost', description: 'Crisp, crystal clear high frequencies', value: 'treble', emoji: '💎' },
+                { label: 'Pop & Vocal Clarity', description: 'Enhanced vocal presence and acoustic sheen', value: 'pop', emoji: '🎙️' }
             ]);
 
         const row4 = new ActionRowBuilder().addComponents(filterMenu);
 
-        // Row 5: Premium, Vote & Links
+        // Row 5: Spotify, Premium & Links
         const row5 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ctrl_spotify')
+                .setEmoji('🟢')
+                .setLabel('My Spotify')
+                .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('ctrl_premium')
                 .setEmoji('⭐')
@@ -208,10 +217,24 @@ class MusicControllerEngine {
         const lang = targetGuildId ? getGuildLanguageSync(targetGuildId) : 'en';
 
         if (track) {
-            const rawFilter = player.filter || player.data?.get('activeFilter') || 'clear';
-            const filterName = (rawFilter === 'clear' || !rawFilter || rawFilter === 'empowering')
-                ? 'Empowering Master (Hi-Fi)'
-                : rawFilter.toUpperCase();
+            const rawFilter = (player.filter || player.data?.get('activeFilter') || 'clear').toLowerCase();
+            let filterName = 'Empowering Master (Hi-Fi)';
+            if (rawFilter === 'bass' || rawFilter === 'vibrate' || rawFilter === 'vibration' || rawFilter === 'bassboost' || rawFilter === 'deepbass' || rawFilter === 'subwoofer') filterName = '🔊 Bass (Physical Vibration)';
+            else if (rawFilter === '8d') filterName = '🌀 8D Spatial Audio';
+            else if (rawFilter === 'nightcore') filterName = '✨ Nightcore';
+            else if (rawFilter === 'daycore' || rawFilter === 'slowed') filterName = '🌅 Daycore (Slowed)';
+            else if (rawFilter === 'vaporwave') filterName = '🪩 Vaporwave';
+            else if (rawFilter === 'lofi' || rawFilter === 'lo-fi' || rawFilter === 'chill') filterName = '☕ Lo-Fi Chill & Warmth';
+            else if (rawFilter === 'reverb' || rawFilter === 'slowreverb' || rawFilter === 'hall' || rawFilter === 'echo') filterName = '🌌 Slowed & Reverb';
+            else if (rawFilter === 'karaoke' || rawFilter === 'vocalremover' || rawFilter === 'instrumental' || rawFilter === 'vocalcut') filterName = '🎤 Karaoke Vocal Remover';
+            else if (rawFilter === 'surround' || rawFilter === '3d' || rawFilter === 'spatial') filterName = '🎧 3D Surround Sound';
+            else if (rawFilter === 'electronic' || rawFilter === 'edm' || rawFilter === 'club') filterName = '⚡ EDM & Club Master';
+            else if (rawFilter === 'soft' || rawFilter === 'mellow' || rawFilter === 'relax') filterName = '🍃 Soft & Mellow Chill';
+            else if (rawFilter === 'radio' || rawFilter === 'vintage') filterName = '📻 Retro Radio';
+            else if (rawFilter === 'treble') filterName = '💎 Treble Boost';
+            else if (rawFilter === 'pop') filterName = '🎙️ Pop & Vocal Clarity';
+            else if (rawFilter === 'clear' || rawFilter === 'flat') filterName = '🚫 Clear / Studio Flat';
+            else if (rawFilter) filterName = rawFilter.toUpperCase();
 
             const fallbackThumb = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80';
             const trackThumb = (track.thumbnail && !track.thumbnail.includes('imgur.com')) 
@@ -223,17 +246,19 @@ class MusicControllerEngine {
 
             return new EmbedBuilder()
                 .setColor('#5865F2')
-                .setTitle(t(lang, 'music.controller_title'))
+                .setTitle(`🎵 ${t(lang, 'music.controller_title')} • ${(track.title || 'Audio Track').substring(0, 50)}`)
                 .setDescription(
-                    `▶️ **[${(track.title || 'Audio Track').substring(0, 75)}](${track.url || 'https://discord.gg'})**\n\n` +
+                    `▶️ **Now Playing:** **[${(track.title || 'Audio Track').substring(0, 75)}](${track.url || 'https://discord.gg'})**\n\n` +
                     `👤 **Artist:** \`${track.author || 'Featured Artist'}\`\n` +
                     `🕒 **Duration:** \`${formatTime(track.duration)}\` | 🔊 **Volume:** \`${volumeVal}%\`\n` +
                     `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
-                    `🌐 **Source:** \`${track.source || 'Spotify'}\` | 🎛️ **Master:** \`${filterName}\`\n` +
+                    `🌐 **Source:** \`${track.source || 'Spotify'}\` | 🎛️ **Audio Master:** \`${filterName}\`\n` +
                     `🔠 **Queue:** \`${queueLen}\` songs in queue\n\n` +
-                    `*Send any song name or link in this channel to add to queue!*`
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `💬 *Send any song name or Spotify/YouTube link in this channel to add to queue!*`
                 )
-                .setImage(trackThumb)
+                .setThumbnail(trackThumb)
+                .setImage('attachment://starry_music_banner.jpg')
                 .setFooter({ 
                     text: `Starry Controller System • Bot: ${client?.user?.tag || 'Starry'}`,
                     iconURL: client?.user?.displayAvatarURL() || undefined
@@ -243,8 +268,8 @@ class MusicControllerEngine {
         // Idle / Waiting for music State
         return new EmbedBuilder()
             .setColor('#2B2D31')
-            .setTitle(t(lang, 'music.controller_title'))
-            .setDescription(t(lang, 'music.waiting_music'))
+            .setTitle(`🎵 ${t(lang, 'music.controller_title')}`)
+            .setDescription(`🎶 **${t(lang, 'music.waiting_music')}**\n\n*Join a voice channel and send any song title or link here to start playing!*`)
             .setImage('attachment://starry_music_banner.jpg')
             .setFooter({ 
                 text: 'Starry Controller System',
@@ -292,15 +317,45 @@ class MusicControllerEngine {
 
             const embed = this.buildEmbed(player, client, guildId);
             const components = this.buildComponents(player, guildId);
+            const files = fs.existsSync(BANNER_PATH) 
+                ? [new AttachmentBuilder(BANNER_PATH, { name: 'starry_music_banner.jpg' })] 
+                : [];
 
             const message = await channel.messages.fetch(config.messageId).catch(() => null);
             if (message) {
-                // If idle and banner needed, ensure attachment is referenced
                 const editPayload = { embeds: [embed], components };
-                await message.edit(editPayload).catch(() => {});
+                if (files.length > 0 && (!message.attachments || message.attachments.size === 0)) {
+                    editPayload.files = files;
+                }
+                await message.edit(editPayload).catch(async () => {
+                    // Clean up and redeploy if edit fails
+                    try {
+                        const oldMsgs = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+                        if (oldMsgs && oldMsgs.size > 0) {
+                            for (const m of oldMsgs.filter(m => m.author.id === client.user.id).values()) {
+                                await m.delete().catch(() => {});
+                            }
+                        }
+                    } catch (e) {}
+
+                    const newMsg = await channel.send({ embeds: [embed], components, files }).catch(() => null);
+                    if (newMsg) {
+                        config.messageId = newMsg.id;
+                        this.cache.set(guildId, config);
+                        await MusicController.updateOne({ guildId }, { messageId: newMsg.id }).catch(() => {});
+                    }
+                });
             } else {
-                // Message was deleted, redeploy controller message
-                const files = fs.existsSync(BANNER_PATH) ? [BANNER_PATH] : [];
+                // Message was deleted, purge any duplicate or stray bot messages before posting
+                try {
+                    const oldMsgs = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+                    if (oldMsgs && oldMsgs.size > 0) {
+                        for (const m of oldMsgs.filter(m => m.author.id === client.user.id).values()) {
+                            await m.delete().catch(() => {});
+                        }
+                    }
+                } catch (e) {}
+
                 const newMsg = await channel.send({
                     embeds: [embed],
                     components,
@@ -326,6 +381,10 @@ class MusicControllerEngine {
         if (config && config.channelId) {
             channel = guild.channels.cache.get(config.channelId) || 
                 await guild.channels.fetch(config.channelId).catch(() => null);
+        }
+
+        if (!channel) {
+            channel = guild.channels.cache.find(c => c.name === '🎵・starry-music' || c.name === 'starry-music');
         }
 
         // 2. If channel doesn't exist, create it
@@ -358,11 +417,22 @@ class MusicControllerEngine {
             });
         }
 
-        // 3. Purge existing bot messages in channel to guarantee a clean layout
+        // 3. Purge ALL existing messages in channel to guarantee STRICTLY ONE EMBED!
         try {
-            const msgs = await channel.messages.fetch({ limit: 25 }).catch(() => null);
-            if (msgs && msgs.size > 0) {
-                await channel.bulkDelete(msgs, true).catch(() => {});
+            const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+            if (fetched && fetched.size > 0) {
+                // Delete recent messages via bulk delete
+                const recent = fetched.filter(m => (Date.now() - m.createdTimestamp) < 13 * 24 * 60 * 60 * 1000);
+                if (recent.size > 0) {
+                    await channel.bulkDelete(recent, true).catch(() => {});
+                }
+                // Individually delete any remaining messages (including >14 days old messages)
+                const remaining = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+                if (remaining && remaining.size > 0) {
+                    for (const m of remaining.values()) {
+                        await m.delete().catch(() => {});
+                    }
+                }
             }
         } catch (e) {}
 
@@ -370,7 +440,9 @@ class MusicControllerEngine {
         const player = StarryAudioEngine.getPlayer(guild.id);
         const embed = this.buildEmbed(player, client, guild.id);
         const components = this.buildComponents(player, guild.id);
-        const files = fs.existsSync(BANNER_PATH) ? [BANNER_PATH] : [];
+        const files = fs.existsSync(BANNER_PATH) 
+            ? [new AttachmentBuilder(BANNER_PATH, { name: 'starry_music_banner.jpg' })] 
+            : [];
 
         const controllerMessage = await channel.send({
             embeds: [embed],
@@ -645,6 +717,106 @@ class MusicControllerEngine {
             }).catch(() => {});
         }
 
+        // Spotify Library Explorer
+        if (customId === 'ctrl_spotify') {
+            const spotifyManager = require('./spotifyManager');
+            const data = await spotifyManager.getUserPlaylists(interaction.user.id);
+            const total = data.savedPlaylists.length + data.oauthPlaylists.length;
+
+            if (total === 0) {
+                const emptyEmbed = new EmbedBuilder()
+                    .setColor('#1DB954')
+                    .setAuthor({ name: '🟢 Starry Spotify Library', iconURL: 'https://cdn-icons-png.flaticon.com/512/174/174872.png' })
+                    .setTitle('No Spotify Playlists Linked Yet')
+                    .setDescription(
+                        `You haven't saved or linked any Spotify playlists yet!\n\n` +
+                        `✨ **How to Add Playlists:**\n` +
+                        `• Use \`,spotify save <playlist_url> [name]\` to bookmark any playlist\n` +
+                        `• Use \`,spotify connect\` to link your personal Spotify account with OAuth\n\n` +
+                        `Once added, you can 1-click play any of your playlists right from this controller!`
+                    );
+
+                const port = process.env.PORT || 10000;
+                const { getPublicUrl } = require('../utils/tunnelManager');
+                const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
+                const redirectUri = `${publicUrl}/api/spotify/callback`;
+                const authUrl = spotifyManager.getOAuthUrl(interaction.user.id, redirectUri);
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('Connect Spotify Account')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(authUrl)
+                        .setEmoji('🟢')
+                );
+
+                return interaction.reply({ embeds: [emptyEmbed], components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor('#1DB954')
+                .setAuthor({ name: `${interaction.user.username}'s Spotify Library`, iconURL: data.avatarUrl || interaction.user.displayAvatarURL() })
+                .setTitle(`🟢 Choose a Spotify Playlist to Stream (${total} available)`)
+                .setDescription('Select any of your saved or personal Spotify playlists below to stream immediately into your voice channel:');
+
+            const options = [];
+            data.savedPlaylists.slice(0, 15).forEach(p => {
+                options.push({
+                    label: p.name.substring(0, 45),
+                    description: `${p.trackCount} tracks • Saved playlist`,
+                    value: `play_sp_${p.url}`,
+                    emoji: '🎵'
+                });
+            });
+            data.oauthPlaylists.slice(0, 10).forEach(p => {
+                if (options.length < 25) {
+                    options.push({
+                        label: p.name.substring(0, 45),
+                        description: `${p.trackCount} tracks • ${p.isPublic ? 'Public' : 'Private'}`,
+                        value: `play_sp_${p.url}`,
+                        emoji: '🟢'
+                    });
+                }
+            });
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('spotify_play_select')
+                .setPlaceholder('▶️ Pick a playlist to play in voice...')
+                .addOptions(options);
+
+            const row = new ActionRowBuilder().addComponents(menu);
+            return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+        }
+
+        // Spotify Direct Stream from Menu
+        if (customId === 'spotify_play_select') {
+            const selectedVal = interaction.values[0];
+            if (!selectedVal || !selectedVal.startsWith('play_sp_')) return false;
+            const playlistUrl = selectedVal.replace('play_sp_', '');
+
+            if (!voiceChannel) {
+                return interaction.reply({ 
+                    content: '❌ You must join a voice channel first to start streaming!', 
+                    flags: [EPHEMERAL_FLAG] 
+                }).catch(() => {});
+            }
+
+            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            try {
+                const spotifyManager = require('./spotifyManager');
+                const res = await spotifyManager.playPlaylist(client, interaction.guild, voiceChannel, interaction.channel, playlistUrl, interaction.user);
+                await this.update(guildId, client);
+
+                return interaction.editReply({ 
+                    content: `🟢 **Now Streaming:** \`${res.title}\` (**${res.trackCount}** tracks loaded into <#${voiceChannel.id}>)!` 
+                }).catch(() => {});
+            } catch (err) {
+                return interaction.editReply({ 
+                    content: `❌ Could not stream Spotify playlist: \`${err.message}\`` 
+                }).catch(() => {});
+            }
+        }
+
         // 4. Premium & Vote & Dashboard
         if (customId === 'ctrl_premium') {
             const embed = new EmbedBuilder()
@@ -755,6 +927,7 @@ class MusicControllerEngine {
             if (isKazagumo) {
                 const cur = player.data.get('autoplay') || false;
                 player.data.set('autoplay', !cur);
+                player.autoplay = !cur;
                 isAp = !cur;
             } else {
                 player.autoplay = !player.autoplay;

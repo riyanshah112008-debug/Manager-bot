@@ -118,9 +118,11 @@ class CommandContext {
     }
 
     async reply(options) {
-        if (this.replied && this.replyMessage) {
-            return this.replyMessage;
+        if (this.replied) {
+            if (this.replyMessage) return this.replyMessage;
+            return null;
         }
+        this.replied = true;
 
         let payload = options;
         if (typeof options === 'string') {

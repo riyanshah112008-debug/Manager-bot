@@ -622,7 +622,37 @@
             .hero-banner { padding: 24px 16px; }
             .hero-banner h2 { font-size: 1.6rem; }
             .redeem-box { flex-direction: column; align-items: stretch; }
-            .nav-tabs { display: none; }
+        /* MULTI-GATEWAY CHECKOUT STYLES */
+        .crypto-pill-container {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .crypto-coin-pill {
+            padding: 8px 14px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .crypto-coin-pill:hover {
+            border-color: var(--cyan);
+            color: #fff;
+            background: rgba(0, 242, 254, 0.1);
+        }
+        .crypto-coin-pill.active {
+            border-color: var(--cyan);
+            color: #fff;
+            background: rgba(0, 242, 254, 0.2);
+            box-shadow: 0 0 14px rgba(0, 242, 254, 0.35);
         }
     </style>
 </head>
@@ -877,10 +907,20 @@
                             <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">Live DSP Audio Presets</label>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                                 <button class="btn btn-outline" onclick="controlMusic('filter', 'clear')">🚫 Clear</button>
-                                <button class="btn btn-outline" onclick="controlMusic('filter', 'bassboost')">🎸 Bassboost</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'bass')">🔊 Bass</button>
                                 <button class="btn btn-outline" onclick="controlMusic('filter', '8d')">🌀 8D Audio</button>
                                 <button class="btn btn-outline" onclick="controlMusic('filter', 'nightcore')">✨ Nightcore</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'daycore')">🌅 Daycore</button>
                                 <button class="btn btn-outline" onclick="controlMusic('filter', 'vaporwave')">🪩 Vaporwave</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'lofi')">☕ Lo-Fi</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'reverb')">🌌 Reverb</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'karaoke')">🎤 Karaoke</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'surround')">🎧 3D Surround</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'electronic')">⚡ EDM / Club</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'soft')">🍃 Soft Chill</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'radio')">📻 Radio</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'treble')">💎 Treble</button>
+                                <button class="btn btn-outline" onclick="controlMusic('filter', 'pop')">🎙️ Pop Clarity</button>
                             </div>
                         </div>
                     </div>
@@ -1231,60 +1271,234 @@
 
     </div>
 
-    <!-- INTERACTIVE PAYMENT CHECKOUT MODAL WITH DROPDOWN -->
-    <div id="checkout-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); backdrop-filter: blur(16px); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
-        <div style="background: var(--bg-card); border: 1px solid var(--border-hover); border-radius: 20px; max-width: 500px; width: 100%; padding: 30px; box-shadow: 0 25px 60px rgba(0,0,0,0.7); position: relative;">
+    <!-- INTERACTIVE MULTI-STEP PAYMENT CHECKOUT MODAL -->
+    <div id="checkout-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); backdrop-filter: blur(16px); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: var(--bg-card); border: 1px solid var(--border-hover); border-radius: 20px; max-width: 540px; width: 100%; padding: 28px; box-shadow: 0 25px 60px rgba(0,0,0,0.8); position: relative; max-height: 92vh; overflow-y: auto;">
             
-            <button onclick="closeCheckout()" style="position: absolute; top: 20px; right: 20px; background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">✕</button>
+            <button onclick="closeCheckout()" style="position: absolute; top: 18px; right: 20px; background: transparent; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer;">✕</button>
 
-            <!-- FORM STATE -->
-            <div id="checkout-form-box">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-                    <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--gold), #D97706); display: flex; align-items: center; justify-content: center; font-size: 20px;">💎</div>
-                    <div>
-                        <h3 style="font-size: 1.25rem; font-weight: 800; margin: 0;">Starry VIP Checkout</h3>
-                        <p id="modal-tier-name" style="font-size: 0.82rem; color: var(--cyan); font-weight: 700; margin: 0;">Pro Cluster</p>
-                    </div>
+            <!-- MODAL HEADER -->
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--gold), #D97706); display: flex; align-items: center; justify-content: center; font-size: 22px;">💎</div>
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 800; margin: 0; color: #fff;">Starry VIP Checkout</h3>
+                    <p id="modal-tier-name" style="font-size: 0.82rem; color: var(--cyan); font-weight: 700; margin: 0;">Pro Cluster</p>
                 </div>
+            </div>
 
-                <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 18px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: var(--text-muted); font-size: 0.88rem;">Order Total:</span>
+            <!-- STEP 1: METHOD SELECTION -->
+            <div id="checkout-step-1">
+                <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="color: var(--text-muted); font-size: 0.88rem;">Selected Plan:</span>
                         <span id="modal-tier-price" style="font-size: 1.35rem; font-weight: 800; color: var(--gold);">$12.99</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-muted);">
+                        <span>Target Server:</span>
+                        <span id="modal-target-guild" style="color: #fff; font-weight: 600;">Current Server</span>
                     </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Select Payment Method (Dropdown)</label>
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Select Payment Gateway</label>
                     <select id="checkout-method-select" class="select-input" onchange="onPaymentMethodChange()">
-                        <option value="card">💳 Stripe / Credit & Debit Card (Instant Global)</option>
-                        <option value="paypal">🅿️ PayPal Express Checkout</option>
-                        <option value="upi">📱 UPI Instant QR & Apps (GooglePay, PhonePe, Paytm)</option>
-                        <option value="crypto">🪙 Crypto (USDT TRC20 / SOL / BTC)</option>
+                        <option value="crypto">🪙 Crypto Gateway (USDT TRC20, SOL, BTC, ETH, BEP20, LTC) - [Global]</option>
+                        <option value="paypal">🅿️ PayPal Express (Cards, Balance, Bank) - [Global USD / EUR]</option>
+                        <option value="upi">📱 UPI Instant QR (GooglePay, PhonePe, Paytm, BHIM) - [India ₹]</option>
+                        <option value="card">💳 Credit & Debit Card (Stripe Global Checkout)</option>
                     </select>
                 </div>
 
-                <!-- UPI LIVE DETAILS -->
+                <!-- CRYPTO DETAILS BLURB -->
+                <div id="method-crypto-info" style="display: block; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 12px; padding: 14px; margin-bottom: 16px; font-size: 0.85rem;">
+                    <p style="font-weight: 700; color: var(--cyan); margin-bottom: 4px;">🪙 Global Multi-Network Crypto Accepted</p>
+                    <p style="color: var(--text-muted); margin-bottom: 4px;">• Pay with <strong>USDT (TRC-20 & BEP-20)</strong>, <strong>Solana (SOL)</strong>, <strong>Bitcoin (BTC)</strong>, <strong>Ethereum (ETH)</strong>, or <strong>Litecoin (LTC)</strong>.</p>
+                    <p style="color: var(--text-muted); margin: 0;">• Instant order registration with 1-confirmation blockchain TxHash.</p>
+                </div>
+
+                <!-- PAYPAL DETAILS BLURB -->
+                <div id="method-paypal-info" style="display: none; background: rgba(0, 112, 186, 0.1); border: 1px solid rgba(0, 112, 186, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 16px; font-size: 0.85rem;">
+                    <p style="font-weight: 700; color: #38BDF8; margin-bottom: 4px;">🅿️ Instant PayPal Express Checkout</p>
+                    <p style="color: var(--text-muted); margin-bottom: 4px;">• Send payment directly via PayPal.Me link or email with 1-click.</p>
+                    <p style="color: var(--text-muted); margin: 0;">• Supports PayPal balance, linked bank accounts, and international debit/credit cards.</p>
+                </div>
+
+                <!-- UPI LIVE DETAILS BLURB -->
                 <div id="method-upi-info" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 16px; font-size: 0.85rem;">
-                    <p style="font-weight: 700; color: #10B981; margin-bottom: 4px;">📱 UPI Payment Active (₹399 / ₹999 / ₹3,299)</p>
-                    <p style="color: var(--text-muted); margin-bottom: 4px;">• Pay via GooglePay / PhonePe / Paytm / BHIM</p>
-                    <p style="color: var(--text-muted);">• License key will be generated immediately below.</p>
+                    <p style="font-weight: 700; color: #10B981; margin-bottom: 4px;">⚡ Instant UPI Dynamic QR & App Payments</p>
+                    <p style="color: var(--text-muted); margin-bottom: 4px;">• Zero extra gateway fees. Supported on all Indian UPI apps (GPay, PhonePe, Paytm).</p>
+                    <p style="color: var(--text-muted); margin: 0;">• Enter your 12-digit UPI UTR / Reference ID after paying to verify.</p>
                 </div>
 
-                <!-- CRYPTO LIVE DETAILS -->
-                <div id="method-crypto-info" style="display: none; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 16px; font-size: 0.85rem;">
-                    <p style="font-weight: 700; color: var(--cyan); margin-bottom: 4px;">🪙 USDT / Crypto Gateway (5 / 14 / 42 USDT)</p>
-                    <p style="color: var(--text-muted);">• Instant license key generation with 0 confirmations required.</p>
+                <!-- CARD DETAILS BLURB -->
+                <div id="method-card-info" style="display: none; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 16px; font-size: 0.85rem;">
+                    <p style="font-weight: 700; color: var(--gold); margin-bottom: 4px;">💳 International Card Gateway</p>
+                    <p style="color: var(--text-muted); margin: 0;">• Visa, MasterCard, American Express, and Apple Pay checkout.</p>
                 </div>
 
-                <button id="checkout-submit-btn" class="btn btn-premium" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem;" onclick="processCheckoutSubmit()">⚡ Complete Order & Generate Key</button>
+                <button id="checkout-step1-btn" class="btn btn-premium" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem;" onclick="proceedToPayment()">💳 Proceed to Payment Details</button>
             </div>
 
-            <!-- SUCCESS RESULT STATE -->
-            <div id="checkout-result-box" style="display: none; text-align: center;">
-                <div style="font-size: 42px; margin-bottom: 10px;">🎉</div>
-                <h3 style="font-size: 1.3rem; font-weight: 800; color: #10B981; margin-bottom: 4px;">Order Created Successfully!</h3>
-                <p id="generated-key-instructions" style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 16px; line-height: 1.4;"></p>
+            <!-- STEP 2: INTERACTIVE PAYMENT DISPLAY & PROOF SUBMISSION -->
+            <div id="checkout-step-2" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;">
+                    <div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Order Reference</div>
+                        <div id="step2-order-id" style="font-family: monospace; font-weight: 800; color: var(--cyan); font-size: 0.95rem;">ORD-XXXX-XXXX</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Amount Due</div>
+                        <div id="step2-order-amount" style="font-weight: 800; color: var(--gold); font-size: 1.15rem;">$12.99 USD</div>
+                    </div>
+                </div>
+
+                <!-- 🪙 1. CRYPTO CONTAINER -->
+                <div id="step2-crypto-container" style="display: none;">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">Select Cryptocurrency / Network:</label>
+                    <div class="crypto-pill-container">
+                        <button class="crypto-coin-pill active" data-coin="usdt_trc20" onclick="selectCryptoCoin('usdt_trc20')">🟢 USDT (TRC-20)</button>
+                        <button class="crypto-coin-pill" data-coin="sol" onclick="selectCryptoCoin('sol')">🟣 Solana (SOL)</button>
+                        <button class="crypto-coin-pill" data-coin="btc" onclick="selectCryptoCoin('btc')">🟡 Bitcoin (BTC)</button>
+                        <button class="crypto-coin-pill" data-coin="eth" onclick="selectCryptoCoin('eth')">🔷 Ethereum (ETH)</button>
+                        <button class="crypto-coin-pill" data-coin="usdt_bep20" onclick="selectCryptoCoin('usdt_bep20')">🟡 USDT (BEP-20)</button>
+                        <button class="crypto-coin-pill" data-coin="ltc" onclick="selectCryptoCoin('ltc')">⚪ Litecoin (LTC)</button>
+                    </div>
+
+                    <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 12px; padding: 14px; margin-bottom: 14px; text-align: center;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem;">
+                            <span id="step2-crypto-network-badge" style="color: var(--cyan); font-weight: 700;">TRON Network (TRC-20)</span>
+                            <span id="step2-crypto-amount-badge" style="color: var(--gold); font-weight: 800; font-size: 0.95rem;">$12.99 USDT</span>
+                        </div>
+
+                        <div style="display: inline-block; padding: 10px; background: #ffffff; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); border: 2px solid var(--cyan); margin-bottom: 12px;">
+                            <img id="step2-crypto-qr-img" src="" alt="Crypto Deposit QR" style="width: 170px; height: 170px; display: block;">
+                        </div>
+
+                        <div style="background: rgba(0,0,0,0.6); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div style="overflow: hidden; text-align: left;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Deposit Address</div>
+                                <div id="step2-crypto-address-text" style="font-family: monospace; font-weight: 700; color: #fff; font-size: 0.85rem; word-break: break-all;">TF1n7dG7K8x9p2Ym3w4Q5r6T7u8V9w0X1Z</div>
+                            </div>
+                            <button class="btn btn-outline" onclick="copyCryptoAddress()" style="padding: 6px 12px; font-size: 0.75rem; white-space: nowrap;">📋 Copy</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🅿️ 2. PAYPAL CONTAINER -->
+                <div id="step2-paypal-container" style="display: none;">
+                    <div style="background: rgba(0, 112, 186, 0.08); border: 1px solid rgba(0, 112, 186, 0.3); border-radius: 14px; padding: 18px; margin-bottom: 14px; text-align: center;">
+                        <div style="font-size: 32px; margin-bottom: 6px;">🅿️</div>
+                        <h4 style="font-size: 1.15rem; font-weight: 800; color: #38BDF8; margin-bottom: 4px;">PayPal Express Checkout</h4>
+                        <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 14px;">Pay securely with your PayPal account or linked debit/credit card.</p>
+
+                        <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 14px;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">Transfer Amount</div>
+                            <div id="step2-paypal-amount-badge" style="font-size: 1.4rem; font-weight: 800; color: var(--gold); margin-bottom: 8px;">$12.99 USD</div>
+                            <a id="step2-paypal-me-btn" href="#" target="_blank" class="btn btn-primary" style="width: 100%; justify-content: center; background: #0070BA; padding: 12px; font-size: 0.95rem; text-decoration: none; border-radius: 10px;">
+                                🅿️ Open PayPal to Complete Payment
+                            </a>
+                        </div>
+
+                        <div style="background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div style="text-align: left; overflow: hidden;">
+                                <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">PayPal Email Address</div>
+                                <div id="paypal-email-text" style="font-family: monospace; font-weight: 700; color: #fff; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis;">starrypayments@gmail.com</div>
+                            </div>
+                            <button class="btn btn-outline" onclick="copyPaypalEmail()" style="padding: 6px 12px; font-size: 0.75rem; white-space: nowrap;">📋 Copy Email</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 📱 3. UPI CONTAINER -->
+                <div id="step2-upi-container" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 14px;">
+                        <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 8px;">Scan with GooglePay, PhonePe, Paytm, BHIM, or any UPI App:</div>
+                        <div style="display: inline-block; padding: 10px; background: #ffffff; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); border: 2px solid var(--gold);">
+                            <img id="step2-upi-qr-img" src="" alt="UPI QR Code" style="width: 180px; height: 180px; display: block;">
+                        </div>
+                    </div>
+
+                    <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="overflow: hidden;">
+                            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">UPI ID / VPA</div>
+                            <div id="step2-upi-id-text" style="font-family: monospace; font-weight: 700; color: #10B981; font-size: 0.9rem; text-overflow: ellipsis; overflow: hidden;">starrybot@upi</div>
+                        </div>
+                        <button class="btn btn-outline" onclick="copyUpiId()" style="padding: 6px 12px; font-size: 0.75rem; white-space: nowrap;">📋 Copy UPI</button>
+                    </div>
+
+                    <a id="step2-upi-intent-link" href="#" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 14px; text-decoration: none; padding: 10px; font-size: 0.9rem;">
+                        📱 Tap to Pay in UPI App (Mobile)
+                    </a>
+                </div>
+
+                <!-- 💳 4. CARD CONTAINER -->
+                <div id="step2-card-container" style="display: none; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 14px; text-align: center;">
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Click below to open the secure Stripe checkout gateway for international debit and credit cards.</p>
+                    <a id="step2-card-link" href="#" target="_blank" class="btn btn-primary" style="display: inline-block; padding: 10px 24px; text-decoration: none; font-size: 0.9rem;">💳 Open Card Checkout</a>
+                </div>
+
+                <!-- VERIFICATION PROOF INPUT BOX -->
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                    <label id="step2-proof-label" style="display: block; font-size: 0.8rem; font-weight: 700; color: #F59E0B; margin-bottom: 4px;">
+                        📝 Enter Payment Reference / TxID to Verify:
+                    </label>
+                    <p id="step2-proof-hint" style="font-size: 0.74rem; color: var(--text-muted); margin-bottom: 8px;">
+                        Paste your Blockchain TxHash, PayPal Transaction ID, or UPI UTR below.
+                    </p>
+                    <input type="text" id="checkout-utr-input" placeholder="e.g. TxHash / PayPal ID / UTR" maxlength="80" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,0.6); color: #fff; font-family: monospace; font-size: 0.95rem; text-align: center; letter-spacing: 1px; box-sizing: border-box;">
+                    <div id="checkout-utr-error" style="display: none; color: #EF4444; font-size: 0.78rem; margin-top: 6px; font-weight: 600;"></div>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-outline" style="flex: 1; justify-content: center; font-size: 0.85rem;" onclick="backToStep1()">← Change</button>
+                    <button id="checkout-submit-proof-btn" class="btn btn-premium" style="flex: 2; justify-content: center; font-size: 0.9rem;" onclick="submitPaymentProof()">⚡ Confirm & Submit Verification</button>
+                </div>
+            </div>
+
+            <!-- STEP 3: VERIFICATION IN PROGRESS -->
+            <div id="checkout-step-3" style="display: none; text-align: center; padding: 10px 0;">
+                <div style="font-size: 48px; margin-bottom: 12px;">⏳</div>
+                <h3 style="font-size: 1.3rem; font-weight: 800; color: #F59E0B; margin-bottom: 6px;">Payment Under Verification</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; margin-bottom: 16px;">
+                    Your payment reference has been submitted to our automated settlement engine.
+                </p>
+
+                <div style="background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 18px; text-align: left;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.82rem;">
+                        <span style="color: var(--text-muted);">Order ID:</span>
+                        <span id="step3-order-id" style="font-family: monospace; font-weight: 700; color: var(--cyan);">ORD-XXXX</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.82rem;">
+                        <span style="color: var(--text-muted);">Method:</span>
+                        <span id="step3-method-text" style="font-weight: 700; color: #fff;">Crypto</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.82rem;">
+                        <span style="color: var(--text-muted);">Reference / Hash:</span>
+                        <span id="step3-utr-text" style="font-family: monospace; font-weight: 700; color: #fff; word-break: break-all; max-width: 60%;">TxHash...</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.82rem;">
+                        <span style="color: var(--text-muted);">Status:</span>
+                        <span style="color: #F59E0B; font-weight: 700;">🟡 Verifying Settlement...</span>
+                    </div>
+                </div>
+
+                <p style="font-size: 0.78rem; color: #6B7280; margin-bottom: 16px;">
+                    💡 Once confirmed by blockchain/gateway, your server will upgrade instantly and your 16-digit license key will be displayed here.
+                </p>
+
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button class="btn btn-outline" onclick="closeCheckout()">Close</button>
+                    <button id="step3-check-btn" class="btn btn-primary" onclick="checkCurrentOrderStatus(true)">🔄 Refresh Status</button>
+                </div>
+            </div>
+
+            <!-- STEP 4: SUCCESS RESULT -->
+            <div id="checkout-step-4" style="display: none; text-align: center; padding: 10px 0;">
+                <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
+                <h3 style="font-size: 1.35rem; font-weight: 800; color: #10B981; margin-bottom: 4px;">Payment Confirmed!</h3>
+                <p id="step4-success-desc" style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 16px; line-height: 1.4;">
+                    Your license key has been generated and your VIP privileges are active!
+                </p>
 
                 <div style="background: rgba(0,0,0,0.6); border: 2px dashed var(--gold); border-radius: 12px; padding: 14px; margin-bottom: 18px;">
                     <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Your 16-Digit License Key</div>
@@ -1293,7 +1507,7 @@
 
                 <div style="display: flex; gap: 10px; justify-content: center;">
                     <button class="btn btn-outline" onclick="copyGeneratedKey()">📋 Copy Key</button>
-                    <button class="btn btn-primary" onclick="autoRedeemGeneratedKey()">⚡ Auto-Activate Server</button>
+                    <button class="btn btn-primary" onclick="closeCheckout()">Done</button>
                 </div>
             </div>
 
@@ -1313,7 +1527,7 @@
 
         const COMMAND_GROUPS = {
             moderation: ['ban', 'unban', 'kick', 'timeout', 'untimeout', 'warn', 'warnings', 'clearwarns', 'purge', 'lock', 'unlock', 'slowmode', 'nickname', 'addrole', 'removerole', 'quarantine', 'emergencylockdown', 'emergencysecure', 'emergencyunban'],
-            music: ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'loop', 'shuffle', 'bassboost', 'nightcore', '8d', 'vaporwave', 'nowplaying', 'autoplay', '247'],
+            music: ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'loop', 'shuffle', 'bass', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop', 'filter', 'clearfilters', 'nowplaying', 'autoplay', '247'],
             utility: ['ping', 'help', 'serverinfo', 'userinfo', 'avatar', 'banner', 'roles', 'channels', 'calc', 'poll', 'snipe', 'afk', 'remind', 'uptime', 'stats', 'invite', 'bump'],
             economy: ['balance', 'daily', 'weekly', 'work', 'crime', 'rob', 'deposit', 'withdraw', 'pay', 'shop', 'buy', 'inventory', 'slots', 'coinflip', 'dice', 'blackjack', 'chest', 'pet', 'prestige'],
             social: ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'sleep', 'wakeup', 'cry', 'laugh', 'dance', 'blush', 'pout', 'smile', 'bored', 'confess', 'marry'],
@@ -1718,6 +1932,10 @@
 
         let checkoutSelectedTier = 'pro_cluster';
         let checkoutSelectedPrice = '$12.99';
+        let currentOrderId = null;
+        let currentOrderData = null;
+        let currentCryptoCoin = 'usdt_trc20';
+        let orderPollInterval = null;
 
         function openCheckout(tier, price) {
             checkoutSelectedTier = tier;
@@ -1732,60 +1950,296 @@
 
             document.getElementById('modal-tier-name').innerText = tierNames[tier] || tier.toUpperCase();
             document.getElementById('modal-tier-price').innerText = price;
-            document.getElementById('checkout-result-box').style.display = 'none';
-            document.getElementById('checkout-form-box').style.display = 'block';
+            
+            const currentGuildName = (guildDataCache[currentGuildId]?.name) || (currentGuildId ? `Server (${currentGuildId})` : 'Personal Account VIP');
+            const targetGuildEl = document.getElementById('modal-target-guild');
+            if (targetGuildEl) targetGuildEl.innerText = currentGuildName;
+
+            backToStep1();
             modal.style.display = 'flex';
         }
 
         function closeCheckout() {
+            if (orderPollInterval) {
+                clearInterval(orderPollInterval);
+                orderPollInterval = null;
+            }
             document.getElementById('checkout-modal').style.display = 'none';
+        }
+
+        function backToStep1() {
+            if (orderPollInterval) {
+                clearInterval(orderPollInterval);
+                orderPollInterval = null;
+            }
+            document.getElementById('checkout-step-1').style.display = 'block';
+            document.getElementById('checkout-step-2').style.display = 'none';
+            document.getElementById('checkout-step-3').style.display = 'none';
+            document.getElementById('checkout-step-4').style.display = 'none';
+            const errEl = document.getElementById('checkout-utr-error');
+            if (errEl) errEl.style.display = 'none';
         }
 
         function onPaymentMethodChange() {
             const method = document.getElementById('checkout-method-select').value;
             const upiInfo = document.getElementById('method-upi-info');
+            const paypalInfo = document.getElementById('method-paypal-info');
             const cryptoInfo = document.getElementById('method-crypto-info');
+            const cardInfo = document.getElementById('method-card-info');
             
-            upiInfo.style.display = method === 'upi' ? 'block' : 'none';
-            cryptoInfo.style.display = method === 'crypto' ? 'block' : 'none';
+            if (cryptoInfo) cryptoInfo.style.display = method === 'crypto' ? 'block' : 'none';
+            if (paypalInfo) paypalInfo.style.display = method === 'paypal' ? 'block' : 'none';
+            if (upiInfo) upiInfo.style.display = method === 'upi' ? 'block' : 'none';
+            if (cardInfo) cardInfo.style.display = method === 'card' ? 'block' : 'none';
         }
 
-        async function processCheckoutSubmit() {
-            const methodSelect = document.getElementById('checkout-method-select');
-            const method = methodSelect.options[methodSelect.selectedIndex].text;
-            const submitBtn = document.getElementById('checkout-submit-btn');
+        function selectCryptoCoin(coinId) {
+            currentCryptoCoin = coinId;
+            if (!currentOrderData || !currentOrderData.paymentDetails?.allCrypto) return;
+            const coinData = currentOrderData.paymentDetails.allCrypto[coinId];
+            if (!coinData) return;
 
-            submitBtn.disabled = true;
-            submitBtn.innerText = '⚡ Processing Order...';
+            // Update pills
+            document.querySelectorAll('.crypto-coin-pill').forEach(p => {
+                if (p.getAttribute('data-coin') === coinId) {
+                    p.classList.add('active');
+                } else {
+                    p.classList.remove('active');
+                }
+            });
+
+            // Update displayed details
+            const qrImg = document.getElementById('step2-crypto-qr-img');
+            if (qrImg) qrImg.src = coinData.qrUrl;
+
+            const addrText = document.getElementById('step2-crypto-address-text');
+            if (addrText) addrText.innerText = coinData.address;
+
+            const netBadge = document.getElementById('step2-crypto-network-badge');
+            if (netBadge) netBadge.innerText = coinData.network + ' • ' + coinData.badge;
+
+            const amtBadge = document.getElementById('step2-crypto-amount-badge');
+            if (amtBadge) amtBadge.innerText = `$${currentOrderData.amountUsd} in ${coinData.symbol}`;
+        }
+
+        function copyCryptoAddress() {
+            const addr = document.getElementById('step2-crypto-address-text').innerText;
+            navigator.clipboard.writeText(addr);
+            showToast('📋 ' + currentCryptoCoin.toUpperCase() + ' Address Copied!');
+        }
+
+        function copyPaypalEmail() {
+            const email = document.getElementById('paypal-email-text').innerText;
+            navigator.clipboard.writeText(email);
+            showToast('📋 PayPal Email Copied: ' + email);
+        }
+
+        function copyUpiId() {
+            const upiId = document.getElementById('step2-upi-id-text').innerText;
+            navigator.clipboard.writeText(upiId);
+            showToast('📋 UPI ID Copied: ' + upiId);
+        }
+
+        async function proceedToPayment() {
+            const methodSelect = document.getElementById('checkout-method-select');
+            const method = methodSelect.value;
+            const step1Btn = document.getElementById('checkout-step1-btn');
+
+            step1Btn.disabled = true;
+            step1Btn.innerText = '⚡ Initializing Gateway...';
 
             try {
                 const res = await fetch('/api/premium/checkout', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
-                    body: JSON.stringify({ 
-                        tier: checkoutSelectedTier, 
-                        method: method, 
-                        guildId: currentGuildId 
+                    body: JSON.stringify({
+                        tier: checkoutSelectedTier,
+                        method: method,
+                        cryptoCoin: currentCryptoCoin,
+                        guildId: currentGuildId
+                    })
+                });
+
+                const data = await res.json();
+                step1Btn.disabled = false;
+                step1Btn.innerText = '💳 Proceed to Payment Details';
+
+                if (!data.success || !data.order) {
+                    alert(data.error || 'Failed to initialize payment order.');
+                    return;
+                }
+
+                currentOrderData = data.order;
+                currentOrderId = currentOrderData.orderId;
+
+                document.getElementById('step2-order-id').innerText = currentOrderData.orderId;
+                document.getElementById('step2-order-amount').innerText = currentOrderData.method === 'upi' ? `₹${currentOrderData.amountInr} INR` : `$${currentOrderData.amountUsd} USD`;
+
+                const cryptoContainer = document.getElementById('step2-crypto-container');
+                const paypalContainer = document.getElementById('step2-paypal-container');
+                const upiContainer = document.getElementById('step2-upi-container');
+                const cardContainer = document.getElementById('step2-card-container');
+
+                const proofLabel = document.getElementById('step2-proof-label');
+                const proofHint = document.getElementById('step2-proof-hint');
+                const proofInput = document.getElementById('checkout-utr-input');
+
+                cryptoContainer.style.display = 'none';
+                paypalContainer.style.display = 'none';
+                upiContainer.style.display = 'none';
+                cardContainer.style.display = 'none';
+
+                if (currentOrderData.method === 'crypto') {
+                    cryptoContainer.style.display = 'block';
+                    proofLabel.innerText = '📝 Enter Blockchain Transaction Hash (TxHash / TxID):';
+                    proofHint.innerText = 'Copy and paste the transaction hash from your wallet (TronLink, Binance, TrustWallet, Phantom, Metamask).';
+                    proofInput.placeholder = 'e.g. 7f8a9b2c3d4e5f6... or 0x4e2f8c...';
+
+                    selectCryptoCoin(currentCryptoCoin || 'usdt_trc20');
+
+                } else if (currentOrderData.method === 'paypal') {
+                    paypalContainer.style.display = 'block';
+                    proofLabel.innerText = '📝 Enter PayPal Transaction ID or Payer Email:';
+                    proofHint.innerText = 'Find your PayPal Transaction ID in your activity or confirmation email after paying.';
+                    proofInput.placeholder = 'e.g. 9XX12345YY67890ZZ or your@email.com';
+
+                    document.getElementById('step2-paypal-amount-badge').innerText = `$${currentOrderData.amountUsd} USD`;
+                    const paypalMeBtn = document.getElementById('step2-paypal-me-btn');
+                    if (paypalMeBtn) paypalMeBtn.href = currentOrderData.paymentDetails?.paypalMeUrl || 'https://paypal.me';
+                    const paypalEmail = document.getElementById('paypal-email-text');
+                    if (paypalEmail) paypalEmail.innerText = currentOrderData.paymentDetails?.paypalEmail || 'starrypayments@gmail.com';
+
+                } else if (currentOrderData.method === 'upi') {
+                    upiContainer.style.display = 'block';
+                    proofLabel.innerText = '📝 Enter 12-Digit UPI UTR / Reference ID:';
+                    proofHint.innerText = 'Locate the 12-digit UTR or Reference Number in your UPI receipt (GPay, PhonePe, Paytm).';
+                    proofInput.placeholder = 'e.g. 423456789012';
+
+                    document.getElementById('step2-upi-qr-img').src = currentOrderData.paymentDetails?.upiQrUrl || '';
+                    document.getElementById('step2-upi-id-text').innerText = currentOrderData.paymentDetails?.upiId || 'starrybot@upi';
+                    const intentLink = document.getElementById('step2-upi-intent-link');
+                    if (intentLink) intentLink.href = currentOrderData.paymentDetails?.upiUri || '#';
+
+                } else {
+                    cardContainer.style.display = 'block';
+                    proofLabel.innerText = '📝 Enter Card Payment Reference / Receipt ID:';
+                    proofHint.innerText = 'Enter the confirmation code or receipt email from the checkout.';
+                    proofInput.placeholder = 'e.g. ch_3M... or receipt email';
+
+                    const cardLink = document.getElementById('step2-card-link');
+                    if (cardLink) cardLink.href = currentOrderData.paymentDetails?.cardUrl || '#';
+                }
+
+                proofInput.value = '';
+                const errEl = document.getElementById('checkout-utr-error');
+                if (errEl) errEl.style.display = 'none';
+
+                document.getElementById('checkout-step-1').style.display = 'none';
+                document.getElementById('checkout-step-2').style.display = 'block';
+            } catch (e) {
+                step1Btn.disabled = false;
+                step1Btn.innerText = '💳 Proceed to Payment Details';
+                alert('Connection error: ' + e.message);
+            }
+        }
+
+        async function submitPaymentProof() {
+            const proofInput = document.getElementById('checkout-utr-input');
+            const proofValue = proofInput.value.trim();
+            const errEl = document.getElementById('checkout-utr-error');
+            const submitBtn = document.getElementById('checkout-submit-proof-btn');
+
+            if (!proofValue || proofValue.length < 5) {
+                errEl.innerText = '❌ Please enter a valid Transaction Hash / Payment Reference (minimum 5 characters).';
+                errEl.style.display = 'block';
+                return;
+            }
+            errEl.style.display = 'none';
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = '⏳ Submitting Verification...';
+
+            try {
+                const res = await fetch('/api/premium/submit-proof', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
+                    body: JSON.stringify({
+                        orderId: currentOrderId,
+                        utr: proofValue,
+                        method: currentOrderData?.method || document.getElementById('checkout-method-select').value,
+                        cryptoCoin: currentCryptoCoin
                     })
                 });
 
                 const data = await res.json();
                 submitBtn.disabled = false;
-                submitBtn.innerText = '⚡ Complete Order & Generate Key';
+                submitBtn.innerText = '⚡ Confirm & Submit Verification';
 
-                if (data.success) {
-                    document.getElementById('checkout-form-box').style.display = 'none';
-                    const resBox = document.getElementById('checkout-result-box');
-                    resBox.style.display = 'block';
-                    document.getElementById('generated-key-display').innerText = data.key;
-                    document.getElementById('generated-key-instructions').innerText = `Your license key is ready! You can click "Auto-Activate" below or use ,redeem ${data.key} in Discord.`;
-                } else {
-                    alert(data.error || 'Failed to process checkout.');
+                if (!data.success) {
+                    errEl.innerText = '❌ ' + (data.error || 'Submission failed.');
+                    errEl.style.display = 'block';
+                    return;
                 }
+
+                // Transition to Step 3: Verification in Progress
+                document.getElementById('step3-order-id').innerText = currentOrderId;
+                document.getElementById('step3-method-text').innerText = (data.method || 'payment').toUpperCase() + (data.cryptoCoin ? ` (${data.cryptoCoin.toUpperCase()})` : '');
+                document.getElementById('step3-utr-text').innerText = proofValue;
+
+                document.getElementById('checkout-step-2').style.display = 'none';
+                document.getElementById('checkout-step-3').style.display = 'block';
+                showToast('✅ Payment Submitted for Instant Verification!');
+
+                // Start Auto-Polling every 4 seconds
+                if (orderPollInterval) clearInterval(orderPollInterval);
+                orderPollInterval = setInterval(() => {
+                    checkCurrentOrderStatus(false);
+                }, 4000);
+
             } catch (e) {
                 submitBtn.disabled = false;
-                submitBtn.innerText = '⚡ Complete Order & Generate Key';
+                submitBtn.innerText = '⚡ Confirm & Submit Verification';
                 alert('Connection error: ' + e.message);
+            }
+        }
+
+        async function checkCurrentOrderStatus(manual = false) {
+            if (!currentOrderId) return;
+            const checkBtn = document.getElementById('step3-check-btn');
+            if (manual && checkBtn) checkBtn.innerText = '🔄 Checking...';
+
+            try {
+                const res = await fetch(`/api/premium/order/${currentOrderId}`, {
+                    headers: { 'bypass-tunnel-reminder': 'true' }
+                });
+                const data = await res.json();
+                if (manual && checkBtn) checkBtn.innerText = '🔄 Refresh Status';
+
+                if (data.success && data.order) {
+                    if (data.order.status === 'completed' && data.order.licenseKey) {
+                        if (orderPollInterval) {
+                            clearInterval(orderPollInterval);
+                            orderPollInterval = null;
+                        }
+
+                        document.getElementById('checkout-step-3').style.display = 'none';
+                        document.getElementById('checkout-step-4').style.display = 'block';
+                        document.getElementById('generated-key-display').innerText = data.order.licenseKey;
+
+                        showToast('🎉 Payment Confirmed & License Key Issued!');
+                    } else if (data.order.status === 'rejected') {
+                        if (orderPollInterval) {
+                            clearInterval(orderPollInterval);
+                            orderPollInterval = null;
+                        }
+                        alert('❌ Payment Verification was rejected: ' + (data.order.notes || 'Invalid reference or unpaid.'));
+                        backToStep1();
+                    } else if (manual) {
+                        showToast('🟡 Settlement still verifying. Please allow a moment.');
+                    }
+                }
+            } catch (e) {
+                if (manual && checkBtn) checkBtn.innerText = '🔄 Refresh Status';
             }
         }
 
@@ -1793,22 +2247,6 @@
             const key = document.getElementById('generated-key-display').innerText;
             navigator.clipboard.writeText(key);
             showToast('📋 License Key Copied to Clipboard!');
-        }
-
-        async function autoRedeemGeneratedKey() {
-            const key = document.getElementById('generated-key-display').innerText;
-            const res = await fetch('/api/premium/redeem', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
-                body: JSON.stringify({ key, guildId: currentGuildId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                showToast(data.message || '🎉 Premium Activated Successfully!');
-                setTimeout(() => closeCheckout(), 1500);
-            } else {
-                alert(data.error || 'Activation failed.');
-            }
         }
 
         async function loadDirectory() {

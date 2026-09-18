@@ -16,6 +16,7 @@ const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const ModCase = require('../../models/ModCase');
 const { requirePremium } = require('../../utils/premiumHelper');
+const automodHelper = require('../../utils/automodHelper');
 
 // Helper to parse duration string like 10m, 1h, 1d to ms
 function parseDuration(str) {
@@ -1489,6 +1490,286 @@ const commands = [
             if (!c) return ctx.reply(`❌ Case **#${caseNum}** was not found.`);
 
             return ctx.reply(`✅ **Case #${caseNum} updated successfully!**\nNew Reason: *${c.reason}*`);
+        }
+    },
+
+    // 41. AUTOMOD (Channel & Server AutoMod Pro Configuration)
+    {
+        name: 'automod',
+        aliases: ['am', 'automoderation'],
+        category: 'Moderation',
+        description: 'Configure and toggle AutoMod protection for specific channels (links, emojis, status).',
+        usage: ',automod <enable|disable|status|list|reset> [links|emojis|all] [#channel]',
+        permissions: [PermissionFlagsBits.Administrator],
+        async execute(ctx) {
+            if (!ctx.inGuild) return ctx.reply('❌ This command can only be used in a Discord server.');
+            if (!automodHelper.canManageAutomod(ctx.member, ctx.user, ctx.guild)) {
+                return ctx.reply('❌ You need **Administrator** or **Manage Server** permissions to configure AutoMod settings.');
+            }
+
+            const prefix = ctx.client?.prefix || ',';
+            const args = ctx.args || [];
+
+            // Case A: No arguments -> Show live status and interactive buttons for current channel
+            if (args.length === 0) {
+                const settings = await automodHelper.getChannelSettings(ctx.channel.id, ctx.guild.id);
+                const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+                const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, ctx.channel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(ctx.channel.id, settings);
+
+                return ctx.reply({
+                    embeds: [embed],
+                    components: [buttons]
+                });
+            }
+
+            const firstArg = args[0].toLowerCase();
+
+            // Case B: List all channel overrides in the server
+            if (firstArg === 'list' || firstArg === 'channels') {
+                const overrides = await automodHelper.listGuildOverrides(ctx.guild.id);
+                if (overrides.length === 0) {
+                    return ctx.reply('ℹ️ **No channel overrides configured.** All channels are currently protected by standard server-wide AutoMod.');
+                }
+
+                const listText = overrides.map(o => {
+                    const linksStatus = o.links ? '🔴 Links Allowed' : '🟢 Links Blocked';
+                    const emojisStatus = o.emojis ? '🔴 Emojis Allowed' : '🟢 Emojis Blocked';
+                    return `• <#${o.channelId}> — ${linksStatus} | ${emojisStatus}`;
+                }).join('\n');
+
+                const embed = new EmbedBuilder()
+                    .setColor(config.EMBED_COLORS?.PRIMARY || '#5865F2')
+                    .setTitle(`🛡️ AutoMod Channel Overrides (${overrides.length})`)
+                    .setDescription(listText)
+                    .setFooter({ text: `Use ${prefix}automod reset #channel to restore default protection` })
+                    .setTimestamp();
+
+                return ctx.reply({ embeds: [embed] });
+            }
+
+            // Case C: Reset channel overrides
+            if (firstArg === 'reset' || firstArg === 'clear') {
+                const targetChannel = await automodHelper.resolveChannel(ctx, args.slice(1));
+                const updated = await automodHelper.resetChannelSettings(targetChannel.id, ctx.guild.id);
+                const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+                const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, updated, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+                return ctx.reply({
+                    content: `✅ Reset AutoMod settings for <#${targetChannel.id}> to **Full Active Protection** (Links & Emojis blocked).`,
+                    embeds: [embed],
+                    components: [buttons]
+                });
+            }
+
+            // Case D: Server-wide toggle (,automod toggle enable / disable)
+            if (firstArg === 'toggle') {
+                const targetStateStr = args[1]?.toLowerCase();
+                const shouldEnable = targetStateStr === 'enable' || targetStateStr === 'on' || targetStateStr === 'true';
+                await automodHelper.setGuildStatus(ctx.guild.id, shouldEnable);
+                return ctx.reply(`${shouldEnable ? '✅' : '🚫'} Server-wide AutoMod is now **${shouldEnable ? 'ENABLED' : 'DISABLED'}**.`);
+            }
+
+            // Case E: General Action & Filter Parser
+            let action = null;
+            let filter = null;
+
+            for (const a of args) {
+                const lower = a.toLowerCase();
+                if (['enable', 'on', 'activate', 'allowblock', 'true'].includes(lower)) action = 'enable';
+                else if (['disable', 'off', 'deactivate', 'ignore', 'false'].includes(lower)) action = 'disable';
+                else if (['status', 'info', 'check', 'view'].includes(lower)) action = 'status';
+                
+                if (['links', 'link', 'url', 'urls'].includes(lower)) filter = 'links';
+                else if (['emojis', 'emoji', 'emote', 'emotes'].includes(lower)) filter = 'emojis';
+                else if (['all', 'both', 'everything'].includes(lower)) filter = 'all';
+            }
+
+            const targetChannel = await automodHelper.resolveChannel(ctx, args);
+            action = action || 'status';
+            filter = filter || 'all';
+
+            if (action === 'status') {
+                const settings = await automodHelper.getChannelSettings(targetChannel.id, ctx.guild.id);
+                const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+                const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, settings);
+
+                return ctx.reply({
+                    embeds: [embed],
+                    components: [buttons]
+                });
+            }
+
+            const shouldEnable = action === 'enable';
+            const updated = await automodHelper.setChannelFilter(targetChannel.id, ctx.guild.id, filter, shouldEnable);
+            const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+            const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+            const filterName = filter === 'all' ? 'All filters (links & emojis)' : `Filter **${filter}**`;
+            return ctx.reply({
+                content: `${shouldEnable ? '✅' : '🚫'} ${filterName} is now **${shouldEnable ? 'ENABLED (Protected)' : 'DISABLED (Ignored)'}** in <#${targetChannel.id}>.`,
+                embeds: [embed],
+                components: [buttons]
+            });
+        }
+    },
+
+    // 42. ANTILINK (Quick Channel Link Filter)
+    {
+        name: 'antilink',
+        aliases: ['anti-link', 'blocklinks', 'linkmod'],
+        category: 'Moderation',
+        description: 'Enable or disable AutoMod link filtering for a specific channel.',
+        usage: ',antilink <enable|disable|status> [#channel]',
+        permissions: [PermissionFlagsBits.Administrator],
+        async execute(ctx) {
+            if (!ctx.inGuild) return ctx.reply('❌ This command can only be used in a Discord server.');
+            if (!automodHelper.canManageAutomod(ctx.member, ctx.user, ctx.guild)) {
+                return ctx.reply('❌ You need **Administrator** or **Manage Server** permissions to configure AutoMod settings.');
+            }
+
+            const targetChannel = await automodHelper.resolveChannel(ctx, ctx.args);
+            const rawArgs = (ctx.args || []).map(a => a.toLowerCase());
+
+            let shouldEnable = null;
+            if (rawArgs.some(a => ['enable', 'on', 'activate', '1', 'true'].includes(a))) shouldEnable = true;
+            else if (rawArgs.some(a => ['disable', 'off', 'deactivate', '0', 'false'].includes(a))) shouldEnable = false;
+
+            if (shouldEnable === null) {
+                const settings = await automodHelper.getChannelSettings(targetChannel.id, ctx.guild.id);
+                const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+                const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, settings);
+
+                return ctx.reply({ embeds: [embed], components: [buttons] });
+            }
+
+            const updated = await automodHelper.setChannelFilter(targetChannel.id, ctx.guild.id, 'links', shouldEnable);
+            const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+            const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+            return ctx.reply({
+                content: `${shouldEnable ? '✅' : '🚫'} Link protection is now **${shouldEnable ? 'ENABLED (Links Blocked)' : 'DISABLED (Links Allowed)'}** in <#${targetChannel.id}>.`,
+                embeds: [embed],
+                components: [buttons]
+            });
+        }
+    },
+
+    // 43. ANTIEMOJI (Quick Channel Emoji Filter)
+    {
+        name: 'antiemoji',
+        aliases: ['anti-emoji', 'blockemojis', 'emojimod'],
+        category: 'Moderation',
+        description: 'Enable or disable AutoMod emoji spam filtering for a specific channel.',
+        usage: ',antiemoji <enable|disable|status> [#channel]',
+        permissions: [PermissionFlagsBits.Administrator],
+        async execute(ctx) {
+            if (!ctx.inGuild) return ctx.reply('❌ This command can only be used in a Discord server.');
+            if (!automodHelper.canManageAutomod(ctx.member, ctx.user, ctx.guild)) {
+                return ctx.reply('❌ You need **Administrator** or **Manage Server** permissions to configure AutoMod settings.');
+            }
+
+            const targetChannel = await automodHelper.resolveChannel(ctx, ctx.args);
+            const rawArgs = (ctx.args || []).map(a => a.toLowerCase());
+
+            let shouldEnable = null;
+            if (rawArgs.some(a => ['enable', 'on', 'activate', '1', 'true'].includes(a))) shouldEnable = true;
+            else if (rawArgs.some(a => ['disable', 'off', 'deactivate', '0', 'false'].includes(a))) shouldEnable = false;
+
+            if (shouldEnable === null) {
+                const settings = await automodHelper.getChannelSettings(targetChannel.id, ctx.guild.id);
+                const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+                const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, settings, isGuildEnabled);
+                const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, settings);
+
+                return ctx.reply({ embeds: [embed], components: [buttons] });
+            }
+
+            const updated = await automodHelper.setChannelFilter(targetChannel.id, ctx.guild.id, 'emojis', shouldEnable);
+            const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+            const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+            return ctx.reply({
+                content: `${shouldEnable ? '✅' : '🚫'} Emoji spam filter is now **${shouldEnable ? 'ENABLED (5+ Emojis Blocked)' : 'DISABLED (Emojis Allowed)'}** in <#${targetChannel.id}>.`,
+                embeds: [embed],
+                components: [buttons]
+            });
+        }
+    },
+
+    // 44. IGNORE (Exclude channel from automod links/emojis)
+    {
+        name: 'ignore',
+        aliases: ['amignore', 'modignore'],
+        category: 'Moderation',
+        description: 'Ignore/allow links or emojis in a channel (disables AutoMod filter).',
+        usage: ',ignore <links|emojis|all> [#channel]',
+        permissions: [PermissionFlagsBits.Administrator],
+        async execute(ctx) {
+            if (!ctx.inGuild) return ctx.reply('❌ This command can only be used in a Discord server.');
+            if (!automodHelper.canManageAutomod(ctx.member, ctx.user, ctx.guild)) {
+                return ctx.reply('❌ You need **Administrator** or **Manage Server** permissions to configure AutoMod settings.');
+            }
+
+            const targetChannel = await automodHelper.resolveChannel(ctx, ctx.args);
+            const rawArgs = (ctx.args || []).map(a => a.toLowerCase());
+
+            let filter = 'all';
+            if (rawArgs.some(a => ['links', 'link', 'url', 'urls'].includes(a))) filter = 'links';
+            else if (rawArgs.some(a => ['emojis', 'emoji', 'emote', 'emotes'].includes(a))) filter = 'emojis';
+
+            const updated = await automodHelper.setChannelFilter(targetChannel.id, ctx.guild.id, filter, false);
+            const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+            const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+            const filterLabel = filter === 'all' ? 'All AutoMod filters' : `AutoMod **${filter}** filter`;
+            return ctx.reply({
+                content: `🚫 ${filterLabel} is now **DISABLED / IGNORED** in <#${targetChannel.id}>. Members can now send ${filter} freely.`,
+                embeds: [embed],
+                components: [buttons]
+            });
+        }
+    },
+
+    // 45. UNIGNORE (Re-enable channel automod links/emojis)
+    {
+        name: 'unignore',
+        aliases: ['amunignore', 'modunignore'],
+        category: 'Moderation',
+        description: 'Unignore/block links or emojis in a channel (enables AutoMod filter).',
+        usage: ',unignore <links|emojis|all> [#channel]',
+        permissions: [PermissionFlagsBits.Administrator],
+        async execute(ctx) {
+            if (!ctx.inGuild) return ctx.reply('❌ This command can only be used in a Discord server.');
+            if (!automodHelper.canManageAutomod(ctx.member, ctx.user, ctx.guild)) {
+                return ctx.reply('❌ You need **Administrator** or **Manage Server** permissions to configure AutoMod settings.');
+            }
+
+            const targetChannel = await automodHelper.resolveChannel(ctx, ctx.args);
+            const rawArgs = (ctx.args || []).map(a => a.toLowerCase());
+
+            let filter = 'all';
+            if (rawArgs.some(a => ['links', 'link', 'url', 'urls'].includes(a))) filter = 'links';
+            else if (rawArgs.some(a => ['emojis', 'emoji', 'emote', 'emotes'].includes(a))) filter = 'emojis';
+
+            const updated = await automodHelper.setChannelFilter(targetChannel.id, ctx.guild.id, filter, true);
+            const isGuildEnabled = automodHelper.getGuildStatus(ctx.guild.id);
+            const embed = automodHelper.buildChannelAutomodEmbed(ctx.guild, targetChannel, updated, isGuildEnabled);
+            const buttons = automodHelper.createChannelAutomodButtons(targetChannel.id, updated);
+
+            const filterLabel = filter === 'all' ? 'All AutoMod filters' : `AutoMod **${filter}** filter`;
+            return ctx.reply({
+                content: `✅ ${filterLabel} is now **ENABLED / ACTIVE** in <#${targetChannel.id}>. Unauthorized content will be blocked.`,
+                embeds: [embed],
+                components: [buttons]
+            });
         }
     }
 ];
