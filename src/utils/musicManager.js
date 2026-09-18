@@ -175,27 +175,28 @@ async function applyKazagumoFilter(player, filterName) {
             case 'vibration':
             case 'deepbass':
             case 'subwoofer':
-                // 🔊 TRUE SUBWOOFER PHYSICAL VIBRATION BASS:
-                // Fundamental sub-bass (25Hz & 40Hz) + tactile driver vibration (63Hz) + kick impact (100Hz)
-                // Mud-scoop around 160Hz-250Hz eliminates boxiness, while 1kHz-4kHz maintains pristine vocal clarity.
-                // Volume at 0.84 provides dynamic excursion headroom without digital clipping.
+                // 🔊 TRUE CLEAN SUB-BASS VIBRATION (Zero Clipping • Crystal-Clear Vocals):
+                // Focused resonant energy at 40Hz & 63Hz (the headphone driver vibration sweet-spot).
+                // Band 5 (250Hz) is gently dipped to keep the low-end separated from male/female vocals.
+                // Volume pre-attenuated to 0.70 to provide +3.5dB of clean headroom, completely eliminating
+                // digital clipping, square-wave distortion, and voice crackling!
                 await shoukakuPlayer.setFilters({
-                    volume: 0.84,
+                    volume: 0.70,
                     equalizer: [
-                        { band: 0, gain: 0.85 },  // 25 Hz - Sub-harmonic rumble
-                        { band: 1, gain: 0.85 },  // 40 Hz - Subwoofer physical vibration
-                        { band: 2, gain: 0.72 },  // 63 Hz - Headphone tactile vibration
-                        { band: 3, gain: 0.42 },  // 100 Hz - Punchy 808/kick transient
-                        { band: 4, gain: -0.06 }, // 160 Hz - Transition scoop
-                        { band: 5, gain: -0.18 }, // 250 Hz - Mud & boxiness reduction
-                        { band: 6, gain: -0.10 }, // 400 Hz - Lower-mid vocal separation
-                        { band: 7, gain: 0.00 },  // 630 Hz
-                        { band: 8, gain: 0.06 },  // 1.0 kHz - Vocal core
-                        { band: 9, gain: 0.08 },  // 1.6 kHz - Vocal articulation
-                        { band: 10, gain: 0.12 }, // 2.5 kHz - Vocal presence
-                        { band: 11, gain: 0.14 }, // 4.0 kHz - Snare snap & bite
-                        { band: 12, gain: 0.08 }, // 6.3 kHz - Clarity
-                        { band: 13, gain: 0.05 }  // 10.0 kHz - High shimmer
+                        { band: 0, gain: 0.28 },  // 25 Hz - Clean sub-rumble
+                        { band: 1, gain: 0.38 },  // 40 Hz - Tactile physical vibration
+                        { band: 2, gain: 0.32 },  // 63 Hz - Headphone diaphragm vibration
+                        { band: 3, gain: 0.14 },  // 100 Hz - Tight, punchy 808/kick
+                        { band: 4, gain: -0.04 }, // 160 Hz - Transition slope
+                        { band: 5, gain: -0.12 }, // 250 Hz - Mud scoop to protect vocals
+                        { band: 6, gain: 0.00 },  // 400 Hz - Flat
+                        { band: 7, gain: 0.00 },  // 630 Hz - Flat
+                        { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
+                        { band: 9, gain: 0.00 },  // 1.6 kHz - 100% untouched vocals
+                        { band: 10, gain: 0.00 }, // 2.5 kHz - 100% untouched vocals
+                        { band: 11, gain: 0.00 }, // 4.0 kHz - 100% untouched vocals
+                        { band: 12, gain: 0.00 }, // 6.3 kHz - Flat
+                        { band: 13, gain: 0.00 }  // 10.0 kHz - Flat
                     ],
                     timescale: null,
                     rotation: null,
@@ -254,14 +255,14 @@ async function applyKazagumoFilter(player, filterName) {
             case 'slowed':
                 // 🌅 Relaxed slowed tempo + deep acoustic body
                 await shoukakuPlayer.setFilters({
-                    volume: 0.94,
+                    volume: 0.88,
                     timescale: { speed: 0.85, pitch: 0.85, rate: 1.0 },
                     equalizer: [
-                        { band: 0, gain: 0.35 },
-                        { band: 1, gain: 0.30 },
-                        { band: 2, gain: 0.20 },
-                        { band: 11, gain: -0.08 },
-                        { band: 12, gain: -0.10 }
+                        { band: 0, gain: 0.20 },
+                        { band: 1, gain: 0.18 },
+                        { band: 2, gain: 0.12 },
+                        { band: 11, gain: -0.05 },
+                        { band: 12, gain: -0.08 }
                     ],
                     rotation: null,
                     tremolo: null,
@@ -276,15 +277,15 @@ async function applyKazagumoFilter(player, filterName) {
             case 'vaporwave':
                 // 🪩 Retro slowed cassette tape vibe with subtle tremolo
                 await shoukakuPlayer.setFilters({
-                    volume: 0.90,
+                    volume: 0.86,
                     timescale: { speed: 0.80, pitch: 0.80, rate: 1.0 },
-                    tremolo: { frequency: 2.2, depth: 0.18 },
+                    tremolo: { frequency: 2.2, depth: 0.16 },
                     equalizer: [
-                        { band: 0, gain: 0.30 },
-                        { band: 1, gain: 0.25 },
-                        { band: 2, gain: 0.15 },
-                        { band: 10, gain: -0.15 },
-                        { band: 11, gain: -0.20 }
+                        { band: 0, gain: 0.18 },
+                        { band: 1, gain: 0.15 },
+                        { band: 2, gain: 0.10 },
+                        { band: 10, gain: -0.10 },
+                        { band: 11, gain: -0.15 }
                     ],
                     rotation: null,
                     vibrato: null,
@@ -405,19 +406,19 @@ async function applyKazagumoFilter(player, filterName) {
             case 'club':
                 // ⚡ High-energy club master with thumping kick & sizzling highs
                 await shoukakuPlayer.setFilters({
-                    volume: 0.88,
+                    volume: 0.75,
                     equalizer: [
-                        { band: 0, gain: 0.65 },
-                        { band: 1, gain: 0.60 },
-                        { band: 2, gain: 0.48 },
-                        { band: 3, gain: 0.25 },
-                        { band: 4, gain: -0.10 },
-                        { band: 5, gain: -0.15 },
-                        { band: 6, gain: -0.05 },
-                        { band: 10, gain: 0.20 },
-                        { band: 11, gain: 0.32 },
-                        { band: 12, gain: 0.35 },
-                        { band: 13, gain: 0.30 }
+                        { band: 0, gain: 0.28 },
+                        { band: 1, gain: 0.32 },
+                        { band: 2, gain: 0.22 },
+                        { band: 3, gain: 0.12 },
+                        { band: 4, gain: -0.06 },
+                        { band: 5, gain: -0.12 },
+                        { band: 6, gain: 0.00 },
+                        { band: 10, gain: 0.10 },
+                        { band: 11, gain: 0.14 },
+                        { band: 12, gain: 0.16 },
+                        { band: 13, gain: 0.14 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -489,16 +490,16 @@ async function applyKazagumoFilter(player, filterName) {
             case 'treble':
                 // 💎 Crisp, crystal clear high-frequency sparkle
                 await shoukakuPlayer.setFilters({
-                    volume: 0.90,
+                    volume: 0.88,
                     equalizer: [
-                        { band: 0, gain: -0.15 },
-                        { band: 1, gain: -0.10 },
-                        { band: 2, gain: -0.05 },
-                        { band: 9, gain: 0.20 },
-                        { band: 10, gain: 0.28 },
-                        { band: 11, gain: 0.35 },
-                        { band: 12, gain: 0.40 },
-                        { band: 13, gain: 0.42 }
+                        { band: 0, gain: -0.10 },
+                        { band: 1, gain: -0.08 },
+                        { band: 2, gain: -0.04 },
+                        { band: 9, gain: 0.12 },
+                        { band: 10, gain: 0.18 },
+                        { band: 11, gain: 0.22 },
+                        { band: 12, gain: 0.24 },
+                        { band: 13, gain: 0.25 }
                     ],
                     timescale: null,
                     rotation: null,

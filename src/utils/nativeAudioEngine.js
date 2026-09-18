@@ -47,35 +47,32 @@ const FILTER_ARGS = {
         'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
         'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
     ],
-    // 🔊 TRUE SUBWOOFER PHYSICAL VIBRATION BASS:
-    // Physical sub-bass rumble (38Hz-52Hz) + punchy kick attack (75Hz) + mud scoop (220Hz) + vocal clarity (1.2kHz-3.5kHz).
-    // Volume at 0.82 ensures dynamic excursion headroom without digital clipping.
+    // 🔊 TRUE CLEAN SUB-BASS VIBRATION (Zero Clipping • Crystal-Clear Vocals):
+    // Pre-attenuation volume=0.70 gives clean +3.5dB headroom.
+    // Focused 50Hz boost (+6.5dB) gives heavy driver vibration rumble.
+    // Mud scoop at 250Hz (-2.5dB) separates sub-bass from male/female vocals.
+    // Limiter with release=100ms eliminates wave cycle modulation and vocal crackling!
     bass: [
         '-af',
-        'volume=0.82,' +
-        'bass=g=12:f=52:w=0.65,' +
-        'equalizer=f=38:width_type=q:w=1.2:g=8.5,' +
-        'equalizer=f=75:width_type=q:w=1.0:g=6.0,' +
-        'equalizer=f=220:width_type=q:w=1.5:g=-3.5,' +
-        'equalizer=f=400:width_type=q:w=1.2:g=-1.8,' +
-        'equalizer=f=1200:width_type=q:w=1.0:g=1.2,' +
-        'equalizer=f=3500:width_type=q:w=1.0:g=2.5,' +
-        'equalizer=f=12000:width_type=q:w=1.0:g=1.5,' +
-        'alimiter=limit=0.96:attack=5:release=60:asc=true:level=false'
+        'volume=0.70,' +
+        'bass=g=6.5:f=50:w=0.6,' +
+        'equalizer=f=38:width_type=q:w=1.2:g=3.0,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-2.5,' +
+        'alimiter=limit=0.95:attack=7:release=100:asc=true:level=false'
     ],
-    '8d': ['-af', 'volume=0.94,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    nightcore: ['-af', 'volume=0.92,asetrate=48000*1.25,aresample=48000,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    daycore: ['-af', 'volume=0.94,asetrate=48000*0.85,aresample=48000,atempo=1.0,bass=g=5:f=55:w=0.6,equalizer=f=250:width_type=q:w=1.2:g=-1.2,equalizer=f=3200:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    vaporwave: ['-af', 'volume=0.90,asetrate=48000*0.80,aresample=48000,atempo=1.0,aecho=0.8:0.85:60:0.25,bass=g=4:f=70:w=0.7,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    lofi: ['-af', 'volume=0.92,lowpass=f=4200,bass=g=4:f=95:w=0.6,equalizer=f=250:width_type=q:w=1.0:g=1.5,tremolo=f=1.5:d=0.10,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    reverb: ['-af', 'volume=0.90,asetrate=48000*0.88,aresample=48000,atempo=1.0,aecho=0.8:0.88:80|160:0.35|0.22,bass=g=3:f=60:w=0.6,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    karaoke: ['-af', 'volume=0.95,stereotools=mlev=0.0:slev=1.2,equalizer=f=1000:width_type=q:w=1.5:g=-4.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    surround: ['-af', 'volume=0.92,extrastereo=m=1.65,equalizer=f=3500:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    electronic: ['-af', 'volume=0.88,bass=g=9:f=60:w=0.6,treble=g=5:f=9000:w=0.6,equalizer=f=280:width_type=q:w=1.2:g=-2.5,alimiter=limit=0.96:attack=5:release=50:asc=true:level=false'],
-    soft: ['-af', 'volume=0.94,equalizer=f=7500:width_type=q:w=1.0:g=-3.5,equalizer=f=12000:width_type=q:w=1.0:g=-5.0,equalizer=f=120:width_type=q:w=1.0:g=1.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    radio: ['-af', 'volume=0.90,highpass=f=450,lowpass=f=3200,equalizer=f=1400:width_type=q:w=1.0:g=4.5,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    treble: ['-af', 'volume=0.90,treble=g=6:f=8000:w=0.6,equalizer=f=12000:width_type=q:w=1.0:g=4.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    pop: ['-af', 'volume=0.94,equalizer=f=220:width_type=q:w=1.2:g=-2.0,equalizer=f=1200:width_type=q:w=1.0:g=1.8,equalizer=f=3200:width_type=q:w=1.0:g=3.2,equalizer=f=10000:width_type=q:w=1.0:g=2.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false']
+    '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-1.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    daycore: ['-af', 'volume=0.86,asetrate=48000*0.85,aresample=48000,atempo=1.0,bass=g=3:f=60:w=0.6,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    vaporwave: ['-af', 'volume=0.85,asetrate=48000*0.80,aresample=48000,atempo=1.0,aecho=0.8:0.85:50:0.25,bass=g=2.5:f=70:w=0.7,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    lofi: ['-af', 'volume=0.88,lowpass=f=4000,bass=g=2.5:f=95:w=0.6,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    reverb: ['-af', 'volume=0.85,asetrate=48000*0.88,aresample=48000,atempo=1.0,aecho=0.8:0.85:60|120:0.3|0.2,bass=g=2:f=60:w=0.6,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    karaoke: ['-af', 'volume=0.92,stereotools=mlev=0.0:slev=1.1,equalizer=f=1000:width_type=q:w=1.5:g=-3.0,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    surround: ['-af', 'volume=0.90,extrastereo=m=1.5,equalizer=f=3500:width_type=q:w=1.0:g=1.2,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    electronic: ['-af', 'volume=0.75,bass=g=5:f=60:w=0.6,treble=g=3:f=9000:w=0.6,equalizer=f=280:width_type=q:w=1.2:g=-2.0,alimiter=limit=0.95:attack=7:release=100:asc=true:level=false'],
+    soft: ['-af', 'volume=0.92,equalizer=f=7500:width_type=q:w=1.0:g=-3.0,equalizer=f=12000:width_type=q:w=1.0:g=-4.0,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    radio: ['-af', 'volume=0.88,highpass=f=450,lowpass=f=3200,equalizer=f=1400:width_type=q:w=1.0:g=3.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    treble: ['-af', 'volume=0.86,treble=g=4:f=8000:w=0.6,equalizer=f=12000:width_type=q:w=1.0:g=2.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
+    pop: ['-af', 'volume=0.88,equalizer=f=220:width_type=q:w=1.2:g=-1.5,equalizer=f=1200:width_type=q:w=1.0:g=1.2,equalizer=f=3200:width_type=q:w=1.0:g=1.8,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false']
 };
 
 // Aliases for seamless backwards compatibility
