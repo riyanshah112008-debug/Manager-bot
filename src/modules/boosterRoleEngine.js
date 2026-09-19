@@ -151,9 +151,16 @@ class BoosterRoleEngine {
         const cleanName = (name || `${member.user.username}'s VIP`).trim().slice(0, 100);
         const cleanColor = (color || '#FF73FA').trim();
 
-        // Calculate maximum friend shares allowed
-        const isGuildPremium = Boolean(settings.premium?.isPremium);
-        const maxShares = isGuildPremium ? (config.premiumMaxShares || 5) : (config.defaultMaxShares || 1);
+        // Calculate maximum friend shares allowed based on live server or member premium status
+        const { isServerOrUserPremium } = require('../utils/premiumHelper');
+        const isGuildPremium = await isServerOrUserPremium(guild.id, member.id, guild.client);
+        const tier = settings.premium?.tier || 'free';
+        let maxShares = config.defaultMaxShares || 1;
+        if (isGuildPremium) {
+            if (tier === 'lifetime') maxShares = 15;
+            else if (tier === 'pro_cluster') maxShares = 10;
+            else maxShares = config.premiumMaxShares || 5;
+        }
 
         // Calculate safe position
         const targetPosition = await this.calculateSafeRolePosition(guild, config.anchorRoleId);
@@ -281,8 +288,31 @@ class BoosterRoleEngine {
             throw new Error(`<@${targetMember.id}> already has your custom booster role!`);
         }
 
+        // Dynamically evaluate server or member premium status to grant upgraded share slots
+        const { isServerOrUserPremium } = require('../utils/premiumHelper');
+        const isGuildPremium = await isServerOrUserPremium(guild.id, ownerMember.id, guild.client);
+        const settings = await this.getSettings(guild.id);
+        const bConfig = settings?.boosterRoleSystem || {};
+        const tier = settings?.premium?.tier || 'free';
+
+        let entitledMax = bConfig.defaultMaxShares || 1;
+        if (isGuildPremium) {
+            if (tier === 'lifetime') entitledMax = 15;
+            else if (tier === 'pro_cluster') entitledMax = 10;
+            else entitledMax = bConfig.premiumMaxShares || 5;
+        }
+
+        // Dynamically auto-scale doc.maxShares if server or owner has active premium privileges
+        if (doc.maxShares < entitledMax) {
+            doc.maxShares = entitledMax;
+            await doc.save();
+        }
+
         if (doc.sharedWith.length >= doc.maxShares) {
-            throw new Error(`You have reached your maximum share limit (${doc.sharedWith.length}/${doc.maxShares}). Upgrade server to Starry Premium or remove an existing friend with \`,boosterrole unshare\`.`);
+            const upgradeTip = isGuildPremium
+                ? `Remove an existing friend with \`,boosterrole unshare\`.`
+                : `Upgrade server to Starry Premium or remove an existing friend with \`,boosterrole unshare\`.`;
+            throw new Error(`You have reached your maximum share limit (${doc.sharedWith.length}/${doc.maxShares}). ${upgradeTip}`);
         }
 
         // Add role to target member

@@ -14,36 +14,45 @@ const PremiumSchema = new mongoose.Schema({
 
 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds', PremiumSchema);
 
-// Helper: Duration String Parser (e.g. 7d, 30d, 1y, lifetime)
+// 🧠 High-Speed Memory Cache with Expiration Objects (Accessible module-wide)
+const globalPremiumCache = new Map(); // targetId -> expiresAt timestamp or null
+
+// Helper: Duration String Parser (e.g. 7d, 30d, 1y, lifetime, 30)
 function parseDuration(str) {
-    if (!str || ['lifetime', 'permanent', 'never'].includes(str.toLowerCase().trim())) return null;
-    const match = str.trim().match(/^(\d+)([smh dwy])$/i);
+    if (!str) return null;
+    const clean = str.toString().trim().toLowerCase();
+    if (['lifetime', 'permanent', 'never', 'life', 'perm', '-1', 'infinite'].includes(clean)) return null;
+
+    const match = clean.match(/^(\d+)\s*([a-z]*)$/i);
     if (!match) return null;
 
-    const amount = parseInt(match[1]);
-    const unit = match[2].toLowerCase();
-    const multipliers = {
-        s: 1000,
-        m: 60 * 1000,
-        h: 60 * 60 * 1000,
-        d: 24 * 60 * 60 * 1000,
-        w: 7 * 24 * 60 * 60 * 1000,
-        y: 365 * 24 * 60 * 60 * 1000
-    };
+    const amount = parseInt(match[1], 10);
+    const rawUnit = (match[2] || 'd').toLowerCase();
 
-    return new Date(Date.now() + (amount * (multipliers[unit] || multipliers.d)));
+    let multiplier = 24 * 60 * 60 * 1000; // default days
+    if (rawUnit.startsWith('s')) multiplier = 1000;
+    else if (rawUnit.startsWith('m') && !rawUnit.startsWith('mo')) multiplier = 60 * 1000;
+    else if (rawUnit.startsWith('h')) multiplier = 60 * 60 * 1000;
+    else if (rawUnit.startsWith('d')) multiplier = 24 * 60 * 60 * 1000;
+    else if (rawUnit.startsWith('w')) multiplier = 7 * 24 * 60 * 60 * 1000;
+    else if (rawUnit.startsWith('mo')) multiplier = 30 * 24 * 60 * 60 * 1000;
+    else if (rawUnit.startsWith('y')) multiplier = 365 * 24 * 60 * 60 * 1000;
+
+    return new Date(Date.now() + (amount * multiplier));
 }
 
 // ==========================================
 // 2. MAIN PREMIUM MODULE
 // ==========================================
 const premiumModule = (client) => {
-    // 🧠 High-Speed Memory Cache with Expiration Objects
-    const premiumCache = new Map(); // targetId -> expiresAt timestamp or null
-
     const BOT_OWNERS = ['1465049039153135639', '1257676837249617971'];
     if (process.env.OWNER_ID && !BOT_OWNERS.includes(process.env.OWNER_ID)) {
         BOT_OWNERS.push(process.env.OWNER_ID);
+    }
+    if (process.env.OWNER_IDS) {
+        process.env.OWNER_IDS.split(',').map(s => s.trim()).forEach(id => {
+            if (!BOT_OWNERS.includes(id)) BOT_OWNERS.push(id);
+        });
     }
 
     // 📥 DB Loader & Automatic Index Cleaner
@@ -53,7 +62,7 @@ const premiumModule = (client) => {
             await PremiumModel.collection.dropIndex('guildId_1').catch(() => {});
 
             const premiumRecords = await PremiumModel.find({ isPremium: true });
-            premiumCache.clear();
+            globalPremiumCache.clear();
 
             const now = Date.now();
             for (const record of premiumRecords) {
@@ -62,9 +71,9 @@ const premiumModule = (client) => {
                     await PremiumModel.deleteOne({ _id: record._id }).catch(() => {});
                     continue;
                 }
-                premiumCache.set(record.targetId, record.expiresAt ? record.expiresAt.getTime() : null);
+                globalPremiumCache.set(record.targetId, record.expiresAt ? record.expiresAt.getTime() : null);
             }
-            console.log(`💎 Loaded ${premiumCache.size} Active Premium entities into high-speed RAM cache!`);
+            console.log(`💎 Loaded ${globalPremiumCache.size} Active Premium entities into high-speed RAM cache!`);
         } catch (err) {
             console.error('❌ Failed to load premium cache:', err);
         }
@@ -81,10 +90,10 @@ const premiumModule = (client) => {
         if (userId && BOT_OWNERS.includes(userId)) return true;
 
         const checkTarget = (id) => {
-            if (!id || !premiumCache.has(id)) return false;
-            const expiresAt = premiumCache.get(id);
+            if (!id || !globalPremiumCache.has(id)) return false;
+            const expiresAt = globalPremiumCache.get(id);
             if (expiresAt !== null && Date.now() >= expiresAt) {
-                premiumCache.delete(id); // Expired, purge from RAM
+                globalPremiumCache.delete(id); // Expired, purge from RAM
                 PremiumModel.deleteOne({ targetId: id }).catch(() => {});
                 return false;
             }
@@ -96,6 +105,18 @@ const premiumModule = (client) => {
 
         return false;
     };
+
+    // Live cache mutation hooks for cross-module synchronization
+    client.setPremiumCache = (targetId, expiresAtTimestamp = null) => {
+        if (!targetId) return;
+        globalPremiumCache.set(targetId, expiresAtTimestamp);
+    };
+    client.removePremiumCache = (targetId) => {
+        if (!targetId) return;
+        globalPremiumCache.delete(targetId);
+    };
+    client.refreshPremiumCache = loadPremiumCache;
+    client.getPremiumCache = () => globalPremiumCache;
 
     // =====================================================================
     // 💎 GLOBAL PREMIUM MODERATION DM SYSTEM
@@ -226,21 +247,52 @@ const premiumModule = (client) => {
                 }
 
                 const expiresAtDate = parseDuration(durationInput);
+                const isGuildTarget = rawInputId ? true : Boolean(guildId);
 
                 await PremiumModel.findOneAndUpdate(
                     { targetId: targetId },
                     { 
                         targetId: targetId, 
                         isPremium: true, 
-                        type: rawInputId ? 'guild' : (guildId ? 'guild' : 'user'),
+                        type: isGuildTarget ? 'guild' : 'user',
                         expiresAt: expiresAtDate 
                     },
                     { upsert: true, new: true }
                 );
 
                 const expireMs = expiresAtDate ? expiresAtDate.getTime() : null;
-                premiumCache.set(targetId, expireMs);
-                if (guildId && targetId === guildId) premiumCache.set(guildId, expireMs);
+                globalPremiumCache.set(targetId, expireMs);
+                if (guildId && targetId === guildId) globalPremiumCache.set(guildId, expireMs);
+
+                // Sync ServerSettings if this is a guild
+                if (isGuildTarget) {
+                    try {
+                        const ServerSettings = require('../models/ServerSettings');
+                        let s = await ServerSettings.findOne({ guildId: targetId });
+                        if (!s) s = new ServerSettings({ guildId: targetId });
+                        s.premium = {
+                            isPremium: true,
+                            tier: 'lifetime',
+                            expiresAt: expiresAtDate,
+                            activatedBy: `Owner: ${user.tag} (${user.id})`
+                        };
+                        await s.save();
+
+                        // Auto-upgrade booster role shares
+                        const BoosterRole = mongoose.models.BoosterRole || mongoose.model('BoosterRole');
+                        if (BoosterRole) {
+                            await BoosterRole.updateMany(
+                                { guildId: targetId, maxShares: { $lt: 15 } },
+                                { $set: { maxShares: 15 } }
+                            ).catch(() => {});
+                        }
+                    } catch (sErr) {}
+                }
+
+                try {
+                    const { invalidatePremiumCache } = require('../utils/premiumHelper');
+                    invalidatePremiumCache(targetId);
+                } catch (cErr) {}
 
                 const expiryText = expiresAtDate 
                     ? `<t:${Math.floor(expiresAtDate.getTime() / 1000)}:R> (<t:${Math.floor(expiresAtDate.getTime() / 1000)}:F>)` 
@@ -272,7 +324,18 @@ const premiumModule = (client) => {
                 const targetId = rawInputId ? rawInputId.trim() : (guildId || user.id);
 
                 await PremiumModel.deleteOne({ targetId: targetId });
-                premiumCache.delete(targetId);
+                globalPremiumCache.delete(targetId);
+
+                // Reset ServerSettings if guild
+                try {
+                    const ServerSettings = require('../models/ServerSettings');
+                    await ServerSettings.updateOne(
+                        { guildId: targetId },
+                        { $set: { 'premium.isPremium': false, 'premium.tier': 'free', 'premium.expiresAt': null } }
+                    ).catch(() => {});
+                    const { invalidatePremiumCache } = require('../utils/premiumHelper');
+                    invalidatePremiumCache(targetId);
+                } catch (sErr) {}
 
                 return interaction.editReply({ content: `🛑 **SUCCESS:** Premium status removed from target ID \`${targetId}\`.` });
             } catch (err) {
@@ -289,4 +352,8 @@ const premiumModule = (client) => {
 
 // Hybrid Export
 premiumModule.PremiumModel = PremiumModel;
+premiumModule.globalPremiumCache = globalPremiumCache;
+premiumModule.setPremiumCache = (targetId, exp = null) => globalPremiumCache.set(targetId, exp);
+premiumModule.removePremiumCache = (targetId) => globalPremiumCache.delete(targetId);
+premiumModule.parseDuration = parseDuration;
 module.exports = premiumModule;

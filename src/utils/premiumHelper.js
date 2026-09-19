@@ -113,6 +113,18 @@ const ALL_PREMIUM_FEATURES = [
 ];
 
 /**
+ * Invalidate the ServerSettings premium RAM cache
+ * @param {string|null} guildId 
+ */
+function invalidatePremiumCache(guildId = null) {
+    if (guildId) {
+        serverSettingsPremiumCache.delete(guildId);
+    } else {
+        serverSettingsPremiumCache.clear();
+    }
+}
+
+/**
  * Checks whether a guild or user currently possesses active Starry Premium privileges.
  * @param {string} guildId
  * @param {string|null} userId
@@ -122,6 +134,12 @@ const ALL_PREMIUM_FEATURES = [
 async function isServerOrUserPremium(guildId, userId = null, client = null) {
     // 1. Bot Owners always have full god-mode premium
     const BOT_OWNERS = config.BOT_OWNERS || ['1465049039153135639', '1257676837249617971'];
+    if (process.env.OWNER_ID && !BOT_OWNERS.includes(process.env.OWNER_ID)) BOT_OWNERS.push(process.env.OWNER_ID);
+    if (process.env.OWNER_IDS) {
+        process.env.OWNER_IDS.split(',').map(s => s.trim()).forEach(id => {
+            if (!BOT_OWNERS.includes(id)) BOT_OWNERS.push(id);
+        });
+    }
     if (userId && BOT_OWNERS.includes(userId)) return true;
 
     // 2. Primary Fast-Check via client.isPremium (checks high-speed RAM cache)
@@ -129,29 +147,63 @@ async function isServerOrUserPremium(guildId, userId = null, client = null) {
         if (client.isPremium(guildId, userId)) return true;
     }
 
+    const now = Date.now();
+
     // 3. Check ServerSettings database with RAM caching
     if (guildId) {
         const cached = serverSettingsPremiumCache.get(guildId);
-        const now = Date.now();
         if (cached && now < cached.expires) {
-            return cached.isPremium;
+            if (cached.isPremium) return true;
+        } else {
+            try {
+                const ServerSettings = require('../models/ServerSettings');
+                const settings = await ServerSettings.findOne({ guildId }).select('premium').lean();
+                if (settings && settings.premium && settings.premium.isPremium) {
+                    // Check if expired
+                    if (!settings.premium.expiresAt || new Date(settings.premium.expiresAt).getTime() > now) {
+                        serverSettingsPremiumCache.set(guildId, { isPremium: true, expires: now + 300000 });
+                        if (client && typeof client.setPremiumCache === 'function') {
+                            client.setPremiumCache(guildId, settings.premium.expiresAt ? new Date(settings.premium.expiresAt).getTime() : null);
+                        }
+                        return true;
+                    }
+                }
+                serverSettingsPremiumCache.set(guildId, { isPremium: false, expires: now + 60000 });
+            } catch (e) {
+                // DB fallback
+            }
         }
+    }
 
-        try {
-            const ServerSettings = require('../models/ServerSettings');
-            const settings = await ServerSettings.findOne({ guildId }).select('premium').lean();
-            if (settings && settings.premium && settings.premium.isPremium) {
-                // Check if expired
-                if (!settings.premium.expiresAt || new Date(settings.premium.expiresAt).getTime() > now) {
-                    serverSettingsPremiumCache.set(guildId, { isPremium: true, expires: now + 300000 });
+    // 4. Fallback check on PremiumModel (PremiumGuilds) for either guild or user
+    try {
+        const mongoose = require('mongoose');
+        const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+        if (PremiumModel) {
+            const targets = [guildId, userId].filter(Boolean);
+            if (targets.length > 0) {
+                const activeRecord = await PremiumModel.findOne({
+                    targetId: { $in: targets },
+                    isPremium: true,
+                    $or: [
+                        { expiresAt: null },
+                        { expiresAt: { $gt: new Date() } }
+                    ]
+                }).lean();
+
+                if (activeRecord) {
+                    const expMs = activeRecord.expiresAt ? new Date(activeRecord.expiresAt).getTime() : null;
+                    if (client && typeof client.setPremiumCache === 'function') {
+                        client.setPremiumCache(activeRecord.targetId, expMs);
+                    }
+                    if (guildId && activeRecord.targetId === guildId) {
+                        serverSettingsPremiumCache.set(guildId, { isPremium: true, expires: now + 300000 });
+                    }
                     return true;
                 }
             }
-            serverSettingsPremiumCache.set(guildId, { isPremium: false, expires: now + 300000 });
-        } catch (e) {
-            // DB fallback
         }
-    }
+    } catch (dbErr) {}
 
     return false;
 }
@@ -288,6 +340,7 @@ async function requirePremium(ctx, featureName) {
 module.exports = {
     ALL_PREMIUM_FEATURES,
     isServerOrUserPremium,
+    invalidatePremiumCache,
     createPremiumLockPayload,
     createPremiumPerksPayload,
     requirePremium

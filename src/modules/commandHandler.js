@@ -538,8 +538,17 @@ class CommandRegistry {
                         await interaction.deferUpdate().catch(() => {});
                         const res = await approvePaymentOrder(orderId, `${interaction.user.username} (Discord Button)`, interaction.client);
                         if (res.success) {
+                            let note = '';
+                            if (res.autoActivated) {
+                                note += `\n🎉 **Auto-Activated for Server:** \`${res.guildId}\``;
+                            }
+                            if (res.userActivated && res.userId) {
+                                note += `\n👑 **Auto-Activated User:** <@${res.userId}>`;
+                            }
+                            note += `\n💡 *To activate any server, run \`,redeem ${res.key}\` in that server or use \`,addpremium <server_id> ${res.tier || 'lifetime'}\`*`;
+
                             return await interaction.editReply({
-                                content: `✅ **Order \`${orderId}\` APPROVED by ${interaction.user.username}**\n🔑 **Issued Key:** \`${res.key}\`${res.autoActivated ? `\n🎉 **Auto-Activated for Server:** \`${res.guildId}\`` : ''}`,
+                                content: `✅ **Order \`${orderId}\` APPROVED by ${interaction.user.username}**\n🔑 **Issued Key:** \`${res.key}\`${note}`,
                                 embeds: [],
                                 components: []
                             }).catch(() => {});

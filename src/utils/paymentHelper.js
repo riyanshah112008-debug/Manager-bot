@@ -450,6 +450,9 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
 
     // If Guild ID was specified during checkout, auto-activate immediately
     let autoActivated = false;
+    const expMs = expiresAt ? expiresAt.getTime() : null;
+    const { invalidatePremiumCache } = require('./premiumHelper');
+
     if (order.guildId) {
         try {
             let settings = await ServerSettings.findOne({ guildId: order.guildId });
@@ -477,9 +480,54 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
                     { upsert: true }
                 ).catch(() => {});
             }
+
+            // Sync live RAM caches immediately
+            if (client && typeof client.setPremiumCache === 'function') {
+                client.setPremiumCache(order.guildId, expMs);
+            }
+            invalidatePremiumCache(order.guildId);
+
+            // Auto-upgrade any existing BoosterRole documents in this server!
+            const BoosterRole = mongoose.models.BoosterRole || mongoose.model('BoosterRole');
+            if (BoosterRole) {
+                const tierMaxShares = order.tier === 'lifetime' ? 15 : (order.tier === 'pro_cluster' ? 10 : 5);
+                await BoosterRole.updateMany(
+                    { guildId: order.guildId, maxShares: { $lt: tierMaxShares } },
+                    { $set: { maxShares: tierMaxShares } }
+                ).catch(() => {});
+            }
+
             autoActivated = true;
         } catch (actErr) {
             console.error('⚠️ Auto-activation guild error:', actErr.message);
+        }
+    }
+
+    // Auto-activate User account so the customer has Starry Premium user privileges
+    let userActivated = false;
+    if (order.userId) {
+        try {
+            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+            if (PremiumModel) {
+                await PremiumModel.findOneAndUpdate(
+                    { targetId: order.userId },
+                    {
+                        targetId: order.userId,
+                        type: 'user',
+                        isPremium: true,
+                        activatedAt: new Date(),
+                        expiresAt: expiresAt
+                    },
+                    { upsert: true }
+                ).catch(() => {});
+            }
+
+            if (client && typeof client.setPremiumCache === 'function') {
+                client.setPremiumCache(order.userId, expMs);
+            }
+            userActivated = true;
+        } catch (uErr) {
+            console.error('⚠️ Auto-activation user error:', uErr.message);
         }
     }
 
@@ -495,15 +543,23 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         try {
             const customer = await client.users.fetch(order.userId).catch(() => null);
             if (customer) {
+                let activationNote = '';
+                if (autoActivated) {
+                    activationNote += `\n✅ **Auto-Activation:** Server ID \`${order.guildId}\` is now fully upgraded to **${order.tierName}**!`;
+                }
+                if (userActivated) {
+                    activationNote += `\n👑 **User Premium Status:** Your Discord user account has been activated with **${order.tierName}** perks!`;
+                }
+                activationNote += `\n\n💡 *To activate or transfer premium to any server, use \`,redeem ${generatedKey}\` in that server.*`;
+
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#10B981')
                     .setTitle('🎉 Starry Premium Payment Approved!')
                     .setDescription(
                         `Your payment for **${order.tierName}** (Order: \`${order.orderId}\`) has been verified and confirmed!\n\n` +
                         `🔑 **Your 16-Digit License Key:**\n` +
-                        `\`\`\`\n${generatedKey}\n\`\`\`\n` +
-                        (autoActivated ? `✅ **Auto-Activation:** Server ID \`${order.guildId}\` is now fully upgraded to **${order.tierName}**!\n\n` : '') +
-                        `*If needed, you can also redeem this key in any server using \`,redeem ${generatedKey}\` or on the dashboard.*`
+                        `\`\`\`\n${generatedKey}\n\`\`\`` +
+                        activationNote
                     )
                     .setFooter({ text: 'Starry VIP Systems • Thank you for supporting the network!' })
                     .setTimestamp();
@@ -519,7 +575,9 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         key: generatedKey,
         tier: order.tier,
         autoActivated,
+        userActivated,
         guildId: order.guildId,
+        userId: order.userId,
         order
     };
 }

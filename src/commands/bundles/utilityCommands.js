@@ -999,6 +999,41 @@ const commands = [
             };
             await settings.save();
 
+            // Sync with PremiumModel (PremiumGuilds) for both Guild and User
+            const mongoose = require('mongoose');
+            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+            if (PremiumModel) {
+                await PremiumModel.findOneAndUpdate(
+                    { targetId: ctx.guild.id },
+                    { targetId: ctx.guild.id, type: 'guild', isPremium: true, activatedAt: new Date(), expiresAt: expiresAt },
+                    { upsert: true }
+                ).catch(() => {});
+                await PremiumModel.findOneAndUpdate(
+                    { targetId: ctx.user.id },
+                    { targetId: ctx.user.id, type: 'user', isPremium: true, activatedAt: new Date(), expiresAt: expiresAt },
+                    { upsert: true }
+                ).catch(() => {});
+            }
+
+            // Sync live RAM caches immediately
+            const expMs = expiresAt ? expiresAt.getTime() : null;
+            if (ctx.client && typeof ctx.client.setPremiumCache === 'function') {
+                ctx.client.setPremiumCache(ctx.guild.id, expMs);
+                ctx.client.setPremiumCache(ctx.user.id, expMs);
+            }
+            const { invalidatePremiumCache } = require('../../utils/premiumHelper');
+            invalidatePremiumCache(ctx.guild.id);
+
+            // Dynamically auto-upgrade any existing BoosterRole documents in this server!
+            const BoosterRole = mongoose.models.BoosterRole || mongoose.model('BoosterRole');
+            if (BoosterRole) {
+                const tierMaxShares = license.tier === 'lifetime' ? 15 : (license.tier === 'pro_cluster' ? 10 : 5);
+                await BoosterRole.updateMany(
+                    { guildId: ctx.guild.id, maxShares: { $lt: tierMaxShares } },
+                    { $set: { maxShares: tierMaxShares } }
+                ).catch(() => {});
+            }
+
             license.usedCount += 1;
             license.redeemedBy.push({ userId: ctx.user.id, guildId: ctx.guild.id, redeemedAt: new Date() });
             if (license.usedCount >= license.maxUses) license.active = false;
@@ -1085,6 +1120,288 @@ const commands = [
             );
 
             return ctx.reply({ embeds: [embed], components: [row] });
+        }
+    },
+
+    // 32. ADDPREMIUM (Bot Owner Direct Grant)
+    {
+        name: 'addpremium',
+        aliases: ['setpremium', 'grantpremium', 'givepremium', 'createpremium'],
+        category: 'Utility',
+        description: 'Directly grant Starry Premium (Shield Plus, Pro Cluster, or Lifetime VIP) to any server or user for a specified duration (Bot Owners Only).',
+        usage: ',addpremium [guild_id|user_id|@user] [tier] [duration]',
+        async execute(ctx) {
+            const BOT_OWNERS = config.BOT_OWNERS || ['1465049039153135639', '1257676837249617971'];
+            if (process.env.OWNER_ID && !BOT_OWNERS.includes(process.env.OWNER_ID)) BOT_OWNERS.push(process.env.OWNER_ID);
+            if (process.env.OWNER_IDS) {
+                process.env.OWNER_IDS.split(',').map(s => s.trim()).forEach(id => {
+                    if (!BOT_OWNERS.includes(id)) BOT_OWNERS.push(id);
+                });
+            }
+
+            const callerId = ctx.user?.id || ctx.author?.id;
+            if (!BOT_OWNERS.includes(callerId)) {
+                return ctx.reply('❌ **Access Denied**: This command is strictly reserved for Starry Bot Owners.');
+            }
+
+            const mongoose = require('mongoose');
+            const ServerSettings = require('../../models/ServerSettings');
+            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+            const { invalidatePremiumCache } = require('../../utils/premiumHelper');
+
+            const args = ctx.args || [];
+            let targetId = null;
+            let targetType = 'guild'; // 'guild' or 'user'
+            let argIdx = 0;
+
+            if (args.length > 0) {
+                const first = args[0].trim();
+                const mentionMatch = first.match(/^<@!?(\d+)>$/);
+                if (mentionMatch) {
+                    targetId = mentionMatch[1];
+                    targetType = 'user';
+                    argIdx = 1;
+                } else if (/^\d{17,21}$/.test(first)) {
+                    targetId = first;
+                    argIdx = 1;
+                    if (ctx.client?.users?.cache?.has(targetId)) {
+                        targetType = 'user';
+                    } else if (ctx.client?.guilds?.cache?.has(targetId)) {
+                        targetType = 'guild';
+                    }
+                }
+            }
+
+            if (!targetId) {
+                targetId = ctx.guild?.id || callerId;
+                targetType = ctx.guild ? 'guild' : 'user';
+            }
+
+            // Identify Target Name
+            let targetDisplayName = targetId;
+            if (targetType === 'guild') {
+                const g = ctx.client?.guilds?.cache?.get(targetId);
+                targetDisplayName = g ? g.name : `Server (${targetId})`;
+            } else {
+                const u = ctx.client?.users?.cache?.get(targetId);
+                targetDisplayName = u ? u.tag : `User (${targetId})`;
+            }
+
+            const remainingArgs = args.slice(argIdx);
+            let chosenTier = null;
+            let durationStr = null;
+
+            const tierKeywords = {
+                lifetime: 'lifetime',
+                life: 'lifetime',
+                vip: 'lifetime',
+                permanent: 'lifetime',
+                perm: 'lifetime',
+                never: 'lifetime',
+                pro: 'pro_cluster',
+                pro_cluster: 'pro_cluster',
+                procluster: 'pro_cluster',
+                cluster: 'pro_cluster',
+                shield: 'shield_plus',
+                shield_plus: 'shield_plus',
+                shieldplus: 'shield_plus',
+                plus: 'shield_plus'
+            };
+
+            for (const rawArg of remainingArgs) {
+                const arg = rawArg.toLowerCase().trim();
+                if (!chosenTier && tierKeywords[arg]) {
+                    chosenTier = tierKeywords[arg];
+                    continue;
+                }
+                if (!durationStr) {
+                    if (['lifetime', 'permanent', 'never', 'life', 'perm', '-1', 'infinite'].includes(arg)) {
+                        durationStr = 'lifetime';
+                        continue;
+                    }
+                    if (/^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hrs?|hours?|d|days?|w|weeks?|mo|months?|y|yrs?|years?)$/i.test(arg) || /^\d+$/.test(arg)) {
+                        durationStr = arg;
+                        continue;
+                    }
+                }
+            }
+
+            // Defaults: Lifetime VIP by default for bot owner convenience!
+            if (!chosenTier) {
+                chosenTier = (durationStr && durationStr !== 'lifetime') ? 'pro_cluster' : 'lifetime';
+            }
+            if (!durationStr) {
+                durationStr = chosenTier === 'lifetime' ? 'lifetime' : '30d';
+            }
+
+            // Parse duration
+            let expiresAt = null;
+            if (!['lifetime', 'permanent', 'never', 'life', 'perm', '-1', 'infinite'].includes(durationStr.toLowerCase())) {
+                const match = durationStr.match(/^(\d+)\s*([a-z]*)$/i);
+                if (match) {
+                    const count = parseInt(match[1], 10);
+                    const rawUnit = (match[2] || 'd').toLowerCase();
+                    let multiplier = 24 * 60 * 60 * 1000;
+                    if (rawUnit.startsWith('s')) multiplier = 1000;
+                    else if (rawUnit.startsWith('m') && !rawUnit.startsWith('mo')) multiplier = 60 * 1000;
+                    else if (rawUnit.startsWith('h')) multiplier = 60 * 60 * 1000;
+                    else if (rawUnit.startsWith('d')) multiplier = 24 * 60 * 60 * 1000;
+                    else if (rawUnit.startsWith('w')) multiplier = 7 * 24 * 60 * 60 * 1000;
+                    else if (rawUnit.startsWith('mo')) multiplier = 30 * 24 * 60 * 60 * 1000;
+                    else if (rawUnit.startsWith('y')) multiplier = 365 * 24 * 60 * 60 * 1000;
+
+                    expiresAt = new Date(Date.now() + (count * multiplier));
+                }
+            }
+
+            const tierNames = {
+                shield_plus: 'Starry Shield Plus',
+                pro_cluster: 'Starry Pro Cluster',
+                lifetime: 'Starry Supreme Lifetime VIP'
+            };
+            const tierMaxShares = {
+                shield_plus: 5,
+                pro_cluster: 10,
+                lifetime: 15
+            };
+
+            const tierName = tierNames[chosenTier] || 'Starry Premium';
+            const maxBoosterShares = tierMaxShares[chosenTier] || 15;
+
+            // 1. Update ServerSettings if target is guild
+            if (targetType === 'guild') {
+                let settings = await ServerSettings.findOne({ guildId: targetId });
+                if (!settings) settings = new ServerSettings({ guildId: targetId });
+                settings.premium = {
+                    isPremium: true,
+                    tier: chosenTier,
+                    expiresAt: expiresAt,
+                    activatedBy: `Owner Direct: ${ctx.user?.tag || 'Bot Owner'} (${callerId})`
+                };
+                await settings.save();
+
+                // Dynamically upgrade BoosterRole docs in this guild
+                const BoosterRole = mongoose.models.BoosterRole || mongoose.model('BoosterRole');
+                if (BoosterRole) {
+                    await BoosterRole.updateMany(
+                        { guildId: targetId, maxShares: { $lt: maxBoosterShares } },
+                        { $set: { maxShares: maxBoosterShares } }
+                    ).catch(() => {});
+                }
+            }
+
+            // 2. Upsert PremiumModel (PremiumGuilds)
+            if (PremiumModel) {
+                await PremiumModel.findOneAndUpdate(
+                    { targetId: targetId },
+                    {
+                        targetId: targetId,
+                        type: targetType,
+                        isPremium: true,
+                        activatedAt: new Date(),
+                        expiresAt: expiresAt
+                    },
+                    { upsert: true, new: true }
+                ).catch(() => {});
+            }
+
+            // 3. Update RAM caches instantly
+            const expMs = expiresAt ? expiresAt.getTime() : null;
+            if (ctx.client && typeof ctx.client.setPremiumCache === 'function') {
+                ctx.client.setPremiumCache(targetId, expMs);
+            }
+            invalidatePremiumCache(targetId);
+
+            const expiryDisplay = expiresAt 
+                ? `<t:${Math.floor(expiresAt.getTime() / 1000)}:F> (<t:${Math.floor(expiresAt.getTime() / 1000)}:R>)`
+                : '`Permanent Lifetime VIP (Never Expires)`';
+
+            const embed = new EmbedBuilder()
+                .setColor('#F59E0B')
+                .setAuthor({ 
+                    name: 'Starry Premium Direct Grant • Bot Owner Authority', 
+                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                })
+                .setTitle(`👑 Premium Granted: ${tierName}`)
+                .setDescription(
+                    `Successfully applied **${tierName}** directly to ${targetType === 'guild' ? 'Server' : 'User'} **${targetDisplayName}**!\n\n` +
+                    `🆔 **Target ID:** \`${targetId}\` (${targetType.toUpperCase()})\n` +
+                    `⏳ **Duration / Expiry:** ${expiryDisplay}\n` +
+                    `👥 **Custom Booster Role Slots:** \`${maxBoosterShares} friends\`\n` +
+                    `⚡ **Authorized By:** <@${callerId}>`
+                )
+                .addFields(
+                    {
+                        name: '✨ Active Perks Unlocked',
+                        value: 
+                            '• **24/7 Voice Channel Persistence** (Zero-latency startup)\n' +
+                            '• **15 Studio DSP Hi-Fi Audio Filters** (Physical Bass, 8D, Lo-Fi, Reverb, Karaoke)\n' +
+                            '• **Server Cloud Backups & Instant Restore**\n' +
+                            '• **Anti-Raid Emergency Lockdown Shield**\n' +
+                            '• **2x Economy XP, Drop Rate & Loot Multiplier**\n' +
+                            '• **Multi-Bot Worker Nodes & Web Captcha Verification**',
+                        inline: false
+                    }
+                )
+                .setFooter({ text: 'Starry Core Infrastructure • Instant RAM & Database Activation' })
+                .setTimestamp();
+
+            return ctx.reply({ embeds: [embed] });
+        }
+    },
+
+    // 33. DELPREMIUM (Bot Owner Direct Revoke)
+    {
+        name: 'delpremium',
+        aliases: ['removepremium', 'revokepremium', 'cancelpremium'],
+        category: 'Utility',
+        description: 'Directly revoke Starry Premium from any server or user (Bot Owners Only).',
+        usage: ',delpremium [guild_id|user_id|@user]',
+        async execute(ctx) {
+            const BOT_OWNERS = config.BOT_OWNERS || ['1465049039153135639', '1257676837249617971'];
+            if (process.env.OWNER_ID && !BOT_OWNERS.includes(process.env.OWNER_ID)) BOT_OWNERS.push(process.env.OWNER_ID);
+            if (process.env.OWNER_IDS) {
+                process.env.OWNER_IDS.split(',').map(s => s.trim()).forEach(id => {
+                    if (!BOT_OWNERS.includes(id)) BOT_OWNERS.push(id);
+                });
+            }
+
+            const callerId = ctx.user?.id || ctx.author?.id;
+            if (!BOT_OWNERS.includes(callerId)) {
+                return ctx.reply('❌ **Access Denied**: This command is strictly reserved for Starry Bot Owners.');
+            }
+
+            let targetId = null;
+            if (ctx.args && ctx.args[0]) {
+                const first = ctx.args[0].trim();
+                const m = first.match(/^<@!?(\d+)>$/);
+                targetId = m ? m[1] : (first.match(/^\d{17,21}$/) ? first : null);
+            }
+            if (!targetId) targetId = ctx.guild?.id || callerId;
+
+            const mongoose = require('mongoose');
+            const ServerSettings = require('../../models/ServerSettings');
+            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+            const { invalidatePremiumCache } = require('../../utils/premiumHelper');
+
+            // 1. Reset ServerSettings
+            await ServerSettings.updateOne(
+                { guildId: targetId },
+                { $set: { 'premium.isPremium': false, 'premium.tier': 'free', 'premium.expiresAt': null } }
+            ).catch(() => {});
+
+            // 2. Remove from PremiumModel
+            if (PremiumModel) {
+                await PremiumModel.deleteOne({ targetId }).catch(() => {});
+            }
+
+            // 3. Clear live caches
+            if (ctx.client && typeof ctx.client.removePremiumCache === 'function') {
+                ctx.client.removePremiumCache(targetId);
+            }
+            invalidatePremiumCache(targetId);
+
+            return ctx.reply(`🛑 **Starry Premium Revoked:** Premium status removed for ID \`${targetId}\`.`);
         }
     },
 

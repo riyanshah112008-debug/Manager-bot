@@ -322,8 +322,15 @@ const commands = [
             const userRole = await BoosterRole.findOne({ guildId: guild.id, userId: ctx.user.id });
 
             const settings = await boosterEngine.getSettings(guild.id);
-            const isGuildPremium = Boolean(settings.premium?.isPremium);
-            const maxShares = isGuildPremium ? (settings.boosterRoleSystem?.premiumMaxShares || 5) : (settings.boosterRoleSystem?.defaultMaxShares || 1);
+            const { isServerOrUserPremium } = require('../../utils/premiumHelper');
+            const isGuildPremium = await isServerOrUserPremium(guild.id, ctx.user.id, ctx.client);
+            const tier = settings.premium?.tier || 'free';
+            let maxShares = settings.boosterRoleSystem?.defaultMaxShares || 1;
+            if (isGuildPremium) {
+                if (tier === 'lifetime') maxShares = 15;
+                else if (tier === 'pro_cluster') maxShares = 10;
+                else maxShares = settings.boosterRoleSystem?.premiumMaxShares || 5;
+            }
 
             const embed = new EmbedBuilder()
                 .setColor('#FF73FA')
@@ -344,7 +351,7 @@ const commands = [
                     {
                         name: '📊 Your Custom Role',
                         value: userRole 
-                            ? `Active: <@&${userRole.roleId}>\nFriends Sharing: \`${userRole.sharedWith.length} / ${userRole.maxShares}\`` 
+                            ? `Active: <@&${userRole.roleId}>\nFriends Sharing: \`${userRole.sharedWith.length} / ${Math.max(userRole.maxShares, maxShares)}\`` 
                             : (isBooster ? 'You have not created your role yet! Run `,boosterrole create <name>`.' : 'Boost this server to unlock your custom role instantly!'),
                         inline: false
                     }
