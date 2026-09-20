@@ -251,7 +251,14 @@ const commands = [
     // 🎨 ZERO-BOOST NAME COLOR & HEX BLEND SUITE
     new SlashCommandBuilder()
         .setName('color')
-        .setDescription('🎨 Customize username color with optical hex blends, gradients, or solid tones (Zero-boost)')
+        .setDescription('🎨 Customize username color with hex blends or zero-role server profile mode')
+        .addSubcommand(sub =>
+            sub.setName('profile')
+                .setDescription('Apply hex blend directly to Server Profile without creating ANY roles (Zero-role mode)')
+                .addStringOption(opt => opt.setName('color1').setDescription('First hex color or preset name (e.g. #FF0055 or cyberpunk)').setRequired(true))
+                .addStringOption(opt => opt.setName('color2').setDescription('Second hex color (optional for blend)').setRequired(false))
+                .addIntegerOption(opt => opt.setName('ratio').setDescription('Blend ratio percentage (0-100, default 50)').setMinValue(0).setMaxValue(100).setRequired(false))
+        )
         .addSubcommand(sub =>
             sub.setName('blend')
                 .setDescription('Blend two hex colors together optically (No server boosts needed!)')

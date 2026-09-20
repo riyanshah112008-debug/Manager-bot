@@ -127,6 +127,7 @@ const serverSettingsSchema = new mongoose.Schema({
     // 🎨 Custom Hex Blend & Name Color System (No boosts required)
     colorRoleSystem: {
         enabled: { type: Boolean, default: true },
+        mode: { type: String, default: 'shared' },        // 'shared' (pooled roles), 'profile' (no roles!), 'personal'
         anchorRoleId: { type: String, default: '' },      // Upper boundary role in hierarchy
         allowEveryone: { type: Boolean, default: true },   // Whether all members can use without booster status
         allowedRoles: { type: [String], default: [] }      // Specific roles allowed if allowEveryone is false

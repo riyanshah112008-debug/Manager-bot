@@ -102,6 +102,24 @@ assert.strictEqual(typeof colorRoleEngine.removeColorRole, 'function');
 assert.strictEqual(typeof colorRoleEngine.getColorRoleStatus, 'function');
 assert.strictEqual(typeof colorRoleEngine.calculateSafeRolePosition, 'function');
 assert.strictEqual(typeof colorRoleEngine.getSettings, 'function');
-console.log('  ✅ ColorRoleEngine interface verification passed!');
+// 10. Test HSL & Aesthetic Badge Engine
+console.log('\n▶ Test 10: HSL Conversion & Aesthetic Badge Engine');
+const hslBlue = colorBlendEngine.hexToHsl('#0000FF');
+assert.strictEqual(hslBlue.h, 240);
+assert.strictEqual(hslBlue.s, 100);
+assert.strictEqual(hslBlue.l, 50);
+
+const badgeSunset = colorBlendEngine.getAestheticBadge('#FF512F');
+assert.strictEqual(typeof badgeSunset, 'string');
+const badgePreset = colorBlendEngine.getAestheticBadge('#0000FF', { emoji: '⚡' });
+assert.strictEqual(badgePreset, '⚡');
+console.log(`  HSL of #0000FF: ${JSON.stringify(hslBlue)}, Badge for Sunset: ${badgeSunset}`);
+console.log('  ✅ HSL and aesthetic badges passed!');
+
+// 11. Test ColorRole Schema support for No-Role Profile mode
+console.log('\n▶ Test 11: ColorRole No-Role Profile Mode Schema Verification');
+assert.ok(ColorRole.schema.paths.applyMode, 'applyMode path should exist in schema');
+assert.ok(ColorRole.schema.paths.originalNickname, 'originalNickname path should exist in schema');
+console.log('  ✅ Schema supports both No-Role Profile mode and Shared Role pool!');
 
 console.log('\n✨ ALL TESTS COMPLETED SUCCESSFULLY WITH 100% PASS RATE!\n');

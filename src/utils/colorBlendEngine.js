@@ -536,6 +536,62 @@ class ColorBlendEngine {
     }
 
     /**
+     * Convert Hex to HSL
+     * @param {string} hex 
+     * @returns {{ h: number, s: number, l: number }}
+     */
+    hexToHsl(hex) {
+        const { r, g, b } = this.hexToRgb(hex);
+        const rNorm = r / 255;
+        const gNorm = g / 255;
+        const bNorm = b / 255;
+
+        const max = Math.max(rNorm, gNorm, bNorm);
+        const min = Math.min(rNorm, gNorm, bNorm);
+        let h, s;
+        const l = (max + min) / 2;
+
+        if (max === min) {
+            h = s = 0;
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case rNorm: h = (gNorm - bNorm) / d + (gNorm < bNorm ? 6 : 0); break;
+                case gNorm: h = (bNorm - rNorm) / d + 2; break;
+                case bNorm: h = (rNorm - gNorm) / d + 4; break;
+            }
+            h *= 60;
+        }
+
+        return {
+            h: Math.round(h),
+            s: Math.round(s * 100),
+            l: Math.round(l * 100)
+        };
+    }
+
+    /**
+     * Get aesthetic emoji badge matching hex hue or preset
+     * @param {string} hex 
+     * @param {object} [preset] 
+     * @returns {string}
+     */
+    getAestheticBadge(hex, preset = null) {
+        if (preset?.emoji) return preset.emoji;
+        const { h, l } = this.hexToHsl(hex);
+        if (l < 18) return '🖤';
+        if (l > 85) return '🤍';
+        if (h >= 345 || h < 15) return '🔴';
+        if (h >= 15 && h < 45) return '🟠';
+        if (h >= 45 && h < 70) return '🟡';
+        if (h >= 70 && h < 165) return '🟢';
+        if (h >= 165 && h < 255) return '🔵';
+        if (h >= 255 && h < 315) return '🟣';
+        return '🌸';
+    }
+
+    /**
      * Convert HSL to Hex
      */
     hslToHex(h, s, l) {

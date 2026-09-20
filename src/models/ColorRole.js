@@ -1,8 +1,8 @@
 // ==========================================
 // 🎨 STARRY HEX BLEND & NAME COLOR SCHEMA
 // File Path: src/models/ColorRole.js
-// Multi-Tenant Custom Vanity Color Role Model
-// Supports: Hex Blends, Solid Hex, Native Gradients, Presets
+// Multi-Tenant Custom Vanity Color Model
+// Supports: No-Role Server Profile Mode, Shared Role Pool, Hex Blends, Presets
 // ==========================================
 const mongoose = require('mongoose');
 
@@ -19,13 +19,17 @@ const colorRoleSchema = new mongoose.Schema({
     },
     roleId: { 
         type: String, 
-        required: true, 
-        unique: true,
+        default: null,
         index: true 
+    },
+    applyMode: {
+        type: String,
+        enum: ['shared', 'profile', 'personal'],
+        default: 'shared'
     },
     colorType: {
         type: String,
-        enum: ['blend', 'solid', 'gradient', 'preset', 'random'],
+        enum: ['blend', 'solid', 'gradient', 'preset', 'random', 'profile', 'no_role'],
         default: 'blend'
     },
     primaryColor: { 
@@ -54,6 +58,10 @@ const colorRoleSchema = new mongoose.Schema({
         default: null,
         trim: true
     },
+    originalNickname: {
+        type: String,
+        default: null
+    },
     isNativeGradient: {
         type: Boolean,
         default: false
@@ -66,7 +74,7 @@ const colorRoleSchema = new mongoose.Schema({
     timestamps: true 
 });
 
-// Compound unique index: each user has at most one personal color role per guild
+// Compound unique index: each user has at most one active color configuration per guild
 colorRoleSchema.index({ guildId: 1, userId: 1 }, { unique: true });
 
 module.exports = mongoose.models.ColorRole || mongoose.model('ColorRole', colorRoleSchema);
