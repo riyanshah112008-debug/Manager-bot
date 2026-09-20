@@ -122,6 +122,14 @@ const serverSettingsSchema = new mongoose.Schema({
         premiumMaxShares: { type: Number, default: 5 },   // Premium server max friends per booster
         allowIcons: { type: Boolean, default: true },      // Allow role icons
         gracePeriodDays: { type: Number, default: 3 }     // Grace days when boost is cancelled
+    },
+
+    // 🎨 Custom Hex Blend & Name Color System (No boosts required)
+    colorRoleSystem: {
+        enabled: { type: Boolean, default: true },
+        anchorRoleId: { type: String, default: '' },      // Upper boundary role in hierarchy
+        allowEveryone: { type: Boolean, default: true },   // Whether all members can use without booster status
+        allowedRoles: { type: [String], default: [] }      // Specific roles allowed if allowEveryone is false
     }
 }, { timestamps: true });
 

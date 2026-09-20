@@ -248,6 +248,66 @@ const commands = [
         )
         .toJSON(),
 
+    // 🎨 ZERO-BOOST NAME COLOR & HEX BLEND SUITE
+    new SlashCommandBuilder()
+        .setName('color')
+        .setDescription('🎨 Customize username color with optical hex blends, gradients, or solid tones (Zero-boost)')
+        .addSubcommand(sub =>
+            sub.setName('blend')
+                .setDescription('Blend two hex colors together optically (No server boosts needed!)')
+                .addStringOption(opt => opt.setName('color1').setDescription('First hex color (e.g. #FF0055)').setRequired(true))
+                .addStringOption(opt => opt.setName('color2').setDescription('Second hex color (e.g. #00E5FF)').setRequired(true))
+                .addIntegerOption(opt => opt.setName('ratio').setDescription('Blend ratio percentage (0-100, default 50)').setMinValue(0).setMaxValue(100).setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('set')
+                .setDescription('Apply a single solid hex color to your username')
+                .addStringOption(opt => opt.setName('hex').setDescription('6-digit hex color (e.g. #FF73FA)').setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName('preset')
+                .setDescription('Apply a hand-crafted aesthetic blend preset')
+                .addStringOption(opt => 
+                    opt.setName('name')
+                        .setDescription('Select an aesthetic blend preset')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '🌅 Sunset Horizon (#FF512F ➔ #DD2476)', value: 'sunset' },
+                            { name: '⚡ Cyberpunk 2099 (#FF007F ➔ #7928CA)', value: 'cyberpunk' },
+                            { name: '🌊 Oceanic Depths (#00F2FE ➔ #4FACFE)', value: 'ocean' },
+                            { name: '🍬 Cotton Candy (#FFAFBD ➔ #C9FFBF)', value: 'cotton_candy' },
+                            { name: '🌌 Northern Aurora (#00F260 ➔ #0575E6)', value: 'aurora' },
+                            { name: '💿 Holographic Prism (#A9FFFF ➔ #FFCCCC)', value: 'holographic' },
+                            { name: '🔥 Phoenix Blaze (#F12711 ➔ #F5AF19)', value: 'fire' },
+                            { name: '🪻 Lavender Mist (#C471ED ➔ #F64F59)', value: 'lavender' },
+                            { name: '💎 Mystic Emerald (#11998E ➔ #38EF7D)', value: 'emerald' },
+                            { name: '✨ Supernova Galaxy (#3A1C71 ➔ #D76D77)', value: 'galaxy' },
+                            { name: '🌸 Cherry Blossom (#FFA8A8 ➔ #FC6C85)', value: 'sakura' },
+                            { name: '🌴 Vaporwave Dream (#FF71CE ➔ #01CDFE)', value: 'vaporwave' }
+                        )
+                )
+        )
+        .addSubcommand(sub =>
+            sub.setName('random')
+                .setDescription('Generate and equip a random vibrant color blend')
+        )
+        .addSubcommand(sub =>
+            sub.setName('preview')
+                .setDescription('Preview an optical color blend without changing your role')
+                .addStringOption(opt => opt.setName('color1').setDescription('First hex color (e.g. #FF0055)').setRequired(true))
+                .addStringOption(opt => opt.setName('color2').setDescription('Second hex color (e.g. #00E5FF)').setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('info')
+                .setDescription('View your active custom color role and contrast analysis')
+                .addUserOption(opt => opt.setName('user').setDescription('Member to inspect (optional)').setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('remove')
+                .setDescription('Remove your custom name color role and reset to default')
+        )
+        .toJSON(),
+
     new ContextMenuCommandBuilder()
         .setName('Steal Emojis')
         .setType(ApplicationCommandType.Message)

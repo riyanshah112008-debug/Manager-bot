@@ -113,18 +113,37 @@ const commands = [
             // SUBCOMMAND: COLOR / COLOUR
             // ==========================================
             if (sub === 'color' || sub === 'colour') {
-                const hexInput = ctx.args[1];
-                const parsedColor = parseHexColor(hexInput);
-                if (!parsedColor) {
-                    return ctx.reply('❌ Please provide a valid 6-digit hex color code.\n*Example:* `,boosterrole color #00F2FE` or `,boosterrole color #FF79C6`');
+                const isBlendKeyword = (ctx.args[1] || '').toLowerCase() === 'blend';
+                const firstColorInput = isBlendKeyword ? ctx.args[2] : ctx.args[1];
+                const secondColorInput = isBlendKeyword ? ctx.args[3] : ctx.args[2];
+
+                const colorBlendEngine = require('../../utils/colorBlendEngine');
+                const parsed1 = colorBlendEngine.parseHex(firstColorInput);
+                const parsed2 = secondColorInput ? colorBlendEngine.parseHex(secondColorInput) : null;
+
+                if (!parsed1) {
+                    return ctx.reply('❌ Please provide a valid 6-digit hex color code.\n*Example:* `,boosterrole color #00F2FE` or `,boosterrole color #FF0055 #00E5FF` (Dual Hex Blend)');
                 }
 
+                const blendedColor = parsed2 ? colorBlendEngine.blendColors(parsed1, parsed2, 0.5) : parsed1;
+
                 try {
-                    const result = await boosterEngine.updateBoosterRole(ctx.guild, member, { color: parsedColor });
+                    const result = await boosterEngine.updateBoosterRole(ctx.guild, member, { 
+                        color: blendedColor,
+                        secondaryColor: parsed2
+                    });
                     const embed = new EmbedBuilder()
                         .setColor(result.role.hexColor)
                         .setTitle('🎨 Booster Role Color Updated!')
-                        .setDescription(`Updated **<@&${result.role.id}>** to color **\`${parsedColor}\`**!`)
+                        .setDescription(
+                            parsed2 
+                                ? `Updated **<@&${result.role.id}>** to a custom dual-blend!\n\n` +
+                                  `🎯 **Color 1:** \`${parsed1}\`\n` +
+                                  `🎯 **Color 2:** \`${parsed2}\`\n` +
+                                  `💎 **Rendered Hex:** \`${blendedColor}\`\n\n` +
+                                  `🌈 **Swatch:**\n${colorBlendEngine.generateVisualBar(parsed1, parsed2, blendedColor)}`
+                                : `Updated **<@&${result.role.id}>** to color **\`${parsed1}\`**!`
+                        )
                         .setFooter({ text: 'Starry Booster Synergy Engine' });
                     return ctx.reply({ embeds: [embed] });
                 } catch (err) {

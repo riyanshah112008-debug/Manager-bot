@@ -244,6 +244,15 @@ class BoosterRoleEngine {
             const cleanColor = updates.color.trim();
             doc.color = cleanColor;
             roleData.color = cleanColor;
+
+            if (updates.secondaryColor && guild.features?.includes('ENHANCED_ROLE_COLORS')) {
+                try {
+                    await role.setColors({ primaryColor: cleanColor, secondaryColor: updates.secondaryColor.trim() });
+                    delete roleData.color;
+                } catch (e) {
+                    // Fallback to roleData.color
+                }
+            }
         }
 
         if (updates.icon !== undefined) {

@@ -77,6 +77,7 @@ const gameCommands = require('../commands/bundles/gameCommands');
 const systemCommands = require('../commands/bundles/systemCommands');
 const nsfwCommands = require('../commands/bundles/nsfwCommands');
 const boosterCommands = require('../commands/bundles/boosterCommands');
+const colorCommands = require('../commands/bundles/colorCommands');
 
 const allBundles = [
     ...musicCommands,
@@ -87,7 +88,8 @@ const allBundles = [
     ...gameCommands,
     ...systemCommands,
     ...nsfwCommands,
-    ...boosterCommands
+    ...boosterCommands,
+    ...colorCommands
 ];
 
 function getFilesRecursively(dir) {

@@ -69,15 +69,22 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 `\`${prefix}vckick\`, \`${prefix}vcmute\`, \`${prefix}vcunmute\`, \`${prefix}vcmod\`, \`${prefix}modpanel\`, \`${prefix}case\`, \`${prefix}editcase\`, \`${prefix}modstats\`, \`${prefix}modleaderboard\`, \`${prefix}banfile\`, \`${prefix}preban\``
             );
     } else if (catId === 'booster') {
-        embed.setTitle('🚀 Booster Studio & Shared Roles (4 Commands)')
+        embed.setTitle('🚀 Vanity Studio & Zero-Boost Name Colors')
             .setDescription(
-                `**🌟 World-First Shared Booster Roles:**\n` +
-                `• \`${prefix}boosterrole\` (or \`${prefix}br\`) — Create, edit color/icon/name, delete, or share your personal custom role with your server friends!\n` +
-                `• \`${prefix}boostperks\` — Inspect your active boosting tier, tenure, unlocked perks, and shared role recipients.\n\n` +
+                `**🎨 Zero-Boost Name Colors & Optical Hex Blends:**\n` +
+                `• \`${prefix}color blend <#Hex1> <#Hex2> [ratio%]\` — Blend two hex colors optically (Zero server boosts needed!)\n` +
+                `• \`${prefix}color presets\` — Browse 26 hand-crafted aesthetic blend palettes\n` +
+                `• \`${prefix}color <#HexCode>\` — Apply a solid custom hex color role\n` +
+                `• \`${prefix}color random\` — Generate and equip a random vibrant blend\n` +
+                `• \`${prefix}color preview <#Hex1> [#Hex2]\` — Preview color blend & WCAG contrast\n` +
+                `• \`${prefix}color info\` / \`${prefix}color remove\` — View active role or reset to default\n\n` +
+                `**🌟 Server Booster Vanity & Shared Roles:**\n` +
+                `• \`${prefix}boosterrole\` (or \`${prefix}br\`) — Create, edit color/icon/name, delete, or share your custom role with friends!\n` +
+                `• \`${prefix}boostperks\` — Inspect your active boosting tier, tenure, and shared role recipients.\n\n` +
                 `**⚙️ Administrator Controls:**\n` +
-                `• \`${prefix}boosteradmin\` — Configure maximum friends allowed per booster, role position anchor, and sync rules.\n` +
-                `• \`${prefix}boost-setup\` — Configure automated server booster greeting announcements and VIP role perks.\n\n` +
-                `*Also manageable through the Web Dashboard with real-time visual color picker!*`
+                `• \`${prefix}color config\` — Configure color role system access and hierarchy anchor.\n` +
+                `• \`${prefix}boosteradmin\` — Configure booster share slots and sync rules.\n` +
+                `• \`${prefix}boost-setup\` — Configure booster announcements and VIP perks.`
             );
     } else if (catId === 'util') {
         embed.setTitle('🛠️ Utility & AI Server Innovations (50+ Commands)')
@@ -191,7 +198,7 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
             .addFields(
                 { name: '🎵 Music (37)', value: `\`${prefix}play\`, \`${prefix}autoplay\`, \`${prefix}spotify\``, inline: true },
                 { name: '🛡️ Moderation (40+)', value: `\`${prefix}ban\`, \`${prefix}lockdown\`, \`${prefix}modpanel\``, inline: true },
-                { name: '🚀 Booster (4)', value: `\`${prefix}boosterrole\`, \`${prefix}boostperks\``, inline: true },
+                { name: '🚀 Vanity & Colors (6)', value: `\`${prefix}color\`, \`${prefix}boosterrole\`, \`${prefix}boostperks\``, inline: true },
                 { name: '🛠️ Utility (50+)', value: `\`${prefix}spark\`, \`${prefix}portal\`, \`${prefix}remind\``, inline: true },
                 { name: '🎮 Arcade (12)', value: `\`${prefix}raid\`, \`${prefix}blackjack\`, \`${prefix}mines\``, inline: true },
                 { name: '💰 Economy (32)', value: `\`${prefix}profile\`, \`${prefix}crime\`, \`${prefix}shop\``, inline: true },
