@@ -2,8 +2,8 @@
 // 🎨 STARRY COLOR ROLE & SERVER PROFILE SYNERGY ENGINE
 // File Path: src/modules/colorRoleEngine.js
 // Dual-Mode Architecture:
-// 1) Zero-Role Server Profile Mode (Direct nickname badge & bot profile theme without creating ANY roles)
-// 2) Shared Role Pool Mode (Shared palette reuse to eliminate duplicate/unnecessary roles)
+// 1) Zero-Role Server Profile Mode (Direct nickname gradient badge & ANSI truecolor gradient without creating ANY roles)
+// 2) Shared Role Pool Mode (Discord Native Gradient primary+secondary colors, pooled to eliminate duplicate/unnecessary roles)
 // ==========================================
 const { 
     Events, 
@@ -50,7 +50,7 @@ class ColorRoleEngine {
             }
         });
 
-        console.log('🎨 [ColorRoleEngine] Hex Blend & Server Profile Engine successfully initialized!');
+        console.log('🎨 [ColorRoleEngine] Discord Gradient & Server Profile Engine successfully initialized!');
     }
 
     /**
@@ -127,7 +127,8 @@ class ColorRoleEngine {
 
     /**
      * Apply or update a color configuration for a member
-     * Supports both No-Role Server Profile Mode and Shared Role Pool Mode
+     * Supports Discord Native Gradient feature (primary + secondary distinct colors)
+     * and Zero-Role Server Profile Mode
      * 
      * @param {import('discord.js').Guild} guild 
      * @param {import('discord.js').GuildMember} member 
@@ -135,6 +136,7 @@ class ColorRoleEngine {
      * @param {'blend'|'solid'|'gradient'|'preset'|'random'|'profile'} options.colorType 
      * @param {string} options.primaryColor 
      * @param {string} [options.secondaryColor] 
+     * @param {string} [options.tertiaryColor] 
      * @param {number} [options.ratio=50] 
      * @param {string} [options.presetName] 
      * @param {'shared'|'profile'|'personal'} [options.applyMode] 
@@ -164,7 +166,10 @@ class ColorRoleEngine {
             }
         }
 
-        // Calculate blended hex code
+        const presetObj = options.presetName ? colorBlendEngine.getPreset(options.presetName) : null;
+        const tertiaryHex = options.tertiaryColor ? colorBlendEngine.parseHex(options.tertiaryColor) : (presetObj?.hex3 || null);
+
+        // Calculate blended hex code (for embed swatch & analytics)
         const ratio = typeof options.ratio === 'number' ? Math.max(0, Math.min(100, options.ratio)) : 50;
         const blendedHex = secondaryHex 
             ? colorBlendEngine.blendColors(primaryHex, secondaryHex, ratio)
@@ -175,6 +180,10 @@ class ColorRoleEngine {
         if (options.colorType === 'profile') mode = 'profile';
 
         let doc = await ColorRole.findOne({ guildId: guild.id, userId: member.id });
+
+        // Generate ANSI living gradient preview of the user's name
+        const memberDisplayName = member.displayName || member.user.username;
+        const ansiGradientText = colorBlendEngine.getGradientPreview(memberDisplayName, primaryHex, secondaryHex, tertiaryHex);
 
         // ==========================================
         // MODE 1: ZERO-ROLE SERVER PROFILE MODE
@@ -192,29 +201,27 @@ class ColorRoleEngine {
             }
 
             // Strip any existing badge from the member's current display name
-            const currentDisplayName = member.displayName || member.user.username;
-            const cleanBase = currentDisplayName.replace(/^[^\w\s\d]+・\s*/u, '').trim() || member.user.username;
+            const cleanBase = memberDisplayName.replace(/^[^\w\s\d]+・\s*|^\[[^\s\]]+\]\s*/u, '').trim() || member.user.username;
 
-            // Pick aesthetic color badge corresponding to the blended hex hue / preset
-            const presetObj = options.presetName ? colorBlendEngine.getPreset(options.presetName) : null;
-            const badge = colorBlendEngine.getAestheticBadge(blendedHex, presetObj);
+            // Pick aesthetic dual-gradient badge corresponding to start and end colors
+            const gradientBadges = colorBlendEngine.getGradientBadges(primaryHex, secondaryHex, presetObj);
 
             // Construct new nickname (Max 32 chars Discord limit)
-            const targetNickname = `${badge}・${cleanBase}`.slice(0, 32);
+            const targetNickname = `${gradientBadges}・${cleanBase}`.slice(0, 32);
             let nicknameApplied = false;
             let nicknameWarning = null;
 
             const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
 
             if (member.id === guild.ownerId) {
-                nicknameWarning = "Discord's API prevents bots from editing the Server Owner's nickname. Your profile color is saved in Starry!";
+                nicknameWarning = "Discord's API prevents bots from editing the Server Owner's nickname. Your profile gradient theme is active in Starry!";
             } else if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) {
                 nicknameWarning = "Starry lacks `Manage Nicknames` permission to update your server profile nickname.";
             } else if (botMember.roles.highest.position <= member.roles.highest.position) {
                 nicknameWarning = "Your highest role is higher than or equal to Starry's role, so Starry cannot edit your nickname.";
             } else {
                 try {
-                    await member.setNickname(targetNickname, 'Starry Color Engine: Applied zero-role server profile color');
+                    await member.setNickname(targetNickname, 'Starry Color Engine: Applied zero-role gradient server profile');
                     nicknameApplied = true;
                 } catch (nickErr) {
                     nicknameWarning = `Could not update server nickname: ${nickErr.message}`;
@@ -255,34 +262,33 @@ class ColorRoleEngine {
                 mode: 'profile',
                 primaryHex,
                 secondaryHex,
+                tertiaryHex,
                 blendedHex,
                 ratio,
-                badge,
+                gradientBadges,
+                ansiGradientText,
                 newNickname: targetNickname,
                 nicknameApplied,
                 nicknameWarning,
                 doc,
-                readability: colorBlendEngine.analyzeDiscordReadability(blendedHex)
+                readability: colorBlendEngine.analyzeDiscordReadability(primaryHex)
             };
         }
 
         // ==========================================
-        // MODE 2: SHARED ROLE POOL MODE (ZERO DUPLICATE ROLES)
+        // MODE 2: SHARED ROLE POOL MODE (DISCORD NATIVE GRADIENT)
         // ==========================================
         const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
         if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
-            throw new Error('Starry requires the `Manage Roles` permission to manage color roles.');
+            throw new Error('Starry requires the `Manage Roles` permission to manage gradient roles.');
         }
 
-        const presetObj = options.presetName ? colorBlendEngine.getPreset(options.presetName) : null;
-        const sharedRoleName = presetObj ? `🎨・${presetObj.name}` : `🎨・${blendedHex}`;
-        const hasNativeEnhancedFeature = guild.features?.includes('ENHANCED_ROLE_COLORS');
+        const sharedRoleName = presetObj 
+            ? `🎨・${presetObj.name}` 
+            : (secondaryHex ? `🎨・${primaryHex}➔${secondaryHex}` : `🎨・${primaryHex}`);
 
-        // Look for an existing shared role with this exact name or color
-        let targetRole = guild.roles.cache.find(r => 
-            r.name === sharedRoleName || 
-            (r.name.startsWith('🎨・') && r.hexColor.toUpperCase() === blendedHex.toUpperCase())
-        );
+        // Look for an existing shared role with this exact name
+        let targetRole = guild.roles.cache.find(r => r.name === sharedRoleName);
 
         let createdNewRole = false;
         let appliedNativeGradient = false;
@@ -290,26 +296,49 @@ class ColorRoleEngine {
         if (!targetRole) {
             // Guard against Discord 250 guild roles limit
             if (guild.roles.cache.size >= 249) {
-                throw new Error('This Discord server has reached its maximum role limit (250 roles). Please use `,color profile` for no-role mode!');
+                throw new Error('This Discord server has reached its maximum role limit (250 roles). Please use `,color profile` for zero-role mode!');
             }
 
             const targetPosition = await this.calculateSafeRolePosition(guild, config.anchorRoleId);
 
-            targetRole = await guild.roles.create({
+            const rolePayload = {
                 name: sharedRoleName,
-                color: blendedHex,
                 permissions: 0n,
                 hoist: false,
                 mentionable: false,
                 position: targetPosition,
-                reason: `Starry Shared Color Palette: ${sharedRoleName}`
-            });
+                reason: `Starry Gradient Role: ${sharedRoleName}`
+            };
 
-            if (secondaryHex && hasNativeEnhancedFeature) {
-                try {
-                    await targetRole.setColors({ primaryColor: primaryHex, secondaryColor: secondaryHex });
-                    appliedNativeGradient = true;
-                } catch (e) {}
+            // Apply Discord Native Gradient structure (primaryColor + secondaryColor)
+            if (secondaryHex) {
+                rolePayload.colors = {
+                    primaryColor: primaryHex,
+                    secondaryColor: secondaryHex,
+                    tertiaryColor: tertiaryHex || null
+                };
+            } else {
+                rolePayload.colors = {
+                    primaryColor: primaryHex,
+                    secondaryColor: null,
+                    tertiaryColor: null
+                };
+            }
+
+            try {
+                targetRole = await guild.roles.create(rolePayload);
+                if (secondaryHex) appliedNativeGradient = true;
+            } catch (roleErr) {
+                // If API rejected secondary_color because guild lacks Enhanced Role Colors perk (3 boosts),
+                // fall back to Discord's official fallback: primaryColor as the base solid role color
+                if (rolePayload.colors && rolePayload.colors.secondaryColor) {
+                    rolePayload.colors.secondaryColor = null;
+                    rolePayload.colors.tertiaryColor = null;
+                    targetRole = await guild.roles.create(rolePayload);
+                    appliedNativeGradient = false;
+                } else {
+                    throw roleErr;
+                }
             }
 
             if (targetRole.position < targetPosition) {
@@ -324,7 +353,7 @@ class ColorRoleEngine {
             const oldRole = guild.roles.cache.get(doc.roleId);
             if (oldRole) {
                 await member.roles.remove(oldRole).catch(() => {});
-                // Auto-cleanup: If old role now has zero members, delete it from the guild
+                // Auto-cleanup: If old role now has zero members, delete it to keep server spotless
                 if (oldRole.name.startsWith('🎨・') && oldRole.members.size === 0) {
                     await oldRole.delete('Starry Color Engine: Purge unused shared role').catch(() => {});
                 }
@@ -333,14 +362,14 @@ class ColorRoleEngine {
 
         // Assign target shared role to member
         if (!member.roles.cache.has(targetRole.id)) {
-            await member.roles.add(targetRole, 'Starry Color Engine: Assigned shared color role');
+            await member.roles.add(targetRole, 'Starry Color Engine: Assigned gradient role');
         }
 
         // Update database doc
         if (doc) {
             doc.applyMode = 'shared';
             doc.roleId = targetRole.id;
-            doc.colorType = options.colorType || (secondaryHex ? 'blend' : 'solid');
+            doc.colorType = options.colorType || (secondaryHex ? 'gradient' : 'solid');
             doc.primaryColor = primaryHex;
             doc.secondaryColor = secondaryHex;
             doc.blendedColor = blendedHex;
@@ -355,7 +384,7 @@ class ColorRoleEngine {
                 userId: member.id,
                 roleId: targetRole.id,
                 applyMode: 'shared',
-                colorType: options.colorType || (secondaryHex ? 'blend' : 'solid'),
+                colorType: options.colorType || (secondaryHex ? 'gradient' : 'solid'),
                 primaryColor: primaryHex,
                 secondaryColor: secondaryHex,
                 blendedColor: blendedHex,
@@ -372,12 +401,14 @@ class ColorRoleEngine {
             doc,
             primaryHex,
             secondaryHex,
+            tertiaryHex,
             blendedHex,
             ratio,
+            ansiGradientText,
             createdNewRole,
             sharedMembersCount: targetRole.members.size,
             appliedNativeGradient,
-            readability: colorBlendEngine.analyzeDiscordReadability(blendedHex)
+            readability: colorBlendEngine.analyzeDiscordReadability(primaryHex)
         };
     }
 
@@ -390,7 +421,6 @@ class ColorRoleEngine {
         const doc = await ColorRole.findOne({ guildId: guild.id, userId: member.id });
 
         if (!doc) {
-            // Check if member has an untracked 🎨 role or nickname badge
             const untrackedRole = member.roles.cache.find(r => r.name.startsWith('🎨・'));
             if (untrackedRole) {
                 await member.roles.remove(untrackedRole).catch(() => {});
@@ -407,11 +437,11 @@ class ColorRoleEngine {
             if (doc.originalNickname && member.displayName !== doc.originalNickname) {
                 await member.setNickname(doc.originalNickname, 'Starry Color Engine: Restored original nickname').catch(() => {});
             } else {
-                const cleaned = (member.displayName || '').replace(/^[^\w\s\d]+・\s*/u, '').trim();
+                const cleaned = (member.displayName || '').replace(/^[^\w\s\d]+・\s*|^\[[^\s\]]+\]\s*/u, '').trim();
                 await member.setNickname(cleaned || null, 'Starry Color Engine: Restored clean nickname').catch(() => {});
             }
             await doc.deleteOne();
-            return { success: true, mode: 'profile', message: 'Removed color badge from your Server Profile.' };
+            return { success: true, mode: 'profile', message: 'Removed gradient badge from your Server Profile.' };
         }
 
         // If in Role/Shared mode: remove role
@@ -419,7 +449,6 @@ class ColorRoleEngine {
             const role = guild.roles.cache.get(doc.roleId);
             if (role) {
                 await member.roles.remove(role).catch(() => {});
-                // If no other members are using this shared role, delete it to keep server spotless
                 if (role.name.startsWith('🎨・') && role.members.size === 0) {
                     await role.delete('Starry Color Engine: Purge unused shared role').catch(() => {});
                 }
@@ -427,7 +456,7 @@ class ColorRoleEngine {
         }
 
         await doc.deleteOne();
-        return { success: true, mode: 'shared', message: 'Removed your custom color role.' };
+        return { success: true, mode: 'shared', message: 'Removed your custom gradient role.' };
     }
 
     /**
@@ -447,7 +476,7 @@ class ColorRoleEngine {
         return {
             doc,
             role,
-            readability: colorBlendEngine.analyzeDiscordReadability(doc.blendedColor)
+            readability: colorBlendEngine.analyzeDiscordReadability(doc.primaryColor || doc.blendedColor)
         };
     }
 

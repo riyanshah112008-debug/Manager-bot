@@ -282,7 +282,8 @@ const PRESETS = {
         category: 'Cosmic',
         hex1: '#A9FFFF',
         hex2: '#FFCCCC',
-        description: 'Discord official holographic spectrum: iridescent ice cyan and prismatic pearl.'
+        hex3: '#FFE0A0',
+        description: 'Discord official holographic spectrum: iridescent ice cyan, prismatic pearl, and gold accent.'
     }
 };
 
@@ -589,6 +590,86 @@ class ColorBlendEngine {
         if (h >= 165 && h < 255) return '🔵';
         if (h >= 255 && h < 315) return '🟣';
         return '🌸';
+    }
+
+    /**
+     * Get dual gradient badges representing start and end of spectrum
+     * @param {string} hex1 
+     * @param {string} [hex2] 
+     * @param {object} [preset] 
+     * @returns {string}
+     */
+    getGradientBadges(hex1, hex2 = null, preset = null) {
+        if (preset?.emoji) return preset.emoji;
+        const b1 = this.getAestheticBadge(hex1);
+        if (!hex2 || hex1.toUpperCase() === hex2.toUpperCase()) return b1;
+        const b2 = this.getAestheticBadge(hex2);
+        return `${b1}➔${b2}`;
+    }
+
+    /**
+     * Generate truecolor 24-bit ANSI gradient across a string of text
+     * Rendered in Discord ```ansi codeblocks
+     * @param {string} text 
+     * @param {string} hex1 
+     * @param {string} hex2 
+     * @param {string} [hex3=null] 
+     * @returns {string}
+     */
+    generateAnsiGradient(text, hex1, hex2, hex3 = null) {
+        if (!text) return '';
+        const c1 = this.hexToRgb(hex1);
+        const c2 = this.hexToRgb(hex2 || hex1);
+        const c3 = hex3 ? this.hexToRgb(hex3) : null;
+
+        const interpolate = (start, end, t) => ({
+            r: Math.round(start.r + (end.r - start.r) * t),
+            g: Math.round(start.g + (end.g - start.g) * t),
+            b: Math.round(start.b + (end.b - start.b) * t)
+        });
+
+        let res = '';
+        const len = text.length;
+        for (let i = 0; i < len; i++) {
+            const t = len > 1 ? i / (len - 1) : 0.5;
+            let c;
+            if (c3) {
+                if (t <= 0.5) c = interpolate(c1, c2, t * 2);
+                else c = interpolate(c2, c3, (t - 0.5) * 2);
+            } else {
+                c = interpolate(c1, c2, t);
+            }
+            res += `\u001b[38;2;${c.r};${c.g};${c.b}m${text[i]}`;
+        }
+        return res + '\u001b[0m';
+    }
+
+    /**
+     * Generate truecolor ANSI visual gradient spectrum bar
+     * @param {string} hex1 
+     * @param {string} hex2 
+     * @param {string} [hex3=null] 
+     * @param {number} [blocks=18] 
+     * @returns {string}
+     */
+    generateAnsiBar(hex1, hex2, hex3 = null, blocks = 18) {
+        const bar = '█'.repeat(blocks);
+        return this.generateAnsiGradient(bar, hex1, hex2, hex3);
+    }
+
+    /**
+     * Wrap ANSI gradient text and spectrum bar in a Discord-ready codeblock
+     * @param {string} text 
+     * @param {string} hex1 
+     * @param {string} hex2 
+     * @param {string} [hex3=null] 
+     * @returns {string}
+     */
+    getGradientPreview(text, hex1, hex2, hex3 = null) {
+        const ansiText = this.generateAnsiGradient(text, hex1, hex2, hex3);
+        const barLength = Math.max(16, (text || '').length);
+        const ansiBar = this.generateAnsiBar(hex1, hex2, hex3, barLength);
+        return `\`\`\`ansi\n${ansiText}\n${ansiBar}\n\`\`\``;
     }
 
     /**

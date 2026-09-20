@@ -1081,6 +1081,26 @@ const commands = [
                 }
             } catch (e) {}
 
+            let profileThemeColor = '#FF79C6';
+            let colorGradientField = null;
+            try {
+                const ColorRole = mongoose.models.ColorRole || require('../../models/ColorRole');
+                const colorDoc = await ColorRole.findOne({ guildId: ctx.guild.id, userId: target.id });
+                if (colorDoc && colorDoc.active) {
+                    profileThemeColor = colorDoc.primaryColor || colorDoc.blendedColor || '#FF79C6';
+                    const hasGrad = Boolean(colorDoc.secondaryColor);
+                    const modeDesc = colorDoc.applyMode === 'profile' ? 'Server Profile' : 'Role';
+                    const gradText = hasGrad 
+                        ? `\`${colorDoc.primaryColor}\` ➔ \`${colorDoc.secondaryColor}\`${colorDoc.presetName ? ` (${colorDoc.presetName})` : ''}`
+                        : `\`${colorDoc.primaryColor}\``;
+                    colorGradientField = {
+                        name: '🎨 Discord Name Gradient',
+                        value: `${gradText} *(${modeDesc})*`,
+                        inline: true
+                    };
+                }
+            } catch (e) {}
+
             let marriageStr = '💔 *Single* (Use `,marry @user`)';
             if (doc.marriedTo) {
                 const partnerUser = await ctx.client.users.fetch(doc.marriedTo).catch(() => null);
@@ -1101,33 +1121,42 @@ const commands = [
             const filled = Math.round(pct / 10);
             const progressBar = '▰'.repeat(filled) + '▱'.repeat(10 - filled);
 
+            const fields = [
+                { name: '💍 Matrimony', value: marriageStr, inline: false },
+                { 
+                    name: '💰 Financial Status', 
+                    value: `💵 **Wallet:** \`$${(doc.wallet || 0).toLocaleString()}\`\n🏦 **Bank:** \`$${(doc.bank || 0).toLocaleString()}\`\n💎 **Net Worth:** \`$${netWorth.toLocaleString()}\``, 
+                    inline: true 
+                },
+                { 
+                    name: '👑 Progression & Rep', 
+                    value: `🌟 **Level:** \`${doc.level}\` (\`${doc.xp || 0}/${neededXp} XP\`)\n\`${progressBar}\` **${pct}%**\n⭐ **Reputation:** \`${repCount} Rep\``, 
+                    inline: true 
+                }
+            ];
+
+            if (colorGradientField) {
+                fields.push(colorGradientField);
+            }
+
+            fields.push(
+                { name: '🐾 Faithful Companion', value: petStr, inline: false },
+                { 
+                    name: '🎒 Backpack & Items', 
+                    value: `📦 **${invCount} items** stored (Estimated: \`$${invValue.toLocaleString()}\`)\n*Use \`,inv\` to open backpack or \`,sell all\` to liquidate.*`, 
+                    inline: false 
+                }
+            );
+
             const embed = new EmbedBuilder()
-                .setColor('#FF79C6')
+                .setColor(profileThemeColor)
                 .setAuthor({ 
                     name: `${target.username}'s Anime Profile`, 
                     iconURL: target.displayAvatarURL({ dynamic: true }) 
                 })
                 .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 256 }))
                 .setDescription(`> *"${doc.bio || 'Living the starlight dream ✨'}"*`)
-                .addFields(
-                    { name: '💍 Matrimony', value: marriageStr, inline: false },
-                    { 
-                        name: '💰 Financial Status', 
-                        value: `💵 **Wallet:** \`$${(doc.wallet || 0).toLocaleString()}\`\n🏦 **Bank:** \`$${(doc.bank || 0).toLocaleString()}\`\n💎 **Net Worth:** \`$${netWorth.toLocaleString()}\``, 
-                        inline: true 
-                    },
-                    { 
-                        name: '👑 Progression & Rep', 
-                        value: `🌟 **Level:** \`${doc.level}\` (\`${doc.xp || 0}/${neededXp} XP\`)\n\`${progressBar}\` **${pct}%**\n⭐ **Reputation:** \`${repCount} Rep\``, 
-                        inline: true 
-                    },
-                    { name: '🐾 Faithful Companion', value: petStr, inline: false },
-                    { 
-                        name: '🎒 Backpack & Items', 
-                        value: `📦 **${invCount} items** stored (Estimated: \`$${invValue.toLocaleString()}\`)\n*Use \`,inv\` to open backpack or \`,sell all\` to liquidate.*`, 
-                        inline: false 
-                    }
-                )
+                .addFields(fields)
                 .setFooter({ text: 'Starry Profile Engine • Prefix: ,' })
                 .setTimestamp();
 
@@ -1643,36 +1672,65 @@ const commands = [
         }
     },
 
-    // 21. PROFILE
+    // 21. PASSPORT
     {
-        name: 'profile',
-        aliases: ['p', 'userprofile'],
+        name: 'passport',
+        aliases: ['starlightpassport', 'userpassport', 'pass'],
         category: 'Economy',
         description: 'View your complete personal Starlight Passport, badges, economy rank, and companion.',
-        usage: ',profile [@user]',
+        usage: ',passport [@user]',
         async execute(ctx) {
             const target = ctx.message?.mentions?.users?.first() || ctx.user;
             const guildId = ctx.guild?.id || 'GLOBAL';
             const user = await getOrCreateEcoUser(target.id, guildId);
 
+            let profileThemeColor = config.EMBED_COLORS.PRIMARY;
+            let colorGradientField = null;
+            try {
+                const ColorRole = mongoose.models.ColorRole || require('../../models/ColorRole');
+                const colorDoc = await ColorRole.findOne({ guildId: ctx.guild?.id, userId: target.id });
+                if (colorDoc && colorDoc.active) {
+                    profileThemeColor = colorDoc.primaryColor || colorDoc.blendedColor || config.EMBED_COLORS.PRIMARY;
+                    const hasGrad = Boolean(colorDoc.secondaryColor);
+                    const modeDesc = colorDoc.applyMode === 'profile' ? 'Server Profile' : 'Role';
+                    const gradText = hasGrad 
+                        ? `\`${colorDoc.primaryColor}\` ➔ \`${colorDoc.secondaryColor}\`${colorDoc.presetName ? ` (${colorDoc.presetName})` : ''}`
+                        : `\`${colorDoc.primaryColor}\``;
+                    colorGradientField = {
+                        name: '🎨 Discord Name Gradient',
+                        value: `${gradText} *(${modeDesc})*`,
+                        inline: true
+                    };
+                }
+            } catch (e) {}
+
             const spouseText = user.marriedTo ? `<@${user.marriedTo}>` : 'Single';
             const petText = user.pet?.name ? `${user.pet.name} (${user.pet.species || 'Companion'}, Lvl ${user.pet.level || 1})` : 'No companion yet';
             const netWorth = (user.wallet || 0) + (user.bank || 0);
 
+            const fields = [
+                { name: '👑 Level & Rank', value: `\`Level ${user.level || 1}\` (${user.xp || 0} XP)`, inline: true },
+                { name: '💎 Net Worth', value: `\`$${netWorth.toLocaleString()}\``, inline: true },
+                { name: '💵 Wallet', value: `\`$${(user.wallet || 0).toLocaleString()}\``, inline: true },
+                { name: '🏦 Bank', value: `\`$${(user.bank || 0).toLocaleString()}\``, inline: true },
+                { name: '💍 Marital Status', value: spouseText, inline: true },
+                { name: '🐾 Active Pet', value: petText, inline: true }
+            ];
+
+            if (colorGradientField) {
+                fields.push(colorGradientField);
+            }
+
+            fields.push(
+                { name: '🎒 Inventory', value: `${user.inventory?.length || 0} items (\`,inventory\`)`, inline: true }
+            );
+
             const embed = new EmbedBuilder()
-                .setColor(config.EMBED_COLORS.PRIMARY)
+                .setColor(profileThemeColor)
                 .setAuthor({ name: `${target.username}'s Starlight Passport`, iconURL: target.displayAvatarURL({ dynamic: true }) })
                 .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 256 }))
                 .setDescription(`*“${user.bio || 'Living the starlight dream ✨'}”*`)
-                .addFields(
-                    { name: '👑 Level & Rank', value: `\`Level ${user.level || 1}\` (${user.xp || 0} XP)`, inline: true },
-                    { name: '💎 Net Worth', value: `\`$${netWorth.toLocaleString()}\``, inline: true },
-                    { name: '💵 Wallet', value: `\`$${(user.wallet || 0).toLocaleString()}\``, inline: true },
-                    { name: '🏦 Bank', value: `\`$${(user.bank || 0).toLocaleString()}\``, inline: true },
-                    { name: '💍 Marital Status', value: spouseText, inline: true },
-                    { name: '🐾 Active Pet', value: petText, inline: true },
-                    { name: '🎒 Inventory', value: `${user.inventory?.length || 0} items (\`,inventory\`)`, inline: true }
-                )
+                .addFields(fields)
                 .setFooter({ text: 'Starry Passport Engine • Prefix: ,' })
                 .setTimestamp();
 

@@ -122,4 +122,36 @@ assert.ok(ColorRole.schema.paths.applyMode, 'applyMode path should exist in sche
 assert.ok(ColorRole.schema.paths.originalNickname, 'originalNickname path should exist in schema');
 console.log('  ✅ Schema supports both No-Role Profile mode and Shared Role pool!');
 
+// 12. Test ANSI Truecolor Gradient and Spectrum Bar
+console.log('\n▶ Test 12: 24-bit ANSI Truecolor Gradient & Spectrum Bar Engine');
+const ansiGrad = colorBlendEngine.generateAnsiGradient('StarryUser', '#FF0055', '#00E5FF');
+assert.ok(ansiGrad.includes('\u001b[38;2;'), 'Should contain 24-bit ANSI color escape codes');
+assert.ok(ansiGrad.endsWith('\u001b[0m'), 'Should end with ANSI color reset');
+
+const ansiBar = colorBlendEngine.generateAnsiBar('#FF0055', '#00E5FF', null, 16);
+assert.ok(ansiBar.includes('█'), 'Should contain block characters');
+assert.ok(ansiBar.includes('\u001b[38;2;'), 'Bar should contain 24-bit ANSI color escape codes');
+
+const previewBlock = colorBlendEngine.getGradientPreview('StarryUser', '#FF0055', '#00E5FF');
+assert.ok(previewBlock.startsWith('```ansi\n'), 'Should start with Discord ansi codeblock delimiter');
+assert.ok(previewBlock.endsWith('\n```'), 'Should end with codeblock delimiter');
+assert.ok(previewBlock.replace(/\u001b\[[0-9;]*m/g, '').includes('StarryUser'), 'Should contain the user display name');
+assert.ok(previewBlock.includes('█'), 'Should contain the spectrum bar');
+console.log('  Preview block output sample:');
+console.log(previewBlock);
+console.log('  ✅ 24-bit ANSI truecolor gradient and spectrum bar passed!');
+
+// 13. Test 3-Stop Gradient (Discord Holographic Style)
+console.log('\n▶ Test 13: 3-Stop Discord Holographic Gradient Style');
+const holo = colorBlendEngine.getPreset('holographic');
+assert.ok(holo, 'Holographic preset should exist');
+assert.strictEqual(holo.hex1, '#A9FFFF');
+assert.strictEqual(holo.hex2, '#FFCCCC');
+assert.strictEqual(holo.hex3, '#FFE0A0');
+
+const holoAnsi = colorBlendEngine.generateAnsiGradient('HolographicGlow', holo.hex1, holo.hex2, holo.hex3);
+assert.ok(holoAnsi.includes('\u001b[38;2;'), 'Holographic should generate valid 3-stop truecolor ANSI gradient');
+console.log('  Holographic 3-stop sample: ' + holoAnsi);
+console.log('  ✅ 3-Stop Discord Holographic Gradient passed!');
+
 console.log('\n✨ ALL TESTS COMPLETED SUCCESSFULLY WITH 100% PASS RATE!\n');
