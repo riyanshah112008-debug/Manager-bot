@@ -112,18 +112,28 @@ Respond in clean Markdown using this structure:
 Transcript:
 ${transcriptSnippet}`;
 
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.4, maxOutputTokens: 600 }
-                })
-            });
+            const models = ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-2.5-pro'];
+            for (const model of models) {
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { temperature: 0.4, maxOutputTokens: 800 }
+                        }),
+                        signal: AbortSignal.timeout(10000)
+                    });
 
-            if (res.ok) {
-                const data = await res.json();
-                aiSummary = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                    if (res.ok) {
+                        const data = await res.json();
+                        const candidate = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                        if (candidate) {
+                            aiSummary = candidate;
+                            break;
+                        }
+                    }
+                } catch (err) {}
             }
         } catch (e) {}
     }

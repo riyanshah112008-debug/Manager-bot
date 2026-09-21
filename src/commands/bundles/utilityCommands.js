@@ -889,30 +889,87 @@ const commands = [
         }
     },
 
-    // 29. ASK / AI (Interactive Paginated AI Assistant + Auto-Image Routing)
+    // 29. ASK / AI (Interactive Paginated AI Assistant + Multimodal Vision + Auto-Image Routing)
     {
         name: 'ask',
         aliases: ['ai', 'gemini', 'gpt', 'chat', 'question', 'starryai'],
         category: 'Utility',
-        description: 'Ask Starry AI anything or generate AI images directly with interactive page-turning buttons.',
-        usage: ',ask <your question or prompt>',
+        description: 'Ask Starry AI anything, inspect attached images visually, or generate AI images with interactive page-turning buttons.',
+        usage: ',ask [question or prompt] (attach image to analyze)',
         async execute(ctx) {
-            const prompt = (ctx.options?.getString ? (ctx.options.getString('question') || ctx.options.getString('prompt') || ctx.options.getString('text')) : null) || ctx.args.join(' ');
+            const { sendPaginatedAIResponse, extractImageFromContext } = require('../../utils/aiEngine');
+            const attachedImage = await extractImageFromContext(ctx);
+
+            let prompt = (ctx.options?.getString ? (ctx.options.getString('question') || ctx.options.getString('prompt') || ctx.options.getString('text')) : null) || ctx.args.join(' ');
+            
             if (!prompt || !prompt.trim()) {
-                return ctx.reply('❓ **Please provide a question or prompt for Starry AI!**\n*Example: `,ask Explain quantum computing` or `,imagine Cyberpunk anime girl` or `/ask question:Hello!`*');
+                if (attachedImage) {
+                    prompt = 'Analyze this image in detail, identify key elements, text, and explain what you see.';
+                } else {
+                    return ctx.reply('❓ **Please provide a question, prompt, or attach an image for Starry AI!**\n*Example: `,ask Explain quantum computing` or `,imagine Cyberpunk anime girl` or attach a screenshot with `,ask`!*');
+                }
             }
 
             await ctx.defer(false);
 
             const cleanPrompt = prompt.trim();
-            // Check if user is asking to generate an image
-            const imageSubject = parseImageIntent(cleanPrompt);
-            if (imageSubject) {
-                return generateAndSendImage(ctx, imageSubject);
+            // Check if user is asking to generate an image (only when not analyzing an existing image)
+            if (!attachedImage) {
+                const imageSubject = parseImageIntent(cleanPrompt);
+                if (imageSubject) {
+                    return generateAndSendImage(ctx, imageSubject);
+                }
             }
 
-            const { sendPaginatedAIResponse } = require('../../utils/aiEngine');
-            return sendPaginatedAIResponse(ctx, cleanPrompt);
+            return sendPaginatedAIResponse(ctx, cleanPrompt, attachedImage);
+        }
+    },
+
+    // 29B. VISION / ANALYZE (Dedicated Multimodal Image & Document Inspector)
+    {
+        name: 'vision',
+        aliases: ['analyze', 'ocr', 'inspectimage', 'imageinfo', 'scanimage'],
+        category: 'Utility',
+        description: '🌌 Starry Multimodal Vision Studio - Analyze any image, screenshot, error code, diagram, or meme.',
+        usage: ',vision [question or prompt] (upload image or reply to image)',
+        async execute(ctx) {
+            const { sendPaginatedAIResponse, extractImageFromContext } = require('../../utils/aiEngine');
+            const attachedImage = await extractImageFromContext(ctx);
+
+            if (!attachedImage) {
+                return ctx.reply('📸 **Please upload an image, provide an image link, or reply to a message with an image!**\n*Example: Attach a screenshot and type `,vision What does this error mean?`*');
+            }
+
+            await ctx.defer(false);
+
+            let prompt = (ctx.options?.getString ? (ctx.options.getString('prompt') || ctx.options.getString('question')) : null) || ctx.args.join(' ');
+            if (!prompt || !prompt.trim()) {
+                prompt = 'Analyze this image thoroughly: identify all visible text/code, explain the context, describe subjects, and point out any errors or interesting details.';
+            }
+
+            return sendPaginatedAIResponse(ctx, prompt.trim(), attachedImage);
+        }
+    },
+
+    // 29C. SUMMARIZE / CATCHUP (AI Channel Conversation Briefing & TL;DR)
+    {
+        name: 'summarize',
+        aliases: ['catchup', 'tldr', 'recap', 'chatrecap'],
+        category: 'Utility',
+        description: '📰 AI Channel Catch-Up: Summarize recent conversations, debates, and highlights.',
+        usage: ',summarize [hours: 1-24]',
+        async execute(ctx) {
+            await ctx.defer(false);
+            const rawHours = ctx.options?.getInteger ? ctx.options.getInteger('hours') : (parseInt(ctx.args[0], 10) || 6);
+            const hours = Math.max(1, Math.min(24, rawHours || 6));
+
+            const { generateChannelCatchup } = require('../../modules/chatCatchup');
+            const result = await generateChannelCatchup(ctx.channel, { hours });
+
+            return ctx.reply({
+                embeds: [result.embed],
+                components: result.components || []
+            });
         }
     },
 

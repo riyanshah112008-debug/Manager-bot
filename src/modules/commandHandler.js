@@ -333,7 +333,34 @@ class CommandRegistry {
                 }
             }
 
-            if (!commandBody) return;
+            if (!commandBody) {
+                if (matchedPrefix === '@') {
+                    const p = message.guild ? await getGuildPrefix(message.guild.id) : ',';
+                    const ping = Math.round(client.ws.ping || 0);
+                    const embed = new EmbedBuilder()
+                        .setColor('#9B59B6')
+                        .setAuthor({ name: '✨ Starry • Celestial AI Companion', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
+                        .setTitle('🌟 Hello! How can I assist you today?')
+                        .setDescription(
+                            `I am **Starry** (Astraea), your all-in-one AI assistant, music streamer, and server guardian!\n\n` +
+                            `• **Server Prefix:** \`${p}\` *(e.g. \`${p}help\`, \`${p}play\`, \`${p}ask\`)*\n` +
+                            `• **AI Assistant:** Mention me with any question or use \`${p}ask <prompt>\` (you can attach images!)\n` +
+                            `• **Gateway Latency:** \`${ping}ms\`\n` +
+                            `• **Music & Hi-Fi:** High-Fidelity 24/7 playback with 15 studio filters`
+                        )
+                        .setFooter({ text: `Type ${p}help to see all commands • Starry Bot` })
+                        .setTimestamp();
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('mention_help_btn').setLabel('📖 Help Menu').setStyle(ButtonStyle.Primary).setEmoji('📜'),
+                        new ButtonBuilder().setCustomId('mention_ping_btn').setLabel(`🏓 Ping (${ping}ms)`).setStyle(ButtonStyle.Secondary)
+                    );
+
+                    return message.reply({ embeds: [embed], components: [row] }).catch(() => null);
+                }
+                return;
+            }
+
             // Ignore custom emoji spam (e.g. ,<:emoji:id>)
             if (commandBody.startsWith('<:') || commandBody.startsWith('<a:')) return;
 
@@ -342,7 +369,17 @@ class CommandRegistry {
             if (!commandKey) return;
 
             const resolvedName = this.aliases.get(commandKey) || commandKey;
-            const command = this.commands.get(resolvedName);
+            let command = this.commands.get(resolvedName);
+
+            // If user mentioned bot directly and spoke naturally, route seamlessly to Starry AI
+            if (!command && matchedPrefix === '@') {
+                const askCmd = this.commands.get('ask');
+                if (askCmd) {
+                    command = askCmd;
+                    args.unshift(commandKey); // Prepend word back to prompt
+                }
+            }
+
             if (!command) return;
 
             // 🛡️ Guaranteed Single-Execution Message Guard (Process-wide In-Memory Deduplication)
@@ -506,6 +543,24 @@ class CommandRegistry {
                     const currentLang = await getGuildLanguage(interaction.guild.id);
                     const setupCard = createSetupPromptCard(interaction.guild, currentLang, client.user);
                     return await interaction.update(setupCard).catch(() => {});
+                }
+
+                // Mention Greeting Card Quick Actions
+                if (customId === 'mention_help_btn') {
+                    const prefix = interaction.guild ? await getGuildPrefix(interaction.guild.id) : (config.DEFAULT_PREFIX || ',');
+                    return await interaction.reply({
+                        embeds: [buildCategoryEmbed('home', prefix)],
+                        components: createHelpComponents(),
+                        flags: EPHEMERAL_FLAG
+                    }).catch(() => {});
+                }
+
+                if (customId === 'mention_ping_btn') {
+                    const ping = Math.round(interaction.client.ws.ping || 0);
+                    return await interaction.reply({
+                        content: `🏓 **Pong!** WebSocket Latency: \`${ping}ms\` • Gateway Shard: \`#${interaction.guild?.shardId ?? 0}\``,
+                        flags: EPHEMERAL_FLAG
+                    }).catch(() => {});
                 }
 
                 // A. Help Menu Dropdown & Navigation

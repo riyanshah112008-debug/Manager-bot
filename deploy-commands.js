@@ -137,6 +137,11 @@ if (gazetteModule && gazetteModule.data) {
     masterPayloads.push(gazetteModule.data.toJSON ? gazetteModule.data.toJSON() : gazetteModule.data);
 }
 
+const codeStudioModule = safeRequire(['./src/commands/utility/codeStudio', './commands/utility/codeStudio']);
+if (codeStudioModule && codeStudioModule.data) {
+    masterPayloads.push(codeStudioModule.data.toJSON ? codeStudioModule.data.toJSON() : codeStudioModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
@@ -358,17 +363,53 @@ if (socialModule && socialModule.ACTION_CONFIG) {
     }
 }
 
-// ✨ AI, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
+// ✨ AI, VISION, SUMMARIZE, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
 commands.push(
     new SlashCommandBuilder()
         .setName('ai')
-        .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons!')
+        .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons & vision!')
         .setContexts([0, 1, 2])
         .setIntegrationTypes([0, 1])
         .addStringOption(option => 
             option.setName('question')
                 .setDescription('The question or prompt for Starry AI')
                 .setRequired(true)
+        )
+        .addAttachmentOption(option =>
+            option.setName('image')
+                .setDescription('Optional image, screenshot, or diagram to visually analyze')
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('vision')
+        .setDescription('🌌 Multimodal Vision: Analyze any image, screenshot, error log, or diagram')
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
+        .addAttachmentOption(option =>
+            option.setName('image')
+                .setDescription('Image file to visually inspect')
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName('prompt')
+                .setDescription('Specific question about the image (optional)')
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName('summarize')
+        .setDescription('📰 AI Channel Catch-Up: Executive briefing of missed conversations and debates')
+        .setContexts([0])
+        .setIntegrationTypes([0])
+        .addIntegerOption(option =>
+            option.setName('hours')
+                .setDescription('Time window in hours to summarize (1-24, default 6)')
+                .setMinValue(1)
+                .setMaxValue(24)
+                .setRequired(false)
         )
         .toJSON(),
 

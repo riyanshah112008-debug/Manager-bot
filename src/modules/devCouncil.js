@@ -22,27 +22,32 @@ async function callAI(prompt, systemInstruction = '', model = 'gemini-2.5-flash'
     const apiKey = getGeminiApiKey();
     if (!apiKey) return null;
 
-    try {
-        const payload = {
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 1200, temperature: 0.2 }
-        };
-        if (systemInstruction) {
-            payload.systemInstruction = { parts: [{ text: systemInstruction }] };
-        }
+    const candidateModels = [model, 'gemini-3.6-flash', 'gemini-2.5-pro'].filter((v, i, a) => a.indexOf(v) === i);
+    for (const m of candidateModels) {
+        try {
+            const payload = {
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 1400, temperature: 0.2 }
+            };
+            if (systemInstruction) {
+                payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+            }
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(12000)
+            });
 
-        if (res.ok) {
-            const data = await res.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+            if (res.ok) {
+                const data = await res.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) return text;
+            }
+        } catch (e) {
+            console.error(`⚠️ [DevCouncil AI Error on ${m}]:`, e.message);
         }
-    } catch (e) {
-        console.error(`⚠️ [DevCouncil AI Error on ${model}]:`, e.message);
     }
     return null;
 }

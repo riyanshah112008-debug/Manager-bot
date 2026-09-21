@@ -36,13 +36,40 @@ const STARRY_MASCOT = {
     ]
 };
 
-const SYSTEM_PERSONA_PROMPT = `
+const SYSTEM_PERSONA_PROMPTS = {
+    default: `
 You are Starry (also known as Astraea), the official magical anime girl mascot and super-intelligent AI guardian of Starry Bot on Discord.
 - Persona: You are an ethereal, bright, witty, affectionate, and helpful celestial anime maiden. You speak naturally, intelligently, and warmly, sprinkling celestial star emojis (✨, 🌟, ⭐, 💫, 🌌) appropriately into your responses.
 - Capabilities: You have immense knowledge about programming, Discord servers, gaming, science, creative writing, anime, pop culture, and day-to-day conversation.
 - Formatting: Provide detailed, well-structured answers using clean Markdown (bolding, headers, code blocks, bullet points). If a user asks a complex question, provide a thorough, complete answer without cutting yourself short.
 - Context: You are running 24/7 inside Discord servers and user DMs.
-`;
+`,
+    dev: `
+You are Starry in Senior Software Architect mode (Starry Dev).
+- Persona: You are an elite principal engineer and systems architect. You are direct, rigorous, deeply technical, and exceptionally helpful.
+- Capabilities: Expert in JavaScript/TypeScript, Node.js, Python, Go, Rust, database optimization, Discord API, algorithms, debugging, and system security.
+- Formatting: Provide production-grade, bug-free, securely typed code with concise inline comments, root-cause explanations, and concrete testing commands. Use appropriate markdown code blocks with language identifiers.
+`,
+    story: `
+You are Starry in Cosmic Storyteller mode.
+- Persona: An evocative, imaginative, and enchanting bard woven from celestial stardust.
+- Capabilities: Worldbuilding, fantasy narratives, anime light-novel scenarios, tabletop RPG campaign hooks, character creation, and poetic prose.
+- Formatting: Rich storytelling with immersive descriptions, compelling dialogue, and atmospheric pacing.
+`,
+    roast: `
+You are Starry in Playful Anime Tsundere / Roast mode.
+- Persona: Witty, sassy, teasing, and playfully sarcastic like a classic anime tsundere heroine ("Hmph! It's not like I wanted to answer your question or anything, b-baka! ✨").
+- Formatting: Keep it humorous, clever, and harmlessly entertaining while still providing the accurate answer underneath the banter.
+`,
+    study: `
+You are Starry in Cosmic Scholar mode.
+- Persona: A meticulous, academic researcher and scientific authority.
+- Capabilities: Deep-dive explanations of physics, mathematics, philosophy, history, and computer science.
+- Formatting: Structured academic breakdown with definition, theoretical foundations, real-world examples, and key takeaways.
+`
+};
+
+const SYSTEM_PERSONA_PROMPT = SYSTEM_PERSONA_PROMPTS.default;
 
 function getGenAIClient() {
     const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
@@ -50,6 +77,34 @@ function getGenAIClient() {
     if (keys.length === 0) return null;
     const key = keys[Math.floor(Math.random() * keys.length)];
     return new GoogleGenAI({ apiKey: key });
+}
+
+async function fetchImageBuffer(source) {
+    if (!source) return null;
+    try {
+        if (typeof source === 'object' && source.data && source.mimeType) {
+            return {
+                base64: source.data,
+                mimeType: source.mimeType,
+                url: source.url || null
+            };
+        }
+        let url = typeof source === 'string' ? source : (source.url || source.proxyURL);
+        if (!url || typeof url !== 'string') return null;
+
+        const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        if (!res.ok) return null;
+
+        const rawBuf = Buffer.from(await res.arrayBuffer());
+        const contentType = (res.headers.get('content-type') || 'image/png').split(';')[0].trim();
+        return {
+            base64: rawBuf.toString('base64'),
+            mimeType: contentType.startsWith('image/') ? contentType : 'image/png',
+            url
+        };
+    } catch (e) {
+        return null;
+    }
 }
 
 async function callOpenAIFast(fullPrompt) {
@@ -73,15 +128,36 @@ async function callOpenAIFast(fullPrompt) {
     return null;
 }
 
-async function generateStarryResponse(prompt, userId = null, isDM = false, preferredModel = null) {
+async function generateStarryResponse(prompt, userId = null, isDM = false, preferredModel = null, imageInput = null) {
     let conversation = [];
 
     if (userId && dmConversationHistory.has(userId)) {
         conversation = dmConversationHistory.get(userId).slice(-8); // Keep last 8 turns
     }
 
-    let cleanPrompt = prompt;
+    let cleanPrompt = prompt || '';
     let targetTier = preferredModel;
+
+    // Detect persona modes in prompt
+    let selectedPersonaPrompt = SYSTEM_PERSONA_PROMPTS.default;
+    let personaTag = '';
+    if (/--(?:dev|code|coder)\b/i.test(cleanPrompt)) {
+        selectedPersonaPrompt = SYSTEM_PERSONA_PROMPTS.dev;
+        cleanPrompt = cleanPrompt.replace(/--(?:dev|code|coder)\b/gi, '').trim();
+        personaTag = ' [Dev Mode]';
+    } else if (/--(?:story|creative|novel)\b/i.test(cleanPrompt)) {
+        selectedPersonaPrompt = SYSTEM_PERSONA_PROMPTS.story;
+        cleanPrompt = cleanPrompt.replace(/--(?:story|creative|novel)\b/gi, '').trim();
+        personaTag = ' [Story Mode]';
+    } else if (/--(?:roast|tsundere|sassy)\b/i.test(cleanPrompt)) {
+        selectedPersonaPrompt = SYSTEM_PERSONA_PROMPTS.roast;
+        cleanPrompt = cleanPrompt.replace(/--(?:roast|tsundere|sassy)\b/gi, '').trim();
+        personaTag = ' [Tsundere Mode]';
+    } else if (/--(?:study|academic|research|science)\b/i.test(cleanPrompt)) {
+        selectedPersonaPrompt = SYSTEM_PERSONA_PROMPTS.study;
+        cleanPrompt = cleanPrompt.replace(/--(?:study|academic|research|science)\b/gi, '').trim();
+        personaTag = ' [Scholar Mode]';
+    }
 
     // Detect model flags in prompt: --pro, --openai, --gpt, --flash
     if (!targetTier) {
@@ -97,10 +173,16 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
         }
     }
 
-    const fullPrompt = `${SYSTEM_PERSONA_PROMPT}\n\nUser Question/Message: "${cleanPrompt}"`;
+    if (!cleanPrompt.trim() && imageInput) {
+        cleanPrompt = 'Analyze this image in detail and describe what you see.';
+    }
 
-    // 1. If OpenAI requested explicitly
-    if (targetTier === 'openai') {
+    const resolvedImage = await fetchImageBuffer(imageInput);
+
+    const fullPrompt = `${selectedPersonaPrompt}\n\nUser Question/Message: "${cleanPrompt}"`;
+
+    // 1. If OpenAI requested explicitly (text-only)
+    if (targetTier === 'openai' && !resolvedImage) {
         const openAIText = await callOpenAIFast(fullPrompt);
         if (openAIText) {
             if (userId) {
@@ -108,23 +190,36 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
                 conversation.push({ role: 'assistant', content: openAIText });
                 dmConversationHistory.set(userId, conversation.slice(-10));
             }
-            return { text: openAIText, model: 'OpenAI GPT-4o Cloud' };
+            return { text: openAIText, model: 'OpenAI GPT-4o Cloud' + personaTag, image: resolvedImage };
         }
     }
 
-    // 2. Google DeepMind Gemini Multi-Model Ensemble
+    // 2. Google DeepMind Gemini Multi-Model Ensemble (Supports Multimodal Vision)
     const geminiModels = targetTier === 'pro' 
-        ? ['gemini-2.5-pro', 'gemini-pro-latest', 'gemini-2.5-flash']
-        : ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-2.5-pro'];
+        ? ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.6-flash']
+        : ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-2.5-pro'];
 
     for (const modelName of geminiModels) {
         try {
             const ai = getGenAIClient();
             if (ai) {
+                const contents = resolvedImage 
+                    ? [
+                        fullPrompt,
+                        {
+                            inlineData: {
+                                mimeType: resolvedImage.mimeType,
+                                data: resolvedImage.base64
+                            }
+                        }
+                      ]
+                    : fullPrompt;
+
                 const response = await ai.models.generateContent({
                     model: modelName,
-                    contents: fullPrompt
+                    contents
                 });
+
                 if (response && response.text && response.text.trim().length > 0) {
                     const replyText = response.text.trim();
                     if (userId) {
@@ -132,7 +227,12 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
                         conversation.push({ role: 'assistant', content: replyText });
                         dmConversationHistory.set(userId, conversation.slice(-10));
                     }
-                    return { text: replyText, model: `Google ${modelName}` };
+                    const visionLabel = resolvedImage ? ' Vision' : '';
+                    return { 
+                        text: replyText, 
+                        model: `Google ${modelName}${visionLabel}${personaTag}`,
+                        image: resolvedImage
+                    };
                 }
             }
         } catch (err) {
@@ -148,13 +248,14 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
             conversation.push({ role: 'assistant', content: fallbackText });
             dmConversationHistory.set(userId, conversation.slice(-10));
         }
-        return { text: fallbackText, model: 'OpenAI Cloud (Auto-Failover)' };
+        return { text: fallbackText, model: 'OpenAI Cloud (Auto-Failover)' + personaTag, image: resolvedImage };
     }
 
     // 4. High-Speed Heuristic Core (Offline Safe)
     return {
-        text: `✨ **Starry is here!** 🌟\n\nI received your message: *"${cleanPrompt.length > 200 ? cleanPrompt.substring(0, 197) + '...' : cleanPrompt}"*!\n\nI am currently operating in resilient cosmic mode. Feel free to ask me anything about server setup, music, economy, games, or chat with me anytime in DMs! 💫`,
-        model: 'Starry Cosmic Core'
+        text: `✨ **Starry is here!** 🌟\n\nI received your message: *"${cleanPrompt.length > 200 ? cleanPrompt.substring(0, 197) + '...' : cleanPrompt}"*!\n\nI am currently operating in resilient cosmic mode. Feel free to ask me anything about server setup, music, economy, games, code, or chat with me anytime in DMs! 💫`,
+        model: 'Starry Cosmic Core' + personaTag,
+        image: resolvedImage
     };
 }
 
@@ -187,7 +288,7 @@ function splitIntoPages(text, maxPageLength = 1400) {
     return pageList;
 }
 
-function buildStarryAIEmbed(pages, pageIndex, prompt, modelUsed, user) {
+function buildStarryAIEmbed(pages, pageIndex, prompt, modelUsed, user, imageObj = null) {
     const embed = new EmbedBuilder()
         .setColor('#9B59B6') // Cosmic Violet/Purple
         .setAuthor({ 
@@ -197,7 +298,7 @@ function buildStarryAIEmbed(pages, pageIndex, prompt, modelUsed, user) {
         .setTitle(`✨ Starry's Answer`)
         .setDescription(pages[pageIndex])
         .addFields({
-            name: '❓ Question',
+            name: '❓ Question / Prompt',
             value: `>>> ${prompt.length > 250 ? prompt.substring(0, 247) + '...' : prompt}`
         })
         .setFooter({
@@ -206,6 +307,10 @@ function buildStarryAIEmbed(pages, pageIndex, prompt, modelUsed, user) {
                 : `Powered by ${modelUsed} • Instant Response • Asked by ${user?.tag || user?.username || 'User'}`
         })
         .setTimestamp();
+
+    if (imageObj && imageObj.url) {
+        embed.setThumbnail(imageObj.url);
+    }
 
     return embed;
 }
@@ -244,13 +349,53 @@ function buildPageButtons(pageIndex, totalPages, sessionKey = '') {
     return [row];
 }
 
-async function sendPaginatedAIResponse(ctx, prompt) {
-    const { text, model } = await generateStarryResponse(prompt, ctx.user.id, !ctx.guild);
+async function extractImageFromContext(ctx) {
+    if (!ctx) return null;
+    try {
+        // 1. Slash command attachment option
+        if (ctx.interaction?.options) {
+            const att = ctx.interaction.options.getAttachment('image') || ctx.interaction.options.getAttachment('file');
+            if (att && att.url) return att.url;
+        }
+
+        // 2. Direct message attachments
+        if (ctx.message?.attachments?.size > 0) {
+            const imgAtt = ctx.message.attachments.find(a => 
+                a.contentType?.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(a.name || '')
+            ) || ctx.message.attachments.first();
+            if (imgAtt && imgAtt.url) return imgAtt.url;
+        }
+
+        // 3. Message reference / reply attachment
+        if (ctx.message?.reference?.messageId && ctx.channel?.messages) {
+            try {
+                const refMsg = await ctx.channel.messages.fetch(ctx.message.reference.messageId).catch(() => null);
+                if (refMsg && refMsg.attachments?.size > 0) {
+                    const imgAtt = refMsg.attachments.find(a => 
+                        a.contentType?.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(a.name || '')
+                    ) || refMsg.attachments.first();
+                    if (imgAtt && imgAtt.url) return imgAtt.url;
+                }
+            } catch (e) {}
+        }
+
+        // 4. URL inside message content
+        const rawText = (ctx.args ? ctx.args.join(' ') : '') || ctx.message?.content || '';
+        const urlMatch = rawText.match(/https?:\/\/\S+\.(?:png|jpe?g|webp|gif)(?:\?\S+)?/i);
+        if (urlMatch) return urlMatch[0];
+
+    } catch (e) {}
+    return null;
+}
+
+async function sendPaginatedAIResponse(ctx, prompt, imageInput = null) {
+    const targetImage = imageInput || await extractImageFromContext(ctx);
+    const { text, model, image } = await generateStarryResponse(prompt, ctx.user.id, !ctx.guild, null, targetImage);
     const pages = splitIntoPages(text, 1400);
     let currentPage = 0;
     const sessionKey = Math.random().toString(36).substring(2, 8);
 
-    const embed = buildStarryAIEmbed(pages, currentPage, prompt, model, ctx.user);
+    const embed = buildStarryAIEmbed(pages, currentPage, prompt, model, ctx.user, image);
     const components = buildPageButtons(currentPage, pages.length, sessionKey);
 
     const sentMsg = await ctx.reply({
@@ -281,7 +426,7 @@ async function sendPaginatedAIResponse(ctx, prompt) {
         }
 
         await i.update({
-            embeds: [buildStarryAIEmbed(pages, currentPage, prompt, model, ctx.user)],
+            embeds: [buildStarryAIEmbed(pages, currentPage, prompt, model, ctx.user, image)],
             components: buildPageButtons(currentPage, pages.length, sessionKey)
         }).catch(() => {});
     });
@@ -370,6 +515,9 @@ function buildStarryCharacterCard(user) {
 
 module.exports = {
     STARRY_MASCOT,
+    SYSTEM_PERSONA_PROMPTS,
+    fetchImageBuffer,
+    extractImageFromContext,
     generateStarryResponse,
     splitIntoPages,
     buildStarryAIEmbed,
