@@ -96,6 +96,7 @@ const sampleRaw = {
     console.log('  ✅ deploy-commands.js syntax and export verified!');
 
     console.log('\n✨ ALL AI VISION & MULTIMODAL TESTS PASSED WITH 100% SUCCESS RATE!\n');
+    process.exit(0);
 })().catch(err => {
     console.error('❌ Test Suite Failed:', err);
     process.exit(1);

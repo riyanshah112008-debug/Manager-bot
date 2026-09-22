@@ -414,6 +414,18 @@ commands.push(
         .toJSON(),
 
     new SlashCommandBuilder()
+        .setName('codebot')
+        .setDescription('🚀 Autonomous Bot Studio: Build a complete multi-file bot pushed to GitHub or ZIP')
+        .setContexts([0, 1, 2])
+        .setIntegrationTypes([0, 1])
+        .addStringOption(option =>
+            option.setName('prompt')
+                .setDescription('Describe the features and theme of your bot')
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
         .setName('setprefix')
         .setDescription('⚙️ Set a custom prefix for this server')
         .setContexts([0])

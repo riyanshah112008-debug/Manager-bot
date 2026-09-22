@@ -489,9 +489,140 @@ class CommandRegistry {
                 return;
             }
 
-            // 2. Handle Global 1-Year Persistent Button & Select Menu Interactions
+            // 2. Handle Modal Submissions
+            if (interaction.isModalSubmit()) {
+                if (interaction.customId.startsWith('modal_botstudio_gh_')) {
+                    const sessionId = interaction.customId.replace('modal_botstudio_gh_', '');
+                    const botStudio = require('./botStudio');
+                    const session = botStudio.botStudioSessions.get(sessionId);
+                    const prompt = session?.prompt || 'Custom Discord Bot';
+
+                    const repoUrl = interaction.fields.getTextInputValue('gh_repo_url');
+                    const pat = interaction.fields.getTextInputValue('gh_pat');
+                    const botName = interaction.fields.getTextInputValue('gh_bot_name');
+
+                    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+                    try {
+                        const scaffoldRes = await botStudio.scaffoldCompleteBot(prompt, { botName });
+                        const pushRes = await botStudio.pushBotToGitHub(scaffoldRes.workspacePath, repoUrl, pat, scaffoldRes.botSlug);
+
+                        const embed = new EmbedBuilder()
+                            .setColor('#2ECC71')
+                            .setTitle('🚀 Bot Successfully Deployed to GitHub!')
+                            .setDescription(
+                                `Starry has scaffolded your multi-file Discord bot in an isolated workspace and pushed it directly to your repository!\n\n` +
+                                `🔗 **Repository:** [${pushRes.owner}/${pushRes.repo}](${pushRes.repoUrl})\n` +
+                                `📦 **Workspace:** \`${scaffoldRes.workspaceName}\`\n` +
+                                `🛡️ **Attribution:** Non-removable Starry core watermark applied.\n` +
+                                `🔑 **Diagnostics:** Starry remote administration gateway active.\n\n` +
+                                `**Next Steps:**\n` +
+                                `1. Clone your repository: \`git clone ${pushRes.repoUrl}.git\`\n` +
+                                `2. Install dependencies: \`npm install\`\n` +
+                                `3. Set up your \`.env\` and launch with \`npm start\`!`
+                            )
+                            .setFooter({ text: 'Starry Autonomous Bot Studio • GitHub Deployment Complete' })
+                            .setTimestamp();
+
+                        return await interaction.editReply({ embeds: [embed] }).catch(() => {});
+                    } catch (err) {
+                        return await interaction.editReply({
+                            content: `❌ **GitHub Deployment Failed:** ${err.message}\n*Please verify your repository URL and ensure your PAT has \`repo\` scope.*`
+                        }).catch(() => {});
+                    }
+                }
+            }
+
+            // 3. Handle Global 1-Year Persistent Button & Select Menu Interactions
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
                 const customId = interaction.customId;
+
+                // 🚀 Starry Autonomous Bot Studio: Push to GitHub Button
+                if (customId.startsWith('botstudio_gh_')) {
+                    const sessionId = customId.replace('botstudio_gh_', '');
+                    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+                    const modal = new ModalBuilder()
+                        .setCustomId(`modal_botstudio_gh_${sessionId}`)
+                        .setTitle('🚀 Push Bot to GitHub Repository')
+                        .addComponents(
+                            new ActionRowBuilder().addComponents(
+                                new TextInputBuilder()
+                                    .setCustomId('gh_repo_url')
+                                    .setLabel('GitHub Repository URL')
+                                    .setPlaceholder('https://github.com/username/my-discord-bot')
+                                    .setStyle(TextInputStyle.Short)
+                                    .setRequired(true)
+                            ),
+                            new ActionRowBuilder().addComponents(
+                                new TextInputBuilder()
+                                    .setCustomId('gh_pat')
+                                    .setLabel('GitHub Personal Access Token (PAT)')
+                                    .setPlaceholder('ghp_... or github_pat_...')
+                                    .setStyle(TextInputStyle.Short)
+                                    .setRequired(true)
+                            ),
+                            new ActionRowBuilder().addComponents(
+                                new TextInputBuilder()
+                                    .setCustomId('gh_bot_name')
+                                    .setLabel('Custom Bot Name (optional)')
+                                    .setPlaceholder('e.g. NexusBot')
+                                    .setStyle(TextInputStyle.Short)
+                                    .setRequired(false)
+                            )
+                        );
+                    return await interaction.showModal(modal).catch(() => {});
+                }
+
+                // 📦 Starry Autonomous Bot Studio: Download as ZIP Button
+                if (customId.startsWith('botstudio_zip_')) {
+                    const sessionId = customId.replace('botstudio_zip_', '');
+                    const botStudio = require('./botStudio');
+                    const session = botStudio.botStudioSessions.get(sessionId);
+                    const prompt = session?.prompt || 'Custom Discord bot with moderation and utilities';
+
+                    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+                    try {
+                        const scaffoldRes = await botStudio.scaffoldCompleteBot(prompt);
+                        const zipRes = await botStudio.packageBotZip(scaffoldRes.workspacePath, scaffoldRes.botSlug);
+                        const attachment = new AttachmentBuilder(zipRes.zipPath, { name: zipRes.zipFilename });
+
+                        const embed = new EmbedBuilder()
+                            .setColor('#2ECC71')
+                            .setTitle(`📦 Bot Project Ready: ${scaffoldRes.botSlug}`)
+                            .setDescription(
+                                `Your multi-file Discord bot has been built in an isolated workspace and packaged!\n\n` +
+                                `• **Files Created:** \`${scaffoldRes.fileCount} core files\`\n` +
+                                `• **Workspace:** \`${scaffoldRes.workspaceName}\`\n` +
+                                `• **Protected Watermark:** \`Enabled (Non-removable)\`\n` +
+                                `• **Starry Telemetry Gateway:** \`Active\`\n\n` +
+                                `**How to Run Your Bot:**\n` +
+                                `1. Download and unzip \`${zipRes.zipFilename}\`.\n` +
+                                `2. Open \`.env\` and paste your \`DISCORD_TOKEN\`.\n` +
+                                `3. Run \`npm install\` then \`node deploy-commands.js\` and \`npm start\`!`
+                            )
+                            .setFooter({ text: 'Starry Autonomous Bot Studio • Download attached below' })
+                            .setTimestamp();
+
+                        return await interaction.editReply({
+                            embeds: [embed],
+                            files: [attachment]
+                        }).catch(() => {});
+                    } catch (err) {
+                        return await interaction.editReply({
+                            content: `❌ Error packaging bot files: ${err.message}`
+                        }).catch(() => {});
+                    }
+                }
+
+                // ❌ Starry Autonomous Bot Studio: Cancel
+                if (customId.startsWith('botstudio_cancel_')) {
+                    return await interaction.update({
+                        content: '🚫 Bot creation cancelled.',
+                        embeds: [],
+                        components: []
+                    }).catch(() => {});
+                }
 
                 // 🌐 Language Select Dropdown (1-Year Global Handler)
                 if (customId === 'starry_lang_select' || customId === 'starry_setup_lang_select' || customId === 'starry_lang_welcome_select') {

@@ -910,9 +910,18 @@ const commands = [
                 }
             }
 
+            const cleanPrompt = prompt.trim();
+
+            // 🚀 Autonomous Bot Studio: If user asks Starry to code a Discord bot, offer delivery options immediately
+            const botStudio = require('../../modules/botStudio');
+            if (botStudio.isBotCreationRequest(cleanPrompt)) {
+                const session = botStudio.createBotStudioSession(ctx.user.id, cleanPrompt, ctx.guild?.id);
+                const choicePayload = botStudio.buildBotStudioChoicePayload(session);
+                return ctx.reply(choicePayload);
+            }
+
             await ctx.defer(false);
 
-            const cleanPrompt = prompt.trim();
             // Check if user is asking to generate an image (only when not analyzing an existing image)
             if (!attachedImage) {
                 const imageSubject = parseImageIntent(cleanPrompt);
@@ -970,6 +979,26 @@ const commands = [
                 embeds: [result.embed],
                 components: result.components || []
             });
+        }
+    },
+
+    // 29D. CODEBOT / BOTSTUDIO (Autonomous Discord Bot Architect & Delivery Engine)
+    {
+        name: 'codebot',
+        aliases: ['buildbot', 'makebot', 'botstudio', 'createbot'],
+        category: 'Utility',
+        description: '🚀 Starry Bot Studio: Build a complete multi-file bot pushed to GitHub or downloaded as ZIP.',
+        usage: ',codebot <describe the bot you want>',
+        async execute(ctx) {
+            let prompt = (ctx.options?.getString ? (ctx.options.getString('prompt') || ctx.options.getString('description')) : null) || ctx.args.join(' ');
+            if (!prompt || !prompt.trim()) {
+                prompt = 'A modern complex Discord bot with moderation, utility, and entertainment features';
+            }
+
+            const { createBotStudioSession, buildBotStudioChoicePayload } = require('../../modules/botStudio');
+            const session = createBotStudioSession(ctx.user.id, prompt.trim(), ctx.guild?.id);
+            const choicePayload = buildBotStudioChoicePayload(session);
+            return ctx.reply(choicePayload);
         }
     },
 
