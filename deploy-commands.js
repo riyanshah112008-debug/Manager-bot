@@ -339,9 +339,16 @@ if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
 
-// Direct Social Action Slash Commands (All 43 Top-Level User-Installable Actions)
+// Direct Social Action Slash Commands (Top 20 most popular actions directly accessible; all others accessible via /social and chat prefix)
+const TOP_DIRECT_SOCIAL_ACTIONS = new Set([
+    'hug', 'kiss', 'pat', 'slap', 'cuddle', 'highfive', 'bonk', 'yeet', 
+    'poke', 'bite', 'feed', 'handhold', 'wink', 'dance', 'cry', 'blush', 
+    'smile', 'wave', 'laugh', 'cheer'
+]);
+
 if (socialModule && socialModule.ACTION_CONFIG) {
     for (const [act, conf] of Object.entries(socialModule.ACTION_CONFIG)) {
+        if (!TOP_DIRECT_SOCIAL_ACTIONS.has(act)) continue;
         const isTargeted = conf.requiresTarget !== false;
         const desc = isTargeted
             ? `${conf.verb.charAt(0).toUpperCase() + conf.verb.slice(1)} a member with an animated anime GIF!`
@@ -544,14 +551,13 @@ commands.push(
     }
 );
 
-// 3. STRICT DEDUPLICATION ENGINE & USER APP ACTIVATION
+// 3. STRICT DEDUPLICATION ENGINE & DISCORD 100-COMMAND LIMIT ENFORCER
 const commandMap = new Map();
 commands.forEach(cmd => { 
     if (cmd) {
         const jsonCmd = typeof cmd.toJSON === 'function' ? cmd.toJSON() : cmd;
         if (jsonCmd.name) {
             // Enable User Install (0 = Guild, 1 = User) and all Contexts (0 = Guild, 1 = Bot DM, 2 = Private Channel)
-            // Allows commands to be used anywhere across Discord even if bot is not in that server!
             if (!jsonCmd.integration_types) {
                 jsonCmd.integration_types = [0, 1];
             }
@@ -562,7 +568,29 @@ commands.forEach(cmd => {
         }
     }
 });
-const finalPayload = Array.from(commandMap.values());
+
+// 🛡️ DISCORD OFFICIAL LIMITS:
+// 1. Chat Input (Slash Commands): 100 maximum per application
+// 2. User Context Menus: 5 maximum per application
+// 3. Message Context Menus: 5 maximum per application
+const MAX_CHAT_INPUT_LIMIT = 100;
+const MAX_CONTEXT_LIMIT = 5;
+
+const allCommands = Array.from(commandMap.values());
+const chatInputList = allCommands.filter(c => !c.type || c.type === 1);
+const userContextList = allCommands.filter(c => c.type === 2);
+const msgContextList = allCommands.filter(c => c.type === 3);
+
+if (chatInputList.length > MAX_CHAT_INPUT_LIMIT) {
+    console.warn(`⚠️ [LIMIT GUARD] Chat input commands (${chatInputList.length}) exceed Discord hard limit of ${MAX_CHAT_INPUT_LIMIT}! Auto-capping to ${MAX_CHAT_INPUT_LIMIT} to prevent DiscordAPIError[30032]...`);
+}
+
+const safeChatInputs = chatInputList.slice(0, MAX_CHAT_INPUT_LIMIT);
+const safeUserContext = userContextList.slice(0, MAX_CONTEXT_LIMIT);
+const safeMsgContext = msgContextList.slice(0, MAX_CONTEXT_LIMIT);
+
+const finalPayload = [...safeChatInputs, ...safeUserContext, ...safeMsgContext];
+console.log(`📊 [COMMAND AUDIT] Prepared ${finalPayload.length} application commands (${safeChatInputs.length}/100 chat inputs, ${safeUserContext.length}/5 user context, ${safeMsgContext.length}/5 msg context).`);
 
 // 4. GLOBAL DEPLOYMENT FUNCTION
 async function deployCommands(client) {
@@ -616,6 +644,13 @@ async function deployCommands(client) {
     }
 }
 
-if (require.main === module) deployCommands().catch(() => process.exitCode = 1);
+if (require.main === module) {
+    deployCommands()
+        .then(() => process.exit(0))
+        .catch(err => {
+            console.error('❌ Command deployment failed:', err);
+            process.exit(1);
+        });
+}
 
 module.exports = { commands: finalPayload, deployCommands };

@@ -220,7 +220,7 @@ app.get('/verify', (req, res) => {
     res.send(`
         <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
         <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:10vh;">
-            <img src="https://i.imgur.com/13w1J4L.png" width="100" style="border-radius:50%; margin-bottom:20px;">
+            <img src="${client.user ? client.user.displayAvatarURL({ extension: 'png' }) : 'https://cdn.discordapp.com/embed/avatars/0.png'}" width="100" style="border-radius:50%; margin-bottom:20px;">
             <h2>Starry Security Protocol</h2>
             <p style="color:#b5bac1; margin-bottom:40px;">To protect our server from automated bots, please verify you are human.</p>
             <form action="/verify" method="POST">

@@ -30,7 +30,7 @@ module.exports = {
             species: 'Polar Bear',
             rarity: 'Uncommon',
             color: '#2ecc71', // Uncommon Green
-            image: 'https://i.imgur.com/8QJ8zuz.png', // Replace with your bear image
+            image: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f43b.png', // Reliable high-res pet icon
             lore: 'Fur as dense and blue as ancient glacial ice. A fiercely loyal companion in the frozen wastes.',
             level: 0,
             xp: 0,

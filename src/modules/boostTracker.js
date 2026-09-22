@@ -25,7 +25,7 @@ module.exports = (client) => {
                     .setTitle('🚀 NEW SERVER BOOST! 🚀')
                     .setDescription(`**THANK YOU SO MUCH <@${message.author.id}>!** 💜\n\nYour boost helps support the server and unlocks epic new perks for the entire community!`)
                     .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 }))
-                    .setImage('https://i.imgur.com/QeN2h7A.gif') // Sparkle/Boost GIF banner
+                    .setImage('https://cdn.otakugifs.xyz/gifs/celebrate/a4cee6028f5fec0e.gif') // Sparkle/Boost celebration GIF banner
                     .setFooter({ text: `Total Server Boosts: ${message.guild.premiumSubscriptionCount}`, iconURL: message.guild.iconURL() });
 
                 await targetChannel.send({ content: `Everyone say thank you to <@${message.author.id}>! 🎉`, embeds: [embed] });

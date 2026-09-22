@@ -22,12 +22,13 @@ const welcomeSchema = new mongoose.Schema({
     title: { type: String, default: '✨ WELCOME TO {server} ✨' },
     description: { type: String, default: '💖 Hello {user}! We are so overjoyed to have you join our family! Make sure to read the guidelines and have an amazing time here. 🌟' },
     color: { type: String, default: '#FF73FA' },
-    image: { type: String, default: 'https://i.imgur.com/vH1O33q.gif' },
+    image: { type: String, default: 'https://cdn.otakugifs.xyz/gifs/wave/61621fefb2bce465.gif' },
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '✨ Enjoy your stellar journey in {server}! ✨' },
     pingContent: { type: String, default: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂' }
 });
 
+const DEFAULT_WELCOME_BANNER = 'https://cdn.otakugifs.xyz/gifs/wave/61621fefb2bce465.gif';
 const WelcomeSettings = mongoose.models.WelcomeSettings || mongoose.model('WelcomeSettings', welcomeSchema);
 
 const setupWelcomeCommand = new SlashCommandBuilder()
@@ -41,7 +42,11 @@ const setupWelcomeCommand = new SlashCommandBuilder()
 
 function cleanImageUrl(str) {
     if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar') return '';
-    return str.trim().replace(/[\`\<\>\s]/g, '');
+    const cleaned = str.trim().replace(/[\`\<\>\s]/g, '');
+    if (cleaned.includes('imgur.com/vH1O33q') || cleaned.includes('imgur.com/removed') || cleaned.includes('i.imgur.com/vH1O33q.gif')) {
+        return DEFAULT_WELCOME_BANNER;
+    }
+    return cleaned;
 }
 
 function isValidUrl(str) {
@@ -148,7 +153,7 @@ const welcomeModule = (client) => {
                 title: defs.title,
                 description: defs.description,
                 color: '#FF73FA',
-                image: 'https://i.imgur.com/vH1O33q.gif',
+                image: DEFAULT_WELCOME_BANNER,
                 thumbnail: 'avatar',
                 footer: defs.footer,
                 pingContent: defs.pingContent
@@ -277,7 +282,7 @@ const welcomeModule = (client) => {
                     .setLabel('Banner Image/GIF URL')
                     .setStyle(TextInputStyle.Paragraph)
                     .setPlaceholder('Paste image/GIF URL (e.g., https://... or Discord CDN link)')
-                    .setValue(cleanImageUrl(settings.image) || 'https://i.imgur.com/vH1O33q.gif')
+                    .setValue(cleanImageUrl(settings.image) || DEFAULT_WELCOME_BANNER)
                     .setRequired(false);
 
                 const thumbInput = new TextInputBuilder()
@@ -402,7 +407,7 @@ const welcomeModule = (client) => {
                         title: defs.title,
                         description: defs.description,
                         color: '#FF73FA',
-                        image: 'https://i.imgur.com/vH1O33q.gif',
+                        image: DEFAULT_WELCOME_BANNER,
                         thumbnail: 'avatar',
                         footer: defs.footer,
                         pingContent: defs.pingContent
@@ -438,7 +443,7 @@ const welcomeModule = (client) => {
                 let thumbnail = cleanImageUrl(thumbnailRaw);
 
                 if (!isValidUrl(image)) {
-                    image = 'https://i.imgur.com/vH1O33q.gif';
+                    image = DEFAULT_WELCOME_BANNER;
                 }
 
                 if (thumbnailRaw.trim().toLowerCase() === 'avatar') {
