@@ -97,12 +97,17 @@ function buildBotStudioChoicePayload(session) {
         )
         .addFields(
             {
-                name: '🌐 Option 1: Push Directly to GitHub Repository',
+                name: '🖥️ Option 1: Code in Local Termux Workspace',
+                value: 'Starry will autonomously code your bot right here on this Termux host inside an isolated workspace directory (`~/workspaces/<bot-name>`), ready to run with `npm start`.',
+                inline: false
+            },
+            {
+                name: '🌐 Option 2: Push Directly to GitHub Repository',
                 value: 'Starry will scaffold the entire multi-file bot project in an isolated workspace, initialize Git, and push the code directly to your GitHub repository using your Personal Access Token (PAT).',
                 inline: false
             },
             {
-                name: '📦 Option 2: Download Complete Bot File (ZIP)',
+                name: '📦 Option 3: Download Complete Bot File (ZIP)',
                 value: 'Starry will build and package all bot files, commands, configuration, and documentation into a downloadable `.zip` archive delivered right here in Discord.',
                 inline: false
             },
@@ -117,20 +122,25 @@ function buildBotStudioChoicePayload(session) {
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+            .setCustomId(`botstudio_local_${session.id}`)
+            .setLabel('Code in Termux Workspace')
+            .setEmoji('🖥️')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
             .setCustomId(`botstudio_gh_${session.id}`)
             .setLabel('Push to GitHub Repo')
             .setEmoji('🌐')
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
             .setCustomId(`botstudio_zip_${session.id}`)
-            .setLabel('Download Bot File (ZIP)')
+            .setLabel('Download ZIP')
             .setEmoji('📦')
-            .setStyle(ButtonStyle.Primary),
+            .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId(`botstudio_cancel_${session.id}`)
             .setLabel('Cancel')
             .setEmoji('✖️')
-            .setStyle(ButtonStyle.Secondary)
+            .setStyle(ButtonStyle.Danger)
     );
 
     return { embeds: [embed], components: [row] };
@@ -491,12 +501,21 @@ module.exports = {
     fs.writeFileSync(path.join(workspacePath, 'src/commands/botinfo.js'), botinfoJs);
 
     // J. Commands: mod.js (Moderation Suite)
-    const modJs = `${STARRY_WATERMARK_HEADER}const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+    const modJs = `${STARRY_WATERMARK_HEADER}const { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
     name: 'mod',
-    description: 'Server moderation commands: kick, ban, clear',
-    aliases: ['moderation'],
+    description: 'Server moderation commands: kick, ban, clear, timeout',
+    aliases: ['moderation', 'purge', 'clear'],
+    data: new SlashCommandBuilder()
+        .setName('mod')
+        .setDescription('Server moderation tools')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addSubcommand(sub => 
+            sub.setName('clear')
+               .setDescription('Bulk delete messages')
+               .addIntegerOption(opt => opt.setName('amount').setDescription('Number of messages (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
+        ),
 
     async execute(ctx) {
         if (!ctx.member?.permissions?.has(PermissionFlagsBits.ModerateMembers)) {
@@ -504,18 +523,129 @@ module.exports = {
         }
 
         const sub = ctx.args[0]?.toLowerCase();
-        if (sub === 'clear' || sub === 'purge') {
-            const amount = parseInt(ctx.args[1], 10) || 10;
+        if (sub === 'clear' || sub === 'purge' || ctx.options?.getSubcommand?.() === 'clear') {
+            const amount = (ctx.options?.getInteger ? ctx.options.getInteger('amount') : null) || parseInt(ctx.args[1], 10) || 10;
             const count = Math.min(100, Math.max(1, amount));
             await ctx.channel.bulkDelete(count, true).catch(() => {});
-            return ctx.reply(\`🧹 Cleared **\${count}** messages.\`);
+            return ctx.reply(\`🧹 Successfully cleared **\${count}** messages.\`);
         }
 
-        return ctx.reply('🛡️ **Moderation Options:**\\n• \\\`!mod clear <1-100>\\\` — Bulk delete messages');
+        return ctx.reply('🛡️ **Moderation Commands:**\\n• \`!mod clear <1-100>\` — Bulk delete messages\\n• \`!kick @user [reason]\` — Kick member\\n• \`!ban @user [reason]\` — Ban member');
     }
 };
 `;
     fs.writeFileSync(path.join(workspacePath, 'src/commands/mod.js'), modJs);
+
+    // K. Commands: economy.js (Banking & Rewards Engine)
+    const economyJs = `${STARRY_WATERMARK_HEADER}const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
+const userBalances = new Map();
+
+module.exports = {
+    name: 'balance',
+    description: 'Check cash wallet, daily rewards, and economy stats',
+    aliases: ['bal', 'wallet', 'money', 'daily', 'work'],
+    data: new SlashCommandBuilder()
+        .setName('balance')
+        .setDescription('Check your cash wallet and bank balance'),
+
+    async execute(ctx) {
+        const userId = ctx.user.id;
+        const currentBal = userBalances.get(userId) || 500;
+        userBalances.set(userId, currentBal);
+
+        const embed = new EmbedBuilder()
+            .setColor('#F1C40F')
+            .setTitle(\`💰 \${ctx.user.username}'s Financial Vault\`)
+            .setDescription(\`• **Cash Wallet:** \\\`$\${currentBal.toLocaleString()}\\\`\\n• **Bank Reserve:** \\\`$1,000\\\`\\n• **Net Worth:** \\\`$\${(currentBal + 1000).toLocaleString()}\\\`\`)
+            .setFooter({ text: 'Economy Engine • Starry Bot Studio' });
+
+        return ctx.reply({ embeds: [embed] });
+    }
+};
+`;
+    fs.writeFileSync(path.join(workspacePath, 'src/commands/economy.js'), economyJs);
+
+    // L. Commands: ticket.js (Interactive Support Desk)
+    const ticketJs = `${STARRY_WATERMARK_HEADER}const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+
+module.exports = {
+    name: 'ticket',
+    description: 'Post an interactive support ticket panel with buttons',
+    aliases: ['support', 'ticketpanel'],
+    data: new SlashCommandBuilder()
+        .setName('ticket')
+        .setDescription('Spawn an interactive support ticket panel')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+    async execute(ctx) {
+        const embed = new EmbedBuilder()
+            .setColor('#3498DB')
+            .setTitle('📩 Need Assistance? Open a Support Ticket!')
+            .setDescription('Click the button below to open a private ticket channel with our support staff.')
+            .setFooter({ text: 'Enterprise Ticket System • Starry Bot Studio' });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ticket_create_btn')
+                .setLabel('Create Ticket')
+                .setEmoji('🎫')
+                .setStyle(ButtonStyle.Primary)
+        );
+
+        return ctx.reply({ embeds: [embed], components: [row] });
+    }
+};
+`;
+    fs.writeFileSync(path.join(workspacePath, 'src/commands/ticket.js'), ticketJs);
+
+    // M. Commands: utility.js (Userinfo, Serverinfo, Avatar)
+    const utilityJs = `${STARRY_WATERMARK_HEADER}const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
+
+module.exports = {
+    name: 'userinfo',
+    description: 'Display detailed user profile, permissions, and roles',
+    aliases: ['whois', 'user'],
+    data: new SlashCommandBuilder()
+        .setName('userinfo')
+        .setDescription('Inspect a user profile and account details')
+        .addUserOption(opt => opt.setName('target').setDescription('Target member').setRequired(false)),
+
+    async execute(ctx) {
+        const target = (ctx.options?.getUser ? ctx.options.getUser('target') : null) || ctx.message?.mentions?.users?.first() || ctx.user;
+        const embed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setTitle(\`👤 User Profile: \${target.tag}\`)
+            .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 256 }))
+            .addFields(
+                { name: '🆔 User ID', value: \`\\\`\${target.id}\\\`\`, inline: true },
+                { name: '📅 Created', value: \`<t:\${Math.floor(target.createdTimestamp / 1000)}:R>\`, inline: true }
+            )
+            .setFooter({ text: 'Starry Bot Studio Utility Engine' });
+
+        return ctx.reply({ embeds: [embed] });
+    }
+};
+`;
+    fs.writeFileSync(path.join(workspacePath, 'src/commands/utility.js'), utilityJs);
+
+    // N. ecosystem.config.js (PM2 Process Supervisor)
+    const ecosystemJs = `${STARRY_WATERMARK_HEADER}module.exports = {
+  apps: [
+    {
+      name: '${botSlug}',
+      script: 'src/index.js',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      env: {
+        NODE_ENV: 'production'
+      }
+    }
+  ]
+};
+`;
+    fs.writeFileSync(path.join(workspacePath, 'ecosystem.config.js'), ecosystemJs);
 
     // K. deploy-commands.js
     const deployCommandsJs = `${STARRY_WATERMARK_HEADER}require('dotenv').config();
@@ -611,7 +741,7 @@ Protected Architecture generated by **Starry (Astraea) Bot Studio**. All rights 
         workspaceName,
         workspacePath,
         botSlug,
-        fileCount: 11
+        fileCount: 17
     };
 }
 

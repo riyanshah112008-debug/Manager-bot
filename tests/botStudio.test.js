@@ -39,9 +39,11 @@ const payload = botStudio.buildBotStudioChoicePayload(session);
 assert.ok(payload.embeds && payload.embeds.length === 1, 'Should have 1 embed');
 assert.ok(payload.components && payload.components.length === 1, 'Should have 1 action row');
 const buttons = payload.components[0].components;
-assert.strictEqual(buttons.length, 3, 'Should have GitHub, ZIP, and Cancel buttons');
-assert.ok(buttons[0].data.custom_id.startsWith('botstudio_gh_'), 'Button 1 must be GitHub push');
-assert.ok(buttons[1].data.custom_id.startsWith('botstudio_zip_'), 'Button 2 must be ZIP download');
+assert.strictEqual(buttons.length, 4, 'Should have Termux Local, GitHub, ZIP, and Cancel buttons');
+assert.ok(buttons[0].data.custom_id.startsWith('botstudio_local_'), 'Button 1 must be Termux Local Workspace');
+assert.ok(buttons[1].data.custom_id.startsWith('botstudio_gh_'), 'Button 2 must be GitHub push');
+assert.ok(buttons[2].data.custom_id.startsWith('botstudio_zip_'), 'Button 3 must be ZIP download');
+assert.ok(buttons[3].data.custom_id.startsWith('botstudio_cancel_'), 'Button 4 must be Cancel');
 console.log('  ✅ Session and interactive choice payload verified!');
 
 // 3. Test Full Multi-File Bot Scaffolding in Isolated Workspace
@@ -57,12 +59,17 @@ console.log('\n▶ Test 3: Multi-File Bot Scaffolding & Watermark Verification')
         '.env.example',
         'README.md',
         'deploy-commands.js',
+        'ecosystem.config.js',
         'src/config.js',
         'src/index.js',
         'src/modules/starryLink.js',
         'src/commands/ping.js',
         'src/commands/help.js',
-        'src/commands/botinfo.js'
+        'src/commands/botinfo.js',
+        'src/commands/mod.js',
+        'src/commands/economy.js',
+        'src/commands/ticket.js',
+        'src/commands/utility.js'
     ];
 
     for (const f of expectedFiles) {

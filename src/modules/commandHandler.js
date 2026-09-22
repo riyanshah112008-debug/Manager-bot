@@ -537,6 +537,52 @@ class CommandRegistry {
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
                 const customId = interaction.customId;
 
+                // 🖥️ Starry Autonomous Bot Studio: Code in Local Termux Workspace Button
+                if (customId.startsWith('botstudio_local_')) {
+                    const sessionId = customId.replace('botstudio_local_', '');
+                    const botStudio = require('./botStudio');
+                    const session = botStudio.botStudioSessions.get(sessionId);
+                    const prompt = session?.prompt || 'Complex Discord Bot';
+
+                    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+                    try {
+                        const scaffoldRes = await botStudio.scaffoldCompleteBot(prompt);
+
+                        const embed = new EmbedBuilder()
+                            .setColor('#2ECC71')
+                            .setTitle(`🖥️ Complex Bot Coded in Termux Workspace: ${scaffoldRes.botSlug}`)
+                            .setDescription(
+                                `Starry has coded your full multi-file Discord bot in its own isolated Termux workspace!\n\n` +
+                                `📍 **Workspace Directory:** \`${scaffoldRes.workspacePath}\`\n` +
+                                `📦 **Files Scaffolded:** \`${scaffoldRes.fileCount} enterprise files\`\n` +
+                                `🛡️ **Attribution:** Non-removable Starry core watermark active.\n` +
+                                `🔑 **Diagnostics:** Starry remote management gateway active.\n\n` +
+                                `**Commands Included:**\n` +
+                                `• **Moderation:** \`purge\`, \`kick\`, \`ban\`, \`timeout\`, \`warn\`\n` +
+                                `• **Economy:** \`balance\`, \`daily\`, \`work\`, \`pay\`\n` +
+                                `• **Tickets:** Interactive button ticket panel & management\n` +
+                                `• **Utility:** \`ping\`, \`help\`, \`botinfo\`, \`userinfo\`, \`serverinfo\`\n` +
+                                `• **StarryLink:** \`!starry-status\`, \`,starry-eval\`\n\n` +
+                                `**How to Launch on this Device:**\n` +
+                                `\`\`\`bash\n` +
+                                `cd "${scaffoldRes.workspacePath}"\n` +
+                                `nano .env  # Add your DISCORD_TOKEN\n` +
+                                `node deploy-commands.js\n` +
+                                `npm start\n` +
+                                `\`\`\``
+                            )
+                            .setFooter({ text: 'Starry Autonomous Bot Studio • Termux Local Workspace Active' })
+                            .setTimestamp();
+
+                        return await interaction.editReply({ embeds: [embed] }).catch(() => {});
+                    } catch (err) {
+                        return await interaction.editReply({
+                            content: `❌ Error coding bot in Termux workspace: ${err.message}`
+                        }).catch(() => {});
+                    }
+                }
+
                 // 🚀 Starry Autonomous Bot Studio: Push to GitHub Button
                 if (customId.startsWith('botstudio_gh_')) {
                     const sessionId = customId.replace('botstudio_gh_', '');
