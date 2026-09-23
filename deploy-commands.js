@@ -548,6 +548,116 @@ commands.push(
                 ]
             }
         ]
+    },
+    {
+        name: 'ticketsetup',
+        description: '🎫 Setup and deploy the interactive support ticket panel in your server',
+        default_member_permissions: ADMIN,
+        options: [
+            {
+                name: 'channel',
+                type: 7,
+                channel_types: [0],
+                required: false,
+                description: 'Target channel to post the ticket panel (default: current channel)'
+            },
+            {
+                name: 'role',
+                type: 8,
+                required: false,
+                description: 'Support/Staff role with permission to view and claim tickets'
+            },
+            {
+                name: 'category',
+                type: 7,
+                channel_types: [4],
+                required: false,
+                description: 'Category where newly created tickets will be opened'
+            },
+            {
+                name: 'title',
+                type: 3,
+                required: false,
+                description: 'Custom title for the ticket embed'
+            },
+            {
+                name: 'description',
+                type: 3,
+                required: false,
+                description: 'Custom description text for the ticket panel'
+            }
+        ]
+    },
+    {
+        name: 'ticket',
+        description: '🎫 Comprehensive ticket management system',
+        options: [
+            {
+                name: 'setup',
+                type: 1,
+                description: 'Setup and deploy the interactive ticket panel',
+                options: [
+                    { name: 'channel', type: 7, channel_types: [0], required: false, description: 'Target channel' },
+                    { name: 'role', type: 8, required: false, description: 'Support/Staff role' },
+                    { name: 'category', type: 7, channel_types: [4], required: false, description: 'Ticket category' },
+                    { name: 'title', type: 3, required: false, description: 'Panel title' },
+                    { name: 'description', type: 3, required: false, description: 'Panel description' }
+                ]
+            },
+            {
+                name: 'close',
+                type: 1,
+                description: 'Close the current ticket channel',
+                options: [
+                    { name: 'reason', type: 3, required: false, description: 'Reason for closing ticket' }
+                ]
+            },
+            {
+                name: 'add',
+                type: 1,
+                description: 'Add a user to the current ticket',
+                options: [
+                    { name: 'user', type: 6, required: true, description: 'User to add' }
+                ]
+            },
+            {
+                name: 'remove',
+                type: 1,
+                description: 'Remove a user from the current ticket',
+                options: [
+                    { name: 'user', type: 6, required: true, description: 'User to remove' }
+                ]
+            },
+            {
+                name: 'claim',
+                type: 1,
+                description: 'Claim the current ticket as staff'
+            },
+            {
+                name: 'transcript',
+                type: 1,
+                description: 'Generate and save a transcript of this ticket'
+            },
+            {
+                name: 'delete',
+                type: 1,
+                description: 'Permanently delete this closed ticket channel'
+            }
+        ]
+    },
+    {
+        name: 'applysetup',
+        description: '📋 Spawn the server staff & partner application panel',
+        default_member_permissions: ADMIN,
+        options: [
+            {
+                name: 'channel',
+                type: 7,
+                channel_types: [0],
+                required: false,
+                description: 'Target channel for the application panel'
+            }
+        ]
     }
 );
 

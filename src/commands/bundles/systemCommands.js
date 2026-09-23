@@ -417,32 +417,373 @@ const commands = [
     // 9. TICKETSETUP
     {
         name: 'ticketsetup',
+        aliases: ['ticketpanel', 'setuptickets', 'ticket-setup'],
         category: 'Systems',
-        description: 'Spawn the interactive 1-Year Support Ticket Hub in this channel.',
-        usage: ',ticketsetup',
-        permissions: [PermissionFlagsBits.Administrator],
+        description: 'Configure and spawn the interactive Support Ticket Hub in this server.',
+        usage: ',ticketsetup [#channel] [@role]',
+        permissions: [PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild],
         async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
+            if (!ctx.member.permissions?.has(PermissionFlagsBits.Administrator) && 
+                !ctx.member.permissions?.has(PermissionFlagsBits.ManageGuild) && 
+                !config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ Administrator or Manage Server permission required to configure tickets.');
             }
 
-            const embed = new EmbedBuilder()
+            const ticketsModule = require('../../modules/tickets');
+
+            // Resolve target channel
+            let targetChannel = null;
+            if (ctx.isSlash) {
+                targetChannel = ctx.options.getChannel('channel') || ctx.channel;
+            } else {
+                targetChannel = ctx.message.mentions.channels.first() || 
+                                (ctx.args[0] ? ctx.guild.channels.cache.get(ctx.args[0]) : null) || 
+                                ctx.channel;
+            }
+
+            // Resolve support role
+            let supportRole = null;
+            if (ctx.isSlash) {
+                supportRole = ctx.options.getRole('role') || null;
+            } else {
+                supportRole = ctx.message.mentions.roles.first() || 
+                              (ctx.args[1] ? ctx.guild.roles.cache.get(ctx.args[1]) : null);
+            }
+
+            // Resolve category & custom text (if provided)
+            let category = ctx.isSlash ? ctx.options.getChannel('category') : null;
+            let title = ctx.isSlash ? ctx.options.getString('title') : null;
+            let description = ctx.isSlash ? ctx.options.getString('description') : null;
+
+            try {
+                await ticketsModule.setupTicketPanel({
+                    guild: ctx.guild,
+                    channel: targetChannel,
+                    client: ctx.client,
+                    supportRole,
+                    category,
+                    title,
+                    description
+                });
+
+                const confirmEmbed = new EmbedBuilder()
+                    .setColor('#2ecc71')
+                    .setTitle('✅ Ticket Setup Complete!')
+                    .setDescription(`The interactive Support Ticket Panel is active and ready in <#${targetChannel.id}>.`)
+                    .addFields(
+                        { name: '📍 Panel Channel', value: `<#${targetChannel.id}>`, inline: true },
+                        { name: '🛡️ Support Role', value: supportRole ? `<@&${supportRole.id}>` : '*Server Staff (auto-detected)*', inline: true },
+                        { name: '📁 Category', value: category ? `${category.name}` : '*Auto-created (OPENED TICKETS)*', inline: true }
+                    )
+                    .setFooter({ text: 'Starry Ticket Engine • High Lifetime 24/7' })
+                    .setTimestamp();
+
+                return ctx.reply({ embeds: [confirmEmbed], ephemeral: true });
+            } catch (err) {
+                console.error('Ticket setup error:', err);
+                return ctx.reply(`❌ Failed to complete ticket setup: \`${err.message}\``);
+            }
+        }
+    },
+
+    // 9b. TICKET MASTER COMMAND
+    {
+        name: 'ticket',
+        category: 'Systems',
+        description: 'Comprehensive ticket management (setup, close, claim, add, remove, transcript, delete).',
+        usage: ',ticket <setup|close|add|remove|claim|transcript|delete> [args]',
+        permissions: [],
+        async execute(ctx) {
+            const ticketsModule = require('../../modules/tickets');
+            const sub = (ctx.isSlash ? ctx.options.getSubcommand?.() : ctx.args[0])?.toLowerCase();
+
+            // 1. SETUP SUBCOMMAND
+            if (sub === 'setup') {
+                if (!ctx.member.permissions?.has(PermissionFlagsBits.Administrator) && 
+                    !ctx.member.permissions?.has(PermissionFlagsBits.ManageGuild) && 
+                    !config.BOT_OWNERS.includes(ctx.user.id)) {
+                    return ctx.reply('❌ Administrator or Manage Server permission required to configure tickets.');
+                }
+
+                let targetChannel = ctx.isSlash 
+                    ? (ctx.options.getChannel('channel') || ctx.channel)
+                    : (ctx.message.mentions.channels.first() || (ctx.args[1] ? ctx.guild.channels.cache.get(ctx.args[1]) : null) || ctx.channel);
+
+                let supportRole = ctx.isSlash 
+                    ? (ctx.options.getRole('role') || null)
+                    : (ctx.message.mentions.roles.first() || (ctx.args[2] ? ctx.guild.roles.cache.get(ctx.args[2]) : null));
+
+                let category = ctx.isSlash ? ctx.options.getChannel('category') : null;
+                let title = ctx.isSlash ? ctx.options.getString('title') : null;
+                let description = ctx.isSlash ? ctx.options.getString('description') : null;
+
+                await ticketsModule.setupTicketPanel({
+                    guild: ctx.guild,
+                    channel: targetChannel,
+                    client: ctx.client,
+                    supportRole,
+                    category,
+                    title,
+                    description
+                });
+
+                const confirmEmbed = new EmbedBuilder()
+                    .setColor('#2ecc71')
+                    .setTitle('✅ Ticket Setup Complete!')
+                    .setDescription(`The interactive Support Ticket Panel is active in <#${targetChannel.id}>.`)
+                    .addFields(
+                        { name: '📍 Channel', value: `<#${targetChannel.id}>`, inline: true },
+                        { name: '🛡️ Role', value: supportRole ? `<@&${supportRole.id}>` : '*Server Staff*', inline: true }
+                    )
+                    .setTimestamp();
+
+                return ctx.reply({ embeds: [confirmEmbed], ephemeral: true });
+            }
+
+            // Ticket Channel Check for management subcommands
+            const isTicketChannel = ctx.channel.name.startsWith('ticket-') || 
+                                    ctx.channel.name.startsWith('claimed-') || 
+                                    ctx.channel.name.startsWith('closed-') || 
+                                    (ctx.channel.topic && /\d{17,20}/.test(ctx.channel.topic));
+
+            // 2. CLOSE SUBCOMMAND
+            if (sub === 'close') {
+                if (!isTicketChannel) {
+                    return ctx.reply('❌ This command can only be run inside a ticket channel.');
+                }
+
+                const isStaff = ticketsModule.isStaff(ctx.member, ctx.guild);
+                const isOwner = ctx.channel.topic?.includes(ctx.user.id);
+                if (!isStaff && !isOwner) {
+                    return ctx.reply('❌ Only server staff or the ticket creator can close this ticket.');
+                }
+
+                const reason = ctx.isSlash ? ctx.options.getString('reason') : (ctx.args.slice(1).join(' ') || 'Closed by user command');
+                const res = await ticketsModule.closeTicketChannel({
+                    channel: ctx.channel,
+                    closedBy: ctx.user,
+                    client: ctx.client,
+                    reason
+                });
+
+                if (res.error) return ctx.reply(res.error);
+                if (ctx.isSlash) return ctx.reply({ content: '🔒 Ticket marked as closed.', ephemeral: true });
+                return;
+            }
+
+            // 3. CLAIM SUBCOMMAND
+            if (sub === 'claim') {
+                if (!isTicketChannel) {
+                    return ctx.reply('❌ This command can only be run inside a ticket channel.');
+                }
+
+                if (!ticketsModule.isStaff(ctx.member, ctx.guild)) {
+                    return ctx.reply('❌ Only staff members can claim tickets.');
+                }
+
+                const res = await ticketsModule.claimTicketChannel({ channel: ctx.channel, staffMember: ctx.user });
+                if (res.error) return ctx.reply(res.error);
+                if (ctx.isSlash) return ctx.reply({ content: '✋ You have claimed this ticket!', ephemeral: true });
+                return;
+            }
+
+            // 4. ADD USER SUBCOMMAND
+            if (sub === 'add') {
+                if (!isTicketChannel) {
+                    return ctx.reply('❌ This command can only be run inside a ticket channel.');
+                }
+
+                if (!ticketsModule.isStaff(ctx.member, ctx.guild)) {
+                    return ctx.reply('❌ Only staff members can add users to tickets.');
+                }
+
+                const targetUser = ctx.isSlash 
+                    ? ctx.options.getUser('user')
+                    : (ctx.message.mentions.users.first() || (ctx.args[1] ? await ctx.client.users.fetch(ctx.args[1]).catch(() => null) : null));
+
+                if (!targetUser) {
+                    return ctx.reply('❌ Please specify a user to add (e.g. `,ticket add @user`).');
+                }
+
+                const targetMember = await ctx.guild.members.fetch(targetUser.id).catch(() => null);
+                if (!targetMember) return ctx.reply('❌ Member not found in this server.');
+
+                await ticketsModule.addMemberToTicket({ channel: ctx.channel, member: targetMember });
+                return ctx.reply(`✅ Added <@${targetMember.id}> to this ticket.`);
+            }
+
+            // 5. REMOVE USER SUBCOMMAND
+            if (sub === 'remove') {
+                if (!isTicketChannel) {
+                    return ctx.reply('❌ This command can only be run inside a ticket channel.');
+                }
+
+                if (!ticketsModule.isStaff(ctx.member, ctx.guild)) {
+                    return ctx.reply('❌ Only staff members can remove users from tickets.');
+                }
+
+                const targetUser = ctx.isSlash 
+                    ? ctx.options.getUser('user')
+                    : (ctx.message.mentions.users.first() || (ctx.args[1] ? await ctx.client.users.fetch(ctx.args[1]).catch(() => null) : null));
+
+                if (!targetUser) {
+                    return ctx.reply('❌ Please specify a user to remove (e.g. `,ticket remove @user`).');
+                }
+
+                const targetMember = await ctx.guild.members.fetch(targetUser.id).catch(() => null);
+                if (!targetMember) return ctx.reply('❌ Member not found in this server.');
+
+                await ticketsModule.removeMemberFromTicket({ channel: ctx.channel, member: targetMember });
+                return ctx.reply(`🛑 Removed <@${targetMember.id}> from this ticket.`);
+            }
+
+            // 6. TRANSCRIPT SUBCOMMAND
+            if (sub === 'transcript') {
+                if (!isTicketChannel) {
+                    return ctx.reply('❌ This command can only be run inside a ticket channel.');
+                }
+
+                const { attachment, transcriptEmbed } = await ticketsModule.generateTranscript({
+                    channel: ctx.channel,
+                    guild: ctx.guild,
+                    user: ctx.user
+                });
+
+                return ctx.reply({ embeds: [transcriptEmbed], files: [attachment] });
+            }
+
+            // 7. DELETE SUBCOMMAND
+            if (sub === 'delete') {
+                if (!isTicketChannel) {
+                    return ctx.reply('❌ This command can only be run inside a ticket channel.');
+                }
+
+                if (!ticketsModule.isStaff(ctx.member, ctx.guild)) {
+                    return ctx.reply('❌ Only staff members can delete tickets.');
+                }
+
+                await ctx.reply('🗑️ Ticket will be deleted in 5 seconds...');
+                setTimeout(async () => {
+                    await ctx.channel.delete().catch(() => {});
+                }, 5000);
+                return;
+            }
+
+            // DEFAULT: HELP EMBED
+            const helpEmbed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('🎫 Server Support & Assistance Hub')
+                .setTitle('🎫 Starry Ticket System Command Guide')
                 .setDescription(
-                    `Need assistance, have questions, or want to contact staff privately?\n\n` +
-                    `Click **Create Ticket** below to spawn a private channel with our staff team.\n\n` +
-                    `*Button interactions are persistent with high lifetime up to 1 year.*`
+                    `Manage and operate high-performance support tickets with persistent buttons.\n\n` +
+                    `• \`,ticketsetup [#channel] [@role]\` — Deploy the ticket panel\n` +
+                    `• \`,ticket setup\` — Interactive ticket setup\n` +
+                    `• \`,ticket close [reason]\` — Close the current ticket\n` +
+                    `• \`,ticket claim\` — Staff claims active ticket\n` +
+                    `• \`,ticket add <@user>\` — Add a user to this ticket\n` +
+                    `• \`,ticket remove <@user>\` — Remove a user from this ticket\n` +
+                    `• \`,ticket transcript\` — Save message archive\n` +
+                    `• \`,ticket delete\` — Permanently remove ticket channel\n\n` +
+                    `*Slash commands also available:* \`/ticketsetup\` *and* \`/ticket <subcommand>\``
                 )
-                .setFooter({ text: 'Starry Ticket Engine • Prefix: ,' })
+                .setFooter({ text: 'Starry Ticket Engine • High Lifetime' })
                 .setTimestamp();
 
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('ticket_create').setLabel('Create Ticket').setEmoji('📩').setStyle(ButtonStyle.Primary)
-            );
+            return ctx.reply({ embeds: [helpEmbed] });
+        }
+    },
 
-            await ctx.channel.send({ embeds: [embed], components: [row] });
-            if (ctx.isSlash) ctx.reply({ content: '✅ Ticket panel spawned!', ephemeral: true });
+    // 9c. DEDICATED TICKET CLOSE SHORTCUT
+    {
+        name: 'ticketclose',
+        aliases: ['close'],
+        category: 'Systems',
+        description: 'Close the current support ticket channel.',
+        usage: ',close [reason]',
+        permissions: [],
+        async execute(ctx) {
+            const isTicketChannel = ctx.channel.name.startsWith('ticket-') || 
+                                    ctx.channel.name.startsWith('claimed-') || 
+                                    ctx.channel.name.startsWith('closed-') || 
+                                    (ctx.channel.topic && /\d{17,20}/.test(ctx.channel.topic));
+
+            if (!isTicketChannel) {
+                return ctx.reply('❌ `,close` can only be run inside a ticket channel.');
+            }
+
+            const ticketsModule = require('../../modules/tickets');
+            const isStaff = ticketsModule.isStaff(ctx.member, ctx.guild);
+            const isOwner = ctx.channel.topic?.includes(ctx.user.id);
+            if (!isStaff && !isOwner) {
+                return ctx.reply('❌ Only server staff or the ticket creator can close this ticket.');
+            }
+
+            const reason = ctx.args.join(' ') || 'Closed by user command';
+            const res = await ticketsModule.closeTicketChannel({
+                channel: ctx.channel,
+                closedBy: ctx.user,
+                client: ctx.client,
+                reason
+            });
+
+            if (res.error) return ctx.reply(res.error);
+        }
+    },
+
+    // 9d. DEDICATED TICKET CLAIM SHORTCUT
+    {
+        name: 'ticketclaim',
+        aliases: ['claim'],
+        category: 'Systems',
+        description: 'Claim the current ticket as staff.',
+        usage: ',claim',
+        permissions: [],
+        async execute(ctx) {
+            const isTicketChannel = ctx.channel.name.startsWith('ticket-') || 
+                                    ctx.channel.name.startsWith('claimed-') || 
+                                    ctx.channel.name.startsWith('closed-') || 
+                                    (ctx.channel.topic && /\d{17,20}/.test(ctx.channel.topic));
+
+            if (!isTicketChannel) {
+                return ctx.reply('❌ `,claim` can only be run inside a ticket channel.');
+            }
+
+            const ticketsModule = require('../../modules/tickets');
+            if (!ticketsModule.isStaff(ctx.member, ctx.guild)) {
+                return ctx.reply('❌ Only staff members can claim tickets.');
+            }
+
+            const res = await ticketsModule.claimTicketChannel({ channel: ctx.channel, staffMember: ctx.user });
+            if (res.error) return ctx.reply(res.error);
+            return ctx.reply(`✋ Ticket claimed by <@${ctx.user.id}>!`);
+        }
+    },
+
+    // 9e. DEDICATED TICKET TRANSCRIPT SHORTCUT
+    {
+        name: 'tickettranscript',
+        aliases: ['transcript'],
+        category: 'Systems',
+        description: 'Export and download the full chat transcript of this ticket.',
+        usage: ',transcript',
+        permissions: [],
+        async execute(ctx) {
+            const isTicketChannel = ctx.channel.name.startsWith('ticket-') || 
+                                    ctx.channel.name.startsWith('claimed-') || 
+                                    ctx.channel.name.startsWith('closed-') || 
+                                    (ctx.channel.topic && /\d{17,20}/.test(ctx.channel.topic));
+
+            if (!isTicketChannel) {
+                return ctx.reply('❌ `,transcript` can only be run inside a ticket channel.');
+            }
+
+            const ticketsModule = require('../../modules/tickets');
+            const { attachment, transcriptEmbed } = await ticketsModule.generateTranscript({
+                channel: ctx.channel,
+                guild: ctx.guild,
+                user: ctx.user
+            });
+
+            return ctx.reply({ embeds: [transcriptEmbed], files: [attachment] });
         }
     },
 
@@ -451,26 +792,33 @@ const commands = [
         name: 'applysetup',
         category: 'Systems',
         description: 'Spawn the staff & partner application panel.',
-        usage: ',applysetup',
-        permissions: [PermissionFlagsBits.Administrator],
+        usage: ',applysetup [#channel]',
+        permissions: [PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild],
         async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
+            if (!ctx.member.permissions?.has(PermissionFlagsBits.Administrator) && 
+                !ctx.member.permissions?.has(PermissionFlagsBits.ManageGuild) && 
+                !config.BOT_OWNERS.includes(ctx.user.id)) {
+                return ctx.reply('❌ Administrator or Manage Server permission required.');
             }
+
+            const targetChannel = ctx.isSlash 
+                ? (ctx.options.getChannel('channel') || ctx.channel)
+                : (ctx.message.mentions.channels.first() || (ctx.args[0] ? ctx.guild.channels.cache.get(ctx.args[0]) : null) || ctx.channel);
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
                 .setTitle('📋 Staff & Partner Applications')
                 .setDescription('Interested in joining our staff team or becoming an official server partner?\nClick below to submit your application!')
-                .setFooter({ text: 'Application Dashboard • Prefix: ,' });
+                .setFooter({ text: 'Application Dashboard • High Lifetime 24/7' })
+                .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('app_mod').setLabel('Apply for Staff').setEmoji('🛡️').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('app_partner').setLabel('Apply for Partner').setEmoji('🤝').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('sys_apply_staff').setLabel('Apply for Staff').setEmoji('🛡️').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('sys_apply_partner').setLabel('Apply for Partner').setEmoji('🤝').setStyle(ButtonStyle.Secondary)
             );
 
-            await ctx.channel.send({ embeds: [embed], components: [row] });
-            if (ctx.isSlash) ctx.reply({ content: '✅ Application panel spawned!', ephemeral: true });
+            await targetChannel.send({ embeds: [embed], components: [row] });
+            return ctx.reply({ content: `✅ Application panel spawned in <#${targetChannel.id}>!`, ephemeral: true });
         }
     },
 
