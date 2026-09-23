@@ -324,8 +324,8 @@ setInterval(() => {
         console.warn(`⚠️ [Watchdog] MongoDB not ready (readyState: ${mongoose.connection.readyState}, down for ${downtime}s). Triggering active reconnect...`);
         attemptMongoReconnect();
 
-        if (downtime > 60) {
-            console.error('🛑 [Watchdog] MongoDB disconnected for >60s. Restarting process to clear dead network sockets...');
+        if (downtime > 300) {
+            console.error('🛑 [Watchdog] MongoDB disconnected for >300s. Restarting process to clear dead network sockets...');
             process.exit(1);
         }
     }
@@ -562,6 +562,15 @@ async function startBot() {
 
         const { initLanguageCache } = require('./utils/i18n');
         await initLanguageCache(client).catch(() => {});
+    } catch (mongoInitErr) {
+        console.warn(`⚠️ [MongoDB Boot] Initial connect failed (${mongoInitErr.message}). Continuing bot startup with local fallbacks; reconnecting in background...`);
+        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+        if (!mongoReconnectInterval) {
+            mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+        }
+    }
+
+    try {
 
         mongoose.connection.on('disconnected', () => {
             console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
