@@ -118,7 +118,7 @@ Return ONLY a JSON object with this exact schema (no markdown, no code fences):
   "reason": "short explanation of why it was flagged or 'Clean' if safe"
 }`;
 
-    const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+    const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-3.5-flash'];
     for (const model of models) {
         try {
             const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;

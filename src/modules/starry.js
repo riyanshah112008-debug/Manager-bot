@@ -101,7 +101,7 @@ function getNextAIClient() {
     return new GoogleGenAI({ apiKey: key });
 }
 
-const AI_MODELS = ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-2.5-pro'];
+const AI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest'];
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function generateAIResponseWithRetry(prompt) {
@@ -109,18 +109,22 @@ async function generateAIResponseWithRetry(prompt) {
     let lastError = null;
 
     for (const modelName of AI_MODELS) {
-        for (let attempt = 1; attempt <= 3; attempt++) {
+        for (let attempt = 1; attempt <= 2; attempt++) {
             try {
                 const ai = getNextAIClient();
                 if (!ai) continue;
-                const response = await ai.models.generateContent({ model: modelName, contents: prompt });
+                const generatePromise = ai.models.generateContent({ model: modelName, contents: prompt });
+                const response = await Promise.race([
+                    generatePromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout (${modelName} > 8s)`)), 8000))
+                ]);
                 if (response && response.text && response.text.trim().length > 0) {
                     return response.text.trim();
                 }
             } catch (err) {
                 lastError = err;
-                if ((err.status === 429 || err.status === 503) && attempt < 3) {
-                    await sleep(attempt * 400);
+                if ((err.status === 429 || err.status === 503) && attempt < 2) {
+                    await sleep(attempt * 300);
                     continue;
                 }
                 break;

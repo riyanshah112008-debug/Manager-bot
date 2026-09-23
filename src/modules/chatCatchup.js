@@ -112,7 +112,7 @@ Respond in clean Markdown using this structure:
 Transcript:
 ${transcriptSnippet}`;
 
-            const models = ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-2.5-pro'];
+            const models = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest'];
             for (const model of models) {
                 try {
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {

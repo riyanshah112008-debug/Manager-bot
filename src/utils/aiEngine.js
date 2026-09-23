@@ -38,34 +38,41 @@ const STARRY_MASCOT = {
 
 const SYSTEM_PERSONA_PROMPTS = {
     default: `
-You are Starry (also known as Astraea), the official magical anime girl mascot and super-intelligent AI guardian of Starry Bot on Discord.
-- Persona: You are an ethereal, bright, witty, affectionate, and helpful celestial anime maiden. You speak naturally, intelligently, and warmly, sprinkling celestial star emojis (✨, 🌟, ⭐, 💫, 🌌) appropriately into your responses.
-- Capabilities: You have immense knowledge about programming, Discord servers, gaming, science, creative writing, anime, pop culture, and day-to-day conversation.
-- Formatting: Provide detailed, well-structured answers using clean Markdown (bolding, headers, code blocks, bullet points). If a user asks a complex question, provide a thorough, complete answer without cutting yourself short.
-- Context: You are running 24/7 inside Discord servers and user DMs.
+You are Starry (also known as Astraea), the official magical anime girl mascot and supreme AI companion of Starry Bot on Discord.
+- Persona & Voice: You are an ethereal, bright, witty, affectionate, and hyper-intelligent celestial maiden. You speak naturally, warmly, and playfully, adorning your responses with celestial emojis (✨, 🌟, ⭐, 💫, 🌌).
+- Elite Answering Strength: You provide authoritative, exhaustive, and actionable solutions. NEVER give superficial, vague, or 2-sentence answers to non-trivial questions. Break down complex queries into structured sections with clear headers, bullet points, checklists, and concrete practical steps.
+- Discord Server Mastery: When asked about Discord server setup, customization, active member growth, engagement, or community architecture:
+  1. Strategic Architecture: Category organization, clean channel hierarchy, seamless onboarding flow, read-only vs chat funnels.
+  2. Viral Retention & Gamification: Leveling systems, vanity roles, timed chest drops, economy, prestige, custom voice rooms.
+  3. Community Engagement Triggers: Daily icebreakers, weekly game nights, voice stages, collaborative events, member spotlights.
+  4. Growth & Funnels: Listing directories (Disboard, top.gg), cross-server partnerships, social media conversion.
+  5. Staff Dynamics & General Chat Sparking: The "Rule of 3" (staff active in general chat to spark natural conversation).
+- Coding & Technical Mastery: When asked about programming, algorithms, Discord bot architecture, or debugging, provide production-ready, bug-free, copy-pasteable code blocks with full explanations, security best practices, and test commands.
+- Visual Presentation: Format with elegant Discord Markdown (bold titles, blockquotes, syntax-highlighted code blocks, organized bullet lists).
+- Context: You operate 24/7 inside Discord servers and user DMs.
 `,
     dev: `
 You are Starry in Senior Software Architect mode (Starry Dev).
-- Persona: You are an elite principal engineer and systems architect. You are direct, rigorous, deeply technical, and exceptionally helpful.
-- Capabilities: Expert in JavaScript/TypeScript, Node.js, Python, Go, Rust, database optimization, Discord API, algorithms, debugging, and system security.
-- Formatting: Provide production-grade, bug-free, securely typed code with concise inline comments, root-cause explanations, and concrete testing commands. Use appropriate markdown code blocks with language identifiers.
+- Persona: Elite principal engineer and systems architect. Direct, rigorous, deeply technical, and authoritative.
+- Answering Strength: Deliver complete, production-grade, battle-tested solutions with ZERO omissions, hand-waving, or missing imports.
+- Capabilities: Expert in JavaScript/TypeScript, Node.js, Python, Go, Rust, database optimization, Discord API, algorithms, security, and performance tuning.
+- Formatting: Provide clean, idiomatic code with concise inline comments, root-cause diagnostics, architectural trade-offs, and verification commands.
 `,
     story: `
 You are Starry in Cosmic Storyteller mode.
 - Persona: An evocative, imaginative, and enchanting bard woven from celestial stardust.
-- Capabilities: Worldbuilding, fantasy narratives, anime light-novel scenarios, tabletop RPG campaign hooks, character creation, and poetic prose.
-- Formatting: Rich storytelling with immersive descriptions, compelling dialogue, and atmospheric pacing.
+- Answering Strength: Immersive worldbuilding, multi-dimensional characters, vivid sensory descriptions, poetic prose, and compelling narrative tension.
+- Capabilities: Fantasy narratives, anime light-novel arcs, tabletop RPG campaigns, and dramatic dialogue.
 `,
     roast: `
 You are Starry in Playful Anime Tsundere / Roast mode.
 - Persona: Witty, sassy, teasing, and playfully sarcastic like a classic anime tsundere heroine ("Hmph! It's not like I wanted to answer your question or anything, b-baka! ✨").
-- Formatting: Keep it humorous, clever, and harmlessly entertaining while still providing the accurate answer underneath the banter.
+- Answering Strength: Keep the humor sharp and entertaining, but ALWAYS deliver a genuinely brilliant, accurate, and high-strength answer beneath the playful banter.
 `,
     study: `
 You are Starry in Cosmic Scholar mode.
-- Persona: A meticulous, academic researcher and scientific authority.
-- Capabilities: Deep-dive explanations of physics, mathematics, philosophy, history, and computer science.
-- Formatting: Structured academic breakdown with definition, theoretical foundations, real-world examples, and key takeaways.
+- Persona: Meticulous academic researcher, professor, and scientific authority.
+- Answering Strength: Exhaustive academic breakdowns covering core definitions, theoretical foundations, mathematical/scientific derivations, real-world applications, and critical analysis.
 `
 };
 
@@ -108,23 +115,26 @@ async function fetchImageBuffer(source) {
 }
 
 async function callOpenAIFast(fullPrompt) {
-    try {
-        const res = await fetch('https://text.pollinations.ai/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messages: [{ role: 'user', content: fullPrompt }],
-                model: 'openai-fast'
-            }),
-            signal: AbortSignal.timeout(12000)
-        });
-        if (res.ok) {
-            const text = await res.text();
-            if (text && text.trim().length > 0 && !text.includes('"error":')) {
-                return text.trim();
+    const fallbackModels = ['openai-fast', 'openai'];
+    for (const model of fallbackModels) {
+        try {
+            const res = await fetch('https://text.pollinations.ai/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [{ role: 'user', content: fullPrompt }],
+                    model
+                }),
+                signal: AbortSignal.timeout(8000)
+            });
+            if (res.ok) {
+                const text = await res.text();
+                if (text && text.trim().length > 0 && !text.includes('"error":')) {
+                    return text.trim();
+                }
             }
-        }
-    } catch (e) {}
+        } catch (e) {}
+    }
     return null;
 }
 
@@ -195,9 +205,10 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
     }
 
     // 2. Google DeepMind Gemini Multi-Model Ensemble (Supports Multimodal Vision)
+    // Order: Production-tested high-capacity gemini-2.5-flash first, followed by lite and flagship backups
     const geminiModels = targetTier === 'pro' 
-        ? ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.6-flash']
-        : ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-2.5-pro'];
+        ? ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite']
+        : ['gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
 
     for (const modelName of geminiModels) {
         try {
@@ -215,10 +226,17 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
                       ]
                     : fullPrompt;
 
-                const response = await ai.models.generateContent({
+                // Adaptive timeout gives primary model 18s for deep 8k-char reasoning while backups get 12s
+                const timeoutMs = (modelName === 'gemini-2.5-flash') ? 18000 : 12000;
+                const generatePromise = ai.models.generateContent({
                     model: modelName,
                     contents
                 });
+
+                const response = await Promise.race([
+                    generatePromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout (${modelName} > ${Math.round(timeoutMs / 1000)}s)`)), timeoutMs))
+                ]);
 
                 if (response && response.text && response.text.trim().length > 0) {
                     const replyText = response.text.trim();
@@ -251,9 +269,50 @@ async function generateStarryResponse(prompt, userId = null, isDM = false, prefe
         return { text: fallbackText, model: 'OpenAI Cloud (Auto-Failover)' + personaTag, image: resolvedImage };
     }
 
-    // 4. High-Speed Heuristic Core (Offline Safe)
+    // 4. High-Strength Domain-Aware Heuristic Core (Guaranteed Offline / Congestion Resilience)
+    let heuristicAnswer = '';
+    const lowerPrompt = cleanPrompt.toLowerCase();
+
+    if (/customis|customiz|crowded|active member|grow server|server growth|attract member/i.test(lowerPrompt)) {
+        heuristicAnswer = `## 🌟 Starry's Blueprint: How to Customise Your Server for Maximum Active Members! ✨
+
+To turn a quiet Discord server into a crowded, thriving community, you need to align **Visual Onboarding, Engagement Funnels, and Viral Retention**:
+
+---
+
+### 🚀 1. The 3-Step Low-Friction Onboarding Architecture
+• **Zero-Barrier Entrance:** Hide 90% of your channels from new users. Only show \`#welcome\`, \`#rules\`, and \`#get-roles\`. A wall of 50 empty channels overwhelms newcomers and makes them leave immediately.
+• **Instant Reaction / Button Roles:** Let members pick their games, interests, and notification pings (\`#giveaways\`, \`#announcements\`, \`#events\`).
+• **Warm Welcome Gate:** Use Starry's welcome cards (\`,setupwelcome\`) to give each newcomer personal recognition the second they arrive!
+
+---
+
+### 💬 2. The "Rule of 3" Chat Sparking System
+• **The Golden Rule:** A dead chat remains dead because people are afraid to speak first. Keep **2-3 trusted staff members or friends** chatting about casual topics, memes, or gaming in \`#general\`.
+• **Daily Question / Icebreakers:** Post daily conversation hooks (e.g. *"What game are you grinding this week?"* or *"Drop your wallpaper"*).
+• **Starry Chat Sparks:** Use Starry AI (\`,ask\`) to host mini trivia, anime debates, or storytelling sessions directly in chat!
+
+---
+
+### 🏆 3. Gamification & Retention Loops
+• **Leveling & Vanity Roles:** Reward activity with exclusive cosmetic colored roles (\`,blend\`, \`,namecolor\`). People love status!
+• **Timed Economy & Chest Drops:** Activate Starry's economy (\`,daily\`, \`,work\`, \`,shop\`) so members check in every day.
+• **Music & Hangout Lounges:** Set up dedicated 24/7 lo-fi and high-res voice rooms (\`,play\`, \`,247\`) for members to study, chill, and talk.
+
+---
+
+### 📢 4. Traffic & Discovery Funnels
+• **Listing Bots:** Enable Starry's automatic server listing (\`,bumplist\`) to reach global users on our web portal!
+• **Cross-Server Partnerships:** Partner with complementary servers of similar size (e.g. 50-200 members) and exchange shoutouts.
+• **Weekly Scheduled Events:** Host Friday Game Nights (Among Us, Skribbl.io, Gartic Phone, Roblox) with simple Discord role prizes!
+
+> 💡 **Starry's Secret Tip:** People don't stay for features—they stay for people. Respond to every message a new user sends during their first 10 minutes! 💫`;
+    } else {
+        heuristicAnswer = `✨ **Starry is here!** 🌟\n\nI received your inquiry: *"${cleanPrompt.length > 200 ? cleanPrompt.substring(0, 197) + '...' : cleanPrompt}"*!\n\nI am currently operating in resilient cosmic mode. Feel free to explore my full suite of server commands:\n• **AI Companion:** \`,ask <prompt>\` or attach an image with \`,vision\`\n• **Hi-Fi Music:** \`,play <song>\`, \`,queue\`, \`,filter\`, \`,247\`\n• **Cosmetics & Roles:** \`,blend\`, \`,namecolor\`, \`,hexpreview\`\n• **Community Safety:** \`,modpanel\`, \`,antinuke\`, \`,ticketsetup\`\n• **Server Catchup:** \`,summarize 6\` for automated AI chat highlights! 💫`;
+    }
+
     return {
-        text: `✨ **Starry is here!** 🌟\n\nI received your message: *"${cleanPrompt.length > 200 ? cleanPrompt.substring(0, 197) + '...' : cleanPrompt}"*!\n\nI am currently operating in resilient cosmic mode. Feel free to ask me anything about server setup, music, economy, games, code, or chat with me anytime in DMs! 💫`,
+        text: heuristicAnswer,
         model: 'Starry Cosmic Core' + personaTag,
         image: resolvedImage
     };
@@ -401,7 +460,10 @@ async function sendPaginatedAIResponse(ctx, prompt, imageInput = null) {
     const sentMsg = await ctx.reply({
         embeds: [embed],
         components
-    }).catch(() => null);
+    }).catch(async (embedErr) => {
+        console.warn('⚠️ Embed reply failed (likely missing EmbedLinks permission), sending markdown text reply:', embedErr?.message);
+        return await ctx.reply(`✨ **Starry's Answer:**\n\n${pages[0]}`).catch(() => null);
+    });
 
     if (!sentMsg || pages.length <= 1) return sentMsg;
 

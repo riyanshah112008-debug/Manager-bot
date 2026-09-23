@@ -22,7 +22,7 @@ async function callAI(prompt, systemInstruction = '', model = 'gemini-2.5-flash'
     const apiKey = getGeminiApiKey();
     if (!apiKey) return null;
 
-    const candidateModels = [model, 'gemini-3.6-flash', 'gemini-2.5-pro'].filter((v, i, a) => a.indexOf(v) === i);
+    const candidateModels = [model, 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-flash-lite-latest'].filter((v, i, a) => a.indexOf(v) === i);
     for (const m of candidateModels) {
         try {
             const payload = {

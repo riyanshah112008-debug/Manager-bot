@@ -111,11 +111,12 @@ function getFilesRecursively(dir) {
 
 // 🛡️ Global Command Safety Execution Guard (Prevents indefinite hangs on slow APIs / DB locks)
 async function executeSafely(command, ctx, client, cmdName) {
-    const TIMEOUT_MS = 30000;
+    const isAiCommand = command.category === 'Utility' && ['ask', 'ai', 'gemini', 'gpt', 'vision', 'summarize', 'codebot'].includes(command.name);
+    const TIMEOUT_MS = command.timeout || (isAiCommand ? 60000 : 30000);
     let timer;
     const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => {
-            reject(new Error(`Command Execution Timed Out (>30s)`));
+            reject(new Error(`Command Execution Timed Out (>${Math.round(TIMEOUT_MS / 1000)}s)`));
         }, TIMEOUT_MS);
     });
 
