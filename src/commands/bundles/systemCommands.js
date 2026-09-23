@@ -478,7 +478,14 @@ const commands = [
                     .setFooter({ text: 'Starry Ticket Engine • High Lifetime 24/7' })
                     .setTimestamp();
 
-                return ctx.reply({ embeds: [confirmEmbed], ephemeral: true });
+                if (ctx.isSlash) {
+                    return ctx.reply({ embeds: [confirmEmbed], ephemeral: true });
+                } else if (targetChannel.id === ctx.channel.id) {
+                    await ctx.message?.delete().catch(() => {});
+                    return;
+                } else {
+                    return ctx.reply({ embeds: [confirmEmbed] });
+                }
             } catch (err) {
                 console.error('Ticket setup error:', err);
                 return ctx.reply(`❌ Failed to complete ticket setup: \`${err.message}\``);
@@ -537,7 +544,14 @@ const commands = [
                     )
                     .setTimestamp();
 
-                return ctx.reply({ embeds: [confirmEmbed], ephemeral: true });
+                if (ctx.isSlash) {
+                    return ctx.reply({ embeds: [confirmEmbed], ephemeral: true });
+                } else if (targetChannel.id === ctx.channel.id) {
+                    await ctx.message?.delete().catch(() => {});
+                    return;
+                } else {
+                    return ctx.reply({ embeds: [confirmEmbed] });
+                }
             }
 
             // Ticket Channel Check for management subcommands
@@ -818,7 +832,14 @@ const commands = [
             );
 
             await targetChannel.send({ embeds: [embed], components: [row] });
-            return ctx.reply({ content: `✅ Application panel spawned in <#${targetChannel.id}>!`, ephemeral: true });
+            if (ctx.isSlash) {
+                return ctx.reply({ content: `✅ Application panel spawned in <#${targetChannel.id}>!`, ephemeral: true });
+            } else if (targetChannel.id === ctx.channel.id) {
+                await ctx.message?.delete().catch(() => {});
+                return;
+            } else {
+                return ctx.reply({ content: `✅ Application panel spawned in <#${targetChannel.id}>!` });
+            }
         }
     },
 
