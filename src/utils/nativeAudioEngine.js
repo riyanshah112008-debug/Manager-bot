@@ -11,7 +11,8 @@ const {
     AudioPlayerStatus,
     VoiceConnectionStatus,
     entersState,
-    StreamType
+    StreamType,
+    NoSubscriberBehavior
 } = require('@discordjs/voice');
 const play = require('play-dl');
 const fetch = require('node-fetch');
@@ -375,8 +376,12 @@ class StarryGuildPlayer {
         this.disconnectTimeout = null;
         this._isSeeking = false;
 
-        // Initialize Discord.js AudioPlayer
-        this.player = createAudioPlayer();
+        // Initialize Discord.js AudioPlayer with Play on no-subscriber behavior
+        this.player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play
+            }
+        });
         this.connection = null;
 
         this.setupPlayerEvents();
@@ -433,7 +438,8 @@ class StarryGuildPlayer {
                 adapterCreator: adapterCreator,
                 selfDeaf: true,
                 selfMute: false,
-                group: botGroup
+                group: botGroup,
+                daveEncryption: false
             });
 
             this.connection.on('stateChange', (oldState, newState) => {

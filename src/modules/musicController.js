@@ -503,7 +503,64 @@ class MusicControllerEngine {
             }
         }
 
-        // Direct Route: Starry Native Audio Engine (Powered by @discordjs/voice, @snazzah/davey & DSP EQ)
+        const manager = client.manager;
+        const hasLavalink = Boolean(
+            manager &&
+            manager.shoukaku &&
+            Array.from(manager.shoukaku.nodes.values()).some(n => n.state === 1)
+        );
+
+        // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
+        if (hasLavalink) {
+            try {
+                const res = await manager.search(content, { requester: message.author });
+                if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
+                    const temp = await message.channel.send({
+                        content: `❌ No audio results found for: \`${content.substring(0, 50)}\``
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+                    return;
+                }
+
+                let player = manager.getPlayer(message.guild.id);
+                if (!player) {
+                    player = await manager.createPlayer({
+                        guildId: message.guild.id,
+                        voiceId: voiceChannel.id,
+                        textId: message.channel.id,
+                        deaf: true
+                    });
+                }
+
+                if (player.voiceId !== voiceChannel.id) {
+                    player.setVoiceChannel(voiceChannel.id);
+                }
+
+                if (res.loadType === 'playlist') {
+                    for (const t of res.tracks) player.queue.add(t);
+                    if (!player.playing && !player.paused) player.play();
+                    const temp = await message.channel.send({
+                        content: `📚 **Enqueued Playlist:** \`${(res.playlist?.name || 'Playlist').substring(0, 45)}\` (**${res.tracks.length}** tracks) • ${message.author}`
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+                } else {
+                    const track = res.tracks[0];
+                    player.queue.add(track);
+                    if (!player.playing && !player.paused) player.play();
+                    const temp = await message.channel.send({
+                        content: `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${message.author}`
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 3500);
+                }
+
+                await this.update(message.guild.id, client);
+                return;
+            } catch (kErr) {
+                console.warn('⚠️ [MusicController Lavalink Fallback]:', kErr.message || kErr);
+            }
+        }
+
+        // Route 2 (Fallback): Starry Native Audio Engine (Local playback / Termux)
         const player = StarryAudioEngine.getOrCreatePlayer(client, message.guild.id, voiceChannel, message.channel);
         player.connect().catch(() => {});
 

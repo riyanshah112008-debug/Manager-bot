@@ -46,11 +46,6 @@ function getVoiceGuard(ctx) {
 }
 
 function getActivePlayer(client, guildId) {
-    let nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
-    if (nativePlayer && !nativePlayer.destroyed) {
-        return nativePlayer;
-    }
-
     let kPlayer = client.manager?.getPlayer(guildId);
     if (!kPlayer && client.multiBot?.instances) {
         for (const inst of client.multiBot.instances.values()) {
@@ -91,7 +86,13 @@ function getActivePlayer(client, guildId) {
             setFilter: (f) => applyKazagumoFilter(kPlayer, f)
         };
     }
-    return StarryAudioEngine.getPlayer(guildId, client);
+
+    const nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
+    if (nativePlayer && !nativePlayer.destroyed) {
+        return nativePlayer;
+    }
+
+    return null;
 }
 
 const commands = [
@@ -117,15 +118,123 @@ const commands = [
             if (ctx.isSlash) await ctx.defer();
 
             const targetClient = guard.workerClient || ctx.client;
+            const manager = targetClient.manager || ctx.client.manager;
+            const hasLavalink = Boolean(
+                manager && 
+                manager.shoukaku && 
+                Array.from(manager.shoukaku.nodes.values()).some(n => n.state === 1)
+            );
 
-            // Autonomous Route: Native Audio Engine (Prioritized for DAVE protocol & direct Termux playback)
-            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            
             let loadingMsg = null;
             if (!ctx.isSlash) {
                 loadingMsg = await ctx.reply(`🔍 **Searching:** \`${query.length > 50 ? query.substring(0, 47) + '...' : query}\` • *Connecting Hi-Fi Audio...*`).catch(() => null);
-                player.loadingMessage = loadingMsg;
             }
+
+            // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
+            if (hasLavalink) {
+                try {
+                    const res = await manager.search(query, { requester: ctx.user });
+                    if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
+                        if (loadingMsg) loadingMsg.delete().catch(() => {});
+                        return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
+                    }
+
+                    let player = manager.getPlayer(ctx.guild.id);
+                    if (!player) {
+                        player = await manager.createPlayer({
+                            guildId: ctx.guild.id,
+                            voiceId: guard.voiceChannel.id,
+                            textId: ctx.channel.id,
+                            deaf: true
+                        });
+                    }
+
+                    if (player.voiceId !== guard.voiceChannel.id) {
+                        player.setVoiceChannel(guard.voiceChannel.id);
+                    }
+
+                    if (loadingMsg) {
+                        player.data.set('loadingMessage', loadingMsg);
+                    }
+
+                    if (res.loadType === 'playlist') {
+                        for (const track of res.tracks) {
+                            player.queue.add(track);
+                        }
+                        if (!player.playing && !player.paused) player.play();
+
+                        if (loadingMsg) {
+                            loadingMsg.delete().catch(() => {});
+                            player.data.delete('loadingMessage');
+                        }
+
+                        const totalDurationMs = res.tracks.reduce((acc, t) => acc + (t.length || 0), 0);
+                        const totalDurationStr = formatTime(totalDurationMs);
+
+                        const previewTracks = res.tracks.slice(0, 3).map((t, idx) => {
+                            return `\`${idx + 1}.\` **[${(t.title || 'Track').substring(0, 45)}](${t.uri || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` (\`${formatTime(t.length)}\`)`;
+                        }).join('\n');
+                        const remainingCount = res.tracks.length > 3 ? `\n*... and **${res.tracks.length - 3}** more tracks*` : '';
+
+                        const embed = new EmbedBuilder()
+                            .setColor('#5865F2')
+                            .setAuthor({ 
+                                name: `📚 Playlist Enqueued • ${res.playlist?.name || 'Online Stream'}`, 
+                                iconURL: ctx.user.displayAvatarURL({ dynamic: true }) 
+                            })
+                            .setTitle(res.playlist?.name ? res.playlist.name.substring(0, 95) : 'Loaded Playlist')
+                            .setThumbnail(res.tracks[0]?.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+                            .setDescription(
+                                `✅ Added **${res.tracks.length}** tracks to the server queue!\n\n` +
+                                `👤 **Curator / Artist:** \`${res.tracks[0]?.author || 'Featured Artist'}\`\n` +
+                                `🕒 **Total Estimated Playtime:** \`${totalDurationStr}\`\n` +
+                                `🔠 **Queue Status:** Currently playing • \`${player.queue.length}\` songs in queue\n` +
+                                `🔊 **Mastering:** \`Lavalink Studio Hi-Fi Active\`\n\n` +
+                                `📝 **Upcoming Tracks Preview:**\n` +
+                                `${previewTracks}${remainingCount}`
+                            )
+                            .setFooter({ text: `Requested by ${ctx.user.tag} • Prefix: ,`, iconURL: ctx.user.displayAvatarURL() })
+                            .setTimestamp();
+                        return ctx.reply({ embeds: [embed] });
+                    } else {
+                        const track = res.tracks[0];
+                        if (!player.playing && !player.paused && !player.queue.current) {
+                            player.queue.add(track);
+                            player.play();
+                            // loadingMsg will be deleted by playerStart handler in musicManager.js
+                        } else {
+                            if (loadingMsg) {
+                                loadingMsg.delete().catch(() => {});
+                                player.data.delete('loadingMessage');
+                            }
+                            player.queue.add(track);
+                            const embed = new EmbedBuilder()
+                                .setColor('#5865F2')
+                                .setAuthor({ name: 'Track Queued • Studio Sound Active', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                                .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
+                                .setURL(track.uri || 'https://discord.gg')
+                                .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
+                                .setDescription(
+                                    `👤 **Artist:** \`${track.author || 'Artist'}\`\n` +
+                                    `🕒 **Duration:** \`${formatTime(track.length)}\`\n` +
+                                    `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
+                                    `🌐 **Source:** \`${track.sourceName || 'Lavalink Hi-Fi'}\`\n` +
+                                    `🔊 **Sound Profile:** \`Studio Dynamic Audio\``
+                                )
+                                .setFooter({ text: `Requested by ${ctx.user.tag} • Prefix: ,` })
+                                .setTimestamp();
+                            return ctx.reply({ embeds: [embed] });
+                        }
+                    }
+                    return;
+                } catch (kErr) {
+                    console.warn('⚠️ [Kazagumo Lavalink Playback Notice]:', kErr.message || kErr);
+                }
+            }
+
+            // Route 2 (Fallback): Native Audio Engine (Local playback / Termux)
+            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            if (loadingMsg) player.loadingMessage = loadingMsg;
 
             const connectPromise = player.connect().catch(() => {});
             const searchPromise = StarryAudioEngine.search(query, ctx.user);
