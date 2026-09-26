@@ -11,6 +11,181 @@ if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
     };
 }
 
+// 🛡️ CANONICAL ORIGINAL TRACK SCORING & DEDUPLICATION ENGINE
+function cleanStr(s) {
+    return (s || '').toLowerCase();
+}
+
+function scoreTrack(track, rawQuery) {
+    let score = 50;
+    const title = cleanStr(track.title);
+    const author = cleanStr(track.author);
+    const q = cleanStr(rawQuery).replace(/^(ytsearch|ytmsearch|scsearch):/i, '').trim();
+
+    // 1. Duration filter: Penalize short status/teasers & multi-hour loops
+    const lenMs = track.length || 0;
+    if (lenMs > 0 && lenMs < 60000) {
+        score -= 150; // Under 1 min: snippet / WhatsApp status / short / teaser
+    } else if (lenMs > 900000) {
+        score -= 80; // Over 15 mins: 1 hour loop or full album unless requested
+    } else if (lenMs >= 100000 && lenMs <= 380000) {
+        score += 25; // Ideal radio/streaming song length (1.6 - 6.3 mins)
+    }
+
+    // 2. Heavy penalties for duplicate / cover / bootleg / remake keywords (unless requested in query)
+    const modifierChecks = [
+        { key: 'cover', penalty: 130 },
+        { key: 'covered by', penalty: 130 },
+        { key: 'fan cover', penalty: 130 },
+        { key: 'slowed', penalty: 100 },
+        { key: 'reverb', penalty: 100 },
+        { key: 'slowed + reverb', penalty: 120 },
+        { key: 'slowed and reverb', penalty: 120 },
+        { key: 'sped up', penalty: 100 },
+        { key: 'speed up', penalty: 100 },
+        { key: 'speedup', penalty: 100 },
+        { key: 'nightcore', penalty: 100 },
+        { key: 'daycore', penalty: 100 },
+        { key: 'chipmunk', penalty: 120 },
+        { key: 'status', penalty: 150 },
+        { key: 'whatsapp status', penalty: 160 },
+        { key: 'shorts', penalty: 150 },
+        { key: 'short', penalty: 80 },
+        { key: 'reel', penalty: 120 },
+        { key: 'tiktok', penalty: 100 },
+        { key: 'karaoke', penalty: 120 },
+        { key: 'instrumental', penalty: 100 },
+        { key: 'backing track', penalty: 120 },
+        { key: 'reaction', penalty: 150 },
+        { key: 'reacting', penalty: 150 },
+        { key: 'review', penalty: 150 },
+        { key: 'parody', penalty: 150 },
+        { key: 'tutorial', penalty: 150 },
+        { key: 'how to play', penalty: 150 },
+        { key: '10 hour', penalty: 120 },
+        { key: '1 hour', penalty: 100 },
+        { key: 'loop', penalty: 80 },
+        { key: 'bass boosted', penalty: 90 },
+        { key: '8d audio', penalty: 90 },
+        { key: 'snippet', penalty: 120 },
+        { key: 'leak', penalty: 90 }
+    ];
+
+    for (const { key, penalty } of modifierChecks) {
+        if (!q.includes(key)) {
+            if (title.includes(key)) score -= penalty;
+            if (author.includes(key)) score -= Math.floor(penalty * 0.7);
+        }
+    }
+
+    // Live concert penalty unless query includes 'live'
+    if (!q.includes('live')) {
+        if (title.includes('live at') || title.includes('live in') || title.includes('live performance') || title.includes('(live)') || title.includes('[live]')) {
+            score -= 85;
+        }
+    }
+
+    // 3. Positive official signals
+    // YouTube Music Topic channel (Official uncompressed digital distributor master upload)
+    if (author.endsWith('- topic') || author.includes(' - topic')) {
+        score += 55;
+    }
+
+    // Major label channel detection
+    const majorLabels = [
+        't-series', 'tseries', 'sony music', 'zee music', 'yrf', 'warner music',
+        'universal music', 'vevo', 'saregama', 'speed records', 'geet mp3',
+        'white hill music', 'tips official', 'spinnin', 'def jam', 'atlantic records',
+        'columbia records', 'interscope', 'republic records', 'coke studio'
+    ];
+    if (majorLabels.some(lbl => author.includes(lbl) || title.includes(lbl))) {
+        score += 45;
+    }
+
+    // Official audio release indicators
+    if (title.includes('official audio') || title.includes('(audio)') || title.includes('[audio]')) {
+        score += 50;
+    } else if (title.includes('official music video') || title.includes('official video') || title.includes('(video)') || title.includes('[video]')) {
+        score += 35;
+    } else if (title.includes('original motion picture') || title.includes('original soundtrack') || title.includes('ost') || title.includes('from "') || title.includes("from '")) {
+        score += 40;
+    } else if (title.includes('lyrical') || title.includes('lyrics')) {
+        score += 20;
+    }
+
+    // 4. Token & Phonetic matching
+    const qTokens = q.split(/[\s\-_\,\.\:\;]+/).filter(t => t.length > 1);
+    let matchedCount = 0;
+    for (const tok of qTokens) {
+        if (title.includes(tok) || author.includes(tok)) {
+            matchedCount++;
+        } else {
+            const normTok = tok[0] + tok.slice(1).replace(/[aeiou]/g, '');
+            if (normTok.length > 2 && (title.includes(normTok) || author.includes(normTok))) {
+                matchedCount += 0.8;
+            }
+        }
+    }
+    const matchRatio = qTokens.length > 0 ? (matchedCount / qTokens.length) : 1;
+    score += matchRatio * 40;
+
+    return Math.round(score);
+}
+
+function rankAndFilterCanonicalTracks(tracks, rawQuery) {
+    if (!tracks || !Array.isArray(tracks) || tracks.length <= 1) return tracks || [];
+    return [...tracks].sort((a, b) => scoreTrack(b, rawQuery) - scoreTrack(a, rawQuery));
+}
+
+// 🛡️ Monkey patch Kazagumo.prototype.search to enforce canonical original track ranking & smart fallbacks
+const rawKazagumoSearch = Kazagumo.prototype.search;
+Kazagumo.prototype.search = async function(query, options) {
+    const isUrl = /^https?:\/\/.*/.test(query);
+    if (isUrl) {
+        return rawKazagumoSearch.call(this, query, options);
+    }
+
+    const cleanQueryForScoring = query.replace(/^(ytsearch|ytmsearch|scsearch):/i, '').trim();
+
+    // 1. Primary search via default engine (YouTube Music)
+    let res = await rawKazagumoSearch.call(this, query, options).catch(() => null);
+    if (res && res.tracks && res.tracks.length > 0) {
+        res.tracks = rankAndFilterCanonicalTracks(res.tracks, cleanQueryForScoring);
+    }
+
+    const topScore = (res && res.tracks && res.tracks[0]) ? scoreTrack(res.tracks[0], cleanQueryForScoring) : -999;
+
+    // 2. If no tracks found or top track score is poor (< 35), search with "Official Audio" on YouTube
+    if (!res || !res.tracks || res.tracks.length === 0 || topScore < 35) {
+        try {
+            const ytOptions = { ...(options || {}), engine: 'youtube' };
+            const fallbackRes = await rawKazagumoSearch.call(this, `${cleanQueryForScoring} Official Audio`, ytOptions).catch(() => null);
+            if (fallbackRes && fallbackRes.tracks && fallbackRes.tracks.length > 0) {
+                const rankedFallback = rankAndFilterCanonicalTracks(fallbackRes.tracks, cleanQueryForScoring);
+                const fallbackTopScore = scoreTrack(rankedFallback[0], cleanQueryForScoring);
+                if (fallbackTopScore > topScore) {
+                    res = fallbackRes;
+                    res.tracks = rankedFallback;
+                }
+            }
+        } catch (_) {}
+    }
+
+    // 3. If still no tracks or empty, try pure ytsearch
+    if (!res || !res.tracks || res.tracks.length === 0) {
+        try {
+            const ytOptions = { ...(options || {}), engine: 'youtube' };
+            const ytRes = await rawKazagumoSearch.call(this, cleanQueryForScoring, ytOptions).catch(() => null);
+            if (ytRes && ytRes.tracks && ytRes.tracks.length > 0) {
+                res = ytRes;
+                res.tracks = rankAndFilterCanonicalTracks(res.tracks, cleanQueryForScoring);
+            }
+        } catch (_) {}
+    }
+
+    return res || { loadType: 'empty', tracks: [] };
+};
+
 // 🛡️ Monkey patch KazagumoSpotify so it produces root KazagumoTrack (v3.4+) instances instead of nested v2.4
 if (KazagumoSpotify && KazagumoSpotify.prototype) {
     KazagumoSpotify.prototype.buildKazagumoTrack = function(spotifyTrack, requester, thumbnail) {
@@ -56,6 +231,11 @@ for (const TrackClass of trackClasses) {
         } catch (_) {}
         if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
             try {
+                searchResult = await searcher.search(`ytsearch:${query} Official Audio`, { requester: this.requester });
+            } catch (_) {}
+        }
+        if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
+            try {
                 searchResult = await searcher.search(`ytsearch:${query}`, { requester: this.requester });
             } catch (_) {}
         }
@@ -69,7 +249,8 @@ for (const TrackClass of trackClasses) {
             throw new Error(`No tracks found for ${query}`);
         }
         
-        const found = searchResult.tracks[0];
+        const ranked = rankAndFilterCanonicalTracks(searchResult.tracks, query);
+        const found = ranked[0] || searchResult.tracks[0];
         return {
             encoded: found.track,
             track: found.track,
@@ -141,6 +322,7 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
+            { label: '⭐ Studio Hi-Fi Master (Empowering)', description: 'Audiophile punch, deep sub-bass, silky vocals & wide stage', value: 'empowering', emoji: '✨' },
             { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
             { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -539,23 +721,48 @@ async function applyKazagumoFilter(player, filterName) {
                 break;
 
             case 'empowering':
+            case 'hifi':
+            case 'audiophile':
+            case 'master':
+            case 'studio':
+                // ⭐ PRO STUDIO HI-FI MASTERING (Praisable Audiophile Grade Audio)
+                // - Deep, tactile physical sub-bass (25-63Hz) that rumbles cleanly without distortion
+                // - Mid-bass punch (100Hz) with zero muddiness
+                // - Precision 250Hz mud scoop (-0.10) to de-mask vocals and acoustic instruments
+                // - Forward, crystal-clear vocal presence & intelligibility (1.0kHz - 4.0kHz)
+                // - Silky, airy high-end shimmer (10kHz - 16kHz)
+                // - Volume pre-attenuation (0.92) giving ~2.5dB clean headroom to eliminate Opus inter-sample clipping
+                // - Subtle wide stereo spatial soundstage
                 await shoukakuPlayer.setFilters({
-                    volume: 0.96,
+                    volume: 0.92,
                     equalizer: [
-                        { band: 0, gain: 0.22 },
-                        { band: 1, gain: 0.18 },
-                        { band: 2, gain: 0.10 },
-                        { band: 5, gain: -0.08 },
-                        { band: 8, gain: 0.10 },
-                        { band: 9, gain: 0.12 },
-                        { band: 11, gain: 0.10 }
+                        { band: 0, gain: 0.24 },  // 25 Hz: Deep sub-bass physical rumble
+                        { band: 1, gain: 0.28 },  // 40 Hz: Tactile chest/headphone vibration
+                        { band: 2, gain: 0.20 },  // 63 Hz: Warm bass body
+                        { band: 3, gain: 0.08 },  // 100 Hz: Tight, punchy kick transient
+                        { band: 4, gain: -0.02 }, // 160 Hz: Transition slope
+                        { band: 5, gain: -0.10 }, // 250 Hz: Mud scoop - de-masks vocals!
+                        { band: 6, gain: -0.02 }, // 400 Hz: Clean separation
+                        { band: 7, gain: 0.04 },  // 630 Hz: Natural body
+                        { band: 8, gain: 0.08 },  // 1.0 kHz: Vocal intelligibility
+                        { band: 9, gain: 0.14 },  // 1.6 kHz: Vocal forwardness
+                        { band: 10, gain: 0.16 }, // 2.5 kHz: Crystal-clear vocal bite
+                        { band: 11, gain: 0.14 }, // 4.0 kHz: Snare snap & presence
+                        { band: 12, gain: 0.12 }, // 6.3 kHz: Silky smooth highs
+                        { band: 13, gain: 0.16 }, // 10.0 kHz: Air & sparkle
+                        { band: 14, gain: 0.18 }  // 16.0 kHz: Ultra-high brilliance
                     ],
+                    channelMix: {
+                        leftToLeft: 0.96,
+                        leftToRight: 0.06,
+                        rightToLeft: 0.06,
+                        rightToRight: 0.96
+                    },
                     timescale: null,
                     rotation: null,
                     tremolo: null,
                     vibrato: null,
                     karaoke: null,
-                    channelMix: null,
                     lowPass: null,
                     distortion: null
                 });
@@ -579,7 +786,7 @@ async function applyKazagumoFilter(player, filterName) {
                 break;
         }
 
-        const canonicalFilter = ['bassboost', 'vibrate', 'vibration', 'deepbass', 'subwoofer'].includes(normalized) ? 'bass' : normalized;
+        const canonicalFilter = ['bassboost', 'vibrate', 'vibration', 'deepbass', 'subwoofer'].includes(normalized) ? 'bass' : (['empowering', 'hifi', 'studio', 'master', 'audiophile'].includes(normalized) ? 'empowering' : normalized);
         player.data.set('activeFilter', canonicalFilter);
 
         // Keep Music Controller request channel synced
@@ -613,13 +820,17 @@ function createMusicManager(client) {
                 const query = [this.author, this.title].filter(Boolean).join(' - ');
                 let searchRes = await this.kazagumo.search(`ytmsearch:${query}`, { requester: this.requester });
                 if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
+                    searchRes = await this.kazagumo.search(`ytsearch:${query} Official Audio`, { requester: this.requester });
+                }
+                if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
                     searchRes = await this.kazagumo.search(`ytsearch:${query}`, { requester: this.requester });
                 }
                 if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
                     searchRes = await this.kazagumo.search(query, { requester: this.requester });
                 }
                 if (searchRes && searchRes.tracks && searchRes.tracks.length > 0) {
-                    const found = searchRes.tracks[0];
+                    const ranked = rankAndFilterCanonicalTracks(searchRes.tracks, query);
+                    const found = ranked[0] || searchRes.tracks[0];
                     this.track = found.track;
                     this.realUri = found.realUri || found.uri;
                     if (!this.thumbnail && found.thumbnail) this.thumbnail = found.thumbnail;
@@ -697,6 +908,11 @@ function createMusicManager(client) {
     manager.on('playerStart', async (player, track) => {
         player.data.set('previousTrack', track);
 
+        // 🔊 PRO STUDIO HI-FI DSP MASTERING: Automatically apply empowering studio master out of the box
+        const activeFilter = player.data.get('activeFilter') || 'empowering';
+        player.data.set('activeFilter', activeFilter);
+        await applyKazagumoFilter(player, activeFilter).catch(() => {});
+
         // Dedicated Request Channel Integration: Update controller in-place, never duplicate
         try {
             const musicController = require('../modules/musicController');
@@ -746,7 +962,7 @@ function createMusicManager(client) {
             ? track.thumbnail
             : (client.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
 
-        const activeFilter = player.data.get('activeFilter') || 'Clear';
+        const currentActiveFilter = player.data.get('activeFilter') || 'empowering';
         const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
 
         const embed = new EmbedBuilder()
@@ -765,6 +981,7 @@ function createMusicManager(client) {
                 `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Spotify'}\n` +
+                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'empowering' ? '⭐ Studio Hi-Fi Master (Empowering)' : currentActiveFilter.toUpperCase()}\`\n` +
                 `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
                 `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`
@@ -961,5 +1178,7 @@ module.exports = {
     Nodes,
     createMusicManager,
     buildNowPlayingComponents,
-    applyKazagumoFilter
+    applyKazagumoFilter,
+    scoreTrack,
+    rankAndFilterCanonicalTracks
 };

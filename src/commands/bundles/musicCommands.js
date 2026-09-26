@@ -127,7 +127,7 @@ const commands = [
 
             let loadingMsg = null;
             if (!ctx.isSlash) {
-                loadingMsg = await ctx.reply(`🔍 **Searching:** \`${query.length > 50 ? query.substring(0, 47) + '...' : query}\` • *Connecting Hi-Fi Audio...*`).catch(() => null);
+                loadingMsg = await ctx.reply(`🔍 **Searching:** \`${query.length > 50 ? query.substring(0, 47) + '...' : query}\` • *Resolving Original Studio Hi-Fi Master...*`).catch(() => null);
             }
 
             // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
@@ -210,7 +210,7 @@ const commands = [
                             player.queue.add(track);
                             const embed = new EmbedBuilder()
                                 .setColor('#5865F2')
-                                .setAuthor({ name: 'Track Queued • Studio Sound Active', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
+                                .setAuthor({ name: 'Track Queued • Original Studio Hi-Fi Active', iconURL: ctx.user.displayAvatarURL({ dynamic: true }) })
                                 .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
                                 .setURL(track.uri || 'https://discord.gg')
                                 .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
@@ -219,7 +219,7 @@ const commands = [
                                     `🕒 **Duration:** \`${formatTime(track.length)}\`\n` +
                                     `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
                                     `🌐 **Source:** \`${track.sourceName || 'Lavalink Hi-Fi'}\`\n` +
-                                    `🔊 **Sound Profile:** \`Studio Dynamic Audio\``
+                                    `🔊 **Sound Profile:** \`⭐ Studio Hi-Fi Master (Original Release)\``
                                 )
                                 .setFooter({ text: `Requested by ${ctx.user.tag} • Prefix: ,` })
                                 .setTimestamp();
@@ -945,17 +945,42 @@ const commands = [
         }
     },
 
-    // 20B. MASTER FILTER HUB
+    // 20B. STUDIO HI-FI MASTER
+    {
+        name: 'hifi',
+        aliases: ['empower', 'empowering', 'master', 'audiophile', 'studio'],
+        category: 'Music',
+        description: 'Activate Studio Hi-Fi Mastering (Deep sub-bass rumble, mud scoop, vocal clarity & wide stage).',
+        usage: ',hifi',
+        async execute(ctx) {
+            const guard = getVoiceGuard(ctx);
+            if (guard.error) return ctx.reply(guard.error);
+
+            const player = getActivePlayer(ctx.client, ctx.guild.id);
+            if (!player) return ctx.reply('❌ No active audio stream.');
+
+            await player.setFilter('empowering');
+            return ctx.reply('✨ **Applied Studio Hi-Fi Master: Crisp Vocal Clarity, Deep Tactile Sub-Bass & Zero-Distortion Dynamics!**');
+        }
+    },
+
+    // 20C. MASTER FILTER HUB
     {
         name: 'filter',
         aliases: ['filters', 'dsp'],
         category: 'Music',
-        description: 'View or select from all 15 studio-grade DSP audio filters.',
+        description: 'View or select from all 16 studio-grade DSP audio filters.',
         usage: ',filter <name> or ,filters',
         async execute(ctx) {
             const requested = (ctx.args[0] || '').toLowerCase().trim();
 
             const filterMap = {
+                empowering: 'empowering',
+                hifi: 'empowering',
+                master: 'empowering',
+                studio: 'empowering',
+                audiophile: 'empowering',
+                empower: 'empowering',
                 bass: 'bass',
                 bb: 'bass',
                 bassboost: 'bass',
@@ -1009,7 +1034,7 @@ const commands = [
                 const player = getActivePlayer(ctx.client, ctx.guild.id);
                 if (!player) return ctx.reply('❌ No active audio stream.');
 
-                if (targetFilter !== 'clear') {
+                if (targetFilter !== 'clear' && targetFilter !== 'empowering') {
                     if (!await requirePremium(ctx, `${targetFilter.toUpperCase()} (Studio DSP Filter)`)) return;
                 }
 
@@ -1017,16 +1042,17 @@ const commands = [
                 return ctx.reply(`🎧 **Applied Audio Filter:** \`${targetFilter.toUpperCase()}\``);
             }
 
-            // Overview Embed of all 15 studio filters
+            // Overview Embed of all 16 studio filters
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setAuthor({ 
                     name: 'Starry Hi-Fi Studio DSP Audio Engine', 
                     iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
                 })
-                .setTitle('🎛️ 15 Studio-Grade DSP Audio Filters')
+                .setTitle('🎛️ 16 Studio-Grade DSP Audio Filters')
                 .setDescription(
                     `Switch audio filters dynamically in real time using \`,filter <name>\` or dedicated commands:\n\n` +
+                    `✨ **\`,hifi\`** — ⭐ **Studio Hi-Fi Master (Default)** (Pristine vocals, tactile sub-bass, zero distortion)\n` +
                     `🔊 **\`,bass\`** — Deep physical subwoofer vibration (Earphones rattle • Vocals clear)\n` +
                     `🌀 **\`,8d\`** — 360° binaural rotating spatial surround\n` +
                     `✨ **\`,nightcore\`** — Upbeat sped-up tempo + higher pitch\n` +

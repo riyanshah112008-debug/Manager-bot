@@ -157,6 +157,7 @@ class MusicControllerEngine {
             .setCustomId('ctrl_filter')
             .setPlaceholder(t(lang, 'music.filter_placeholder'))
             .addOptions([
+                { label: '⭐ Studio Hi-Fi Master (Empowering)', description: 'Audiophile punch, deep sub-bass, silky vocals & wide stage', value: 'empowering', emoji: '✨' },
                 { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio sound', value: 'clear', emoji: '🚫' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },

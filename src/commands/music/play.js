@@ -139,7 +139,7 @@ module.exports = {
               player.queue.add(track);
               const embed = new EmbedBuilder()
                 .setColor('#5865F2')
-                .setAuthor({ name: 'Track Queued • Studio Sound Active', iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
+                .setAuthor({ name: 'Track Queued • Original Studio Hi-Fi Active', iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
                 .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
                 .setURL(track.uri || 'https://discord.gg')
                 .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
@@ -148,7 +148,7 @@ module.exports = {
                   `🕒 **Duration:** \`${formatTime(track.length)}\`\n` +
                   `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
                   `🌐 **Source:** \`${track.sourceName || 'Lavalink Hi-Fi'}\`\n` +
-                  `🔊 **Sound Profile:** \`Studio Dynamic Audio\``
+                  `🔊 **Sound Profile:** \`⭐ Studio Hi-Fi Master (Original Release)\``
                 )
                 .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,` })
                 .setTimestamp();

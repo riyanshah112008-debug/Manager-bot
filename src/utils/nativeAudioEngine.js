@@ -364,7 +364,7 @@ class StarryGuildPlayer {
         this.previousTrack = null;
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
-        this.filter = 'clear';
+        this.filter = 'empowering';
         this.is247 = false;
         this.autoplay = false;
         this.nowPlayingMessage = null;
@@ -826,6 +826,7 @@ class StarryGuildPlayer {
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
+                { label: '⭐ Studio Hi-Fi Master (Empowering)', description: 'Audiophile punch, deep sub-bass, silky vocals & wide stage', value: 'empowering', emoji: '✨' },
                 { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -1530,15 +1531,25 @@ class StarryAudioEngine {
 
         // 8. Fallback Official YouTube Search
         try {
-            const ytSearch = await play.search(query, { limit: 1 }).catch(() => []);
+            const ytSearch = await play.search(query, { limit: 5 }).catch(() => []);
             if (ytSearch && ytSearch.length > 0) {
-                const item = ytSearch[0];
-                tracks.push({
+                let candidateItems = ytSearch.map(item => ({
+                    rawItem: item,
                     title: item.title || query,
-                    url: item.url,
-                    duration: (item.durationInSec || 180) * 1000,
                     author: item.channel?.name || 'Official Artist',
-                    thumbnail: item.thumbnails?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
+                    length: (item.durationInSec || 180) * 1000
+                }));
+                try {
+                    const { rankAndFilterCanonicalTracks } = require('./musicManager');
+                    candidateItems = rankAndFilterCanonicalTracks(candidateItems, query);
+                } catch (_) {}
+                const best = candidateItems[0]?.rawItem || ytSearch[0];
+                tracks.push({
+                    title: best.title || query,
+                    url: best.url,
+                    duration: (best.durationInSec || 180) * 1000,
+                    author: best.channel?.name || 'Official Artist',
+                    thumbnail: best.thumbnails?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
                     source: 'YouTube',
                     requester
                 });
