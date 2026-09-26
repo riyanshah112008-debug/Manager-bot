@@ -280,6 +280,7 @@ let mongoDisconnectedSince = null;
 let mongoReconnectInterval = null;
 
 async function attemptMongoReconnect() {
+    if (!process.env.MONGO_URI) return;
     if (isReconnectingMongo || mongoose.connection.readyState === 1) return;
     isReconnectingMongo = true;
     console.log('🔄 [MongoDB Watchdog] Actively attempting to reconnect to MongoDB...');
@@ -318,7 +319,7 @@ setInterval(() => {
     }
 
     // 2. Check MongoDB Connection Health
-    if (mongoose.connection.readyState !== 1) {
+    if (process.env.MONGO_URI && mongoose.connection.readyState !== 1) {
         if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
         const downtime = Math.round((Date.now() - mongoDisconnectedSince) / 1000);
         console.warn(`⚠️ [Watchdog] MongoDB not ready (readyState: ${mongoose.connection.readyState}, down for ${downtime}s). Triggering active reconnect...`);
@@ -525,10 +526,21 @@ async function startBot() {
     }
 
     const primaryToken = cleanToken(rawToken);
-    if (!process.env.MONGO_URI || !primaryToken) {
-        console.error("🛑 CRITICAL ERROR: MONGO_URI or TOKEN missing!");
-        console.error(`- MONGO_URI: ${process.env.MONGO_URI ? 'Present' : 'MISSING'}`);
-        console.error(`- Bot Token (${sourceVar}): ${primaryToken ? 'Present' : 'MISSING'}`);
+    if (!primaryToken) {
+        console.error("🛑 CRITICAL ERROR: Discord Bot Token is missing!");
+        console.error(`- Bot Token (${sourceVar}): MISSING`);
+        console.error(`- MONGO_URI: ${process.env.MONGO_URI ? 'Present' : 'Not configured (optional)'}`);
+        console.error("------------------------------------------------------------------");
+        console.error("👉 ACTION REQUIRED ON RENDER DASHBOARD:");
+        console.error("1. Open https://dashboard.render.com and select your service (Manager-bot-1).");
+        console.error("2. Go to the 'Environment' tab on the left sidebar.");
+        console.error("3. Click 'Add Environment Variable':");
+        console.error("   - Key: DISCORD_TOKEN");
+        console.error("   - Value: <paste your bot token from Discord Developer Portal>");
+        console.error("   (Optional) Key: MONGO_URI, Value: <paste your mongodb connection string>");
+        console.error("   (Or add your .env file directly under the 'Secret Files' tab)");
+        console.error("4. Save Changes to redeploy.");
+        console.error("------------------------------------------------------------------");
         process.exit(1);
     }
 
@@ -553,26 +565,25 @@ async function startBot() {
         console.log(`✨ Discord Token Verified! Bot identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'} (ID: ${preflight.bot.id})`);
     }
 
-    try {
-        await mongoose.connect(process.env.MONGO_URI, {
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000,
-            maxPoolSize: 10,
-            heartbeatFrequencyMS: 10000
-        });
-        console.log('🍃 Successfully connected to MongoDB Cloud!');
+    if (process.env.MONGO_URI) {
+        try {
+            await mongoose.connect(process.env.MONGO_URI, {
+                serverSelectionTimeoutMS: 5000,
+                socketTimeoutMS: 45000,
+                maxPoolSize: 10,
+                heartbeatFrequencyMS: 10000
+            });
+            console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-        const { initLanguageCache } = require('./utils/i18n');
-        await initLanguageCache(client).catch(() => {});
-    } catch (mongoInitErr) {
-        console.warn(`⚠️ [MongoDB Boot] Initial connect failed (${mongoInitErr.message}). Continuing bot startup with local fallbacks; reconnecting in background...`);
-        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
-        if (!mongoReconnectInterval) {
-            mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+            const { initLanguageCache } = require('./utils/i18n');
+            await initLanguageCache(client).catch(() => {});
+        } catch (mongoInitErr) {
+            console.warn(`⚠️ [MongoDB Boot] Initial connect failed (${mongoInitErr.message}). Continuing bot startup with local fallbacks; reconnecting in background...`);
+            if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+            if (!mongoReconnectInterval) {
+                mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+            }
         }
-    }
-
-    try {
 
         mongoose.connection.on('disconnected', () => {
             console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
@@ -596,6 +607,11 @@ async function startBot() {
         mongoose.connection.on('error', (err) => {
             console.error('❌ MongoDB Connection Error:', err.message);
         });
+    } else {
+        console.warn('⚠️ [MongoDB Boot] MONGO_URI is not set. Bot will operate in high-resilience mode with local/in-memory state.');
+    }
+
+    try {
 
         try {
             const bumpModule = require('./modules/bumpEngine.js');
