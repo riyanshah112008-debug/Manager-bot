@@ -18,7 +18,6 @@ const {
     SlashCommandBuilder
 } = require('discord.js');
 const mongoose = require('mongoose');
-const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
@@ -38,9 +37,6 @@ const masterSecuritySchema = new mongoose.Schema({
     userInfractions: { type: Map, of: Number, default: {} }
 });
 const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
-
-const protectDb = new Database('protect.db');
-protectDb.exec(`CREATE TABLE IF NOT EXISTS protected_users (guild_id TEXT, user_id TEXT, PRIMARY KEY (guild_id, user_id))`);
 
 const securityCache = new Map();
 

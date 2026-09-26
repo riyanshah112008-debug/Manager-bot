@@ -21,6 +21,7 @@ bot.log
 *.db
 *.sqlite
 *.sqlite3
+sus_accounts.json
 
 # Backup archives
 BOT/

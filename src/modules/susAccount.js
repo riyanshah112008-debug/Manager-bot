@@ -1,18 +1,29 @@
 const { EmbedBuilder, PermissionsBitField, AuditLogEvent } = require('discord.js');
-const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 
-const db = new Database(path.join(__dirname, 'sus_accounts.db'));
+const storageFile = path.join(__dirname, 'sus_accounts.json');
+const susSettingsCache = new Map();
 
-// Setup settings table
-db.exec(`
-    CREATE TABLE IF NOT EXISTS sus_settings (
-        guild_id TEXT PRIMARY KEY,
-        enabled INTEGER DEFAULT 0,
-        threshold_days INTEGER DEFAULT 7,
-        action TEXT DEFAULT 'warn' 
-    )
-`);
+function loadSusSettings() {
+    try {
+        if (fs.existsSync(storageFile)) {
+            const data = JSON.parse(fs.readFileSync(storageFile, 'utf8'));
+            for (const [k, v] of Object.entries(data)) {
+                susSettingsCache.set(k, v);
+            }
+        }
+    } catch (e) {}
+}
+loadSusSettings();
+
+function saveSusSetting(guildId, setting) {
+    susSettingsCache.set(guildId, setting);
+    try {
+        const obj = Object.fromEntries(susSettingsCache);
+        fs.writeFileSync(storageFile, JSON.stringify(obj, null, 2), 'utf8');
+    } catch (e) {}
+}
 
 module.exports = (client) => {
     // ==========================================
@@ -29,18 +40,21 @@ module.exports = (client) => {
         const days = interaction.options.getInteger('threshold');
         const action = interaction.options.getString('action');
 
-        db.prepare('INSERT OR REPLACE INTO sus_settings (guild_id, enabled, threshold_days, action) VALUES (?, ?, ?, ?)').run(
-            interaction.guildId, enabled ? 1 : 0, days, action
-        );
+        saveSusSetting(interaction.guildId, {
+            guild_id: interaction.guildId,
+            enabled: enabled ? 1 : 0,
+            threshold_days: days || 7,
+            action: action || 'warn'
+        });
 
-        interaction.reply({ content: `✅ **Suspicious Account Settings Updated:**\nEnabled: **${enabled}**\nThreshold: **${days} days**\nAction: **${action.toUpperCase()}**`, ephemeral: true });
+        interaction.reply({ content: `✅ **Suspicious Account Settings Updated:**\nEnabled: **${enabled}**\nThreshold: **${days} days**\nAction: **${(action || 'warn').toUpperCase()}**`, ephemeral: true });
     });
 
     // ==========================================
     // 2. THE DETECTION ENGINE
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
-        const settings = db.prepare('SELECT * FROM sus_settings WHERE guild_id = ?').get(member.guild.id);
+        const settings = susSettingsCache.get(member.guild.id);
         if (!settings || !settings.enabled) return;
 
         // Calculate Age

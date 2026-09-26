@@ -30,11 +30,6 @@ try {
     loadImage = canvasPkg.loadImage;
 } catch (e) {}
 
-let Database;
-try {
-    Database = require('better-sqlite3');
-} catch (e) {}
-
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const blacklistedUsers = new Set();
 
