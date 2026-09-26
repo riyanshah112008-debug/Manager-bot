@@ -514,6 +514,8 @@ const MODULE_INITIALIZERS = [
 
 const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
 
+let tokenCheckInterval = null;
+
 async function startBot() {
     let sourceVar = 'DISCORD_TOKEN';
     let rawToken = process.env.DISCORD_TOKEN;
@@ -541,7 +543,32 @@ async function startBot() {
         console.error("   (Or add your .env file directly under the 'Secret Files' tab)");
         console.error("4. Save Changes to redeploy.");
         console.error("------------------------------------------------------------------");
-        process.exit(1);
+        console.warn(`🌐 Express Web Server & Health Check are ACTIVE on port ${port}.`);
+        console.warn(`⏳ Keeping service running to keep Render deployment healthy while waiting for DISCORD_TOKEN.`);
+
+        if (!tokenCheckInterval) {
+            tokenCheckInterval = setInterval(async () => {
+                try {
+                    const envPath = path.join(process.cwd(), '.env');
+                    if (fs.existsSync(envPath)) {
+                        require('dotenv').config({ path: envPath, override: true });
+                        const checkToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
+                        if (checkToken) {
+                            console.log('✨ [Auto-Detect] Detected bot token in environment/secret file! Booting bot...');
+                            clearInterval(tokenCheckInterval);
+                            tokenCheckInterval = null;
+                            await startBot();
+                        }
+                    }
+                } catch (e) {}
+            }, 10000);
+        }
+        return;
+    }
+
+    if (tokenCheckInterval) {
+        clearInterval(tokenCheckInterval);
+        tokenCheckInterval = null;
     }
 
     console.log(`🔑 Bot Token detected from ${sourceVar}: ${maskToken(primaryToken)}`);
