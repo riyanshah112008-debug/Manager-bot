@@ -67,82 +67,8 @@ module.exports = {
         await interaction.deferReply().catch(() => {});
     }
 
-    const manager = client.manager;
-    const hasLavalink = manager && Array.from(manager.shoukaku?.nodes?.values() || []).some(n => n.state === 1);
-
-    if (hasLavalink) {
-      try {
-        const existingNative = StarryAudioEngine.getPlayer(interaction.guild.id);
-        if (existingNative) existingNative.destroy();
-
-        const isUrl = /^https?:\/\//i.test(query);
-        let res = null;
-        if (!isUrl) {
-          try {
-            res = await manager.search(query, { requester: interaction.user, engine: 'spotify' });
-          } catch (spErr) {}
-        }
-        if (!res || !res.tracks || res.tracks.length === 0) {
-          try {
-            res = await manager.search(query, { requester: interaction.user, engine: 'youtube_music' });
-          } catch (_) {}
-        }
-        if (!res || !res.tracks || res.tracks.length === 0) {
-          res = await manager.search(query, { requester: interaction.user });
-        }
-
-        if (res && res.tracks && res.tracks.length > 0) {
-          let player = manager.getPlayer(interaction.guild.id);
-          if (!player) {
-            player = await manager.createPlayer({
-              guildId: interaction.guild.id,
-              voiceId: voiceChannel.id,
-              textId: interaction.channel.id,
-              deaf: true,
-              shardId: interaction.guild.shardId || 0
-            });
-          }
-
-          if (player.voiceId !== voiceChannel.id) {
-            player.setVoiceChannel(voiceChannel.id);
-          }
-          player.textId = interaction.channel.id;
-
-          const replyFunc = interaction.editReply || interaction.reply;
-          const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
-          if (!isSearch && res.type === 'PLAYLIST') {
-            for (const track of res.tracks) player.queue.add(track);
-            if (!player.playing && !player.paused) {
-              await player.play().catch(e => console.error('Player play error:', e));
-            }
-            return replyFunc.call(interaction, `✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`);
-          } else {
-            const track = res.tracks[0];
-            const isCurrentlyPlaying = player.playing || player.paused;
-            player.queue.add(track);
-            if (!isCurrentlyPlaying) {
-              await player.play().catch(e => console.error('Player play error:', e));
-            }
-            const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
-            const msg = isCurrentlyPlaying
-              ? `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi (Position #${player.queue.size})`
-              : `▶️ Loading **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi...`;
-            const sent = await replyFunc.call(interaction, msg).catch(() => null);
-            if (!isCurrentlyPlaying && sent) {
-              player.data.set('loadingMessage', sent);
-            }
-            return sent;
-          }
-        } else {
-          const replyFunc = interaction.editReply || interaction.reply;
-          return replyFunc.call(interaction, `❌ No audio results found for \`${query}\`. Please check the song name or link!`);
-        }
-      } catch (lavalinkErr) {
-        console.warn('⚠️ [Lavalink play.js Error]:', lavalinkErr.message);
-      }
-    }
-
     try {
+      const replyFunc = interaction.editReply || interaction.reply;
       const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
       // ⚡ Instantly join voice channel in 0.1s without waiting for search
       player.connect().catch(() => {});

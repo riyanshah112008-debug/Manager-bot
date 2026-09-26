@@ -46,6 +46,11 @@ function getVoiceGuard(ctx) {
 }
 
 function getActivePlayer(client, guildId) {
+    let nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
+    if (nativePlayer && !nativePlayer.destroyed) {
+        return nativePlayer;
+    }
+
     let kPlayer = client.manager?.getPlayer(guildId);
     if (!kPlayer && client.multiBot?.instances) {
         for (const inst of client.multiBot.instances.values()) {
@@ -112,82 +117,16 @@ const commands = [
             if (ctx.isSlash) await ctx.defer();
 
             const targetClient = guard.workerClient || ctx.client;
-            const manager = targetClient.manager || ctx.client.manager;
-            const hasLavalink = manager && Array.from(manager.shoukaku?.nodes?.values() || []).some(n => n.state === 1);
 
-            // 1. High-Performance Primary Route: Cloud Lavalink v4 Audio Cluster
-            if (hasLavalink) {
-                try {
-                    const existingNative = StarryAudioEngine.getPlayer(ctx.guild.id);
-                    if (existingNative) existingNative.destroy();
-
-                    const isUrl = /^https?:\/\//i.test(query);
-                    let res = null;
-                    if (!isUrl) {
-                        try {
-                            res = await manager.search(query, { requester: ctx.user, engine: 'spotify' });
-                        } catch (spErr) {}
-                    }
-                    if (!res || !res.tracks || res.tracks.length === 0) {
-                        res = await manager.search(query, { requester: ctx.user });
-                    }
-
-                    if (res && res.tracks && res.tracks.length > 0) {
-                        let player = manager.getPlayer(ctx.guild.id);
-                        if (!player) {
-                            player = await manager.createPlayer({
-                                guildId: ctx.guild.id,
-                                voiceId: guard.voiceChannel.id,
-                                textId: ctx.channel.id,
-                                deaf: true,
-                                shardId: ctx.guild.shardId || 0
-                            });
-                        }
-
-                        if (player.voiceId !== guard.voiceChannel.id) {
-                            player.setVoiceChannel(guard.voiceChannel.id);
-                        }
-                        player.textId = ctx.channel.id;
-
-                        const isSearch = res.type === 'SEARCH' || (res.playlistName && res.playlistName.startsWith('Search results'));
-                        let replyText = '';
-                        if (!isSearch && res.type === 'PLAYLIST') {
-                            for (const track of res.tracks) player.queue.add(track);
-                            if (!player.playing && !player.paused) {
-                                await player.play().catch(e => console.error('Player play error:', e));
-                            }
-                            replyText = `✅ Added playlist **${res.playlistName || 'Playlist'}** (${res.tracks.length} tracks queued).`;
-                        } else {
-                            const track = res.tracks[0];
-                            const isCurrentlyPlaying = player.playing || player.paused;
-                            player.queue.add(track);
-                            if (!isCurrentlyPlaying) {
-                                await player.play().catch(e => console.error('Player play error:', e));
-                            }
-                            const sourceName = track.sourceName ? (track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1)) : 'Spotify';
-                            replyText = isCurrentlyPlaying
-                                ? `🎵 Queued **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi (Position #${player.queue.size})`
-                                : `▶️ Loading **${track.title}** by \`${track.author}\` • ${sourceName} Hi-Fi...`;
-                        }
-
-                        const replyMsg = await ctx.reply(replyText);
-                        try {
-                            const musicController = require('../../modules/musicController');
-                            if (musicController.isRequestChannel(ctx.guild.id, ctx.channel.id)) {
-                                if (replyMsg && typeof replyMsg.delete === 'function') {
-                                    setTimeout(() => replyMsg.delete().catch(() => {}), 3500);
-                                }
-                            }
-                        } catch (ctrlErr) {}
-                        return replyMsg;
-                    }
-                } catch (lavalinkErr) {
-                    console.warn('⚠️ [Lavalink Play Error, falling back to Native Audio]:', lavalinkErr.message);
-                }
+            // Autonomous Route: Native Audio Engine (Prioritized for DAVE protocol & direct Termux playback)
+            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            
+            let loadingMsg = null;
+            if (!ctx.isSlash) {
+                loadingMsg = await ctx.reply(`🔍 **Searching:** \`${query.length > 50 ? query.substring(0, 47) + '...' : query}\` • *Connecting Hi-Fi Audio...*`).catch(() => null);
+                player.loadingMessage = loadingMsg;
             }
 
-            // 2. Secondary Autonomous Route: Native Audio Engine
-            const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             const connectPromise = player.connect().catch(() => {});
             const searchPromise = StarryAudioEngine.search(query, ctx.user);
 
@@ -197,6 +136,7 @@ const commands = [
                     new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search or voice connect timed out after 20s')), 20000))
                 ]);
                 if (!result || !result.tracks || result.tracks.length === 0) {
+                    if (loadingMsg) loadingMsg.delete().catch(() => {});
                     return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
                 }
 
@@ -206,6 +146,11 @@ const commands = [
                     }
                     if (!player.currentTrack) {
                         await player.playNext();
+                    }
+
+                    if (loadingMsg) {
+                        loadingMsg.delete().catch(() => {});
+                        player.loadingMessage = null;
                     }
 
                     const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
@@ -242,6 +187,10 @@ const commands = [
                         player.queue.push(track);
                         await player.playNext();
                     } else {
+                        if (loadingMsg) {
+                            loadingMsg.delete().catch(() => {});
+                            player.loadingMessage = null;
+                        }
                         player.queue.push(track);
                         const embed = new EmbedBuilder()
                             .setColor('#5865F2')
@@ -262,6 +211,7 @@ const commands = [
                     }
                 }
             } catch (err) {
+                if (loadingMsg) loadingMsg.delete().catch(() => {});
                 console.error('Play command error:', err);
                 return ctx.reply(`❌ Playback error: \`${err.message}\``);
             }

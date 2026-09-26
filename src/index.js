@@ -325,8 +325,10 @@ setInterval(() => {
         attemptMongoReconnect();
 
         if (downtime > 300) {
-            console.error('🛑 [Watchdog] MongoDB disconnected for >300s. Restarting process to clear dead network sockets...');
-            process.exit(1);
+            // Keep bot running with in-memory fallbacks even if MongoDB is unreachable
+            if (watchdogCycle % 10 === 0) {
+                console.warn(`⚠️ [Watchdog] MongoDB offline for ${downtime}s. Running in high-resilience mode with local/in-memory state.`);
+            }
         }
     }
 

@@ -39,25 +39,29 @@ const FILTER_ARGS = {
     flat: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
     empowering: [
         '-af',
-        'volume=0.95,' +
-        'bass=g=3.5:f=60:w=0.6,' +
-        'equalizer=f=250:width_type=q:w=1.2:g=-1.2,' +
-        'equalizer=f=1000:width_type=q:w=1.0:g=1.0,' +
-        'equalizer=f=3200:width_type=q:w=1.0:g=2.5,' +
-        'equalizer=f=12000:width_type=q:w=1.0:g=2.0,' +
-        'alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'
+        'volume=0.78,' +
+        'bass=g=6.2:f=50:w=0.6,' +
+        'equalizer=f=40:width_type=q:w=1.2:g=2.8,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-2.5,' +
+        'equalizer=f=1000:width_type=q:w=1.0:g=1.2,' +
+        'equalizer=f=3200:width_type=q:w=1.0:g=3.0,' +
+        'equalizer=f=12000:width_type=q:w=1.0:g=2.2,' +
+        'alimiter=limit=0.96:attack=7:release=100:asc=true:level=false'
     ],
     // 🔊 TRUE CLEAN SUB-BASS VIBRATION (Zero Clipping • Crystal-Clear Vocals):
     // Pre-attenuation volume=0.70 gives clean +3.5dB headroom.
-    // Focused 50Hz boost (+6.5dB) gives heavy driver vibration rumble.
-    // Mud scoop at 250Hz (-2.5dB) separates sub-bass from male/female vocals.
+    // Heavy 50Hz boost (+7.2dB) gives driver vibration rumble you can clearly feel.
+    // Deep 38Hz resonance (+3.2dB) adds low-end punch.
+    // Mud scoop at 250Hz (-3.0dB) isolates sub-bass so human vocals are never masked.
+    // Vocal clarity boost at 3200Hz (+2.5dB) guarantees lyrics remain razor-sharp.
     // Limiter with release=100ms eliminates wave cycle modulation and vocal crackling!
     bass: [
         '-af',
         'volume=0.70,' +
-        'bass=g=6.5:f=50:w=0.6,' +
-        'equalizer=f=38:width_type=q:w=1.2:g=3.0,' +
-        'equalizer=f=250:width_type=q:w=1.2:g=-2.5,' +
+        'bass=g=7.2:f=50:w=0.6,' +
+        'equalizer=f=38:width_type=q:w=1.2:g=3.2,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-3.0,' +
+        'equalizer=f=3200:width_type=q:w=1.0:g=2.5,' +
         'alimiter=limit=0.95:attack=7:release=100:asc=true:level=false'
     ],
     '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
@@ -519,6 +523,73 @@ class StarryGuildPlayer {
                     }
                 }, 60000);
             }
+        }
+    }
+
+    createFilteredResource(streamOrPath, isFile = false) {
+        const activeFilter = (this.filter && FILTER_ARGS[this.filter]) 
+            ? FILTER_ARGS[this.filter] 
+            : FILTER_ARGS.empowering;
+
+        try {
+            if (isFile) {
+                const ffmpeg = new prism.FFmpeg({
+                    args: [
+                        '-i', streamOrPath,
+                        ...activeFilter,
+                        '-f', 's16le',
+                        '-ar', '48000',
+                        '-ac', '2'
+                    ]
+                });
+                ffmpeg.on('error', err => console.warn('⚠️ [FFmpeg File Filter Notice]:', err.message || err));
+                return createAudioResource(ffmpeg, {
+                    inputType: StreamType.Raw,
+                    inlineVolume: true
+                });
+            } else {
+                const ffmpeg = new prism.FFmpeg({
+                    args: [
+                        '-analyzeduration', '0',
+                        '-loglevel', '0',
+                        '-i', 'pipe:0',
+                        ...activeFilter,
+                        '-f', 's16le',
+                        '-ar', '48000',
+                        '-ac', '2'
+                    ]
+                });
+                ffmpeg.on('error', err => console.warn('⚠️ [FFmpeg Stream Filter Notice]:', err.message || err));
+                if (typeof streamOrPath.on === 'function') {
+                    streamOrPath.on('error', err => console.warn('⚠️ [Input Audio Stream Notice]:', err.message || err));
+                }
+                const piped = streamOrPath.pipe(ffmpeg);
+                return createAudioResource(piped, {
+                    inputType: StreamType.Raw,
+                    inlineVolume: true
+                });
+            }
+        } catch (e) {
+            console.warn('⚠️ [Audio Filter Fallback]:', e.message || e);
+            return createAudioResource(streamOrPath, {
+                inputType: isFile ? StreamType.Arbitrary : StreamType.Arbitrary,
+                inlineVolume: true
+            });
+        }
+    }
+
+    async playTrack() {
+        if (this.queue.length === 0) {
+            this.currentTrack = null;
+            this.isPlaying = false;
+            if (!this.is247) {
+                if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
+                this.disconnectTimeout = setTimeout(() => {
+                    if (this.queue.length === 0 && !this.currentTrack) {
+                        this.destroy();
+                    }
+                }, 60000);
+            }
             return;
         }
 
@@ -538,12 +609,9 @@ class StarryGuildPlayer {
             if (targetUrl && targetUrl.includes('soundcloud.com/')) {
                 try {
                     await refreshSoundCloudToken();
-                    const stream = await play.stream(targetUrl, { quality: 2, discordPlayerCompatibility: true });
-                    if (stream) {
-                        audioResource = createAudioResource(stream.stream, {
-                            inputType: stream.type,
-                            inlineVolume: true
-                        });
+                    const stream = await play.stream(targetUrl, { quality: 2 });
+                    if (stream && stream.stream) {
+                        audioResource = this.createFilteredResource(stream.stream, false);
                     }
                 } catch (scErr) {}
             }
@@ -567,23 +635,7 @@ class StarryGuildPlayer {
 
                     if (resolved && resolved.file && fs.existsSync(resolved.file)) {
                         track._resolvedFile = resolved.file;
-                        const activeFilter = (this.filter && FILTER_ARGS[this.filter]) 
-                            ? FILTER_ARGS[this.filter] 
-                            : FILTER_ARGS.empowering;
-
-                        const ffmpeg = new prism.FFmpeg({
-                            args: [
-                                '-i', resolved.file,
-                                ...activeFilter,
-                                '-f', 's16le',
-                                '-ar', '48000',
-                                '-ac', '2'
-                            ]
-                        });
-                        audioResource = createAudioResource(ffmpeg, {
-                            inputType: StreamType.Raw,
-                            inlineVolume: true
-                        });
+                        audioResource = this.createFilteredResource(resolved.file, true);
                     }
                 } catch (srErr) {}
             }
@@ -595,13 +647,12 @@ class StarryGuildPlayer {
                     const primaryArtist = (track.author || '').split(',')[0].trim();
                     const searchQuery = `${primaryArtist} ${track.title}`.trim();
                     const scResults = await play.search(searchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
-                    if (scResults && scResults[0] && scResults[0].url) {
-                        const stream = await play.stream(scResults[0].url, { quality: 2, discordPlayerCompatibility: true });
+                    const targetSc = scResults?.[0];
+                    const scUrl = targetSc?.permalink || targetSc?.url;
+                    if (scUrl) {
+                        const stream = await play.stream(scUrl, { quality: 2 });
                         if (stream && stream.stream) {
-                            audioResource = createAudioResource(stream.stream, {
-                                inputType: stream.type,
-                                inlineVolume: true
-                            });
+                            audioResource = this.createFilteredResource(stream.stream, false);
                         }
                     }
                 } catch (scErr) {
@@ -619,20 +670,14 @@ class StarryGuildPlayer {
                     }
                     if (ytUrl) {
                         try {
-                            const stream = await play.stream(ytUrl, { quality: 2, discordPlayerCompatibility: true });
+                            const stream = await play.stream(ytUrl, { quality: 2 });
                             if (stream && stream.stream) {
-                                audioResource = createAudioResource(stream.stream, {
-                                    inputType: stream.type,
-                                    inlineVolume: true
-                                });
+                                audioResource = this.createFilteredResource(stream.stream, false);
                             }
                         } catch (pErr) {
                             const ytdl = require('@distube/ytdl-core');
                             const ytdlStream = ytdl(ytUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-                            audioResource = createAudioResource(ytdlStream, {
-                                inputType: StreamType.Arbitrary,
-                                inlineVolume: true
-                            });
+                            audioResource = this.createFilteredResource(ytdlStream, false);
                         }
                     }
                 } catch (ytErr) {
@@ -643,10 +688,7 @@ class StarryGuildPlayer {
             // 5. Direct Media URL Fallback (mp3, wav, ogg, m4a)
             if (!audioResource && targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.wav') || targetUrl.endsWith('.ogg') || targetUrl.endsWith('.m4a'))) {
                 try {
-                    audioResource = createAudioResource(targetUrl, {
-                        inputType: StreamType.Arbitrary,
-                        inlineVolume: true
-                    });
+                    audioResource = this.createFilteredResource(targetUrl, true);
                 } catch (urlErr) {}
             }
 
@@ -663,6 +705,11 @@ class StarryGuildPlayer {
             this.paused = false;
             this.playbackStartTime = Date.now();
             this._pausedPosition = 0;
+
+            if (this.loadingMessage) {
+                this.loadingMessage.delete().catch(() => {});
+                this.loadingMessage = null;
+            }
 
             await this.sendNowPlayingPanel(track);
             try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
@@ -909,6 +956,30 @@ class StarryGuildPlayer {
                 this._pausedPosition = 0;
                 setTimeout(() => { this._isSeeking = false; }, 600);
                 return true;
+            } else {
+                let targetUrl = track.url;
+                if (!targetUrl || (!targetUrl.includes('soundcloud.com/') && !targetUrl.includes('youtube.com/'))) {
+                    const primaryArtist = (track.author || '').split(',')[0].trim();
+                    const scResults = await play.search(`${primaryArtist} ${track.title}`.trim(), { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    targetUrl = scResults?.[0]?.permalink || scResults?.[0]?.url;
+                }
+                if (targetUrl) {
+                    const stream = await play.stream(targetUrl, { seek: seconds, quality: 2 }).catch(() => null);
+                    if (stream && stream.stream) {
+                        const audioResource = this.createFilteredResource(stream.stream, false);
+                        this.audioResource = audioResource;
+                        if (this.audioResource.volume) {
+                            this.audioResource.volume.setVolume(this.volume / 100);
+                        }
+                        this._isSeeking = true;
+                        this.player.play(this.audioResource);
+                        this.paused = false;
+                        this.playbackStartTime = Date.now() - (seconds * 1000);
+                        this._pausedPosition = 0;
+                        setTimeout(() => { this._isSeeking = false; }, 600);
+                        return true;
+                    }
+                }
             }
         } catch (e) {
             console.warn('⚠️ [Seek / Filter Hot-Swap Notice]:', e.message || e);
@@ -1279,7 +1350,7 @@ class StarryAudioEngine {
                         for (const t of allTracks) {
                             tracks.push({
                                 title: t.name || t.title,
-                                url: t.url,
+                                url: t.permalink || t.url,
                                 duration: (t.durationInSec || 180) * 1000,
                                 author: t.user?.name || 'SoundCloud Artist',
                                 thumbnail: t.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
@@ -1298,7 +1369,7 @@ class StarryAudioEngine {
                     } else {
                         tracks.push({
                             title: scData.name || scData.title || query,
-                            url: scData.url,
+                            url: scData.permalink || scData.url,
                             duration: (scData.durationInSec || 180) * 1000,
                             author: scData.user?.name || 'SoundCloud Artist',
                             thumbnail: scData.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
@@ -1460,7 +1531,7 @@ class StarryAudioEngine {
                 const item = scSearch.find(t => (t.durationInSec || 0) > 45) || scSearch[0];
                 tracks.push({
                     title: item.name || item.title || query,
-                    url: item.url,
+                    url: item.permalink || item.url,
                     duration: (item.durationInSec || 180) * 1000,
                     author: item.user?.name || 'SoundCloud Artist',
                     thumbnail: item.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
