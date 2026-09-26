@@ -678,7 +678,8 @@ const MODULE_INITIALIZERS = [
         };
         setTimeout(runAgyUpdate, 15000);
         setInterval(runAgyUpdate, 6 * 60 * 60 * 1000);
-    }}
+    }},
+    { name: 'Native AutoMod Badge Engine', fn: () => require('./modules/nativeAutoMod.js')(client) }
 ];
 
 let isBootingBot = false;
