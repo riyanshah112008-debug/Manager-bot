@@ -658,6 +658,19 @@
 </head>
 <body>
 
+    <div id="cloudSetupBanner" style="display:none; background: linear-gradient(90deg, #f59e0b, #ef4444); color: #fff; padding: 10px 20px; text-align: center; font-size: 0.9rem; font-weight: 700; z-index: 10001; position: relative;">
+        ⚡ Starry Bot is waiting for Discord Token on Render. 
+        <a href="/setup" style="color: #fff; text-decoration: underline; margin-left: 8px; font-weight: 800;">Click here to Activate & Connect to Discord &rarr;</a>
+    </div>
+    <script>
+        fetch('/api/status').then(r => r.json()).then(data => {
+            if (data.status !== 'online') {
+                const b = document.getElementById('cloudSetupBanner');
+                if (b) b.style.display = 'block';
+            }
+        }).catch(() => {});
+    </script>
+
     <!-- HEADER / NAVBAR -->
     <header>
         <a href="/" class="brand">

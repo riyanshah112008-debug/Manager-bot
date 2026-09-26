@@ -54,6 +54,7 @@ const fs = require('fs');
 const path = require('path');
 const child_process = require('child_process');
 const KazagumoSpotify = require('kazagumo-spotify');
+const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
 
 // ==========================================
 // 🔋 TERMUX WAKE LOCK HELPERS
@@ -132,6 +133,174 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => res.status(200).send('awake'));
+
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: client && client.isReady() ? 'online' : (isBootingBot ? 'booting' : 'waiting_for_token'),
+        bot: client && client.user ? `${client.user.username}#${client.user.discriminator || '0'}` : null,
+        botId: client && client.user ? client.user.id : null,
+        uptime: process.uptime(),
+        mongo: mongoose.connection && mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
+});
+
+app.get('/setup', (req, res) => {
+    const isOnline = Boolean(client && client.isReady());
+    const botUser = client && client.user ? `${client.user.username}#${client.user.discriminator || '0'}` : null;
+    
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starry Bot — Cloud Activation Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b0e14;
+            --card: #151922;
+            --primary: #5865f2;
+            --text: #f3f4f6;
+            --muted: #9ca3af;
+            --success: #10b981;
+            --danger: #ef4444;
+            --border: rgba(255,255,255,0.08);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 520px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+        h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+        p { color: var(--muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 20px; }
+        .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; margin-bottom: 24px; }
+        .badge.online { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid var(--success); }
+        .badge.waiting { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid #f59e0b; }
+        label { display: block; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; color: var(--muted); }
+        input { width: 100%; padding: 14px; background: #0e1117; border: 1px solid var(--border); border-radius: 10px; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; margin-bottom: 18px; outline: none; transition: border-color 0.2s; }
+        input:focus { border-color: var(--primary); }
+        button { width: 100%; padding: 15px; background: var(--primary); border: none; border-radius: 10px; color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #4752c4; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .alert { padding: 14px; border-radius: 10px; font-size: 0.9rem; margin-top: 18px; display: none; line-height: 1.5; }
+        .alert.success { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid var(--success); display: block; }
+        .alert.error { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid var(--danger); display: block; }
+        .info-box { background: rgba(88,101,242,0.1); border: 1px solid rgba(88,101,242,0.3); border-radius: 10px; padding: 14px; font-size: 0.85rem; color: #cbd5e1; margin-top: 20px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🌟 Starry Cloud Activation</h1>
+        <p>Your web service is live on Render! ${isOnline ? 'The bot is online and connected to Discord.' : 'To bring the bot online on Discord, paste your credentials below:'}</p>
+        
+        <div class="badge ${isOnline ? 'online' : 'waiting'}">
+            <span>●</span> ${isOnline ? 'Bot Online: ' + botUser : 'Status: Waiting for Discord Token'}
+        </div>
+
+        ${isOnline ? `
+            <div class="alert success">
+                ✅ <strong>Starry is Active & Online!</strong><br>
+                Connected as <code>${botUser}</code>. All 150+ slash commands, automod, leveling, and music features are ready on Discord.
+            </div>
+        ` : `
+            <form id="activateForm">
+                <label for="discordToken">Discord Bot Token (Required)</label>
+                <input type="password" id="discordToken" name="token" placeholder="Paste your bot token here" required autocomplete="off" />
+                
+                <label for="mongoUri">MongoDB URI (Optional)</label>
+                <input type="password" id="mongoUri" name="mongoUri" placeholder="mongodb+srv://..." autocomplete="off" />
+                
+                <button type="submit" id="submitBtn">⚡ Connect Starry to Discord</button>
+                <div id="resultMsg" class="alert"></div>
+            </form>
+            <div class="info-box">
+                💡 <strong>Permanent Cloud Setup:</strong> You can also set <code>DISCORD_TOKEN</code> permanently in your 
+                <a href="https://dashboard.render.com" target="_blank" style="color:var(--primary); font-weight:700;">Render Dashboard</a> under <strong>Environment</strong>.
+            </div>
+            <script>
+                document.getElementById('activateForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const btn = document.getElementById('submitBtn');
+                    const msg = document.getElementById('resultMsg');
+                    btn.disabled = true;
+                    btn.textContent = 'Verifying with Discord...';
+                    msg.style.display = 'none';
+
+                    try {
+                        const res = await fetch('/api/activate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token: document.getElementById('discordToken').value.trim(),
+                                mongoUri: document.getElementById('mongoUri').value.trim()
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            msg.className = 'alert success';
+                            msg.innerHTML = '🎉 <strong>' + data.message + '</strong><br>Bot is now connecting to Discord. Refreshing status...';
+                            setTimeout(() => window.location.reload(), 2500);
+                        } else {
+                            msg.className = 'alert error';
+                            msg.innerHTML = '❌ <strong>Error:</strong> ' + data.error;
+                            btn.disabled = false;
+                            btn.textContent = '⚡ Connect Starry to Discord';
+                        }
+                    } catch (err) {
+                        msg.className = 'alert error';
+                        msg.innerHTML = '❌ Network error: ' + err.message;
+                        btn.disabled = false;
+                        btn.textContent = '⚡ Connect Starry to Discord';
+                    }
+                });
+            </script>
+        `}
+    </div>
+</body>
+</html>`);
+});
+
+app.post('/api/activate', async (req, res) => {
+    if (client && client.isReady()) {
+        return res.json({ success: true, message: `Bot is already online as ${client.user.tag}` });
+    }
+
+    const { token, mongoUri } = req.body || {};
+    const sanitizedToken = cleanToken(token);
+    if (!sanitizedToken) {
+        return res.status(400).json({ success: false, error: 'A valid Discord Bot Token is required.' });
+    }
+
+    // Verify token with Discord REST API
+    const preflight = await verifyDiscordToken(sanitizedToken);
+    if (!preflight.valid) {
+        return res.status(401).json({ 
+            success: false, 
+            error: `Discord rejected this token (${preflight.status || 'Error'}): ${preflight.error || 'Invalid Bot Token'}` 
+        });
+    }
+
+    // Persist to local .env in container
+    try {
+        let envContent = `DISCORD_TOKEN=${sanitizedToken}\nTOKEN=${sanitizedToken}\n`;
+        if (mongoUri && mongoUri.trim()) envContent += `MONGO_URI=${mongoUri.trim()}\n`;
+        if (process.env.CLIENT_ID) envContent += `CLIENT_ID=${process.env.CLIENT_ID}\n`;
+        fs.writeFileSync(path.join(process.cwd(), '.env'), envContent, 'utf8');
+    } catch (e) {}
+
+    process.env.DISCORD_TOKEN = sanitizedToken;
+    process.env.TOKEN = sanitizedToken;
+    if (mongoUri && mongoUri.trim()) process.env.MONGO_URI = mongoUri.trim();
+
+    // Trigger boot
+    startBot(sanitizedToken, mongoUri).catch(err => {
+        console.error('Activation boot error:', err);
+    });
+
+    return res.json({ 
+        success: true, 
+        message: `Token Verified! Connected identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'}` 
+    });
+});
+
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
     if (process.env.RENDER_EXTERNAL_URL) {
@@ -512,64 +681,71 @@ const MODULE_INITIALIZERS = [
     }}
 ];
 
-const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
+let isBootingBot = false;
 
-let tokenCheckInterval = null;
+async function startBot(overrideToken, overrideMongo) {
+    if ((client && client.isReady()) || isBootingBot) return;
+    isBootingBot = true;
 
-async function startBot() {
-    let sourceVar = 'DISCORD_TOKEN';
-    let rawToken = process.env.DISCORD_TOKEN;
-    if (!rawToken && process.env.BOT_TOKEN) {
-        rawToken = process.env.BOT_TOKEN;
-        sourceVar = 'BOT_TOKEN';
-    } else if (!rawToken && process.env.TOKEN) {
-        rawToken = process.env.TOKEN;
-        sourceVar = 'TOKEN';
-    }
-
-    const primaryToken = cleanToken(rawToken);
-    if (!primaryToken) {
-        console.error("🛑 CRITICAL ERROR: Discord Bot Token is missing!");
-        console.error(`- Bot Token (${sourceVar}): MISSING`);
-        console.error(`- MONGO_URI: ${process.env.MONGO_URI ? 'Present' : 'Not configured (optional)'}`);
-        console.error("------------------------------------------------------------------");
-        console.error("👉 ACTION REQUIRED ON RENDER DASHBOARD:");
-        console.error("1. Open https://dashboard.render.com and select your service (Manager-bot-1).");
-        console.error("2. Go to the 'Environment' tab on the left sidebar.");
-        console.error("3. Click 'Add Environment Variable':");
-        console.error("   - Key: DISCORD_TOKEN");
-        console.error("   - Value: <paste your bot token from Discord Developer Portal>");
-        console.error("   (Optional) Key: MONGO_URI, Value: <paste your mongodb connection string>");
-        console.error("   (Or add your .env file directly under the 'Secret Files' tab)");
-        console.error("4. Save Changes to redeploy.");
-        console.error("------------------------------------------------------------------");
-        console.warn(`🌐 Express Web Server & Health Check are ACTIVE on port ${port}.`);
-        console.warn(`⏳ Keeping service running to keep Render deployment healthy while waiting for DISCORD_TOKEN.`);
-
-        if (!tokenCheckInterval) {
-            tokenCheckInterval = setInterval(async () => {
-                try {
-                    const envPath = path.join(process.cwd(), '.env');
-                    if (fs.existsSync(envPath)) {
-                        require('dotenv').config({ path: envPath, override: true });
-                        const checkToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
-                        if (checkToken) {
-                            console.log('✨ [Auto-Detect] Detected bot token in environment/secret file! Booting bot...');
-                            clearInterval(tokenCheckInterval);
-                            tokenCheckInterval = null;
-                            await startBot();
-                        }
-                    }
-                } catch (e) {}
-            }, 10000);
+    try {
+        if (overrideToken) {
+            process.env.DISCORD_TOKEN = overrideToken;
+            process.env.TOKEN = overrideToken;
         }
-        return;
-    }
+        if (overrideMongo) {
+            process.env.MONGO_URI = overrideMongo;
+        }
 
-    if (tokenCheckInterval) {
-        clearInterval(tokenCheckInterval);
-        tokenCheckInterval = null;
-    }
+        let sourceVar = 'DISCORD_TOKEN';
+        let rawToken = process.env.DISCORD_TOKEN;
+        if (!rawToken && process.env.BOT_TOKEN) {
+            rawToken = process.env.BOT_TOKEN;
+            sourceVar = 'BOT_TOKEN';
+        } else if (!rawToken && process.env.TOKEN) {
+            rawToken = process.env.TOKEN;
+            sourceVar = 'TOKEN';
+        }
+
+        const primaryToken = cleanToken(rawToken);
+        if (!primaryToken) {
+            isBootingBot = false;
+            console.error("🛑 CRITICAL ERROR: Discord Bot Token is missing!");
+            console.error(`- Bot Token (${sourceVar}): MISSING`);
+            console.error(`- MONGO_URI: ${process.env.MONGO_URI ? 'Present' : 'Not configured (optional)'}`);
+            console.error("------------------------------------------------------------------");
+            console.error("👉 ACTION REQUIRED ON RENDER DASHBOARD OR WEB PORTAL:");
+            console.error("1. Easiest Option: Open your Render URL /setup in your phone browser");
+            console.error("   and paste your bot token to activate instantly!");
+            console.error("2. Permanent Dashboard Option: Go to Render Dashboard -> Environment tab.");
+            console.error("   Add variable: DISCORD_TOKEN = <your_token>");
+            console.error("------------------------------------------------------------------");
+            console.warn(`🌐 Express Web Server & Health Check are ACTIVE on port ${port}.`);
+            console.warn(`⏳ Keeping service running to keep Render deployment healthy while waiting for DISCORD_TOKEN.`);
+
+            if (!tokenCheckInterval) {
+                tokenCheckInterval = setInterval(async () => {
+                    try {
+                        const envPath = path.join(process.cwd(), '.env');
+                        if (fs.existsSync(envPath)) {
+                            require('dotenv').config({ path: envPath, override: true });
+                            const checkToken = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN;
+                            if (checkToken) {
+                                console.log('✨ [Auto-Detect] Detected bot token in environment/secret file! Booting bot...');
+                                clearInterval(tokenCheckInterval);
+                                tokenCheckInterval = null;
+                                await startBot();
+                            }
+                        }
+                    } catch (e) {}
+                }, 10000);
+            }
+            return;
+        }
+
+        if (tokenCheckInterval) {
+            clearInterval(tokenCheckInterval);
+            tokenCheckInterval = null;
+        }
 
     console.log(`🔑 Bot Token detected from ${sourceVar}: ${maskToken(primaryToken)}`);
 
@@ -639,9 +815,7 @@ async function startBot() {
     }
 
     try {
-
-        try {
-            const bumpModule = require('./modules/bumpEngine.js');
+        const bumpModule = require('./modules/bumpEngine.js');
             if (typeof bumpModule === 'function') {
                 bumpModule(client, app);
                 console.log('✅ Registered Directory API Endpoints with Express Web Server!');
@@ -665,8 +839,9 @@ async function startBot() {
         await multiBot.initAll(client, primaryToken);
 
     } catch (error) {
-        console.error("🛑 FATAL BOOTSTRAP ERROR:\n", error.stack || error);
-        process.exit(1);
+        isBootingBot = false;
+        console.error("🛑 BOOTSTRAP ERROR:\n", error.stack || error);
+        console.warn("⚠️ Keeping web server active so deployment remains healthy on Render. Check /setup to re-enter credentials.");
     }
 }
 

@@ -10,7 +10,8 @@ except ImportError:
     import subprocess
     try:
         # Attempt auto-installation for cloud hosts (Render, Railway, Heroku)
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp", "--quiet", "--no-warn-script-location"])
+        cmd = [sys.executable, "-m", "pip", "install", "yt-dlp", "--quiet", "--no-warn-script-location", "--break-system-packages"]
+        subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         import yt_dlp
     except Exception:
         # Gracefully step aside without throwing an unhandled traceback
