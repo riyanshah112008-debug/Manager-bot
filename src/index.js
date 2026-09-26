@@ -682,6 +682,7 @@ const MODULE_INITIALIZERS = [
 ];
 
 let isBootingBot = false;
+let tokenCheckInterval = null;
 
 async function startBot(overrideToken, overrideMongo) {
     if ((client && client.isReady()) || isBootingBot) return;
