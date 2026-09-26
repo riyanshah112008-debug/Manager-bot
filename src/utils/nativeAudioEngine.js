@@ -523,7 +523,10 @@ class StarryGuildPlayer {
                     }
                 }, 60000);
             }
+            return;
         }
+
+        return this.playTrack();
     }
 
     createFilteredResource(streamOrPath, isFile = false) {
@@ -593,7 +596,6 @@ class StarryGuildPlayer {
             return;
         }
 
-        await this.connect();
         const track = this.queue.shift();
         if (this.currentTrack) {
             this.history.push(this.currentTrack);
@@ -602,6 +604,7 @@ class StarryGuildPlayer {
         this.currentTrack = track;
 
         try {
+            await this.connect();
             let targetUrl = track.url;
             let audioResource = null;
 
@@ -645,8 +648,10 @@ class StarryGuildPlayer {
                 try {
                     await refreshSoundCloudToken();
                     const primaryArtist = (track.author || '').split(',')[0].trim();
-                    const searchQuery = `${primaryArtist} ${track.title}`.trim();
-                    const scResults = await play.search(searchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    let scResults = await play.search(searchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    if (!scResults || scResults.length === 0) {
+                        scResults = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    }
                     const targetSc = scResults?.[0];
                     const scUrl = targetSc?.permalink || targetSc?.url;
                     if (scUrl) {
@@ -665,7 +670,10 @@ class StarryGuildPlayer {
                 try {
                     let ytUrl = targetUrl;
                     if (!ytUrl || (!ytUrl.includes('youtube.com/') && !ytUrl.includes('youtu.be/'))) {
-                        const ytSearch = await play.search(`${track.author || ''} ${track.title}`.trim(), { limit: 1 }).catch(() => []);
+                        let ytSearch = await play.search(`${track.author || ''} ${track.title}`.trim(), { limit: 1 }).catch(() => []);
+                        if (!ytSearch || ytSearch.length === 0) {
+                            ytSearch = await play.search(track.title, { limit: 1 }).catch(() => []);
+                        }
                         if (ytSearch && ytSearch[0]) ytUrl = ytSearch[0].url;
                     }
                     if (ytUrl) {
@@ -716,6 +724,10 @@ class StarryGuildPlayer {
 
         } catch (err) {
             console.error(`⚠️ [Playback Exception for "${track.title}"]:`, err.message || err);
+            if (this.loadingMessage) {
+                this.loadingMessage.delete().catch(() => {});
+                this.loadingMessage = null;
+            }
             if (this.textChannel) {
                 this.textChannel.send(`⚠️ Could not stream **${track.title}**: ${err.message || 'Source stream unreachable'}`).catch(() => {});
             }
@@ -875,6 +887,10 @@ class StarryGuildPlayer {
         this.queue = [];
         this.currentTrack = null;
         this.player.stop();
+        if (this.loadingMessage) {
+            this.loadingMessage.delete().catch(() => {});
+            this.loadingMessage = null;
+        }
         if (this.nowPlayingMessage) {
             this.nowPlayingMessage.delete().catch(() => {});
             this.nowPlayingMessage = null;
