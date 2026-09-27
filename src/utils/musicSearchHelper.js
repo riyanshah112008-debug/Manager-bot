@@ -46,6 +46,31 @@ function formatDuration(ms) {
 }
 
 /**
+ * Formats a Discord autocomplete choice label ensuring:
+ * Title + Artist Name + Track Time [Duration] (max 100 chars)
+ */
+function formatChoiceLabel(title, artist, duration) {
+    const durStr = duration ? ` [${duration}]` : '';
+    const cleanTitle = (title || 'Unknown Title').replace(/[\t\n\r]/g, ' ').trim();
+    const cleanArtist = (artist || 'Unknown Artist').replace(/[\t\n\r]/g, ' ').trim();
+
+    const budget = 100 - durStr.length;
+    if (`${cleanTitle} • ${cleanArtist}`.length <= budget) {
+        return `${cleanTitle} • ${cleanArtist}${durStr}`;
+    }
+
+    const separator = ' • ';
+    const availableForText = budget - separator.length;
+    const maxArtistLen = Math.min(cleanArtist.length, 25);
+    const maxTitleLen = availableForText - maxArtistLen;
+
+    const truncTitle = cleanTitle.length > maxTitleLen ? cleanTitle.substring(0, maxTitleLen - 1) + '…' : cleanTitle;
+    const truncArtist = cleanArtist.length > maxArtistLen ? cleanArtist.substring(0, maxArtistLen - 1) + '…' : cleanArtist;
+
+    return `${truncTitle}${separator}${truncArtist}${durStr}`.substring(0, 100);
+}
+
+/**
  * Builds the 5-button platform action row matching Jockie Music's UI:
  * [🟠 SoundCloud] [🟢 Spotify] [🍎 Apple Music] [🎵 YouTube Music] [❌ Cancel]
  */
@@ -121,7 +146,8 @@ async function sendNoResultsFallback(ctx, query) {
 }
 
 /**
- * Real-time fast autocomplete query engine (<30ms)
+ * Real-time fast autocomplete query engine
+ * Always returns formatted choices with: Title • Artist [Track Time]
  */
 async function getSongAutocomplete(rawQuery, manager) {
     if (!rawQuery || !rawQuery.trim()) return [];
@@ -138,55 +164,84 @@ async function getSongAutocomplete(rawQuery, manager) {
     const suggestions = [];
     const seen = new Set();
 
-    // 1. YouTube instant autocomplete API (20-40ms worldwide)
-    try {
-        const apiUrl = `https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(cleanQuery)}`;
-        const ytSuggestions = await new Promise((resolve) => {
-            const req = https.get(apiUrl, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    try {
-                        const parsed = JSON.parse(data);
-                        resolve(parsed[1] || []);
-                    } catch {
-                        resolve([]);
-                    }
-                });
-            });
-            req.on('error', () => resolve([]));
-            req.setTimeout(500, () => { req.destroy(); resolve([]); });
-        });
-
-        for (const item of ytSuggestions) {
-            if (typeof item === 'string' && item.trim()) {
-                const label = item.trim().substring(0, 100);
-                if (!seen.has(label.toLowerCase())) {
-                    seen.add(label.toLowerCase());
-                    suggestions.push({ name: `🎵 ${label}`.substring(0, 100), value: label });
-                }
-            }
-            if (suggestions.length >= 10) break;
-        }
-    } catch (_) {}
-
-    // 2. Lavalink track search in parallel for precise titles/artists if time permits
-    if (manager && suggestions.length < 5) {
+    // 1. Primary: Kazagumo / Lavalink Cluster Search (Returns Title + Artist + Duration)
+    if (manager && typeof manager.search === 'function') {
         try {
             const searchPromise = manager.search(`ytmsearch:${cleanQuery}`);
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 500));
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1200));
             const res = await Promise.race([searchPromise, timeoutPromise]);
             if (res && res.tracks && res.tracks.length > 0) {
-                for (const t of res.tracks.slice(0, 8)) {
+                for (const t of res.tracks.slice(0, 15)) {
                     const title = t.title || 'Track';
-                    const author = t.author ? ` • ${t.author}` : '';
-                    const dur = t.length ? ` (${formatDuration(t.length)})` : '';
-                    const label = `${title}${author}${dur}`.substring(0, 100);
-                    const val = (t.uri && t.uri.length <= 100) ? t.uri : title.substring(0, 100);
+                    const author = t.author || 'Artist';
+                    const dur = formatDuration(t.length);
+                    const label = formatChoiceLabel(title, author, dur);
+                    const val = (t.uri && t.uri.length <= 100) ? t.uri : `${title} ${author}`.substring(0, 100);
+
                     if (!seen.has(label.toLowerCase())) {
                         seen.add(label.toLowerCase());
-                        suggestions.unshift({ name: label, value: val });
+                        suggestions.push({ name: label, value: val });
                     }
+                }
+            }
+        } catch (_) {}
+    }
+
+    // 2. Secondary: Fast YouTube Engine via play-dl (Returns Title + Artist + Duration)
+    if (suggestions.length < 5) {
+        try {
+            const play = require('play-dl');
+            const playPromise = play.search(cleanQuery, { limit: 12 });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1200));
+            const playResults = await Promise.race([playPromise, timeoutPromise]);
+            if (Array.isArray(playResults) && playResults.length > 0) {
+                for (const r of playResults) {
+                    const title = r.title || 'Track';
+                    const author = r.channel?.name || 'Artist';
+                    const dur = r.durationRaw || formatDuration((r.durationInSec || 0) * 1000);
+                    const label = formatChoiceLabel(title, author, dur);
+                    const val = (r.url && r.url.length <= 100) ? r.url : `${title} ${author}`.substring(0, 100);
+
+                    if (!seen.has(label.toLowerCase())) {
+                        seen.add(label.toLowerCase());
+                        suggestions.push({ name: label, value: val });
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    // 3. Tertiary: Instant iTunes Metadata API (Returns Title + Artist + Duration in ~40ms)
+    if (suggestions.length < 5) {
+        try {
+            const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=10`;
+            const itunesResults = await new Promise((resolve) => {
+                const req = https.get(itunesUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+                    let body = '';
+                    res.on('data', chunk => body += chunk);
+                    res.on('end', () => {
+                        try {
+                            const parsed = JSON.parse(body);
+                            resolve(parsed.results || []);
+                        } catch {
+                            resolve([]);
+                        }
+                    });
+                });
+                req.on('error', () => resolve([]));
+                req.setTimeout(800, () => { req.destroy(); resolve([]); });
+            });
+
+            for (const r of itunesResults) {
+                const title = r.trackName || 'Song';
+                const author = r.artistName || 'Artist';
+                const dur = formatDuration(r.trackTimeMillis);
+                const label = formatChoiceLabel(title, author, dur);
+                const val = `${title} ${author}`.substring(0, 100);
+
+                if (!seen.has(label.toLowerCase())) {
+                    seen.add(label.toLowerCase());
+                    suggestions.push({ name: label, value: val });
                 }
             }
         } catch (_) {}
@@ -310,14 +365,14 @@ async function handleSearchButton(interaction, client) {
     // If this was initiated from the `,search` or `/search` command: show interactive dropdown menu
     if (session.isSearchCommand) {
         const topTracks = session.cachedTracks.slice(0, 5);
-        const desc = topTracks.map((t, i) => `\`${i + 1}.\` **[${(t.title || 'Track').substring(0, 55)}](${t.uri || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` (\`${formatDuration(t.length)}\`)`).join('\n');
+        const desc = topTracks.map((t, i) => `\`${i + 1}.\` **[${(t.title || 'Track').substring(0, 55)}](${t.uri || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` [${formatDuration(t.length)}]`).join('\n');
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`search_track_select_${searchId}`)
             .setPlaceholder('🎵 Select a track from the list to play...')
             .addOptions(topTracks.map((t, idx) => ({
-                label: `${idx + 1}. ${(t.title || 'Track').substring(0, 45)}`,
-                description: `${(t.author || 'Artist').substring(0, 30)} • ${formatDuration(t.length)}`,
+                label: `${idx + 1}. ${(t.title || 'Track').substring(0, 45)} [${formatDuration(t.length)}]`,
+                description: `Artist: ${(t.author || 'Artist').substring(0, 40)} • Duration: ${formatDuration(t.length)}`,
                 value: String(idx)
             })));
 
@@ -520,14 +575,14 @@ async function executeSearchCommand(ctx, rawQuery) {
     }
 
     const topTracks = session.cachedTracks.slice(0, 5);
-    const desc = topTracks.map((t, i) => `\`${i + 1}.\` **[${(t.title || 'Track').substring(0, 55)}](${t.uri || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` (\`${formatDuration(t.length)}\`)`).join('\n');
+    const desc = topTracks.map((t, i) => `\`${i + 1}.\` **[${(t.title || 'Track').substring(0, 55)}](${t.uri || 'https://discord.gg'})** • \`${t.author || 'Artist'}\` [${formatDuration(t.length)}]`).join('\n');
 
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`search_track_select_${searchId}`)
         .setPlaceholder('🎵 Select a track from the list to play...')
         .addOptions(topTracks.map((t, idx) => ({
-            label: `${idx + 1}. ${(t.title || 'Track').substring(0, 45)}`,
-            description: `${(t.author || 'Artist').substring(0, 30)} • ${formatDuration(t.length)}`,
+            label: `${idx + 1}. ${(t.title || 'Track').substring(0, 45)} [${formatDuration(t.length)}]`,
+            description: `Artist: ${(t.author || 'Artist').substring(0, 40)} • Duration: ${formatDuration(t.length)}`,
             value: String(idx)
         })));
 
