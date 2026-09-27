@@ -42,10 +42,12 @@ const {
     ButtonStyle, 
     StringSelectMenuBuilder, 
     PermissionFlagsBits,
-    MessageFlags
+    MessageFlags,
+    Status
 } = require('discord.js');
 const express = require('express');
 const cors = require('cors'); 
+const http = require('http');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
 const { Connectors } = require('shoukaku');
@@ -132,7 +134,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-app.get('/health', (req, res) => res.status(200).send('awake'));
+app.get(['/health', '/ping'], (req, res) => res.status(200).json({ status: 'ok', uptime: process.uptime(), bot: client?.user?.tag || 'ready' }));
 
 app.get('/api/status', (req, res) => {
     res.json({
@@ -303,11 +305,33 @@ app.post('/api/activate', async (req, res) => {
 
 app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Web Dashboard & Server listening on port ${port}`);
-    if (process.env.RENDER_EXTERNAL_URL) {
-        setInterval(() => {
-            https.get(`${process.env.RENDER_EXTERNAL_URL}/health`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).on('error', () => {});
-        }, 840000);
+
+    // High-Resilience Anti-Sleep Keep-Alive Engine (Runs every 3 minutes)
+    // Render Free Web Services sleep after 15 minutes of inbound HTTP inactivity.
+    const externalUrl = process.env.RENDER_EXTERNAL_URL || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : null);
+    if (externalUrl) {
+        console.log(`🌐 [Keep-Alive] External self-ping active for ${externalUrl} (interval: 3 mins)`);
+    } else {
+        console.log('ℹ️ [Keep-Alive] Note: Set RENDER_EXTERNAL_URL on Render environment for external awake pinging.');
     }
+
+    setInterval(() => {
+        // 1. Local loopback keep-alive (keeps node event loop alive)
+        http.get(`http://127.0.0.1:${port}/health`, { timeout: 5000 }, (res) => {
+            res.resume();
+        }).on('error', () => {});
+
+        // 2. External Render inbound HTTP ping (prevents Render 15-minute container freeze)
+        if (externalUrl) {
+            const clientModule = externalUrl.startsWith('https') ? https : http;
+            clientModule.get(`${externalUrl}/health`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StarryKeepAlive/2.0)' },
+                timeout: 8000
+            }, (res) => {
+                res.resume();
+            }).on('error', () => {});
+        }
+    }, 180000);
 });
 
 // Create Primary Bot Client
@@ -505,25 +529,35 @@ setInterval(() => {
     // 3. Check Primary Discord Gateway WebSocket & Zombie Heartbeat State
     // Provide a 3-minute startup grace period for Discord heartbeat cycles and shard latency negotiation
     if (client.ws && client.isReady() && client.uptime > 180000) {
-        const isNotReady = client.ws.status !== 0;
         const ping = client.ws.ping;
         const shard = client.ws.shards?.first();
         const lastPing = shard?.lastPingTimestamp || 0;
         const timeSinceLastPing = lastPing > 0 ? (Date.now() - lastPing) : 0;
+        const status = client.ws.status;
 
         // True Zombie socket detection:
-        // - WebSocket status is not ready (status !== 0)
-        // - Ping is abnormally astronomical (>30000ms)
-        // - Heartbeat ACK missing for >120s (Discord heartbeat interval is ~41.25s)
-        const isZombiePing = (ping > 30000);
-        const isHeartbeatStale = (lastPing > 0 && timeSinceLastPing > 120000);
+        // - Socket status is explicitly Disconnected (Status.Disconnected = 5)
+        // - OR Heartbeat ACK missing for >180s (Discord heartbeat interval is ~41.25s) AND ping > 60000ms
+        const isDisconnected = (status === Status.Disconnected);
+        const isZombiePing = (ping > 60000 && lastPing > 0 && timeSinceLastPing > 180000);
 
-        if (isNotReady || isZombiePing || isHeartbeatStale) {
+        if (isDisconnected || isZombiePing) {
             gatewayAbnormalCount++;
-            console.warn(`⚠️ [Watchdog] Gateway abnormal (status: ${client.ws.status}, ping: ${ping}ms, lastPingAck: ${Math.round(timeSinceLastPing / 1000)}s ago) [Check ${gatewayAbnormalCount}/6]`);
+            console.warn(`⚠️ [Watchdog] Gateway abnormal (status: ${status}, ping: ${ping}ms, lastPingAck: ${Math.round(timeSinceLastPing / 1000)}s ago) [Check ${gatewayAbnormalCount}/20]`);
             
-            if (gatewayAbnormalCount >= 6) {
-                console.error('🛑 [Watchdog] Gateway stuck in dead/disconnected state for >90s. Initiating recovery restart...');
+            // At check 8 (2 minutes of abnormal status), attempt graceful shard reconnection before forcing process restart
+            if (gatewayAbnormalCount === 8) {
+                console.warn('🔄 [Watchdog] Gateway unresponsive for 2 minutes. Requesting Shard reconnect...');
+                try {
+                    shard?.reconnect?.();
+                } catch (recErr) {
+                    console.error('Shard reconnect trigger failed:', recErr.message);
+                }
+            }
+
+            // Only if disconnected continuously for 5 minutes (20 checks * 15s) do we restart the container
+            if (gatewayAbnormalCount >= 20) {
+                console.error('🛑 [Watchdog] Gateway stuck in dead/disconnected state for >5 minutes. Initiating recovery restart...');
                 gatewayAbnormalCount = 0;
                 process.exit(1);
             }

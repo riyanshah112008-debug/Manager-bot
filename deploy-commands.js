@@ -757,17 +757,6 @@ async function deployCommands(client) {
         const result = await rest.put(Routes.applicationCommands(clientId), { body: finalPayload });
         console.log(`✅ Successfully deployed ${result.length} commands globally!`);
 
-        // Instant Guild Sync (0-Second Appearance in Active Servers)
-        if (client && client.guilds && client.guilds.cache.size > 0) {
-            console.log(`⚡ [INSTANT GUILD SYNC] Deploying commands to ${client.guilds.cache.size} connected servers for instant 0s availability...`);
-            for (const guild of client.guilds.cache.values()) {
-                try {
-                    await rest.put(Routes.applicationGuildCommands(clientId, guild.id), { body: finalPayload });
-                } catch (gErr) {}
-            }
-            console.log(`⚡ [INSTANT GUILD SYNC] All connected servers synchronized instantly!`);
-        }
-
         return result;
     } catch (error) {
         console.error('❌ Discord API Rejected Command Payload:', error);

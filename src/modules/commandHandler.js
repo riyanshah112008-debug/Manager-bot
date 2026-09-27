@@ -12,7 +12,8 @@ const {
     AttachmentBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -55,7 +56,6 @@ function setCachedPrefix(guildId, prefix) {
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
 const mongoose = require('mongoose');
-const ExecutionLock = require('../models/ExecutionLock');
 
 function isPrimaryBotClient(client) {
     if (client.isPrimary === false) return false;
@@ -112,7 +112,10 @@ function getFilesRecursively(dir) {
 // 🛡️ Global Command Safety Execution Guard (Prevents indefinite hangs on slow APIs / DB locks)
 async function executeSafely(command, ctx, client, cmdName) {
     const isAiCommand = command.category === 'Utility' && ['ask', 'ai', 'gemini', 'gpt', 'vision', 'summarize', 'codebot'].includes(command.name);
-    const TIMEOUT_MS = command.timeout || (isAiCommand ? 60000 : 30000);
+    const isMusicCommand = command.category === 'Music';
+    // Generous timeouts: 90s for AI, 60s for music queue/fetching, 45s for standard commands
+    const defaultTimeout = isAiCommand ? 90000 : (isMusicCommand ? 60000 : 45000);
+    const TIMEOUT_MS = command.timeout || defaultTimeout;
     let timer;
     const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => {
@@ -388,18 +391,6 @@ class CommandRegistry {
             executedMessageIds.add(message.id);
             setTimeout(() => executedMessageIds.delete(message.id), 20000);
 
-            // 🛡️ Guaranteed Distributed Single-Execution Lock (Multi-Process / Cloud + Termux Deduplication)
-            if (mongoose.connection.readyState === 1) {
-                try {
-                    await ExecutionLock.create({ _id: message.id, instance: client.user?.id || 'primary' });
-                } catch (lockErr) {
-                    if (lockErr.code === 11000) {
-                        console.log(`🛡️ [Deduplication] Dropped duplicate command message ${message.id} (already locked by peer instance)`);
-                        return;
-                    }
-                }
-            }
-
             console.log(`⚡ [Command] Executing ,${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
 
@@ -441,18 +432,10 @@ class CommandRegistry {
         client.on(Events.InteractionCreate, async (interaction) => {
             if (!interaction) return;
 
-            // 🛡️ Interaction Deduplication Guard (In-Memory + Distributed ExecutionLock)
+            // 🛡️ Interaction Deduplication Guard (Ultra-Fast 0ms In-Memory Guard)
             if (executedInteractionIds.has(interaction.id)) return;
             executedInteractionIds.add(interaction.id);
             setTimeout(() => executedInteractionIds.delete(interaction.id), 20000);
-
-            if (mongoose.connection.readyState === 1) {
-                try {
-                    await ExecutionLock.create({ _id: interaction.id, instance: client.user?.id || 'primary' });
-                } catch (lockErr) {
-                    if (lockErr.code === 11000) return;
-                }
-            }
 
             // 0. Handle Autocomplete Interactions (Live Instant Dropdown List)
             if (interaction.isAutocomplete()) {
@@ -560,6 +543,18 @@ class CommandRegistry {
             // 3. Handle Global 1-Year Persistent Button & Select Menu Interactions
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
                 const customId = interaction.customId;
+
+                // 🛡️ Interaction Timeout Safety Net
+                // If a button or menu has no active collector or global handler,
+                // acknowledge gracefully before Discord's strict 3-second limit.
+                setTimeout(() => {
+                    if (!interaction.replied && !interaction.deferred) {
+                        interaction.reply({
+                            content: '⚠️ This button or menu interaction has expired. Please run the command again.',
+                            flags: EPHEMERAL_FLAG
+                        }).catch(() => {});
+                    }
+                }, 2400);
 
                 // 🖥️ Starry Autonomous Bot Studio: Code in Local Termux Workspace Button
                 if (customId.startsWith('botstudio_local_')) {
@@ -1663,6 +1658,12 @@ class CommandRegistry {
                                 }
                             }
                         }
+
+                        // Refresh dedicated music controller message if active
+                        try {
+                            const musicController = require('./musicController');
+                            musicController.update(interaction.guildId, client).catch(() => {});
+                        } catch (e) {}
                     } catch (e) {}
                 }
             }
