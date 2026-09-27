@@ -874,7 +874,12 @@ async function startBot(overrideToken, overrideMongo) {
             console.error('⚠️ Could not load bumpEngine API routes:', e.message);
         }
 
-        // Initialize Background Modules
+        // 1. Connect Primary Client to Discord Gateway IMMEDIATELY
+        console.log('🚀 Connecting Primary Bot to Discord Gateway...');
+        await client.login(primaryToken);
+        console.log('✨ Primary Bot login sequence initiated successfully!');
+
+        // 2. Initialize Background Modules
         for (const mod of MODULE_INITIALIZERS) {
             try {
                 await Promise.resolve(mod.fn());
@@ -884,8 +889,7 @@ async function startBot(overrideToken, overrideMongo) {
             }
         }
 
-        // Connect Primary Client & Boot Multi-Bot Cluster
-        await client.login(primaryToken);
+        // 3. Boot Multi-Bot Cluster Worker Nodes
         await multiBot.initAll(client, primaryToken);
 
     } catch (error) {
