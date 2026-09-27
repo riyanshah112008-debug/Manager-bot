@@ -453,6 +453,29 @@ class CommandRegistry {
                     if (lockErr.code === 11000) return;
                 }
             }
+
+            // 0. Handle Autocomplete Interactions (Live Instant Dropdown List)
+            if (interaction.isAutocomplete()) {
+                const commandName = interaction.commandName.toLowerCase();
+                const resolvedName = this.aliases.get(commandName) || commandName;
+                const command = this.commands.get(resolvedName) || client.commands?.get(resolvedName);
+                if (command && typeof command.autocomplete === 'function') {
+                    try {
+                        await command.autocomplete(interaction, client);
+                    } catch (autoErr) {
+                        console.warn(`⚠️ Autocomplete error (/${commandName}):`, autoErr.message);
+                    }
+                } else if (commandName === 'play' || commandName === 'search') {
+                    try {
+                        const { getSongAutocomplete } = require('../utils/musicSearchHelper');
+                        const focused = interaction.options.getFocused();
+                        const choices = await getSongAutocomplete(focused, client.manager);
+                        await interaction.respond(choices).catch(() => {});
+                    } catch (_) {}
+                }
+                return;
+            }
+
             // 1. Handle Slash Commands
             if (interaction.isChatInputCommand()) {
                 const commandName = interaction.commandName.toLowerCase();
@@ -1414,8 +1437,18 @@ class CommandRegistry {
                     return await musicController.handleButtonInteraction(interaction, client);
                 }
 
-                // G. Music & DJ Panel Global Controls (1-Year Global Handler)
-                if (customId.startsWith('dj_') || customId.startsWith('music_')) {
+                // G. Music, Search & DJ Panel Global Controls (1-Year Global Handler)
+                if (customId.startsWith('dj_') || customId.startsWith('music_') || customId.startsWith('search_')) {
+                    // Handle Multi-Platform Search System Buttons & Select Menus (from screenshot)
+                    if (customId.startsWith('search_src_') || customId.startsWith('search_cancel:')) {
+                        const { handleSearchButton } = require('../utils/musicSearchHelper');
+                        return handleSearchButton(interaction, client);
+                    }
+                    if (customId.startsWith('search_track_select_')) {
+                        const { handleSearchTrackSelect } = require('../utils/musicSearchHelper');
+                        return handleSearchTrackSelect(interaction, client);
+                    }
+
                     const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
                     const { applyKazagumoFilter } = require('../utils/musicManager');
 

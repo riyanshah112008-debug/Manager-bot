@@ -149,7 +149,28 @@ const commands = [
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
 
     // MUSIC COMMANDS
-    { name: 'play', description: 'Play a song from SoundCloud or Spotify', options: [{ name: 'song', type: 3, required: true, description: 'Song name, SoundCloud URL, or Spotify URL' }] },
+    { 
+        name: 'play', 
+        description: '🎵 Play high-fidelity audio from SoundCloud, Spotify, or YouTube', 
+        options: [{ 
+            name: 'song', 
+            type: 3, 
+            required: true, 
+            description: 'Song title, artist, or music link', 
+            autocomplete: true 
+        }] 
+    },
+    { 
+        name: 'search', 
+        description: '🔍 Interactive search across SoundCloud, Spotify, Apple Music & YouTube', 
+        options: [{ 
+            name: 'query', 
+            type: 3, 
+            required: true, 
+            description: 'Song title or artist to search', 
+            autocomplete: true 
+        }] 
+    },
     { name: 'skip', description: 'Skip the current song' },
     { name: 'stop', description: 'Stop the music and clear the queue' },
     { name: 'queue', description: 'View and interactively manage the current music queue' },

@@ -103,6 +103,12 @@ const commands = [
         category: 'Music',
         description: 'Play high quality audio from SoundCloud, Spotify, YouTube or search keywords.',
         usage: ',play <song title or URL>',
+        async autocomplete(interaction, client) {
+            const { getSongAutocomplete } = require('../../utils/musicSearchHelper');
+            const focused = interaction.options.getFocused();
+            const choices = await getSongAutocomplete(focused, client.manager);
+            return interaction.respond(choices).catch(() => {});
+        },
         async execute(ctx) {
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
@@ -136,7 +142,8 @@ const commands = [
                     const res = await manager.search(query, { requester: ctx.user });
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                         if (loadingMsg) loadingMsg.delete().catch(() => {});
-                        return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
+                        const { sendNoResultsFallback } = require('../../utils/musicSearchHelper');
+                        return sendNoResultsFallback(ctx, query);
                     }
 
                     let player = manager.getPlayer(ctx.guild.id);
@@ -246,7 +253,8 @@ const commands = [
                 ]);
                 if (!result || !result.tracks || result.tracks.length === 0) {
                     if (loadingMsg) loadingMsg.delete().catch(() => {});
-                    return ctx.reply('❌ No audio results found for your query. Please check the song name or link!');
+                    const { sendNoResultsFallback } = require('../../utils/musicSearchHelper');
+                    return sendNoResultsFallback(ctx, query);
                 }
 
                 if (result.type === 'PLAYLIST') {
@@ -1233,70 +1241,20 @@ const commands = [
         name: 'search',
         aliases: ['find'],
         category: 'Music',
-        description: 'Search and pick from top 5 audio results.',
-        usage: ',search <song name>',
+        description: 'Interactive multi-platform audio search across SoundCloud, Spotify, Apple Music & YouTube.',
+        usage: ',search <song name or artist>',
+        async autocomplete(interaction, client) {
+            const { getSongAutocomplete } = require('../../utils/musicSearchHelper');
+            const focused = interaction.options.getFocused();
+            const choices = await getSongAutocomplete(focused, client.manager);
+            return interaction.respond(choices).catch(() => {});
+        },
         async execute(ctx) {
-            const guard = getVoiceGuard(ctx);
-            if (guard.error) return ctx.reply(guard.error);
-
-            const query = ctx.args.join(' ').trim();
-            if (!query) return ctx.reply('❌ Please provide search keywords!');
-
-            await ctx.defer();
-
-            const play = require('play-dl');
-            const results = await play.search(query, { source: { soundcloud: 'tracks' }, limit: 5 }).catch(() => []);
-            if (!results || results.length === 0) {
-                return ctx.reply('❌ No results found for your search query.');
-            }
-
-            let desc = results.map((t, i) => `\`${i + 1}.\` **${(t.name || t.title)?.substring(0, 60)}** \`(${t.durationInSec ? formatTime(t.durationInSec * 1000) : 'N/A'})\``).join('\n');
-
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('music_search_select')
-                .setPlaceholder('🎵 Select a track to play...')
-                .addOptions(results.slice(0, 5).map((t, idx) => ({
-                    label: `${idx + 1}. ${(t.name || t.title || 'Track').substring(0, 45)}`,
-                    description: `Duration: ${t.durationInSec ? formatTime(t.durationInSec * 1000) : 'N/A'}`,
-                    value: String(idx)
-                })));
-
-            const row = new ActionRowBuilder().addComponents(selectMenu);
-            const embed = new EmbedBuilder()
-                .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle(`🔍 Search Results for: "${query}"`)
-                .setDescription(desc)
-                .setFooter({ text: 'Select a track from dropdown below to start playback.' });
-
-            const msg = await ctx.reply({ embeds: [embed], components: [row] });
-            const collector = ctx.create1YearCollector(msg, {
-                filter: i => i.user.id === ctx.user.id && i.customId === 'music_search_select'
-            });
-
-            if (collector) {
-                collector.on('collect', async (i) => {
-                    await i.deferUpdate().catch(() => {});
-                    const chosenIdx = parseInt(i.values[0], 10);
-                    const chosen = results[chosenIdx];
-                    if (chosen) {
-                        const targetClient = guard.workerClient || ctx.client;
-                        const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-                        player.connect().catch(() => {});
-                        const trackObj = {
-                            title: chosen.name || chosen.title,
-                            url: chosen.url,
-                            duration: (chosen.durationInSec || 180) * 1000,
-                            author: chosen.user?.name || 'SoundCloud Artist',
-                            thumbnail: chosen.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
-                            source: 'SoundCloud',
-                            requester: ctx.user
-                        };
-                        player.queue.push(trackObj);
-                        if (!player.currentTrack) await player.playNext();
-                        await i.editReply({ content: `🎵 Added **${trackObj.title}** to queue!`, embeds: [], components: [] }).catch(() => {});
-                    }
-                });
-            }
+            const query = (ctx.isSlash && typeof ctx.interaction?.options?.getString === 'function') 
+                ? ctx.interaction.options.getString('query') 
+                : (ctx.args ? ctx.args.join(' ') : '');
+            const { executeSearchCommand } = require('../../utils/musicSearchHelper');
+            return executeSearchCommand(ctx, query);
         }
     },
 

@@ -25,7 +25,15 @@ module.exports = {
       option.setName('song')
         .setDescription('Song title, Spotify Playlist URL, or SoundCloud link')
         .setRequired(true)
+        .setAutocomplete(true)
     ),
+
+  async autocomplete(interaction, client) {
+    const { getSongAutocomplete } = require('../../utils/musicSearchHelper');
+    const focused = interaction.options.getFocused();
+    const choices = await getSongAutocomplete(focused, client.manager);
+    return interaction.respond(choices).catch(() => {});
+  },
 
   async execute(interaction, client) {
     const rawQuery = typeof interaction.options?.getString === 'function' 
@@ -80,7 +88,10 @@ module.exports = {
         try {
           const res = await manager.search(query, { requester: interaction.user });
           if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
-            return replyFunc.call(interaction, '❌ No audio results found for your query.');
+            const { buildNoResultsPayload } = require('../../utils/musicSearchHelper');
+            const searchId = `srch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const payload = buildNoResultsPayload(query, searchId);
+            return replyFunc.call(interaction, payload);
           }
 
           let player = manager.getPlayer(interaction.guild.id);
