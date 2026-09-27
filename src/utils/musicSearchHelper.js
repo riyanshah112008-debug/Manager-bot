@@ -328,7 +328,7 @@ async function handleSearchButton(interaction, client) {
         } else if (sourceKey === 'sp') {
             searchResult = await manager.search(session.query, { requester: interaction.user, engine: 'spotify' });
             if (!searchResult || !searchResult.tracks?.length) {
-                searchResult = await manager.search(`ytmsearch:${session.query} Official Audio`, { requester: interaction.user });
+                searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });
             }
         } else if (sourceKey === 'am') {
             searchResult = await manager.search(session.query, { requester: interaction.user, engine: 'spotify' });
@@ -339,7 +339,7 @@ async function handleSearchButton(interaction, client) {
             // ytm
             searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });
             if (!searchResult || !searchResult.tracks?.length) {
-                searchResult = await manager.search(`ytsearch:${session.query} Official Audio`, { requester: interaction.user });
+                searchResult = await manager.search(`ytsearch:${session.query}`, { requester: interaction.user });
             }
         }
     } catch (err) {
@@ -553,7 +553,7 @@ async function executeSearchCommand(ctx, rawQuery) {
         try {
             res = await manager.search(`ytmsearch:${query}`, { requester: ctx.user });
             if (!res || !res.tracks || res.tracks.length === 0) {
-                res = await manager.search(`ytsearch:${query} Official Audio`, { requester: ctx.user });
+                res = await manager.search(`ytsearch:${query}`, { requester: ctx.user });
             }
         } catch (_) {}
     }

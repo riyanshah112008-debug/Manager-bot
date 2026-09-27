@@ -16,125 +16,174 @@ function cleanStr(s) {
     return (s || '').toLowerCase();
 }
 
-function scoreTrack(track, rawQuery) {
-    let score = 50;
+function normalizeText(text) {
+    return (text || '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function stripTitleNoise(title) {
+    return (title || '')
+        .replace(/\s*[\(\[\{][^\)\]\}]*[\)\]\}]/g, '')
+        .replace(/\b(official\s+video|official\s+audio|official\s+music\s+video|music\s+video|lyric\s+video|lyrics\s+video|audio|lyrics?|full\s+song|visualizer|hd|4k)\b/gi, '')
+        .replace(/\s*[-–—|:]\s*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function scoreTrack(track, rawQuery, positionIndex = 0) {
+    let score = 100;
     const title = cleanStr(track.title);
     const author = cleanStr(track.author);
     const q = cleanStr(rawQuery).replace(/^(ytsearch|ytmsearch|scsearch):/i, '').trim();
+    const normQ = normalizeText(q);
+    const normTitle = normalizeText(title);
+    const strippedTitle = normalizeText(stripTitleNoise(track.title));
+    const normAuthor = normalizeText(author);
+
+    // Positional trust from search engine:
+    // YouTube's ML ranks the exact song at position 0. Trust it unless disqualified!
+    if (positionIndex === 0) score += 120;
+    else if (positionIndex === 1) score += 80;
+    else if (positionIndex === 2) score += 50;
+    else if (positionIndex === 3) score += 30;
+    else if (positionIndex <= 5) score += 15;
 
     // 1. Duration filter: Penalize short status/teasers & multi-hour loops
     const lenMs = track.length || 0;
     if (lenMs > 0 && lenMs < 60000) {
-        score -= 150; // Under 1 min: snippet / WhatsApp status / short / teaser
+        score -= 250; // Under 1 min: snippet / WhatsApp status / short / teaser
     } else if (lenMs > 900000) {
-        score -= 80; // Over 15 mins: 1 hour loop or full album unless requested
-    } else if (lenMs >= 100000 && lenMs <= 380000) {
-        score += 25; // Ideal radio/streaming song length (1.6 - 6.3 mins)
+        score -= 150; // Over 15 mins: 1 hour loop or full album unless requested
+    } else if (lenMs >= 100000 && lenMs <= 420000) {
+        score += 30; // Ideal radio/streaming song length (1.6 - 7 mins)
     }
 
-    // 2. Heavy penalties for duplicate / cover / bootleg / remake keywords (unless requested in query)
+    // 2. Heavy penalties for duplicate / cover / bootleg / remix keywords (unless requested in query)
     const modifierChecks = [
-        { key: 'cover', penalty: 130 },
-        { key: 'covered by', penalty: 130 },
-        { key: 'fan cover', penalty: 130 },
-        { key: 'slowed', penalty: 100 },
-        { key: 'reverb', penalty: 100 },
-        { key: 'slowed + reverb', penalty: 120 },
-        { key: 'slowed and reverb', penalty: 120 },
-        { key: 'sped up', penalty: 100 },
-        { key: 'speed up', penalty: 100 },
-        { key: 'speedup', penalty: 100 },
-        { key: 'nightcore', penalty: 100 },
-        { key: 'daycore', penalty: 100 },
-        { key: 'chipmunk', penalty: 120 },
-        { key: 'status', penalty: 150 },
-        { key: 'whatsapp status', penalty: 160 },
-        { key: 'shorts', penalty: 150 },
-        { key: 'short', penalty: 80 },
-        { key: 'reel', penalty: 120 },
-        { key: 'tiktok', penalty: 100 },
-        { key: 'karaoke', penalty: 120 },
-        { key: 'instrumental', penalty: 100 },
-        { key: 'backing track', penalty: 120 },
-        { key: 'reaction', penalty: 150 },
-        { key: 'reacting', penalty: 150 },
-        { key: 'review', penalty: 150 },
-        { key: 'parody', penalty: 150 },
-        { key: 'tutorial', penalty: 150 },
-        { key: 'how to play', penalty: 150 },
-        { key: '10 hour', penalty: 120 },
-        { key: '1 hour', penalty: 100 },
-        { key: 'loop', penalty: 80 },
-        { key: 'bass boosted', penalty: 90 },
-        { key: '8d audio', penalty: 90 },
-        { key: 'snippet', penalty: 120 },
-        { key: 'leak', penalty: 90 }
+        { key: 'cover', penalty: 180 },
+        { key: 'covered by', penalty: 180 },
+        { key: 'fan cover', penalty: 180 },
+        { key: 'slowed', penalty: 150 },
+        { key: 'reverb', penalty: 150 },
+        { key: 'slowed + reverb', penalty: 160 },
+        { key: 'slowed and reverb', penalty: 160 },
+        { key: 'sped up', penalty: 150 },
+        { key: 'speed up', penalty: 150 },
+        { key: 'speedup', penalty: 150 },
+        { key: 'nightcore', penalty: 150 },
+        { key: 'daycore', penalty: 150 },
+        { key: 'chipmunk', penalty: 180 },
+        { key: 'status', penalty: 200 },
+        { key: 'whatsapp status', penalty: 220 },
+        { key: 'shorts', penalty: 200 },
+        { key: 'short', penalty: 120 },
+        { key: 'reel', penalty: 180 },
+        { key: 'tiktok', penalty: 150 },
+        { key: 'karaoke', penalty: 180 },
+        { key: 'instrumental', penalty: 150 },
+        { key: 'backing track', penalty: 180 },
+        { key: 'reaction', penalty: 200 },
+        { key: 'reacting', penalty: 200 },
+        { key: 'review', penalty: 200 },
+        { key: 'parody', penalty: 200 },
+        { key: 'tutorial', penalty: 200 },
+        { key: 'how to play', penalty: 200 },
+        { key: '10 hour', penalty: 180 },
+        { key: '1 hour', penalty: 150 },
+        { key: 'loop', penalty: 120 },
+        { key: 'bass boosted', penalty: 120 },
+        { key: '8d audio', penalty: 120 },
+        { key: 'snippet', penalty: 180 },
+        { key: 'leak', penalty: 150 },
+        { key: 'remix', penalty: 180 },
+        { key: 'mashup', penalty: 180 },
+        { key: 'bootleg', penalty: 180 },
+        { key: 'extended mix', penalty: 150 },
+        { key: 'club mix', penalty: 150 },
+        { key: 'flip', penalty: 150 },
+        { key: 're-recorded', penalty: 150 },
+        { key: 're recorded', penalty: 150 }
     ];
 
     for (const { key, penalty } of modifierChecks) {
-        if (!q.includes(key)) {
+        if (!normQ.includes(key)) {
             if (title.includes(key)) score -= penalty;
             if (author.includes(key)) score -= Math.floor(penalty * 0.7);
         }
     }
 
     // Live concert penalty unless query includes 'live'
-    if (!q.includes('live')) {
+    if (!normQ.includes('live')) {
         if (title.includes('live at') || title.includes('live in') || title.includes('live performance') || title.includes('(live)') || title.includes('[live]')) {
-            score -= 85;
+            score -= 100;
         }
     }
 
-    // 3. Positive official signals
-    // YouTube Music Topic channel (Official uncompressed digital distributor master upload)
+    // 3. EXACT TITLE & ARTIST MATCHING ENGINE (Eliminates "relative / similar" song drift)
+    if (normTitle === normQ || strippedTitle === normQ) {
+        // Absolute 100% exact title match
+        score += 450;
+    } else if (new RegExp('\\b' + normQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(normTitle) ||
+               new RegExp('\\b' + normQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(strippedTitle)) {
+        // Query exists as a complete whole phrase in title
+        score += 300;
+    } else if (`${normAuthor} ${strippedTitle}` === normQ || `${strippedTitle} ${normAuthor}` === normQ ||
+               `${normAuthor} ${normTitle}` === normQ || `${normTitle} ${normAuthor}` === normQ) {
+        // Query exactly matches Artist + Title or Title + Artist
+        score += 500;
+    } else {
+        const qWords = normQ.split(/\s+/).filter(w => w.length > 0);
+        let titleWordMatches = 0;
+        let authorWordMatches = 0;
+        for (const w of qWords) {
+            if (new RegExp('\\b' + w + '\\b').test(normTitle)) titleWordMatches++;
+            if (new RegExp('\\b' + w + '\\b').test(normAuthor)) authorWordMatches++;
+        }
+        const totalMatches = titleWordMatches + authorWordMatches;
+        const matchRatio = qWords.length > 0 ? (totalMatches / qWords.length) : 0;
+        if (matchRatio >= 1.0) {
+            score += 250;
+        } else if (matchRatio >= 0.7) {
+            score += 150;
+        } else if (matchRatio >= 0.5) {
+            score += 50;
+        } else {
+            score -= 120; // Dissimilar / relative title penalty
+        }
+    }
+
+    // 4. Extraneous Word Penalty: Stop songs having extra words / similar relative titles from overtaking exact songs!
+    const strippedWords = strippedTitle.split(/\s+/).filter(w => w.length > 0);
+    const qWords = normQ.split(/\s+/).filter(w => w.length > 0);
+    const extraWords = strippedWords.filter(w => !qWords.includes(w) && !normAuthor.includes(w));
+    if (extraWords.length > 0) {
+        score -= Math.min(extraWords.length * 25, 150);
+    }
+
+    // 5. Mild tie-breaker bonuses for verified releases (kept small so they never override exact title)
     if (author.endsWith('- topic') || author.includes(' - topic')) {
-        score += 55;
-    }
-
-    // Major label channel detection
-    const majorLabels = [
-        't-series', 'tseries', 'sony music', 'zee music', 'yrf', 'warner music',
-        'universal music', 'vevo', 'saregama', 'speed records', 'geet mp3',
-        'white hill music', 'tips official', 'spinnin', 'def jam', 'atlantic records',
-        'columbia records', 'interscope', 'republic records', 'coke studio'
-    ];
-    if (majorLabels.some(lbl => author.includes(lbl) || title.includes(lbl))) {
-        score += 45;
-    }
-
-    // Official audio release indicators
-    if (title.includes('official audio') || title.includes('(audio)') || title.includes('[audio]')) {
-        score += 50;
-    } else if (title.includes('official music video') || title.includes('official video') || title.includes('(video)') || title.includes('[video]')) {
-        score += 35;
-    } else if (title.includes('original motion picture') || title.includes('original soundtrack') || title.includes('ost') || title.includes('from "') || title.includes("from '")) {
-        score += 40;
-    } else if (title.includes('lyrical') || title.includes('lyrics')) {
         score += 20;
     }
-
-    // 4. Token & Phonetic matching
-    const qTokens = q.split(/[\s\-_\,\.\:\;]+/).filter(t => t.length > 1);
-    let matchedCount = 0;
-    for (const tok of qTokens) {
-        if (title.includes(tok) || author.includes(tok)) {
-            matchedCount++;
-        } else {
-            const normTok = tok[0] + tok.slice(1).replace(/[aeiou]/g, '');
-            if (normTok.length > 2 && (title.includes(normTok) || author.includes(normTok))) {
-                matchedCount += 0.8;
-            }
-        }
+    if (title.includes('official audio') || title.includes('(audio)') || title.includes('[audio]')) {
+        score += 20;
+    } else if (title.includes('official music video') || title.includes('official video') || title.includes('(video)') || title.includes('[video]')) {
+        score += 15;
+    } else if (title.includes('original motion picture') || title.includes('original soundtrack') || title.includes('ost')) {
+        score += 20;
     }
-    const matchRatio = qTokens.length > 0 ? (matchedCount / qTokens.length) : 1;
-    score += matchRatio * 40;
 
     return Math.round(score);
 }
 
 function rankAndFilterCanonicalTracks(tracks, rawQuery) {
     if (!tracks || !Array.isArray(tracks) || tracks.length <= 1) return tracks || [];
-    return [...tracks].sort((a, b) => scoreTrack(b, rawQuery) - scoreTrack(a, rawQuery));
+    return [...tracks]
+        .map((t, idx) => ({ track: t, score: scoreTrack(t, rawQuery, idx) }))
+        .sort((a, b) => b.score - a.score)
+        .map(item => item.track);
 }
 
 // 🛡️ Monkey patch Kazagumo.prototype.search to enforce canonical original track ranking & smart fallbacks
@@ -153,25 +202,7 @@ Kazagumo.prototype.search = async function(query, options) {
         res.tracks = rankAndFilterCanonicalTracks(res.tracks, cleanQueryForScoring);
     }
 
-    const topScore = (res && res.tracks && res.tracks[0]) ? scoreTrack(res.tracks[0], cleanQueryForScoring) : -999;
-
-    // 2. If no tracks found or top track score is poor (< 35), search with "Official Audio" on YouTube
-    if (!res || !res.tracks || res.tracks.length === 0 || topScore < 35) {
-        try {
-            const ytOptions = { ...(options || {}), engine: 'youtube' };
-            const fallbackRes = await rawKazagumoSearch.call(this, `${cleanQueryForScoring} Official Audio`, ytOptions).catch(() => null);
-            if (fallbackRes && fallbackRes.tracks && fallbackRes.tracks.length > 0) {
-                const rankedFallback = rankAndFilterCanonicalTracks(fallbackRes.tracks, cleanQueryForScoring);
-                const fallbackTopScore = scoreTrack(rankedFallback[0], cleanQueryForScoring);
-                if (fallbackTopScore > topScore) {
-                    res = fallbackRes;
-                    res.tracks = rankedFallback;
-                }
-            }
-        } catch (_) {}
-    }
-
-    // 3. If still no tracks or empty, try pure ytsearch
+    // 2. If no tracks found, try ytsearch directly with the clean exact query (no mutating with extra words!)
     if (!res || !res.tracks || res.tracks.length === 0) {
         try {
             const ytOptions = { ...(options || {}), engine: 'youtube' };
@@ -229,11 +260,6 @@ for (const TrackClass of trackClasses) {
         try {
             searchResult = await searcher.search(`ytmsearch:${query}`, { requester: this.requester });
         } catch (_) {}
-        if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
-            try {
-                searchResult = await searcher.search(`ytsearch:${query} Official Audio`, { requester: this.requester });
-            } catch (_) {}
-        }
         if (!searchResult || !searchResult.tracks || !searchResult.tracks.length) {
             try {
                 searchResult = await searcher.search(`ytsearch:${query}`, { requester: this.requester });
@@ -861,14 +887,11 @@ async function triggerAutoplayBuffer(player, playImmediately = false) {
 
         const searchQueries = [];
         if (primaryArtist && primaryArtist.length > 1) {
-            searchQueries.push(`ytmsearch:${primaryArtist} songs`);
+            searchQueries.push(`ytmsearch:${primaryArtist} top songs`);
             searchQueries.push(`ytsearch:${primaryArtist} hit songs`);
         }
-        if (cleanTitle && cleanTitle.length > 2) {
-            searchQueries.push(`ytmsearch:${cleanTitle} related`);
-            if (primaryArtist) {
-                searchQueries.push(`ytsearch:${primaryArtist} ${cleanTitle} audio`);
-            }
+        if (primaryArtist && cleanTitle) {
+            searchQueries.push(`ytmsearch:${primaryArtist} official tracks`);
         }
 
         const requester = referenceTrack.requester || player.kazagumo?.client?.user;
@@ -975,9 +998,6 @@ function createMusicManager(client) {
                 if (this.readyToPlay) return true;
                 const query = [this.author, this.title].filter(Boolean).join(' - ');
                 let searchRes = await this.kazagumo.search(`ytmsearch:${query}`, { requester: this.requester });
-                if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
-                    searchRes = await this.kazagumo.search(`ytsearch:${query} Official Audio`, { requester: this.requester });
-                }
                 if (!searchRes || !searchRes.tracks || searchRes.tracks.length === 0) {
                     searchRes = await this.kazagumo.search(`ytsearch:${query}`, { requester: this.requester });
                 }

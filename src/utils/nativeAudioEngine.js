@@ -291,9 +291,17 @@ function scoreTrackMatch(candidate, targetDurationMs, queryTitle, targetArtist) 
         score -= 80;
     }
 
+    // 2.5 Exact Title Match & Anti-Relative Bonus
+    const cleanLower = lower.replace(/\s*[\(\[\{][^\)\]\}]*[\)\]\}]/g, '').trim();
+    if (lower === qLower || cleanLower === qLower) {
+        score += 350;
+    } else if (qLower && new RegExp('\\b' + qLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(lower)) {
+        score += 200;
+    }
+
     // 3. Rewards for official / original
     if (lower.includes('official') || lower.includes('original') || lower.includes('audio')) {
-        score += 30;
+        score += 20;
     }
 
     // 4. Artist affinity bonus
@@ -1647,7 +1655,7 @@ class StarryAudioEngine {
 
         // 3. Fallback YouTube related search
         try {
-            const ytResults = await play.search(`${primaryArtist} similar songs`, { limit: 10 }).catch(() => []);
+            const ytResults = await play.search(`${primaryArtist} top songs`, { limit: 10 }).catch(() => []);
             for (const item of ytResults) {
                 if (isFresh(item.title, item.url)) {
                     return {
