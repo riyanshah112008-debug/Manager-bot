@@ -138,11 +138,14 @@ app.get(['/health', '/ping'], (req, res) => res.status(200).json({ status: 'ok',
 
 app.get('/api/status', (req, res) => {
     res.json({
-        status: client && client.isReady() ? 'online' : (isBootingBot ? 'booting' : 'waiting_for_token'),
+        status: client && client.isReady() ? 'online' : (isBootingBot ? 'booting' : (lastBootstrapError ? 'error' : 'waiting_for_token')),
         bot: client && client.user ? `${client.user.username}#${client.user.discriminator || '0'}` : null,
         botId: client && client.user ? client.user.id : null,
         uptime: process.uptime(),
-        mongo: mongoose.connection && mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+        mongo: mongoose.connection && mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        hasToken: Boolean(process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || process.env.TOKEN),
+        lastError: lastBootstrapError,
+        preflight: lastPreflight
     });
 });
 
@@ -589,6 +592,11 @@ setInterval(() => {
 }, 15000);
 
 client.once(Events.ClientReady, async () => {
+    lastBootstrapError = null;
+    if (bootRetryTimer) {
+        clearTimeout(bootRetryTimer);
+        bootRetryTimer = null;
+    }
     console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
     acquireWakeLock();
 
@@ -718,6 +726,9 @@ const MODULE_INITIALIZERS = [
 
 let isBootingBot = false;
 let tokenCheckInterval = null;
+let lastBootstrapError = null;
+let lastPreflight = null;
+let bootRetryTimer = null;
 
 async function startBot(overrideToken, overrideMongo) {
     if ((client && client.isReady()) || isBootingBot) return;
@@ -745,6 +756,7 @@ async function startBot(overrideToken, overrideMongo) {
         const primaryToken = cleanToken(rawToken);
         if (!primaryToken) {
             isBootingBot = false;
+            lastBootstrapError = 'DISCORD_TOKEN environment variable is missing on Render. Please configure it in Render Dashboard -> Environment or via /setup.';
             console.error("🛑 CRITICAL ERROR: Discord Bot Token is missing!");
             console.error(`- Bot Token (${sourceVar}): MISSING`);
             console.error(`- MONGO_URI: ${process.env.MONGO_URI ? 'Present' : 'Not configured (optional)'}`);
@@ -783,26 +795,28 @@ async function startBot(overrideToken, overrideMongo) {
             tokenCheckInterval = null;
         }
 
-    console.log(`🔑 Bot Token detected from ${sourceVar}: ${maskToken(primaryToken)}`);
+        console.log(`🔑 Bot Token detected from ${sourceVar}: ${maskToken(primaryToken)}`);
 
-    // Pre-flight REST verification with Discord API
-    console.log('📡 Verifying bot token with Discord REST API...');
-    const preflight = await verifyDiscordToken(primaryToken);
-    if (!preflight.valid) {
-        console.error('🛑 DISCORD TOKEN VERIFICATION FAILED!');
-        console.error(`Status: ${preflight.status || 'Network/Fetch error'}`);
-        console.error(`Response from Discord: ${preflight.error || preflight.networkError}`);
-        console.error(`Masked token in environment: ${maskToken(primaryToken)}`);
-        console.error('------------------------------------------------------------------');
-        console.error('👉 ACTION REQUIRED ON RENDER DASHBOARD:');
-        console.error('1. Open https://dashboard.render.com and select your service.');
-        console.error('2. Go to the "Environment" tab.');
-        console.error('3. Ensure DISCORD_TOKEN is set strictly to your bot token string');
-        console.error('   without "DISCORD_TOKEN=" in the value box and without quotes.');
-        console.error('------------------------------------------------------------------');
-    } else {
-        console.log(`✨ Discord Token Verified! Bot identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'} (ID: ${preflight.bot.id})`);
-    }
+        // Pre-flight REST verification with Discord API
+        console.log('📡 Verifying bot token with Discord REST API...');
+        const preflight = await verifyDiscordToken(primaryToken);
+        lastPreflight = preflight;
+        if (!preflight.valid) {
+            lastBootstrapError = `Discord REST API rejected token (${preflight.status || 'Network error'}): ${preflight.error || preflight.networkError}`;
+            console.error('🛑 DISCORD TOKEN VERIFICATION FAILED!');
+            console.error(`Status: ${preflight.status || 'Network/Fetch error'}`);
+            console.error(`Response from Discord: ${preflight.error || preflight.networkError}`);
+            console.error(`Masked token in environment: ${maskToken(primaryToken)}`);
+            console.error('------------------------------------------------------------------');
+            console.error('👉 ACTION REQUIRED ON RENDER DASHBOARD:');
+            console.error('1. Open https://dashboard.render.com and select your service.');
+            console.error('2. Go to the "Environment" tab.');
+            console.error('3. Ensure DISCORD_TOKEN is set strictly to your bot token string');
+            console.error('   without "DISCORD_TOKEN=" in the value box and without quotes.');
+            console.error('------------------------------------------------------------------');
+        } else {
+            console.log(`✨ Discord Token Verified! Bot identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'} (ID: ${preflight.bot.id})`);
+        }
 
     if (process.env.MONGO_URI) {
         try {
@@ -876,8 +890,18 @@ async function startBot(overrideToken, overrideMongo) {
 
     } catch (error) {
         isBootingBot = false;
+        lastBootstrapError = error.message || String(error);
         console.error("🛑 BOOTSTRAP ERROR:\n", error.stack || error);
         console.warn("⚠️ Keeping web server active so deployment remains healthy on Render. Check /setup to re-enter credentials.");
+
+        // Automatically retry login after 15 seconds to overcome transient Discord gateway rate limits / handshakes
+        if (!bootRetryTimer) {
+            console.log("🔄 Scheduling automated bot boot retry in 15 seconds...");
+            bootRetryTimer = setTimeout(async () => {
+                bootRetryTimer = null;
+                await startBot();
+            }, 15000);
+        }
     }
 }
 

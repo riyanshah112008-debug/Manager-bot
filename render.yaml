@@ -5,9 +5,23 @@ services:
     plan: free
     region: oregon
     dockerfilePath: Dockerfile
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: 10000
       - key: NODE_ENV
         value: production
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: RENDER_EXTERNAL_URL
+        sync: false
