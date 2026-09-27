@@ -592,6 +592,11 @@ const commands = [
                 kPlayer.data?.set('autoplay', newState);
                 kPlayer.autoplay = newState;
 
+                if (newState) {
+                    const { triggerAutoplayBuffer } = require('../../utils/musicManager');
+                    triggerAutoplayBuffer(kPlayer, kPlayer.queue.length === 0 && !kPlayer.playing).catch(() => {});
+                }
+
                 // Live update the now-playing embed components
                 const nowMsg = kPlayer.data?.get('nowPlayingMessage');
                 if (nowMsg && typeof nowMsg.edit === 'function') {

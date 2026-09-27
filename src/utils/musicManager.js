@@ -695,19 +695,19 @@ async function applyKazagumoFilter(player, filterName) {
                 break;
 
             case 'pop':
-                // 🎙️ Modern vocal forward pop master with clean lows
+                // 🎙️ Modern vocal forward pop master with clean lows & headroom
                 await shoukakuPlayer.setFilters({
-                    volume: 0.94,
+                    volume: 0.82,
                     equalizer: [
-                        { band: 0, gain: 0.12 },
+                        { band: 0, gain: 0.08 },
                         { band: 1, gain: 0.10 },
-                        { band: 4, gain: -0.08 },
+                        { band: 4, gain: -0.06 },
                         { band: 5, gain: -0.12 },
-                        { band: 7, gain: 0.15 },
-                        { band: 8, gain: 0.22 },
-                        { band: 9, gain: 0.25 },
-                        { band: 10, gain: 0.20 },
-                        { band: 11, gain: 0.15 }
+                        { band: 7, gain: 0.04 },
+                        { band: 8, gain: 0.06 },
+                        { band: 9, gain: 0.08 },
+                        { band: 10, gain: 0.06 },
+                        { band: 11, gain: 0.04 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -725,39 +725,34 @@ async function applyKazagumoFilter(player, filterName) {
             case 'audiophile':
             case 'master':
             case 'studio':
-                // ⭐ PRO STUDIO HI-FI MASTERING (Praisable Audiophile Grade Audio)
-                // - Deep, tactile physical sub-bass (25-63Hz) that rumbles cleanly without distortion
-                // - Mid-bass punch (100Hz) with zero muddiness
-                // - Precision 250Hz mud scoop (-0.10) to de-mask vocals and acoustic instruments
-                // - Forward, crystal-clear vocal presence & intelligibility (1.0kHz - 4.0kHz)
-                // - Silky, airy high-end shimmer (10kHz - 16kHz)
-                // - Volume pre-attenuation (0.92) giving ~2.5dB clean headroom to eliminate Opus inter-sample clipping
-                // - Subtle wide stereo spatial soundstage
+                // ⭐ PRO STUDIO AUDIOPHILE MASTERING (Clean Headroom • Zero Distortion • Crystal Clear Vocals)
+                // - Deep, clean sub-bass (40Hz: +0.14, 63Hz: +0.10, 25Hz: +0.06)
+                // - Tight punch at 100Hz (+0.04)
+                // - Subtractive mud-scoop at 250Hz (-0.12) and 160Hz (-0.04) to cleanly de-mask vocals without artificial gain
+                // - Natural vocal clarity & presence: 1.0kHz (+0.02), 1.6kHz (+0.04), 2.5kHz (+0.05), 4.0kHz (+0.03)
+                // - Silky airy highs: 10kHz (+0.06), 16kHz (+0.04)
+                // - Master volume set to 0.80 (~2.0dB digital headroom) ensuring zero clipping or voice cracking into Discord Opus 48kHz
+                // - In-phase stereo (channelMix: null) for crystal-clear centered vocals and zero comb-filtering
                 await shoukakuPlayer.setFilters({
-                    volume: 0.92,
+                    volume: 0.80,
                     equalizer: [
-                        { band: 0, gain: 0.24 },  // 25 Hz: Deep sub-bass physical rumble
-                        { band: 1, gain: 0.28 },  // 40 Hz: Tactile chest/headphone vibration
-                        { band: 2, gain: 0.20 },  // 63 Hz: Warm bass body
-                        { band: 3, gain: 0.08 },  // 100 Hz: Tight, punchy kick transient
-                        { band: 4, gain: -0.02 }, // 160 Hz: Transition slope
-                        { band: 5, gain: -0.10 }, // 250 Hz: Mud scoop - de-masks vocals!
+                        { band: 0, gain: 0.06 },  // 25 Hz: Clean sub rumble
+                        { band: 1, gain: 0.14 },  // 40 Hz: Warm, tactile chest punch
+                        { band: 2, gain: 0.10 },  // 63 Hz: Solid kick definition
+                        { band: 3, gain: 0.04 },  // 100 Hz: Gentle warmth
+                        { band: 4, gain: -0.04 }, // 160 Hz: Transition slope
+                        { band: 5, gain: -0.12 }, // 250 Hz: Mud scoop - de-masks vocals!
                         { band: 6, gain: -0.02 }, // 400 Hz: Clean separation
-                        { band: 7, gain: 0.04 },  // 630 Hz: Natural body
-                        { band: 8, gain: 0.08 },  // 1.0 kHz: Vocal intelligibility
-                        { band: 9, gain: 0.14 },  // 1.6 kHz: Vocal forwardness
-                        { band: 10, gain: 0.16 }, // 2.5 kHz: Crystal-clear vocal bite
-                        { band: 11, gain: 0.14 }, // 4.0 kHz: Snare snap & presence
-                        { band: 12, gain: 0.12 }, // 6.3 kHz: Silky smooth highs
-                        { band: 13, gain: 0.16 }, // 10.0 kHz: Air & sparkle
-                        { band: 14, gain: 0.18 }  // 16.0 kHz: Ultra-high brilliance
+                        { band: 7, gain: 0.00 },  // 630 Hz: Neutral
+                        { band: 8, gain: 0.02 },  // 1.0 kHz: Vocal intelligibility
+                        { band: 9, gain: 0.04 },  // 1.6 kHz: Vocal forwardness
+                        { band: 10, gain: 0.05 }, // 2.5 kHz: Crystal-clear vocal bite
+                        { band: 11, gain: 0.03 }, // 4.0 kHz: Snare snap & presence
+                        { band: 12, gain: 0.02 }, // 6.3 kHz: Smooth highs
+                        { band: 13, gain: 0.06 }, // 10.0 kHz: Air & sparkle
+                        { band: 14, gain: 0.04 }  // 16.0 kHz: Ultra-high brilliance
                     ],
-                    channelMix: {
-                        leftToLeft: 0.96,
-                        leftToRight: 0.06,
-                        rightToLeft: 0.06,
-                        rightToRight: 0.96
-                    },
+                    channelMix: null,
                     timescale: null,
                     rotation: null,
                     tremolo: null,
@@ -800,6 +795,167 @@ async function applyKazagumoFilter(player, filterName) {
         return true;
     } catch (e) {
         console.warn('⚠️ Could not apply Lavalink filter:', e.message);
+        return false;
+    }
+}
+
+// 📻 CONTINUOUS SMART AUTOPLAY RECOMMENDATION & PRE-BUFFERING ENGINE
+function getAutoplayHistory(player) {
+    let history = player.data.get('autoplayHistory');
+    if (!history) {
+        history = new Set();
+        player.data.set('autoplayHistory', history);
+    }
+    return history;
+}
+
+function recordTrackHistory(player, track) {
+    if (!player || !track) return;
+    const history = getAutoplayHistory(player);
+    if (track.identifier) history.add(track.identifier);
+    if (track.uri) history.add(track.uri);
+    if (track.realUri) history.add(track.realUri);
+    const norm = (track.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (norm) history.add(norm);
+}
+
+function isTrackInHistory(player, track) {
+    if (!player || !track) return false;
+    const history = getAutoplayHistory(player);
+    if (track.identifier && history.has(track.identifier)) return true;
+    if (track.uri && history.has(track.uri)) return true;
+    if (track.realUri && history.has(track.realUri)) return true;
+    const norm = (track.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (norm && history.has(norm)) return true;
+    return false;
+}
+
+async function triggerAutoplayBuffer(player, playImmediately = false) {
+    if (!player) return false;
+    const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
+    if (!isAutoplay) return false;
+
+    // Concurrency lock
+    if (player.data.get('isBufferingAutoplay')) return false;
+
+    // If pre-buffering while playing, do not overfill queue
+    if (!playImmediately && player.queue && player.queue.length >= 2) return false;
+
+    player.data.set('isBufferingAutoplay', true);
+
+    try {
+        const referenceTrack = player.queue.current || player.data.get('previousTrack');
+        if (!referenceTrack) {
+            player.data.set('isBufferingAutoplay', false);
+            return false;
+        }
+
+        const cleanTitle = (referenceTrack.title || '')
+            .replace(/[\(\[].*?[\)\]]/g, '')
+            .replace(/official|audio|video|lyrics|ft\.|feat\.|hd|4k|remix|mix/gi, '')
+            .trim();
+        const primaryArtist = (referenceTrack.author || '')
+            .split(/[,&]/)[0]
+            .replace(/vevo|topic|official/gi, '')
+            .trim();
+
+        const searchQueries = [];
+        if (primaryArtist && primaryArtist.length > 1) {
+            searchQueries.push(`ytmsearch:${primaryArtist} songs`);
+            searchQueries.push(`ytsearch:${primaryArtist} hit songs`);
+        }
+        if (cleanTitle && cleanTitle.length > 2) {
+            searchQueries.push(`ytmsearch:${cleanTitle} related`);
+            if (primaryArtist) {
+                searchQueries.push(`ytsearch:${primaryArtist} ${cleanTitle} audio`);
+            }
+        }
+
+        const requester = referenceTrack.requester || player.kazagumo?.client?.user;
+        let candidates = [];
+        const searcher = player.kazagumo || player;
+
+        for (const query of searchQueries) {
+            try {
+                const res = await searcher.search(query, { requester });
+                if (res && res.tracks && res.tracks.length > 0) {
+                    for (const cand of res.tracks) {
+                        if (isTrackInHistory(player, cand)) continue;
+                        if (referenceTrack.identifier === cand.identifier) continue;
+                        if (player.queue && player.queue.some(q => q.identifier === cand.identifier || (q.title && cand.title && q.title.toLowerCase() === cand.title.toLowerCase()))) continue;
+                        if (cand.length && (cand.length < 50000 || cand.length > 900000)) continue;
+
+                        if (candidates.some(c => c.identifier === cand.identifier || (c.title && cand.title && c.title.toLowerCase() === cand.title.toLowerCase()))) continue;
+
+                        candidates.push(cand);
+                    }
+                }
+                if (candidates.length >= 4) break;
+            } catch (err) {}
+        }
+
+        // Spotify recommendation / top tracks fallback
+        if (candidates.length < 2 && primaryArtist) {
+            try {
+                const spRes = await searcher.search(`${primaryArtist} top tracks`, { 
+                    requester, 
+                    engine: 'spotify' 
+                });
+                if (spRes && spRes.tracks && spRes.tracks.length > 0) {
+                    for (const cand of spRes.tracks) {
+                        if (isTrackInHistory(player, cand)) continue;
+                        if (referenceTrack.identifier === cand.identifier) continue;
+                        if (player.queue && player.queue.some(q => q.identifier === cand.identifier)) continue;
+                        if (candidates.some(c => c.identifier === cand.identifier)) continue;
+                        candidates.push(cand);
+                    }
+                }
+            } catch (spErr) {}
+        }
+
+        // Soundcloud fallback
+        if (candidates.length < 2 && primaryArtist) {
+            try {
+                const scRes = await searcher.search(`${primaryArtist} songs`, { 
+                    requester, 
+                    engine: 'soundcloud' 
+                });
+                if (scRes && scRes.tracks && scRes.tracks.length > 0) {
+                    for (const cand of scRes.tracks) {
+                        if (isTrackInHistory(player, cand)) continue;
+                        if (referenceTrack.identifier === cand.identifier) continue;
+                        if (player.queue && player.queue.some(q => q.identifier === cand.identifier)) continue;
+                        if (candidates.some(c => c.identifier === cand.identifier)) continue;
+                        candidates.push(cand);
+                    }
+                }
+            } catch (scErr) {}
+        }
+
+        if (candidates.length === 0) {
+            player.data.set('isBufferingAutoplay', false);
+            return false;
+        }
+
+        candidates = rankAndFilterCanonicalTracks(candidates, `${primaryArtist} ${cleanTitle}`);
+
+        const needed = playImmediately ? 2 : Math.max(1, 2 - player.queue.length);
+        const toAdd = candidates.slice(0, needed);
+
+        for (const trk of toAdd) {
+            recordTrackHistory(player, trk);
+            player.queue.add(trk);
+        }
+
+        if (playImmediately && !player.playing && player.queue.length > 0) {
+            await player.play();
+        }
+
+        player.data.set('isBufferingAutoplay', false);
+        return true;
+    } catch (err) {
+        console.error('❌ Autoplay Recommendation Error:', err.message || err);
+        player.data.set('isBufferingAutoplay', false);
         return false;
     }
 }
@@ -907,6 +1063,7 @@ function createMusicManager(client) {
     // Player Start Event
     manager.on('playerStart', async (player, track) => {
         player.data.set('previousTrack', track);
+        recordTrackHistory(player, track);
 
         // 🔊 PRO STUDIO HI-FI DSP MASTERING: Automatically apply empowering studio master out of the box
         const activeFilter = player.data.get('activeFilter') || 'empowering';
@@ -1009,6 +1166,11 @@ function createMusicManager(client) {
                 if (msg) player.data.set('nowPlayingMessage', msg);
             }
         }
+
+        // 📻 Smart Autoplay Pre-Buffering: Keep queue buffered ahead so transitions are seamless and continuous
+        if (isAutoplay && player.queue && player.queue.length < 2) {
+            triggerAutoplayBuffer(player, false).catch(() => {});
+        }
     });
 
     manager.on('playerResolveError', (player, track, message) => {
@@ -1036,110 +1198,8 @@ function createMusicManager(client) {
 
         // 📻 HIGH-INTELLIGENCE AUTOPLAY RECOMMENDATION ENGINE
         if (isAutoplay) {
-            const previousTrack = player.data.get('previousTrack');
-            if (previousTrack) {
-                try {
-                    let result = null;
-                    const cleanTitle = (previousTrack.title || '')
-                        .replace(/[\(\[].*?[\)\]]/g, '')
-                        .replace(/official|audio|video|lyrics|ft\.|feat\./gi, '')
-                        .trim();
-                    const primaryArtist = (previousTrack.author || '').split(',')[0].trim();
-
-                    // Tier 1: If YouTube source with 11-char ID, use YouTube Mix
-                    if (previousTrack.sourceName === 'youtube' && previousTrack.identifier && previousTrack.identifier.length === 11) {
-                        const searchQuery = `https://www.youtube.com/watch?v=${previousTrack.identifier}&list=RD${previousTrack.identifier}`;
-                        result = await manager.search(searchQuery, { requester: previousTrack.requester }).catch(() => null);
-                    }
-
-                    // Tier 2: Spotify Search via Kazagumo Spotify plugin
-                    if (!result || !result.tracks || !result.tracks.length) {
-                        try {
-                            result = await manager.search(`${primaryArtist} ${cleanTitle}`, { 
-                                requester: previousTrack.requester, 
-                                engine: 'spotify' 
-                            });
-                        } catch (spErr) {}
-                    }
-
-                    // Tier 3: Artist Radio / Popular tracks
-                    if (!result || !result.tracks || !result.tracks.length) {
-                        try {
-                            result = await manager.search(`${primaryArtist} top tracks`, { 
-                                requester: previousTrack.requester, 
-                                engine: 'spotify' 
-                            });
-                        } catch (e) {}
-                    }
-
-                    // Tier 4: General keyword search fallback
-                    if (!result || !result.tracks || !result.tracks.length) {
-                        result = await manager.search(`${primaryArtist} ${cleanTitle} related`, { 
-                            requester: previousTrack.requester 
-                        });
-                    }
-
-                    // Tier 5: Soundcloud fallback
-                    if (!result || !result.tracks || !result.tracks.length) {
-                        result = await manager.search(`${primaryArtist} ${cleanTitle}`, { 
-                            requester: previousTrack.requester, 
-                            engine: 'soundcloud' 
-                        });
-                    }
-
-                    if (result && result.tracks && result.tracks.length > 0) {
-                        // Pick next track that isn't the identical track
-                        const nextTrack = result.tracks.find(t => 
-                            t.identifier !== previousTrack.identifier && 
-                            t.title.toLowerCase() !== previousTrack.title.toLowerCase()
-                        ) || result.tracks[0];
-
-                        player.queue.add(nextTrack);
-                        await player.play();
-
-                        if (channel) {
-                            const formatDuration = (ms) => {
-                                if (!ms || isNaN(ms)) return '0:00';
-                                const sec = Math.floor(ms / 1000);
-                                const m = Math.floor(sec / 60);
-                                const s = sec % 60;
-                                return `${m}m ${s.toString().padStart(2, '0')}s`;
-                            };
-
-                            const autoEmbed = new EmbedBuilder()
-                                .setColor('#5865F2')
-                                .setAuthor({ 
-                                    name: '📻 Autoplay Smart Stream • Next Song', 
-                                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
-                                })
-                                .setTitle(nextTrack.title ? nextTrack.title.substring(0, 85) : 'Recommended Track')
-                                .setURL(nextTrack.uri || 'https://discord.gg')
-                                .setDescription(
-                                    `🎵 **Continuous Smart Autoplay Active**\n` +
-                                    `▶️ **Now Streaming:** **[${nextTrack.title}](${nextTrack.uri || 'https://discord.gg'})**\n` +
-                                    `👤 **Artist:** \`${nextTrack.author || primaryArtist}\` | 🕒 **Duration:** \`${formatDuration(nextTrack.length)}\`\n\n` +
-                                    `*Autoplay is on. Click 📻 on the player embed or use \`,autoplay\` to disable.*`
-                                )
-                                .setFooter({ text: 'Starry Hi-Fi Audio Engine • Continuous Stream' });
-                            
-                            const notifyMsg = await channel.send({ embeds: [autoEmbed] }).catch(() => null);
-                            if (notifyMsg) {
-                                setTimeout(() => notifyMsg.delete().catch(() => {}), 15000);
-                            }
-                        }
-
-                        // Update controller if active
-                        try {
-                            const musicController = require('../modules/musicController');
-                            await musicController.update(player.guildId, client).catch(() => {});
-                        } catch (e) {}
-
-                        return;
-                    }
-                } catch (err) {
-                    console.error('❌ Autoplay Recommendation Error:', err.message || err);
-                }
-            }
+            const success = await triggerAutoplayBuffer(player, true).catch(() => false);
+            if (success) return;
         }
 
         // Dedicated Request Channel Integration: Update controller in-place
@@ -1180,5 +1240,7 @@ module.exports = {
     buildNowPlayingComponents,
     applyKazagumoFilter,
     scoreTrack,
-    rankAndFilterCanonicalTracks
+    rankAndFilterCanonicalTracks,
+    triggerAutoplayBuffer,
+    recordTrackHistory
 };

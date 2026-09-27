@@ -1526,6 +1526,11 @@ class CommandRegistry {
                             kPlayer.data?.set('autoplay', next);
                             kPlayer.autoplay = next;
 
+                            if (next) {
+                                const { triggerAutoplayBuffer } = require('../utils/musicManager');
+                                triggerAutoplayBuffer(kPlayer, kPlayer.queue.length === 0 && !kPlayer.playing).catch(() => {});
+                            }
+
                             // Live update the player embed components so the button turns Green/Grey in real time
                             const { buildNowPlayingComponents } = require('../utils/musicManager');
                             const newComponents = buildNowPlayingComponents(interaction.guildId, next);

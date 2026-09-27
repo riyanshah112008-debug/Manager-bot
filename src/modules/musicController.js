@@ -908,6 +908,10 @@ class MusicControllerEngine {
                 player.data.set('autoplay', !cur);
                 player.autoplay = !cur;
                 isAp = !cur;
+                if (isAp) {
+                    const { triggerAutoplayBuffer } = require('../utils/musicManager');
+                    triggerAutoplayBuffer(player, player.queue.length === 0 && !player.playing).catch(() => {});
+                }
             } else {
                 player.autoplay = !player.autoplay;
                 isAp = player.autoplay;
