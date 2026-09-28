@@ -25,3 +25,9 @@ services:
         sync: false
       - key: RENDER_EXTERNAL_URL
         sync: false
+      - key: VERIFY_URL
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: CUSTOM_DOMAIN
+        sync: false

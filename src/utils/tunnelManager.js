@@ -77,16 +77,37 @@ function scheduleReconnect(port, delayMs) {
 }
 
 function getPublicUrl() {
+    // 1. Explicit verification URL or proxy override (e.g. Cloudflare Worker or unblocked public domain)
+    if (process.env.VERIFY_URL && process.env.VERIFY_URL.trim() !== '') {
+        return process.env.VERIFY_URL.trim().replace(/\/$/, '');
+    }
+    if (process.env.PUBLIC_VERIFY_URL && process.env.PUBLIC_VERIFY_URL.trim() !== '') {
+        return process.env.PUBLIC_VERIFY_URL.trim().replace(/\/$/, '');
+    }
+    if (process.env.PUBLIC_URL && process.env.PUBLIC_URL.trim() !== '') {
+        return process.env.PUBLIC_URL.trim().replace(/\/$/, '');
+    }
     if (process.env.CUSTOM_DOMAIN && process.env.CUSTOM_DOMAIN.trim() !== '') {
         return process.env.CUSTOM_DOMAIN.trim().replace(/\/$/, '');
     }
     if (process.env.GG_DOMAIN && process.env.GG_DOMAIN.trim() !== '') {
         return process.env.GG_DOMAIN.trim().replace(/\/$/, '');
     }
+    // 2. Active Tunnel URL (if running and publicly accessible)
+    if (global.PUBLIC_WEB_URL && typeof global.PUBLIC_WEB_URL === 'string' && !global.PUBLIC_WEB_URL.includes('localhost') && !global.PUBLIC_WEB_URL.includes('127.0.0.1')) {
+        return global.PUBLIC_WEB_URL.trim().replace(/\/$/, '');
+    }
+    if (process.env.PUBLIC_WEB_URL && typeof process.env.PUBLIC_WEB_URL === 'string' && !process.env.PUBLIC_WEB_URL.includes('localhost') && !process.env.PUBLIC_WEB_URL.includes('127.0.0.1')) {
+        return process.env.PUBLIC_WEB_URL.trim().replace(/\/$/, '');
+    }
+    // 3. Render cloud hosting URL
     if (process.env.RENDER_EXTERNAL_URL && process.env.RENDER_EXTERNAL_URL.trim() !== '') {
         return process.env.RENDER_EXTERNAL_URL.trim().replace(/\/$/, '');
     }
-    return global.PUBLIC_WEB_URL || process.env.PUBLIC_WEB_URL || publicDomainUrl || 'https://starry.gg';
+    if (process.env.RENDER_EXTERNAL_HOSTNAME && process.env.RENDER_EXTERNAL_HOSTNAME.trim() !== '') {
+        return `https://${process.env.RENDER_EXTERNAL_HOSTNAME.trim().replace(/\/$/, '')}`;
+    }
+    return publicDomainUrl || 'https://manager-bot-1-6167.onrender.com';
 }
 
 module.exports = {

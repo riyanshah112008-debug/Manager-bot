@@ -410,39 +410,135 @@ client.on('messageCreate', async (message) => {
 });
 
 // Verification Web Routes
-app.get('/verify', (req, res) => {
+app.get('/verify', async (req, res) => {
     const token = req.query.token;
-    if (!client.verifyMap.has(token)) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif; margin-top:50px;">❌ Invalid or Expired Link. Please generate a new one in Discord.</h1>');
+    if (!token || !client.verifyMap || !client.verifyMap.has(token)) {
+        return res.status(400).send(`
+            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Starry Verification</title></head>
+            <body style="background-color:#1e1f22; color:#dbdee1; font-family:system-ui, -apple-system, sans-serif; text-align:center; padding:15vh 20px 0;">
+                <div style="max-width:480px; margin:0 auto; background:#2b2d31; padding:35px 25px; border-radius:12px; border:1px solid #3f4147;">
+                    <div style="font-size:48px; margin-bottom:15px;">⏱️</div>
+                    <h2 style="color:#f23f43; margin:0 0 12px;">Link Expired or Invalid</h2>
+                    <p style="color:#949ba4; font-size:15px; line-height:1.5;">This verification session has expired or has already been used.</p>
+                    <p style="color:#949ba4; font-size:14px; line-height:1.5; margin-top:15px;">👉 <b>Tip:</b> Return to Discord and click <b>"⚡ Verify in Discord (Instant)"</b> on the bot message to verify immediately with zero browser errors.</p>
+                </div>
+            </body></html>
+        `);
+    }
+
+    const data = client.verifyMap.get(token);
+    const guild = data?.guildId ? (client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null)) : null;
+    const guildName = guild ? guild.name : 'Discord Server';
+    const botAvatar = client.user ? client.user.displayAvatarURL({ extension: 'png' }) : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
     res.send(`
-        <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-        <body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:10vh;">
-            <img src="${client.user ? client.user.displayAvatarURL({ extension: 'png' }) : 'https://cdn.discordapp.com/embed/avatars/0.png'}" width="100" style="border-radius:50%; margin-bottom:20px;">
-            <h2>Starry Security Protocol</h2>
-            <p style="color:#b5bac1; margin-bottom:40px;">To protect our server from automated bots, please verify you are human.</p>
-            <form action="/verify" method="POST">
-                <input type="hidden" name="token" value="${token}">
-                <button type="submit" style="padding:15px 40px; font-size:18px; font-weight:bold; background-color:#23a559; color:white; border:none; border-radius:8px; cursor:pointer; box-shadow: 0 4px 15px rgba(35,165,89,0.4);">
-                    I am human (Verify)
-                </button>
-            </form>
+        <!DOCTYPE html>
+        <html><head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Human Verification - ${guildName}</title>
+            <style>
+                body { background-color:#1e1f22; color:#dbdee1; font-family:system-ui, -apple-system, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:20px; box-sizing:border-box; }
+                .card { background:#2b2d31; padding:35px 25px; border-radius:12px; max-width:440px; width:100%; text-align:center; border:1px solid #3f4147; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+                .avatar { width:88px; height:88px; border-radius:50%; margin-bottom:18px; border:3px solid #23a559; }
+                h2 { color:#ffffff; margin:0 0 8px; font-size:22px; }
+                p { color:#949ba4; font-size:14px; line-height:1.5; margin:0 0 24px; }
+                button { width:100%; padding:14px 20px; font-size:16px; font-weight:600; background-color:#23a559; color:white; border:none; border-radius:8px; cursor:pointer; transition:background 0.2s, transform 0.1s; }
+                button:hover { background-color:#1f944f; }
+                button:active { transform:scale(0.98); }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <img src="${botAvatar}" class="avatar" alt="Bot Avatar">
+                <h2>Human Verification</h2>
+                <p>Confirm you are human to unlock full channel access in <b>${guildName}</b>.</p>
+                <form action="/verify" method="POST">
+                    <input type="hidden" name="token" value="${token}">
+                    <button type="submit" id="btn">I am human (Verify Now)</button>
+                </form>
+            </div>
+            <script>
+                document.querySelector('form').addEventListener('submit', function() {
+                    const btn = document.getElementById('btn');
+                    btn.disabled = true;
+                    btn.innerText = 'Verifying security token...';
+                });
+            </script>
         </body></html>
     `);
 });
 
 app.post('/verify', async (req, res) => {
-    const token = req.body.token;
+    const token = req.body?.token;
+    if (!token || !client.verifyMap || !client.verifyMap.has(token)) {
+        return res.status(400).send(`
+            <html><body style="background-color:#1e1f22; color:#dbdee1; font-family:sans-serif; text-align:center; padding-top:15vh;">
+                <h1 style="color:#f23f43;">❌ Token Expired or Invalid</h1>
+                <p>Please return to Discord and click the verify button again.</p>
+            </body></html>
+        `);
+    }
+
     const data = client.verifyMap.get(token);
-    if (!data) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Token expired or invalid.</h1>');
     try {
-        const guild = client.guilds.cache.get(data.guildId);
-        if (!guild) return res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Server not found.</h1>');
-        const member = await guild.members.fetch(data.userId);
-        await member.roles.add(data.roleId);
-        client.verifyMap.delete(token); 
-        res.send(`<body style="background-color:#2b2d31; color:white; font-family:sans-serif; text-align:center; padding-top:20vh;"><h1 style="color:#23a559; font-size:50px; margin-bottom:10px;">✅ Success!</h1><h3>You are now verified. You may close this tab and return to Discord.</h3></body>`);
+        const guild = client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null);
+        if (!guild) {
+            return res.send('<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Discord Server Not Found.</h1>');
+        }
+
+        const member = await guild.members.fetch(data.userId).catch(() => null);
+        if (!member) {
+            return res.send('<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Member not found in Discord server.</h1>');
+        }
+
+        const { resolveTargetRole } = require('./modules/verification');
+        const targetRole = await resolveTargetRole(guild, data.roleId);
+
+        if (!targetRole) {
+            return res.send('<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Verified role is not configured. Please contact server admins.</h1>');
+        }
+
+        const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+        if (botMember && targetRole.position >= botMember.roles.highest.position) {
+            return res.send(`
+                <body style="background-color:#1e1f22; color:white; font-family:sans-serif; text-align:center; padding-top:15vh;">
+                    <h1 style="color:#faa81a;">⚠️ Role Hierarchy Misconfiguration</h1>
+                    <p style="color:#b5bac1;">The role <b>${targetRole.name}</b> is above or equal to the bot role in Server Settings.</p>
+                    <p style="color:#949ba4;">Ask an administrator to drag the bot role above <b>${targetRole.name}</b>.</p>
+                </body>
+            `);
+        }
+
+        await member.roles.add(targetRole, 'Starry Web Human Verification');
+        client.verifyMap.delete(token);
+
+        // Telemetry audit notification
+        try {
+            const chamberCh = guild.channels.cache.find(c => c.name === 'verification-chamber' || c.name === 'audit-log' || c.name === 'mod-logs');
+            if (chamberCh && chamberCh.isTextBased()) {
+                const { EmbedBuilder } = require('discord.js');
+                const logEmbed = new EmbedBuilder()
+                    .setColor('#2ecc71')
+                    .setTitle('🟢 Member Human Verification Complete')
+                    .setDescription(`**User Verified:** <@${member.id}> (\`${member.user.tag}\`) completed web human verification.`)
+                    .setTimestamp();
+                chamberCh.send({ embeds: [logEmbed] }).catch(() => {});
+            }
+        } catch (e) {}
+
+        res.send(`
+            <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Verification Success</title></head>
+            <body style="background-color:#1e1f22; color:white; font-family:system-ui, -apple-system, sans-serif; text-align:center; padding-top:18vh;">
+                <div style="max-width:440px; margin:0 auto; background:#2b2d31; padding:35px 25px; border-radius:12px; border:1px solid #3f4147;">
+                    <h1 style="color:#23a559; font-size:42px; margin:0 0 10px;">✅ Success!</h1>
+                    <h3 style="color:#ffffff; margin:0 0 15px;">You are now verified in ${guild.name}</h3>
+                    <p style="color:#949ba4; font-size:15px; margin:0 0 25px;">You have received the <b>${targetRole.name}</b> role. You may close this tab and return to Discord.</p>
+                </div>
+            </body></html>
+        `);
     } catch (error) {
-        console.error('Web Verification Error:', error);
-        res.send('<h1 style="color:red; text-align:center; font-family:sans-serif;">❌ Error assigning role. Ensure bot role is higher than verification role!</h1>');
+        console.error('Web Verification Execution Error:', error);
+        res.send(`<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Verification Error: ${error.message || 'Unknown error'}. Ensure the bot role is positioned higher than the verification role.</h1>`);
     }
 });
 

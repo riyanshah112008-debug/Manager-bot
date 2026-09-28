@@ -1058,20 +1058,6 @@ module.exports = async (client) => {
                     return interaction.reply({ embeds: [listEmbed], flags: [EPHEMERAL_FLAG] });
                 }
             }
-
-            // --- VERIFY BUTTON ---
-            if (interaction.customId.startsWith('verify_role_')) {
-                const roleId = interaction.customId.split('verify_role_')[1];
-                const token = Math.random().toString(36).substring(2, 15);
-                if (!client.verifyMap) client.verifyMap = new Map();
-                client.verifyMap.set(token, { guildId: interaction.guild.id, userId: interaction.user.id, roleId });
-
-                const hostUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`;
-                const verifyUrl = `${hostUrl}/verify?token=${token}`;
-
-                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('Verify Human Access').setStyle(ButtonStyle.Link).setURL(verifyUrl).setEmoji('🌐'));
-                return interaction.reply({ content: '🛡️ Click the secure link below to complete web verification:', components: [row], flags: [EPHEMERAL_FLAG] });
-            }
         }
 
         // ==========================================
