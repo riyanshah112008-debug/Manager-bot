@@ -55,7 +55,11 @@ function getActivePlayer(client, guildId) {
             }
         }
     }
-    if (kPlayer) {
+    const nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
+    const nativeIsActive = nativePlayer && !nativePlayer.destroyed && (nativePlayer.currentTrack || nativePlayer.queue.length > 0);
+    const kazagumoIsActive = kPlayer && (kPlayer.queue?.current || kPlayer.playing || kPlayer.queue?.length > 0);
+
+    if (kazagumoIsActive || (kPlayer && !nativeIsActive)) {
         const { applyKazagumoFilter } = require('../../utils/musicManager');
         return {
             isKazagumo: true,
@@ -87,8 +91,7 @@ function getActivePlayer(client, guildId) {
         };
     }
 
-    const nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
-    if (nativePlayer && !nativePlayer.destroyed) {
+    if (nativeIsActive || (nativePlayer && !nativePlayer.destroyed)) {
         return nativePlayer;
     }
 
@@ -141,9 +144,7 @@ const commands = [
                 try {
                     const res = await manager.search(query, { requester: ctx.user });
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
-                        if (loadingMsg) loadingMsg.delete().catch(() => {});
-                        const { sendNoResultsFallback } = require('../../utils/musicSearchHelper');
-                        return sendNoResultsFallback(ctx, query);
+                        throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
                     }
 
                     let player = manager.getPlayer(ctx.guild.id);

@@ -4,12 +4,13 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    StringSelectMenuBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
+    StringSelectMenuBuilder, 
+    ModalBuilder, 
+    TextInputBuilder, 
+    TextInputStyle, 
     ComponentType 
 } = require('discord.js');
+const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -19,9 +20,13 @@ module.exports = {
     async execute(interaction, client) {
         await interaction.deferReply();
 
-        const player = client.manager.getPlayer(interaction.guild.id);
+        const kPlayer = client.manager?.getPlayer(interaction.guild.id);
+        const nativePlayer = StarryAudioEngine?.getPlayer(interaction.guild.id, client);
 
-        if (!player || !player.queue.current) {
+        const isNative = (!kPlayer || !kPlayer.queue?.current) && (nativePlayer && (nativePlayer.currentTrack || nativePlayer.queue.length > 0));
+        const activePlayer = isNative ? nativePlayer : kPlayer;
+
+        if (!activePlayer || (isNative ? !nativePlayer.currentTrack : !kPlayer.queue?.current)) {
             return interaction.editReply('❌ There is no music currently playing in this server.');
         }
 
@@ -33,29 +38,37 @@ module.exports = {
             return `${minutes}:${seconds.toString().padStart(2, '0')}`;
         };
 
-        let tracks = player.queue;
+        const getTracks = () => isNative ? nativePlayer.queue : activePlayer.queue;
+        const getCurrent = () => isNative ? nativePlayer.currentTrack : activePlayer.queue.current;
+
+        let tracks = getTracks();
         const itemsPerPage = 10;
         let currentPage = 0;
 
         // Function to build the Queue Display Embed
         const generateEmbed = (page) => {
-            const current = player.queue.current;
-            tracks = player.queue;
+            const current = getCurrent();
+            tracks = getTracks();
             const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
             const start = page * itemsPerPage;
             const currentTracks = tracks.slice(start, start + itemsPerPage);
 
             const trackList = currentTracks.length > 0
                 ? currentTracks.map((track, index) => {
-                    return `**${start + index + 1}.** [${track.title.substring(0, 45)}](${track.uri}) - \`${formatTime(track.length)}\``;
+                    const url = track.uri || track.url || 'https://discord.gg';
+                    const dur = track.length || track.duration || 0;
+                    return `**${start + index + 1}.** [${(track.title || 'Track').substring(0, 45)}](${url}) - \`${formatTime(dur)}\``;
                 }).join('\n')
                 : '*No upcoming songs in queue.*';
+
+            const curUrl = current?.uri || current?.url || '';
+            const curDur = current?.length || current?.duration || 0;
 
             return new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle(`🎶 Queue for ${interaction.guild.name}`)
                 .setDescription(
-                    `**Now Playing:**\n[${current ? current.title : 'None'}](${current ? current.uri : ''}) - \`${formatTime(current ? current.length : 0)}\`\n\n` +
+                    `**Now Playing:**\n[${current ? current.title : 'None'}](${curUrl}) - \`${formatTime(curDur)}\`\n\n` +
                     `**Up Next:**\n${trackList}`
                 )
                 .setFooter({ 
@@ -66,7 +79,7 @@ module.exports = {
 
         // Function to build Navigation Buttons
         const generateButtons = (page) => {
-            tracks = player.queue;
+            tracks = getTracks();
             const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
 
             return new ActionRowBuilder().addComponents(
@@ -80,15 +93,15 @@ module.exports = {
 
         // Function to build the "Play Next" Dropdown Menu
         const generatePlayNextMenu = (page) => {
-            tracks = player.queue;
+            tracks = getTracks();
             const start = page * itemsPerPage;
             const currentTracks = tracks.slice(start, start + itemsPerPage);
 
             if (currentTracks.length === 0) return null;
 
             const options = currentTracks.map((track, index) => ({
-                label: `${start + index + 1}. ${track.title}`.substring(0, 95),
-                description: `Duration: ${formatTime(track.length)}`,
+                label: `${start + index + 1}. ${track.title || 'Track'}`.substring(0, 95),
+                description: `Duration: ${formatTime(track.length || track.duration || 0)}`,
                 value: `playnext_${start + index}`
             }));
 
@@ -102,15 +115,15 @@ module.exports = {
 
         // Function to build the "Remove Song" Dropdown Menu
         const generateRemoveMenu = (page) => {
-            tracks = player.queue;
+            tracks = getTracks();
             const start = page * itemsPerPage;
             const currentTracks = tracks.slice(start, start + itemsPerPage);
 
             if (currentTracks.length === 0) return null;
 
             const options = currentTracks.map((track, index) => ({
-                label: `${start + index + 1}. ${track.title}`.substring(0, 95),
-                description: `Duration: ${formatTime(track.length)}`,
+                label: `${start + index + 1}. ${track.title || 'Track'}`.substring(0, 95),
+                description: `Duration: ${formatTime(track.length || track.duration || 0)}`,
                 value: `remove_${start + index}`
             }));
 
@@ -146,7 +159,7 @@ module.exports = {
                 return i.reply({ content: '❌ Only the person who requested the queue can use these controls.', ephemeral: true });
             }
 
-            tracks = player.queue;
+            tracks = getTracks();
             const totalPages = Math.max(Math.ceil(tracks.length / itemsPerPage), 1);
 
             // --- 1. PAGINATION CONTROLS ---

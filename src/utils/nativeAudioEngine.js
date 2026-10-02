@@ -550,9 +550,20 @@ class StarryGuildPlayer {
 
         try {
             if (isFile) {
+                const isUrl = typeof streamOrPath === 'string' && (streamOrPath.startsWith('http://') || streamOrPath.startsWith('https://'));
+                const inputArgs = isUrl 
+                    ? [
+                        '-reconnect', '1', 
+                        '-reconnect_streamed', '1', 
+                        '-reconnect_delay_max', '5', 
+                        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        '-i', streamOrPath
+                      ]
+                    : ['-i', streamOrPath];
+
                 const ffmpeg = new prism.FFmpeg({
                     args: [
-                        '-i', streamOrPath,
+                        ...inputArgs,
                         ...activeFilter,
                         '-f', 's16le',
                         '-ar', '48000',
@@ -643,16 +654,20 @@ class StarryGuildPlayer {
                     }
 
                     let resolved = await streamResolver.resolve(query);
-                    if (!resolved || !resolved.file) {
+                    if (!resolved || (!resolved.file && !resolved.url)) {
                         resolved = await streamResolver.resolve(`${primaryArtist} ${track.title}`.trim());
                     }
-                    if (!resolved || !resolved.file) {
+                    if (!resolved || (!resolved.file && !resolved.url)) {
                         resolved = await streamResolver.resolve(`${track.title} Official Audio`.trim());
                     }
 
-                    if (resolved && resolved.file && fs.existsSync(resolved.file)) {
-                        track._resolvedFile = resolved.file;
-                        audioResource = this.createFilteredResource(resolved.file, true);
+                    if (resolved) {
+                        if (resolved.file && fs.existsSync(resolved.file)) {
+                            track._resolvedFile = resolved.file;
+                            audioResource = this.createFilteredResource(resolved.file, true);
+                        } else if (resolved.url) {
+                            audioResource = this.createFilteredResource(resolved.url, true);
+                        }
                     }
                 } catch (srErr) {}
             }
@@ -662,7 +677,8 @@ class StarryGuildPlayer {
                 try {
                     await refreshSoundCloudToken();
                     const primaryArtist = (track.author || '').split(',')[0].trim();
-                    let scResults = await play.search(searchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    const scSearchQuery = `${primaryArtist} ${track.title}`.trim() || track.title;
+                    let scResults = await play.search(scSearchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
                     if (!scResults || scResults.length === 0) {
                         scResults = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
                     }
@@ -679,7 +695,7 @@ class StarryGuildPlayer {
                 }
             }
 
-            // 4. Secondary Cloud Streamer: YouTube Audio via play-dl or @distube/ytdl-core
+            // 4. Secondary Cloud Streamer: YouTube Audio via streamResolver, play-dl or @distube/ytdl-core
             if (!audioResource) {
                 try {
                     let ytUrl = targetUrl;
@@ -691,15 +707,23 @@ class StarryGuildPlayer {
                         if (ytSearch && ytSearch[0]) ytUrl = ytSearch[0].url;
                     }
                     if (ytUrl) {
-                        try {
-                            const stream = await play.stream(ytUrl, { quality: 2 });
-                            if (stream && stream.stream) {
-                                audioResource = this.createFilteredResource(stream.stream, false);
+                        if (streamResolver && !streamResolver.disabled) {
+                            const res = await streamResolver.resolve(ytUrl);
+                            if (res && res.url) {
+                                audioResource = this.createFilteredResource(res.url, true);
                             }
-                        } catch (pErr) {
-                            const ytdl = require('@distube/ytdl-core');
-                            const ytdlStream = ytdl(ytUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-                            audioResource = this.createFilteredResource(ytdlStream, false);
+                        }
+                        if (!audioResource) {
+                            try {
+                                const stream = await play.stream(ytUrl, { quality: 2 });
+                                if (stream && stream.stream) {
+                                    audioResource = this.createFilteredResource(stream.stream, false);
+                                }
+                            } catch (pErr) {
+                                const ytdl = require('@distube/ytdl-core');
+                                const ytdlStream = ytdl(ytUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+                                audioResource = this.createFilteredResource(ytdlStream, false);
+                            }
                         }
                     }
                 } catch (ytErr) {

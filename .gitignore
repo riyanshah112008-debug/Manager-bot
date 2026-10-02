@@ -42,4 +42,6 @@ Starry/
 Thumbs.db
 .audio_cache/
 .tempmediaStorage/
+__pycache__/
+*.pyc
 

@@ -295,13 +295,13 @@ for (const TrackClass of trackClasses) {
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
-const Nodes = [
+const defaultNodes = [
     {
         name: 'Node-1-Serenetia-SSL',
-        url: 'lavalink.serenetia.com:443',
-        auth: 'youshallnotpass',
-        secure: true,
-        retryAmount: 50,
+        url: process.env.LAVALINK_URL || 'lavalink.serenetia.com:443',
+        auth: process.env.LAVALINK_AUTH || 'youshallnotpass',
+        secure: process.env.LAVALINK_SECURE ? process.env.LAVALINK_SECURE === 'true' : true,
+        retryAmount: 15,
         retryDelay: 3000
     },
     {
@@ -309,10 +309,12 @@ const Nodes = [
         url: 'lava-v4.ajieblogs.eu.org:80',
         auth: 'https://dsc.gg/ajidevserver',
         secure: false,
-        retryAmount: 50,
-        retryDelay: 3000
+        retryAmount: 5,
+        retryDelay: 5000
     }
 ];
+
+const Nodes = defaultNodes;
 
 function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
@@ -1055,7 +1057,7 @@ function createMusicManager(client) {
                     return prevLoad < currentLoad ? prev : current;
                 });
             }
-            return allNodes[0] || null;
+            return null;
         }
     });
 

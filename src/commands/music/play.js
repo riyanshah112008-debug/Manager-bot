@@ -88,10 +88,7 @@ module.exports = {
         try {
           const res = await manager.search(query, { requester: interaction.user });
           if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
-            const { buildNoResultsPayload } = require('../../utils/musicSearchHelper');
-            const searchId = `srch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-            const payload = buildNoResultsPayload(query, searchId);
-            return replyFunc.call(interaction, payload);
+            throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
           }
 
           let player = manager.getPlayer(interaction.guild.id);
