@@ -55,6 +55,7 @@ function setCachedPrefix(guildId, prefix) {
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
+const prefixNoticeCooldowns = new Set();
 const mongoose = require('mongoose');
 
 function isPrimaryBotClient(client) {
@@ -309,12 +310,15 @@ class CommandRegistry {
                     if (content.startsWith(',')) {
                         matchedPrefix = ',';
                         commandBody = content.slice(1).trim();
+                    } else if (content.startsWith('.')) {
+                        matchedPrefix = '.';
+                        commandBody = content.slice(1).trim();
                     } else if (guildId) {
                         const activePrefix = guildPrefixCache.has(guildId) 
                             ? guildPrefixCache.get(guildId) 
                             : await getGuildPrefix(guildId);
 
-                        if (activePrefix && activePrefix !== ',' && content.startsWith(activePrefix)) {
+                        if (activePrefix && activePrefix !== ',' && activePrefix !== '.' && content.startsWith(activePrefix)) {
                             matchedPrefix = activePrefix;
                             commandBody = content.slice(activePrefix.length).trim();
                         } else {
@@ -347,12 +351,13 @@ class CommandRegistry {
                         .setTitle('🌟 Hello! How can I assist you today?')
                         .setDescription(
                             `I am **Starry** (Astraea), your all-in-one AI assistant, music streamer, and server guardian!\n\n` +
-                            `• **Server Prefix:** \`${p}\` *(e.g. \`${p}help\`, \`${p}play\`, \`${p}ask\`)*\n` +
-                            `• **AI Assistant:** Mention me with any question or use \`${p}ask <prompt>\` (you can attach images!)\n` +
+                            `• **Slash Commands:** Type \`/\` to browse all commands (e.g. \`/help\`, \`/play\`, \`/ask\`)\n` +
+                            `• **Prefix Commands:** \`${p}\` *(Reserved exclusively for Bot Owners)*\n` +
+                            `• **AI Assistant:** Mention me with any question or use \`/ask <prompt>\` (you can attach images!)\n` +
                             `• **Gateway Latency:** \`${ping}ms\`\n` +
                             `• **Music & Hi-Fi:** High-Fidelity 24/7 playback with 15 studio filters`
                         )
-                        .setFooter({ text: `Type ${p}help to see all commands • Starry Bot` })
+                        .setFooter({ text: 'Type /help to see all commands • Starry Bot' })
                         .setTimestamp();
 
                     const row = new ActionRowBuilder().addComponents(
@@ -391,7 +396,52 @@ class CommandRegistry {
             executedMessageIds.add(message.id);
             setTimeout(() => executedMessageIds.delete(message.id), 20000);
 
-            console.log(`⚡ [Command] Executing ,${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
+            // 👑 OWNER-ONLY PREFIX RESTRICTION (Plan B: Slash Command Migration)
+            const isPrefixInvocation = matchedPrefix !== '@' && matchedPrefix !== '';
+            if (isPrefixInvocation) {
+                const isOwner = typeof config.isBotOwner === 'function' 
+                    ? config.isBotOwner(message.author.id, client) 
+                    : (config.BOT_OWNERS || []).includes(message.author.id);
+
+                if (!isOwner) {
+                    // Throttle notices to avoid channel spam (1 notice per 8 seconds per user)
+                    if (!prefixNoticeCooldowns.has(message.author.id)) {
+                        prefixNoticeCooldowns.add(message.author.id);
+                        setTimeout(() => prefixNoticeCooldowns.delete(message.author.id), 8000);
+
+                        const slashEquivalent = `/${resolvedName}`;
+                        const embed = new EmbedBuilder()
+                            .setColor('#5865F2')
+                            .setAuthor({ name: '✨ Starry • Slash Command Migration', iconURL: client.user ? client.user.displayAvatarURL({ dynamic: true }) : undefined })
+                            .setTitle('⚡ Prefix Commands Are Reserved for Bot Owners')
+                            .setDescription(
+                                `Starry has officially transitioned to **Discord Slash Commands** in accordance with Discord platform guidelines!\n\n` +
+                                `• **Prefix commands (\`,\` / \`.\`)** are restricted exclusively to **Bot Owners**.\n` +
+                                `• Please use **\`${slashEquivalent}\`** instead!\n` +
+                                `• Type **\`/help\`** to browse and execute commands with interactive menus and autocomplete.`
+                            )
+                            .setFooter({ text: 'Tip: Type / to see all slash commands • Starry Bot' });
+
+                        const row = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('mention_help_btn')
+                                .setLabel('📖 Open /help Menu')
+                                .setStyle(ButtonStyle.Primary)
+                                .setEmoji('📜')
+                        );
+
+                        message.reply({ embeds: [embed], components: [row] })
+                            .then(sentMsg => {
+                                setTimeout(() => sentMsg.delete().catch(() => {}), 12000);
+                            })
+                            .catch(() => {});
+                    }
+                    return;
+                }
+            }
+
+            const logTag = isPrefixInvocation ? 'Owner-Prefix' : 'Command';
+            console.log(`⚡ [${logTag}] Executing ${matchedPrefix || ''}${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
 
             // Guard server-only commands when run in DMs
@@ -402,7 +452,7 @@ class CommandRegistry {
             try {
                 // Check permissions if in a guild
                 if (message.guild && command.permissions && Array.isArray(command.permissions)) {
-                    if (!config.BOT_OWNERS?.includes(message.author.id)) {
+                    if (!config.isBotOwner(message.author.id, client)) {
                         for (const perm of command.permissions) {
                             if (!message.member?.permissions?.has(perm)) {
                                 return ctx.reply('❌ You do not have sufficient permissions to execute this command.');
@@ -1680,6 +1730,7 @@ module.exports = registryInstance;
 module.exports.guildPrefixCache = guildPrefixCache;
 module.exports.getGuildPrefix = getGuildPrefix;
 module.exports.setCachedPrefix = setCachedPrefix;
+module.exports.CommandRegistry = CommandRegistry;
 
 const { getGuildLanguage, getGuildLanguageSync, setGuildLanguage, t } = require('../utils/i18n');
 module.exports.getGuildLanguage = getGuildLanguage;

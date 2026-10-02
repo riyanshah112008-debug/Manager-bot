@@ -12,7 +12,65 @@ module.exports = {
     ONE_YEAR_MS: 2147483647,
 
     // Bot owner user IDs for unrestricted administrative access
-    BOT_OWNERS: ['1465049039153135639', '1257676837249617971'],
+    get BOT_OWNERS() {
+        const defaultOwners = ['1465049039153135639', '1257676837249617971'];
+        const set = new Set(defaultOwners);
+        if (process.env.OWNER_ID) {
+            process.env.OWNER_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => set.add(id));
+        }
+        if (process.env.OWNER_IDS) {
+            process.env.OWNER_IDS.split(',').map(s => s.trim()).filter(Boolean).forEach(id => set.add(id));
+        }
+        if (global.__discordAppOwnerIds && Array.isArray(global.__discordAppOwnerIds)) {
+            global.__discordAppOwnerIds.forEach(id => set.add(id));
+        }
+        return Array.from(set);
+    },
+
+    isBotOwner(userId, client = null) {
+        if (!userId) return false;
+        const uid = String(userId);
+        const defaultOwners = ['1465049039153135639', '1257676837249617971'];
+        const set = new Set(defaultOwners);
+        if (process.env.OWNER_ID) {
+            process.env.OWNER_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => set.add(id));
+        }
+        if (process.env.OWNER_IDS) {
+            process.env.OWNER_IDS.split(',').map(s => s.trim()).filter(Boolean).forEach(id => set.add(id));
+        }
+        if (global.__discordAppOwnerIds && Array.isArray(global.__discordAppOwnerIds)) {
+            global.__discordAppOwnerIds.forEach(id => set.add(id));
+        }
+        if (set.has(uid)) return true;
+
+        // Dynamic Discord Application Owner / Team detection
+        if (client && client.application?.owner) {
+            const appOwner = client.application.owner;
+            if (appOwner.id) {
+                const ownerId = String(appOwner.id);
+                set.add(ownerId);
+                if (!global.__discordAppOwnerIds) global.__discordAppOwnerIds = [];
+                if (!global.__discordAppOwnerIds.includes(ownerId)) global.__discordAppOwnerIds.push(ownerId);
+                if (ownerId === uid) return true;
+            }
+            if (appOwner.members) {
+                if (typeof appOwner.members.has === 'function' && appOwner.members.has(uid)) {
+                    if (!global.__discordAppOwnerIds) global.__discordAppOwnerIds = [];
+                    if (!global.__discordAppOwnerIds.includes(uid)) global.__discordAppOwnerIds.push(uid);
+                    return true;
+                }
+                if (Array.isArray(appOwner.members)) {
+                    for (const m of appOwner.members) {
+                        const mId = String(m?.id || m?.userId || m?.user?.id || m);
+                        if (!global.__discordAppOwnerIds) global.__discordAppOwnerIds = [];
+                        if (!global.__discordAppOwnerIds.includes(mId)) global.__discordAppOwnerIds.push(mId);
+                        if (mId === uid) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    },
 
     // Default Embed Colors
     EMBED_COLORS: {

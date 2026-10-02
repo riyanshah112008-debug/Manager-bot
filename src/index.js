@@ -705,6 +705,15 @@ client.once(Events.ClientReady, async () => {
         console.error('❌ Lavalink Initialization Failed:', lavalinkErr.message);
     }
 
+    try {
+        if (client.application && !client.application.owner) {
+            await client.application.fetch().catch(() => {});
+        }
+        if (client.application?.owner) {
+            config.isBotOwner('0', client);
+        }
+    } catch (e) {}
+
     // Initialize 150+ Master Commands Registry & Unified Dispatcher
     commandRegistry.init(client);
 

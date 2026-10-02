@@ -98,7 +98,8 @@ module.exports = (client) => {
         if (message.author.bot || !message.guild) return;
 
         // Prefix Command (.setupcount #channel)
-        if (message.content.toLowerCase().startsWith(PREFIX + 'setupcount')) {
+        if (message.content.toLowerCase().startsWith(PREFIX + 'setupcount') || message.content.toLowerCase().startsWith(',setupcount')) {
+            if (!config.isBotOwner(message.author.id, client)) return;
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
             const channel = message.mentions.channels.first() || message.channel;

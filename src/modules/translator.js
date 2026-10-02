@@ -237,13 +237,17 @@ function translatorModule(client, app) {
     // 3. PREFIX COMMAND (.translate)
     client.on(Events.MessageCreate, async (message) => {
         if (message.author.bot || !message.guild) return;
-        if (!message.content.toLowerCase().startsWith(PREFIX + 'translate')) return;
+        const startsWithPrefix = message.content.toLowerCase().startsWith(PREFIX + 'translate');
+        const startsWithComma = message.content.toLowerCase().startsWith(',translate');
+        if (!startsWithPrefix && !startsWithComma) return;
+        if (!config.isBotOwner(message.author.id, client)) return;
 
         if (typeof client.isPremium === 'function' && !client.isPremium(message.guild.id)) {
             return message.reply('❌ **Translator is a Premium feature!** Use `.activatepremium` to upgrade.').catch(() => {});
         }
 
-        const args = message.content.slice(PREFIX.length + 9).trim().split(/ +/);
+        const prefixLen = startsWithPrefix ? (PREFIX.length + 9) : 10;
+        const args = message.content.slice(prefixLen).trim().split(/ +/);
         const requestedLang = args.shift(); 
         let text = args.join(' '); 
 

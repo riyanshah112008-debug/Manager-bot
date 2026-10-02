@@ -23,7 +23,9 @@ const dmNsfwCache = new Map();
 function canManageServerNsfw(userId, guild) {
     if (!guild || !userId) return false;
     const isServerOwner = guild.ownerId === userId;
-    const isBotOwner = Array.isArray(config.BOT_OWNERS) && config.BOT_OWNERS.includes(userId);
+    const isBotOwner = typeof config.isBotOwner === 'function' 
+        ? config.isBotOwner(userId) 
+        : (Array.isArray(config.BOT_OWNERS) && config.BOT_OWNERS.includes(userId));
     return isServerOwner || isBotOwner;
 }
 

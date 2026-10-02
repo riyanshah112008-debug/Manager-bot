@@ -189,7 +189,7 @@ module.exports = (client) => {
         );
         const isOwner = typeof client.isOwner === 'function' 
             ? client.isOwner(message.author.id) 
-            : OWNER_IDS.includes(message.author.id);
+            : (typeof config.isBotOwner === 'function' ? config.isBotOwner(message.author.id, client) : OWNER_IDS.includes(message.author.id));
 
         if (isStaff || isOwner) return;
 

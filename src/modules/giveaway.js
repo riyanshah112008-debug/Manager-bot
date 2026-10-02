@@ -202,7 +202,8 @@ module.exports = (client) => {
         if (message.author.bot || !message.guild) return;
 
         // PREFIX REROLL COMMAND (.reroll <message_id> [winners])
-        if (message.content.toLowerCase().startsWith(PREFIX + 'reroll') || message.content.toLowerCase().startsWith(PREFIX + 'giveaway reroll')) {
+        if (message.content.toLowerCase().startsWith(PREFIX + 'reroll') || message.content.toLowerCase().startsWith(PREFIX + 'giveaway reroll') || message.content.toLowerCase().startsWith(',reroll') || message.content.toLowerCase().startsWith(',giveaway reroll')) {
+            if (!config.isBotOwner(message.author.id, client)) return;
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                 return message.reply('❌ You need **Administrator** permissions to reroll giveaways.').catch(() => {});
             }
@@ -223,7 +224,8 @@ module.exports = (client) => {
         }
 
         // PREFIX START GIVEAWAY COMMAND (.giveaway <duration> [winners] <prize>)
-        if (message.content.toLowerCase().startsWith(PREFIX + 'giveaway')) {
+        if (message.content.toLowerCase().startsWith(PREFIX + 'giveaway') || message.content.toLowerCase().startsWith(',giveaway')) {
+            if (!config.isBotOwner(message.author.id, client)) return;
             if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                 return message.reply('❌ You need **Administrator** permissions to start a giveaway.').catch(() => {});
             }

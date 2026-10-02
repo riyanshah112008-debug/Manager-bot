@@ -30,7 +30,7 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
     const prefix = customPrefix || config.DEFAULT_PREFIX || ',';
     const embed = new EmbedBuilder()
         .setColor(config.EMBED_COLORS.PRIMARY)
-        .setFooter({ text: `Starry Master Bot • Default Prefix: ${prefix} • 1-Year Controls` })
+        .setFooter({ text: `Starry Master Bot • Slash Commands (/) • Prefix (${prefix}) Owner-Only` })
         .setTimestamp();
 
     if (catId === 'music') {
@@ -189,7 +189,8 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
         embed.setTitle('🌟 Manager Bot & Starry Supreme Command Hub')
             .setDescription(
                 `Welcome to the ultimate Discord multi-feature bot!\n` +
-                `• **Default Prefix:** \`${prefix}\` *(Fixed standard prefix)*\n` +
+                `• **Primary Interface:** **Slash Commands (\`/\`)** *(Type \`/\` to view autocomplete list)*\n` +
+                `• **Prefix Commands (\`${prefix}\`):** Reserved exclusively for **Bot Owners**\n` +
                 `• **Total Commands:** \`${totalCommands}\` across ${isNsfw ? '9' : '8'} specialized categories\n` +
                 `• **Multi-Bot Clustering:** Active and synchronized\n` +
                 `• **Embed Buttons Lifetime:** High persistence up to **1 Year**\n\n` +

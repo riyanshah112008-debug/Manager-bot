@@ -119,13 +119,17 @@ module.exports = (client) => {
     // ==========================================
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
-        if (!message.content.startsWith(PREFIX)) return;
+        const startsWithPrefix = message.content.startsWith(PREFIX);
+        const startsWithComma = message.content.startsWith(',');
+        if (!startsWithPrefix && !startsWithComma) return;
 
-        const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
+        const prefixLen = startsWithPrefix ? PREFIX.length : 1;
+        const args = message.content.slice(prefixLen).trim().split(/ +/);
+        const command = args.shift()?.toLowerCase();
 
         const roleCommands = ['createrole', 'deleterole', 'giverole', 'removerole'];
         if (!roleCommands.includes(command)) return;
+        if (!config.isBotOwner(message.author.id, client)) return;
 
         const hasPerms = message.member.permissions.has(PermissionsBitField.Flags.ManageRoles);
         const botHasPerms = message.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageRoles);
