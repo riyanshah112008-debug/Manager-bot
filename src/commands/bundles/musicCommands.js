@@ -161,6 +161,9 @@ const commands = [
                         player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
+                    if (ctx.isSlash && ctx.interaction) {
+                        player.data.set('interaction', ctx.interaction);
+                    }
                     if (loadingMsg) {
                         player.data.set('loadingMessage', loadingMsg);
                     }
@@ -240,18 +243,18 @@ const commands = [
                 }
             }
 
-            // Route 2 (Fallback): Native Audio Engine (Local playback / Termux)
+            // Route 2: Native Audio Engine (Local / Standalone / Cloud fallback)
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            if (loadingMsg) player.loadingMessage = loadingMsg;
-
-            const connectPromise = player.connect().catch(() => {});
-            const searchPromise = StarryAudioEngine.search(query, ctx.user);
+            // ⚡ Instantly join voice channel in background without blocking search
+            player.connect().catch(() => {});
 
             try {
-                const [_, result] = await Promise.race([
-                    Promise.all([connectPromise, searchPromise]),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search or voice connect timed out after 20s')), 20000))
+                // Fast search with 4-second timeout guarantee
+                const result = await Promise.race([
+                    StarryAudioEngine.search(query, ctx.user),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 4s')), 4000))
                 ]);
+
                 if (!result || !result.tracks || result.tracks.length === 0) {
                     if (loadingMsg) loadingMsg.delete().catch(() => {});
                     const { sendNoResultsFallback } = require('../../utils/musicSearchHelper');
@@ -263,7 +266,7 @@ const commands = [
                         player.queue.push(track);
                     }
                     if (!player.currentTrack) {
-                        await player.playNext();
+                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
                     }
 
                     if (loadingMsg) {
@@ -303,7 +306,24 @@ const commands = [
                     const track = result.tracks[0];
                     if (!player.currentTrack) {
                         player.queue.push(track);
-                        await player.playNext();
+                        // ⚡ Launch playback asynchronously in background - NEVER wait for it before showing embed!
+                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
+
+                        // ⚡ Deliver Now Playing embed immediately (< 2 seconds)!
+                        const payload = player.buildNowPlayingPayload(track);
+                        let sentMsg = null;
+                        if (ctx.isSlash) {
+                            sentMsg = await ctx.reply(payload).catch(() => null);
+                        } else if (loadingMsg) {
+                            sentMsg = await loadingMsg.edit({ content: null, ...payload }).catch(() => null);
+                            if (!sentMsg) sentMsg = await ctx.reply(payload).catch(() => null);
+                        } else {
+                            sentMsg = await ctx.reply(payload).catch(() => null);
+                        }
+                        if (sentMsg) {
+                            player.nowPlayingMessage = sentMsg;
+                        }
+                        return;
                     } else {
                         if (loadingMsg) {
                             loadingMsg.delete().catch(() => {});

@@ -141,6 +141,7 @@ module.exports = {
           } else {
             const track = res.tracks[0];
             if (!player.playing && !player.paused && !player.queue.current) {
+              player.data.set('interaction', interaction);
               player.queue.add(track);
               player.play();
             } else {
@@ -170,9 +171,13 @@ module.exports = {
       }
 
       const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
-      // ⚡ Instantly join voice channel in 0.1s without waiting for search
+      // ⚡ Instantly join voice channel in background without blocking search
       player.connect().catch(() => {});
-      const result = await StarryAudioEngine.search(query, interaction.user);
+
+      const result = await Promise.race([
+        StarryAudioEngine.search(query, interaction.user),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 4s')), 4000))
+      ]);
 
       if (!result || !result.tracks || result.tracks.length === 0) {
         const replyFunc = interaction.editReply || interaction.reply;
@@ -184,7 +189,7 @@ module.exports = {
           player.queue.push(track);
         }
         if (!player.currentTrack) {
-          await player.playNext();
+          player.playNext().catch(err => console.warn('playNext error:', err.message || err));
         }
 
         const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
@@ -221,7 +226,17 @@ module.exports = {
         const track = result.tracks[0];
         if (!player.currentTrack) {
           player.queue.push(track);
-          await player.playNext();
+          // ⚡ Launch playback asynchronously in background - NEVER wait for it before showing embed!
+          player.playNext().catch(err => console.warn('playNext error:', err.message || err));
+
+          // ⚡ Deliver Now Playing embed immediately (< 2 seconds)!
+          const payload = player.buildNowPlayingPayload(track);
+          const replyFunc = interaction.editReply || interaction.reply;
+          const msg = await replyFunc.call(interaction, payload).catch(() => null);
+          if (msg) {
+            player.nowPlayingMessage = msg;
+          }
+          return;
         } else {
           player.queue.push(track);
           const embed = new EmbedBuilder()
