@@ -81,6 +81,21 @@ class StreamResolverClient {
             }
         }
 
+        if (!this.ready && !this.disabled && this.process) {
+            await new Promise((r) => {
+                const checkInterval = setInterval(() => {
+                    if (this.ready || this.disabled || !this.process) {
+                        clearInterval(checkInterval);
+                        r();
+                    }
+                }, 50);
+                setTimeout(() => {
+                    clearInterval(checkInterval);
+                    r();
+                }, 4000);
+            });
+        }
+
         const id = ++this.reqId;
         const payload = JSON.stringify({ id, query }) + '\n';
 

@@ -1771,6 +1771,158 @@ const commands = [
                 components: [buttons]
             });
         }
+    },
+
+    // 46. BOTAVATAR (Per-Server Bot Profile Picture Customization)
+    {
+        name: 'botavatar',
+        aliases: ['botpfp', 'setbotavatar', 'setbotpfp', 'serveravatar'],
+        category: 'Moderation',
+        description: 'Customize or reset the bot\'s profile picture (server avatar) for this server.',
+        usage: ',botavatar <image URL | upload file | reset>',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            if (!ctx.inGuild) return ctx.reply('❌ This command can only be used in a Discord server.');
+
+            const botAvatarHelper = require('../../utils/botAvatarHelper');
+            if (!botAvatarHelper.canManageBotAvatar(ctx.member, ctx.user, ctx.guild)) {
+                return ctx.reply('❌ You need the **Manage Server** permission to change the bot\'s avatar for this server.');
+            }
+
+            const extracted = await botAvatarHelper.extractImageFromContext(ctx);
+
+            // Case 1: View current avatar
+            if (extracted.isView) {
+                const payload = botAvatarHelper.buildCurrentAvatarEmbed(ctx.guild, ctx.client, ctx.user);
+                const replyMsg = await ctx.reply(payload).catch(() => null);
+
+                if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
+                    const collector = replyMsg.createMessageComponentCollector({
+                        filter: (i) => i.customId === 'botavatar_btn_reset' && i.user.id === ctx.user.id,
+                        time: 120000
+                    });
+
+                    collector.on('collect', async (btnInt) => {
+                        await btnInt.deferUpdate().catch(() => {});
+                        try {
+                            const resetRes = await botAvatarHelper.resetBotServerAvatar(
+                                ctx.guild,
+                                ctx.client,
+                                `Reset via button by ${btnInt.user.tag}`
+                            );
+                            const resetPayload = botAvatarHelper.buildAvatarResetEmbed(
+                                ctx.guild,
+                                ctx.client,
+                                resetRes.globalAvatarUrl,
+                                btnInt.user
+                            );
+                            await replyMsg.edit(resetPayload).catch(() => {});
+                        } catch (e) {
+                            await ctx.reply(`❌ Error resetting avatar: \`${e.message}\``).catch(() => {});
+                        }
+                    });
+                }
+                return;
+            }
+
+            // Case 2: Reset to default global avatar
+            if (extracted.isReset) {
+                let loadingMsg = null;
+                if (!ctx.isSlash) {
+                    loadingMsg = await ctx.reply('🔄 **Resetting bot server avatar to default...**').catch(() => null);
+                }
+
+                try {
+                    const resetRes = await botAvatarHelper.resetBotServerAvatar(
+                        ctx.guild,
+                        ctx.client,
+                        `Reset via command by ${ctx.user.tag}`
+                    );
+                    const payload = botAvatarHelper.buildAvatarResetEmbed(
+                        ctx.guild,
+                        ctx.client,
+                        resetRes.globalAvatarUrl,
+                        ctx.user
+                    );
+                    if (loadingMsg) {
+                        return await loadingMsg.edit({ content: null, ...payload });
+                    }
+                    return await ctx.reply(payload);
+                } catch (err) {
+                    const errText = `❌ Failed to reset server avatar: \`${err.message}\``;
+                    if (loadingMsg) return await loadingMsg.edit(errText);
+                    return await ctx.reply(errText);
+                }
+            }
+
+            // Case 3: Update Avatar
+            if (!extracted.imageUrl) {
+                return ctx.reply('❌ Please provide an image URL or upload an image file to set the server avatar!\n*Usage: `,botavatar <image URL | upload file>` or `,botavatar reset`*');
+            }
+
+            let loadingMsg = null;
+            if (!ctx.isSlash) {
+                loadingMsg = await ctx.reply('🎨 **Downloading and applying custom server profile picture...**').catch(() => null);
+            }
+
+            try {
+                const updateRes = await botAvatarHelper.updateBotServerAvatar(
+                    ctx.guild,
+                    ctx.client,
+                    extracted.imageUrl,
+                    `Updated via command by ${ctx.user.tag} (${ctx.user.id})`
+                );
+
+                const payload = botAvatarHelper.buildAvatarSuccessEmbed(
+                    ctx.guild,
+                    ctx.client,
+                    updateRes.avatarUrl,
+                    ctx.user
+                );
+
+                let replyMsg = null;
+                if (loadingMsg) {
+                    replyMsg = await loadingMsg.edit({ content: null, ...payload }).catch(() => null);
+                } else {
+                    replyMsg = await ctx.reply(payload).catch(() => null);
+                }
+
+                if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
+                    const collector = replyMsg.createMessageComponentCollector({
+                        filter: (i) => i.customId === 'botavatar_btn_reset' && i.user.id === ctx.user.id,
+                        time: 120000
+                    });
+
+                    collector.on('collect', async (btnInt) => {
+                        await btnInt.deferUpdate().catch(() => {});
+                        try {
+                            const resetRes = await botAvatarHelper.resetBotServerAvatar(
+                                ctx.guild,
+                                ctx.client,
+                                `Reset via button by ${btnInt.user.tag}`
+                            );
+                            const resetPayload = botAvatarHelper.buildAvatarResetEmbed(
+                                ctx.guild,
+                                ctx.client,
+                                resetRes.globalAvatarUrl,
+                                btnInt.user
+                            );
+                            await replyMsg.edit(resetPayload).catch(() => {});
+                        } catch (e) {
+                            await ctx.reply(`❌ Error resetting avatar: \`${e.message}\``).catch(() => {});
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('BotAvatar Error:', err);
+                const isRateLimit = err.status === 429 || (err.message && err.message.includes('rate limit'));
+                const errorMsg = isRateLimit
+                    ? '⚠️ **Discord Rate Limit:** Profile changes are temporarily limited by Discord. Please wait a few moments and try again!'
+                    : `❌ **Failed to update server avatar:** ${err.message || 'Unknown Discord API error'}`;
+                if (loadingMsg) return await loadingMsg.edit(errorMsg);
+                return await ctx.reply(errorMsg);
+            }
+        }
     }
 ];
 

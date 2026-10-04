@@ -5,6 +5,7 @@ const serverSettingsSchema = new mongoose.Schema({
     prefix: { type: String, default: ',' },
     triggerWord: { type: String, default: 'Starry' },
     language: { type: String, default: 'en' },
+    botAvatar: { type: String, default: '' },
     
     // 🛡️ Starry Anti-Nuke & Security Guard Shield
     antinuke: {

@@ -142,6 +142,11 @@ if (codeStudioModule && codeStudioModule.data) {
     masterPayloads.push(codeStudioModule.data.toJSON ? codeStudioModule.data.toJSON() : codeStudioModule.data);
 }
 
+const botavatarModule = safeRequire(['./src/commands/moderation/botavatar', './commands/moderation/botavatar']);
+if (botavatarModule && botavatarModule.data) {
+    masterPayloads.push(botavatarModule.data.toJSON ? botavatarModule.data.toJSON() : botavatarModule.data);
+}
+
 const commands = [
     ...masterPayloads,
 
