@@ -13,6 +13,7 @@ const {
 const mongoose = require('mongoose');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
+const levelingModule = require('../../modules/leveling');
 
 // Economy schema definition / model loader
 const economySchema = new mongoose.Schema({
@@ -94,19 +95,27 @@ const commands = [
         usage: ',rank [@user]',
         async execute(ctx) {
             const target = ctx.message?.mentions?.users?.first() || ctx.user;
+            try {
+                const lvlUser = await levelingModule.LevelUser.findOne({ userId: target.id, guildId: ctx.guild.id });
+                if (lvlUser) {
+                    const rankEmbed = await levelingModule.buildRankEmbed(target, lvlUser, ctx.guild);
+                    return ctx.reply({ embeds: [rankEmbed] });
+                }
+            } catch (err) {}
+
             const doc = await getOrCreateEcoUser(target.id, ctx.guild.id);
             const neededXp = doc.level * 100;
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
-                .setAuthor({ name: `${target.username}'s Rank & Level`, iconURL: target.displayAvatarURL({ dynamic: true }) })
+                .setAuthor({ name: `${target.username} — Rank & Level`, iconURL: target.displayAvatarURL({ dynamic: true }) })
                 .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 256 }))
                 .addFields(
-                    { name: '👑 Level', value: `\`Level ${doc.level}\``, inline: true },
-                    { name: '✨ XP Progress', value: `\`${doc.xp} / ${neededXp} XP\``, inline: true },
-                    { name: '💰 Net Worth', value: `\`$${(doc.wallet + doc.bank).toLocaleString()}\``, inline: true }
+                    { name: 'Level', value: `\`Level ${doc.level}\``, inline: true },
+                    { name: 'XP Progress', value: `\`${doc.xp} / ${neededXp} XP\``, inline: true },
+                    { name: 'Net Worth', value: `\`$${(doc.wallet + doc.bank).toLocaleString()}\``, inline: true }
                 )
-                .setFooter({ text: 'Starry Leveling Engine • Prefix: ,' })
+                .setFooter({ text: `${config.BOT_NAME || 'Mina'} Leveling System • Prefix: ,` })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -122,18 +131,24 @@ const commands = [
         usage: ',leaderboard [xp / money]',
         async execute(ctx) {
             const type = ctx.args[0]?.toLowerCase() === 'money' ? 'wallet' : 'xp';
+            if (type === 'xp') {
+                try {
+                    const lbData = await levelingModule.buildLeaderboardData(ctx.guild.id, ctx.guild, 'xp');
+                    return ctx.reply(lbData);
+                } catch (e) {}
+            }
+
             const top = await EcoUser.find({ guildId: ctx.guild.id }).sort({ [type]: -1 }).limit(10).lean();
 
-            if (top.length === 0) return ctx.reply('📭 Leaderboard is empty for this server.');
+            if (top.length === 0) return ctx.reply('Leaderboard is empty for this server.');
 
             const list = top.map((u, i) => {
-                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `\`#${i + 1}\``;
-                return `${medal} <@${u.userId}> — **Level ${u.level}** (\`${u.xp} XP\`) | **$${(u.wallet + u.bank).toLocaleString()}**`;
+                return `**#${i + 1}** <@${u.userId}> — **Level ${u.level}** (\`${u.xp} XP\`) | **$${(u.wallet + u.bank).toLocaleString()}**`;
             }).join('\n');
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.ECONOMY)
-                .setTitle(`🏆 ${ctx.guild.name} Top Leaderboard`)
+                .setTitle(`${ctx.guild.name} Top Leaderboard`)
                 .setDescription(list)
                 .setFooter({ text: 'Rankings update in real-time • Prefix: ,' })
                 .setTimestamp();
@@ -145,7 +160,7 @@ const commands = [
     // 3. SETLEVEL
     {
         name: 'setlevel',
-        aliases: ['givexp'],
+        aliases: ['setlvl', 'lvlset'],
         category: 'Economy',
         description: 'Set a user\'s level or add XP (Admins Only).',
         usage: ',setlevel <@user> <level number>',
@@ -160,6 +175,14 @@ const commands = [
                 return ctx.reply('❌ Usage: `,setlevel @user <level>`');
             }
             await EcoUser.updateOne({ userId: target.id, guildId: ctx.guild.id }, { level, xp: 0 }, { upsert: true });
+            try {
+                const targetXp = Math.round(levelingModule.xpForNextLevel(level - 1)) || 0;
+                await levelingModule.LevelUser.findOneAndUpdate(
+                    { userId: target.id, guildId: ctx.guild.id },
+                    { $set: { level, xp: targetXp } },
+                    { upsert: true }
+                );
+            } catch (e) {}
             return ctx.reply(`✅ **Set ${target.username}'s level to Level ${level}!**`);
         }
     },

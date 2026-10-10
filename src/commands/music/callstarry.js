@@ -6,7 +6,8 @@ const {
   AudioPlayerStatus,
   EndBehaviorType,
   getVoiceConnection,
-  VoiceConnectionStatus
+  VoiceConnectionStatus,
+  NoSubscriberBehavior
 } = require('@discordjs/voice');
 const prism = require('prism-media');
 const { Readable } = require('stream');
@@ -61,7 +62,15 @@ module.exports = {
 
       await interaction.editReply({ content: `📞 **Connecting to ${voiceChannel.name}...** Hey ${member.displayName}, Starry is on the line!` });
 
-      // 4. JOIN VOICE CHANNEL
+      // 4. JOIN VOICE CHANNEL (Clean up conflicting music session first)
+      try {
+        const kPlayer = client.manager?.getPlayer(interaction.guild.id);
+        if (kPlayer) kPlayer.destroy();
+        const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
+        const nPlayer = StarryAudioEngine.getPlayer(interaction.guild.id, client);
+        if (nPlayer && !nPlayer.destroyed) nPlayer.destroy();
+      } catch (_) {}
+
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
@@ -70,7 +79,12 @@ module.exports = {
         selfMute: false
       });
 
-      const player = createAudioPlayer();
+      const player = createAudioPlayer({
+        behaviors: {
+          noSubscriber: NoSubscriberBehavior.Play,
+          maxMissedFrames: 250
+        }
+      });
       connection.subscribe(player);
 
       player.on('error', err => console.error('❌ [CallStarry Player Error]:', err.message));

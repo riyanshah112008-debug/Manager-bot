@@ -26,30 +26,69 @@ const User = require('../models/User');
 const guildPrefixCache = new Map();
 
 async function getGuildPrefix(guildId) {
-    if (!guildId) return ',';
+    if (!guildId) return config.DEFAULT_PREFIX || ',';
     if (guildPrefixCache.has(guildId)) return guildPrefixCache.get(guildId);
+
+    let resolvedPrefix = null;
+
+    // 1. Try MongoDB ServerSettings
     try {
         const mongoose = require('mongoose');
-        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
-            guildPrefixCache.set(guildId, ',');
-            return ',';
+        if (mongoose.connection && mongoose.connection.readyState === 1) {
+            const ServerSettings = require('../models/ServerSettings');
+            const settings = await Promise.race([
+                ServerSettings.findOne({ guildId }).select('prefix').lean(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+            ]);
+            if (settings?.prefix) {
+                resolvedPrefix = settings.prefix;
+            }
         }
-        const ServerSettings = require('../models/ServerSettings');
-        const settings = await Promise.race([
-            ServerSettings.findOne({ guildId }).select('prefix').lean(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
-        ]);
-        const p = settings?.prefix || ',';
-        guildPrefixCache.set(guildId, p);
-        return p;
-    } catch (e) {
-        guildPrefixCache.set(guildId, ',');
-        return ',';
+    } catch (e) {}
+
+    // 2. Fallback to local JSON store (mina-store.json)
+    if (!resolvedPrefix) {
+        try {
+            const db = require('../utils/database');
+            if (db && typeof db.getGuildSettings === 'function') {
+                const local = db.getGuildSettings(guildId);
+                if (local?.prefix && local.prefix !== '?') {
+                    resolvedPrefix = local.prefix;
+                }
+            }
+        } catch (e) {}
     }
+
+    const finalPrefix = resolvedPrefix || config.DEFAULT_PREFIX || ',';
+    guildPrefixCache.set(guildId, finalPrefix);
+    return finalPrefix;
 }
 
 function setCachedPrefix(guildId, prefix) {
-    if (guildId) guildPrefixCache.set(guildId, prefix || ',');
+    if (!guildId) return;
+    const finalPrefix = prefix || config.DEFAULT_PREFIX || ',';
+    guildPrefixCache.set(guildId, finalPrefix);
+
+    // Sync to local JSON database
+    try {
+        const db = require('../utils/database');
+        if (db && typeof db.updateGuildSettings === 'function') {
+            db.updateGuildSettings(guildId, { prefix: finalPrefix });
+        }
+    } catch (e) {}
+
+    // Sync to MongoDB ServerSettings
+    try {
+        const mongoose = require('mongoose');
+        if (mongoose.connection && mongoose.connection.readyState === 1) {
+            const ServerSettings = require('../models/ServerSettings');
+            ServerSettings.findOneAndUpdate(
+                { guildId },
+                { $set: { prefix: finalPrefix } },
+                { upsert: true }
+            ).catch(() => {});
+        }
+    } catch (e) {}
 }
 
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
@@ -79,6 +118,7 @@ const systemCommands = require('../commands/bundles/systemCommands');
 const nsfwCommands = require('../commands/bundles/nsfwCommands');
 const boosterCommands = require('../commands/bundles/boosterCommands');
 const colorCommands = require('../commands/bundles/colorCommands');
+const mediaCommands = require('../commands/bundles/mediaCommands');
 
 const allBundles = [
     ...musicCommands,
@@ -90,7 +130,8 @@ const allBundles = [
     ...systemCommands,
     ...nsfwCommands,
     ...boosterCommands,
-    ...colorCommands
+    ...colorCommands,
+    ...mediaCommands
 ];
 
 function getFilesRecursively(dir) {
@@ -125,10 +166,17 @@ async function executeSafely(command, ctx, client, cmdName) {
     });
 
     try {
-        await Promise.race([
-            command.execute(ctx, client),
-            timeoutPromise
-        ]);
+        if (command.execute.length >= 3) {
+            await Promise.race([
+                command.execute(ctx, ctx.args, client),
+                timeoutPromise
+            ]);
+        } else {
+            await Promise.race([
+                command.execute(ctx, client),
+                timeoutPromise
+            ]);
+        }
     } finally {
         if (timer) clearTimeout(timer);
     }
@@ -195,15 +243,17 @@ class CommandRegistry {
                             if (!this.categories.has(cmdModule.category)) this.categories.set(cmdModule.category, []);
                             this.categories.get(cmdModule.category).push(cmdModule);
                         }
-                    }
 
-                    // Register all aliases for standalone commands
-                    if (cmdModule.aliases && Array.isArray(cmdModule.aliases)) {
-                        for (const alias of cmdModule.aliases) {
-                            const cleanAlias = alias.toLowerCase();
-                            this.aliases.set(cleanAlias, name);
-                            client.aliases.set(cleanAlias, name);
-                            client.prefixCommands.set(cleanAlias, cmdModule);
+                        // Register all aliases for standalone commands only if not already taken
+                        if (cmdModule.aliases && Array.isArray(cmdModule.aliases)) {
+                            for (const alias of cmdModule.aliases) {
+                                const cleanAlias = alias.toLowerCase();
+                                if (!this.commands.has(cleanAlias) && !this.aliases.has(cleanAlias)) {
+                                    this.aliases.set(cleanAlias, name);
+                                    client.aliases.set(cleanAlias, name);
+                                    client.prefixCommands.set(cleanAlias, cmdModule);
+                                }
+                            }
                         }
                     }
                 }
@@ -262,8 +312,9 @@ class CommandRegistry {
                 const musicController = require('./musicController');
                 if (musicController.isRequestChannel(message.guild.id, message.channel.id)) {
                     if (!isPrimary) return;
+                    const activePrefix = await getGuildPrefix(message.guild.id);
                     const raw = message.content.trim();
-                    if (!raw.startsWith(',') && !raw.startsWith('.')) {
+                    if (!raw.startsWith(activePrefix)) {
                         return musicController.handleSongRequest(message, client);
                     }
                 }
@@ -301,49 +352,55 @@ class CommandRegistry {
                     commandBody = clusterMatch[2].trim();
                     matchedPrefix = 's' + botIndex;
                 } 
-                // C. Single Comma (,) Default Prefix & Custom Server Prefix
+                // C. Single Prefix Matching (Guild Prefix or DM Fallback)
                 else {
                     if (content.startsWith('<@')) return;
                     if (!isPrimary) return; // Standard prefix handled EXCLUSIVELY by primary bot! Secondary worker bots never respond here!
 
-                    const guildId = message.guild?.id;
-                    if (content.startsWith(',')) {
-                        matchedPrefix = ',';
-                        commandBody = content.slice(1).trim();
-                    } else if (content.startsWith('.')) {
-                        matchedPrefix = '.';
-                        commandBody = content.slice(1).trim();
-                    } else if (guildId) {
-                        const activePrefix = guildPrefixCache.has(guildId) 
-                            ? guildPrefixCache.get(guildId) 
-                            : await getGuildPrefix(guildId);
+                    if (message.guild) {
+                        const guildId = message.guild.id;
+                        if (content.startsWith(',')) {
+                            matchedPrefix = ',';
+                            commandBody = content.slice(1).trim();
+                        } else if (content.startsWith('.')) {
+                            matchedPrefix = '.';
+                            commandBody = content.slice(1).trim();
+                        } else {
+                            const activePrefix = guildPrefixCache.has(guildId) 
+                                ? guildPrefixCache.get(guildId) 
+                                : await getGuildPrefix(guildId);
 
-                        if (activePrefix && activePrefix !== ',' && activePrefix !== '.' && content.startsWith(activePrefix)) {
-                            matchedPrefix = activePrefix;
-                            commandBody = content.slice(activePrefix.length).trim();
-                        } else {
-                            return; // Not a command
-                        }
-                    } else if (!message.guild) {
-                        const firstWord = content.toLowerCase().split(/\s+/)[0];
-                        const isCmd = this.commands.has(firstWord) || this.aliases.has(firstWord);
-                        if (isCmd) {
-                            matchedPrefix = '';
-                            commandBody = content;
-                        } else {
-                            // In DMs, talk directly with Starry AI without needing a prefix
-                            matchedPrefix = '';
-                            commandBody = 'ask ' + content;
+                            if (activePrefix && activePrefix !== ',' && activePrefix !== '.' && content.startsWith(activePrefix)) {
+                                matchedPrefix = activePrefix;
+                                commandBody = content.slice(activePrefix.length).trim();
+                            } else {
+                                return; // Strictly ignore: Not a command for Starry!
+                            }
                         }
                     } else {
-                        return; // Not a command
+                        const defaultPrefix = config.DEFAULT_PREFIX || ',';
+                        if (content.startsWith(defaultPrefix)) {
+                            matchedPrefix = defaultPrefix;
+                            commandBody = content.slice(defaultPrefix.length).trim();
+                        } else {
+                            const firstWord = content.toLowerCase().split(/\s+/)[0];
+                            const isCmd = this.commands.has(firstWord) || this.aliases.has(firstWord);
+                            if (isCmd) {
+                                matchedPrefix = '';
+                                commandBody = content;
+                            } else {
+                                // In DMs, talk directly with Starry AI without needing a prefix
+                                matchedPrefix = '';
+                                commandBody = 'ask ' + content;
+                            }
+                        }
                     }
                 }
             }
 
             if (!commandBody) {
                 if (matchedPrefix === '@') {
-                    const p = message.guild ? await getGuildPrefix(message.guild.id) : ',';
+                    const p = message.guild ? await getGuildPrefix(message.guild.id) : (config.DEFAULT_PREFIX || ',');
                     const ping = Math.round(client.ws.ping || 0);
                     const embed = new EmbedBuilder()
                         .setColor('#9B59B6')
@@ -352,7 +409,7 @@ class CommandRegistry {
                         .setDescription(
                             `I am **Starry** (Astraea), your all-in-one AI assistant, music streamer, and server guardian!\n\n` +
                             `• **Slash Commands:** Type \`/\` to browse all commands (e.g. \`/help\`, \`/play\`, \`/ask\`)\n` +
-                            `• **Prefix Commands:** \`${p}\` *(Reserved exclusively for Bot Owners)*\n` +
+                            `• **Prefix Commands:** \`${p}\`\n` +
                             `• **AI Assistant:** Mention me with any question or use \`/ask <prompt>\` (you can attach images!)\n` +
                             `• **Gateway Latency:** \`${ping}ms\`\n` +
                             `• **Music & Hi-Fi:** High-Fidelity 24/7 playback with 15 studio filters`
@@ -377,7 +434,7 @@ class CommandRegistry {
             const commandKey = args.shift()?.toLowerCase();
             if (!commandKey) return;
 
-            const resolvedName = this.aliases.get(commandKey) || commandKey;
+            const resolvedName = this.commands.has(commandKey) ? commandKey : (this.aliases.get(commandKey) || commandKey);
             let command = this.commands.get(resolvedName);
 
             // If user mentioned bot directly and spoke naturally, route seamlessly to Starry AI
@@ -396,51 +453,40 @@ class CommandRegistry {
             executedMessageIds.add(message.id);
             setTimeout(() => executedMessageIds.delete(message.id), 20000);
 
-            // 👑 OWNER-ONLY PREFIX RESTRICTION (Plan B: Slash Command Migration)
             const isPrefixInvocation = matchedPrefix !== '@' && matchedPrefix !== '';
+
+            // 👑 OWNER-ONLY PREFIX RESTRICTION (Starry Policy)
             if (isPrefixInvocation) {
                 const isOwner = typeof config.isBotOwner === 'function' 
                     ? config.isBotOwner(message.author.id, client) 
                     : (config.BOT_OWNERS || []).includes(message.author.id);
 
                 if (!isOwner) {
-                    // Throttle notices to avoid channel spam (1 notice per 8 seconds per user)
                     if (!prefixNoticeCooldowns.has(message.author.id)) {
                         prefixNoticeCooldowns.add(message.author.id);
                         setTimeout(() => prefixNoticeCooldowns.delete(message.author.id), 8000);
 
-                        const slashEquivalent = `/${resolvedName}`;
-                        const embed = new EmbedBuilder()
-                            .setColor('#5865F2')
-                            .setAuthor({ name: '✨ Starry • Slash Command Migration', iconURL: client.user ? client.user.displayAvatarURL({ dynamic: true }) : undefined })
-                            .setTitle('⚡ Prefix Commands Are Reserved for Bot Owners')
+                        const prefixChar = matchedPrefix || ',';
+                        const migrationEmbed = new EmbedBuilder()
+                            .setColor('#F1C40F')
+                            .setTitle('✨ Commands have migrated to Slash Commands (/)')
                             .setDescription(
-                                `Starry has officially transitioned to **Discord Slash Commands** in accordance with Discord platform guidelines!\n\n` +
-                                `• **Prefix commands (\`,\` / \`.\`)** are restricted exclusively to **Bot Owners**.\n` +
-                                `• Please use **\`${slashEquivalent}\`** instead!\n` +
-                                `• Type **\`/help\`** to browse and execute commands with interactive menus and autocomplete.`
+                                `Prefix commands (\`${prefixChar}${resolvedName}\`) are reserved exclusively for **Bot Owners**.\n\n` +
+                                `👉 **Please use Slash Commands instead:** \`/${resolvedName}\`\n` +
+                                `Type \`/\` in the chat to explore all **Starry** commands!`
                             )
-                            .setFooter({ text: 'Tip: Type / to see all slash commands • Starry Bot' });
+                            .setFooter({ text: 'Starry Master System • Fast & Fluid' });
 
-                        const row = new ActionRowBuilder().addComponents(
-                            new ButtonBuilder()
-                                .setCustomId('mention_help_btn')
-                                .setLabel('📖 Open /help Menu')
-                                .setStyle(ButtonStyle.Primary)
-                                .setEmoji('📜')
-                        );
-
-                        message.reply({ embeds: [embed], components: [row] })
-                            .then(sentMsg => {
-                                setTimeout(() => sentMsg.delete().catch(() => {}), 12000);
-                            })
-                            .catch(() => {});
+                        const noticeMsg = await message.reply({ embeds: [migrationEmbed] }).catch(() => null);
+                        if (noticeMsg) {
+                            setTimeout(() => noticeMsg.delete().catch(() => null), 12000);
+                        }
                     }
-                    return;
+                    return; // Reject execution for non-owners
                 }
             }
 
-            const logTag = isPrefixInvocation ? 'Owner-Prefix' : 'Command';
+            const logTag = isPrefixInvocation ? 'Prefix' : 'Command';
             console.log(`⚡ [${logTag}] Executing ${matchedPrefix || ''}${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
 
@@ -465,11 +511,11 @@ class CommandRegistry {
                     await executeSafely(command, ctx, client, resolvedName);
                 }
             } catch (err) {
-                console.error(`❌ Error executing prefix command ,${resolvedName}:`, err);
+                console.error(`❌ Error executing prefix command ${matchedPrefix || ''}${resolvedName}:`, err);
                 const isTimeout = err.message && err.message.includes('Timed Out');
                 const replyText = isTimeout
-                    ? `⚠️ **Command Timed Out:** \`,${resolvedName}\` took too long to respond. Please try again in a moment.`
-                    : `⚠️ An error occurred while executing \`,${resolvedName}\`: \`${err.message}\``;
+                    ? `⚠️ **Command Timed Out:** \`${matchedPrefix || ''}${resolvedName}\` took too long to respond. Please try again in a moment.`
+                    : `⚠️ An error occurred while executing \`${matchedPrefix || ''}${resolvedName}\`: \`${err.message}\``;
                 await ctx.reply(replyText).catch(() => {});
             }
         });
@@ -880,8 +926,17 @@ class CommandRegistry {
                     }
                 }
 
-                // AutoMod Channel Interactive Buttons (1-Year Global Handler)
-                if (customId.startsWith('am_toggle_links_') || customId.startsWith('am_toggle_emojis_') || customId.startsWith('am_refresh_')) {
+                // AutoMod Channel & Server Interactive Buttons (1-Year Global Handler)
+                if (
+                    customId.startsWith('am_toggle_links_') || 
+                    customId.startsWith('am_toggle_emojis_') || 
+                    customId.startsWith('am_toggle_server_') || 
+                    customId.startsWith('am_server_dashboard_') || 
+                    customId.startsWith('am_list_overrides_') || 
+                    customId.startsWith('am_reset_channel_') || 
+                    customId.startsWith('am_channel_config_') || 
+                    customId.startsWith('am_refresh_')
+                ) {
                     if (!interaction.guild) {
                         return interaction.reply({ content: '❌ AutoMod can only be configured in a server.', ephemeral: true }).catch(() => {});
                     }
@@ -894,33 +949,94 @@ class CommandRegistry {
                         }).catch(() => {});
                     }
 
-                    const channelId = customId.replace(/^(am_toggle_links_|am_toggle_emojis_|am_refresh_)/, '');
-                    const targetChannel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+                    const channelId = customId.replace(/^(am_toggle_links_|am_toggle_emojis_|am_toggle_server_|am_server_dashboard_|am_list_overrides_|am_reset_channel_|am_channel_config_|am_refresh_)/, '');
+                    const targetChannel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null) || interaction.channel;
 
-                    if (!targetChannel) {
-                        return interaction.reply({
-                            content: '❌ Target channel could not be found or has been deleted.',
-                            ephemeral: true
-                        }).catch(() => {});
+                    // Handle: View Overrides List
+                    if (customId.startsWith('am_list_overrides_')) {
+                        const overrides = await automodHelper.listGuildOverrides(interaction.guild.id);
+                        if (overrides.length === 0) {
+                            return interaction.reply({
+                                content: 'ℹ️ **No channel overrides configured.** All channels follow default server protection.',
+                                ephemeral: true
+                            }).catch(() => {});
+                        }
+                        const listText = overrides.map(o => {
+                            const linksStatus = o.links ? '🔴 Links Allowed' : '🟢 Links Blocked';
+                            const emojisStatus = o.emojis ? '🔴 Emojis Allowed' : '🟢 Emojis Blocked';
+                            return `• <#${o.channelId}> — ${linksStatus} | ${emojisStatus}`;
+                        }).join('\n');
+
+                        const overridesEmbed = new EmbedBuilder()
+                            .setColor('#5865F2')
+                            .setTitle(`🛡️ AutoMod Channel Overrides (${overrides.length})`)
+                            .setDescription(listText)
+                            .setFooter({ text: 'Use Reset Channel button in any channel to restore default protection' })
+                            .setTimestamp();
+
+                        return interaction.reply({ embeds: [overridesEmbed], ephemeral: true }).catch(() => {});
                     }
 
-                    const current = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
+                    // Handle: Server AutoMod Toggle
+                    if (customId.startsWith('am_toggle_server_')) {
+                        const currentGuild = automodHelper.getGuildStatus(interaction.guild.id);
+                        const newGuild = !currentGuild;
+                        await automodHelper.setGuildStatus(interaction.guild.id, newGuild);
 
+                        const isServerDashboard = interaction.message?.embeds?.[0]?.title?.includes('Server Dashboard');
+                        if (isServerDashboard) {
+                            const overrides = await automodHelper.listGuildOverrides(interaction.guild.id);
+                            const newEmbed = automodHelper.buildServerAutomodEmbed(interaction.guild, newGuild, overrides);
+                            const newButtons = automodHelper.createServerAutomodButtons(channelId, newGuild);
+                            return await interaction.update({
+                                embeds: [newEmbed],
+                                components: Array.isArray(newButtons) ? newButtons : [newButtons]
+                            }).catch(() => {});
+                        } else {
+                            const updatedSettings = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
+                            const newEmbed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, updatedSettings, newGuild);
+                            const newButtons = automodHelper.createChannelAutomodButtons(channelId, updatedSettings, newGuild);
+                            return await interaction.update({
+                                embeds: [newEmbed],
+                                components: Array.isArray(newButtons) ? newButtons : [newButtons]
+                            }).catch(() => {});
+                        }
+                    }
+
+                    // Handle: Reset Channel Override
+                    if (customId.startsWith('am_reset_channel_')) {
+                        await automodHelper.resetChannelSettings(channelId, interaction.guild.id);
+                    }
+
+                    // Handle: Channel Filter Toggles
+                    const current = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
                     if (customId.startsWith('am_toggle_links_')) {
                         await automodHelper.setChannelFilter(channelId, interaction.guild.id, 'links', !current.linksActive);
                     } else if (customId.startsWith('am_toggle_emojis_')) {
                         await automodHelper.setChannelFilter(channelId, interaction.guild.id, 'emojis', !current.emojisActive);
                     }
 
-                    const updatedSettings = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
+                    // Re-render
+                    const isServerDashboard = (interaction.message?.embeds?.[0]?.title?.includes('Server Dashboard') || customId.startsWith('am_server_dashboard_')) && !customId.startsWith('am_channel_config_');
                     const isGuildEnabled = automodHelper.getGuildStatus(interaction.guild.id);
-                    const newEmbed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, updatedSettings, isGuildEnabled);
-                    const newButtons = automodHelper.createChannelAutomodButtons(channelId, updatedSettings);
 
-                    return await interaction.update({
-                        embeds: [newEmbed],
-                        components: [newButtons]
-                    }).catch(() => {});
+                    if (isServerDashboard) {
+                        const overrides = await automodHelper.listGuildOverrides(interaction.guild.id);
+                        const newEmbed = automodHelper.buildServerAutomodEmbed(interaction.guild, isGuildEnabled, overrides);
+                        const newButtons = automodHelper.createServerAutomodButtons(channelId, isGuildEnabled);
+                        return await interaction.update({
+                            embeds: [newEmbed],
+                            components: Array.isArray(newButtons) ? newButtons : [newButtons]
+                        }).catch(() => {});
+                    } else {
+                        const updatedSettings = await automodHelper.getChannelSettings(channelId, interaction.guild.id);
+                        const newEmbed = automodHelper.buildChannelAutomodEmbed(interaction.guild, targetChannel, updatedSettings, isGuildEnabled);
+                        const newButtons = automodHelper.createChannelAutomodButtons(channelId, updatedSettings, isGuildEnabled);
+                        return await interaction.update({
+                            embeds: [newEmbed],
+                            components: Array.isArray(newButtons) ? newButtons : [newButtons]
+                        }).catch(() => {});
+                    }
                 }
 
                 // C. Chest Claim Buttons (1-Year Global Handler)

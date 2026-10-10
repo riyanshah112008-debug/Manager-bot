@@ -9,7 +9,7 @@ module.exports = {
         .setDescription('⏹️ Stops playback, clears queue, and disconnects'),
         
     async execute(interaction, client) {
-        const player = StarryAudioEngine.getPlayer(interaction.guild.id) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
+        const player = StarryAudioEngine.getPlayer(interaction.guild.id, client) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
         
         if (!player) {
             return interaction.reply({ content: '❌ No active audio session in this server.', flags: [EPHEMERAL_FLAG] });

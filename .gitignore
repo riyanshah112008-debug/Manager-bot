@@ -22,6 +22,8 @@ bot.log
 *.sqlite
 *.sqlite3
 sus_accounts.json
+src/data/*.json
+src/data/*.tmp
 
 # Backup archives
 BOT/

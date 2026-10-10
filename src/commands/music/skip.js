@@ -9,7 +9,7 @@ module.exports = {
         .setDescription('⏭️ Skips the current track'),
         
     async execute(interaction, client) {
-        const player = StarryAudioEngine.getPlayer(interaction.guild.id) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
+        const player = StarryAudioEngine.getPlayer(interaction.guild.id, client) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
         
         if (!player || (!player.currentTrack && !player.playing)) {
             return interaction.reply({ content: '❌ Nothing is currently playing in this server.', flags: [EPHEMERAL_FLAG] });

@@ -493,25 +493,41 @@ class MultiBotManager {
     }
 
     getPlayerForChannel(guildId, voiceChannelId) {
+        const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
         for (const [id, info] of this.instances.entries()) {
             const client = info.client;
-            if (!client || !client.manager) continue;
+            if (!client) continue;
 
-            const player = client.manager.getPlayer(guildId);
-            if (player && player.voiceId === voiceChannelId) {
-                return player;
+            if (client.manager) {
+                const player = client.manager.getPlayer(guildId);
+                if (player && player.voiceId === voiceChannelId) {
+                    return player;
+                }
+            }
+
+            const nPlayer = StarryAudioEngine?.getPlayer(guildId, client);
+            if (nPlayer && !nPlayer.destroyed && nPlayer.voiceChannel?.id === voiceChannelId) {
+                return nPlayer;
             }
         }
         return null;
     }
 
     getPlayerForGuild(guildId) {
+        const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
         for (const [id, info] of this.instances.entries()) {
             const client = info.client;
-            if (!client || !client.manager) continue;
+            if (!client) continue;
 
-            const player = client.manager.getPlayer(guildId);
-            if (player) return player;
+            if (client.manager) {
+                const player = client.manager.getPlayer(guildId);
+                if (player) return player;
+            }
+
+            const nPlayer = StarryAudioEngine?.getPlayer(guildId, client);
+            if (nPlayer && !nPlayer.destroyed && (nPlayer.currentTrack || nPlayer.queue.length > 0)) {
+                return nPlayer;
+            }
         }
         return null;
     }

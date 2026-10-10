@@ -16,7 +16,7 @@ module.exports = {
         ),
         
     async execute(interaction, client) {
-        const player = StarryAudioEngine.getPlayer(interaction.guild.id) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
+        const player = StarryAudioEngine.getPlayer(interaction.guild.id, client) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
         
         if (!player) {
             return interaction.reply({ content: '❌ No active audio stream in this server.', flags: [EPHEMERAL_FLAG] });
