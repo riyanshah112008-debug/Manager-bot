@@ -354,8 +354,8 @@
                 <img id="userAvatar" src="" class="user-avatar" alt="Avatar">
                 <span id="userName" style="font-weight:700; font-size:0.9rem;">Admin</span>
             </div>
-            <button id="logoutBtn" class="btn btn-secondary" type="button" onclick="logoutDashboard()">Sign out</button>
-            <a href="/auth/login" id="loginBtn" class="btn btn-primary">Login with Discord</a>
+            <button id="logoutBtn" class="btn btn-secondary" type="button" style="display:none;" onclick="logoutDashboard()">Sign out</button>
+            <a href="/auth/login" id="loginBtn" class="btn btn-primary" style="display:none;">Login with Discord</a>
         </div>
     </header>
 
@@ -502,43 +502,56 @@
         }
 
         async function initDashboard() {
+            const loginBtn = document.getElementById('loginBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const userContainer = document.getElementById('userContainer');
+            const grid = document.getElementById('guildsGrid');
+            loginBtn.style.display = 'none';
+            logoutBtn.style.display = 'none';
+            userContainer.style.display = 'none';
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Checking your Discord session…</div>';
             try {
-                const userRes = await fetch('/auth/user');
+                const userRes = await fetch('/auth/user', { cache: 'no-store' });
                 const userData = await userRes.json();
-
-                if (userData.authenticated) {
-                    currentUser = userData.user;
-                    document.getElementById('loginBtn').style.display = 'none';
-                    document.getElementById('userContainer').style.display = 'flex';
-                    document.getElementById('logoutBtn').style.display = 'inline-flex';
-                    document.getElementById('userName').innerText = userData.user.username;
-                    document.getElementById('userAvatar').src = userData.user.avatar;
-                    document.getElementById('mockChatUsername').innerText = userData.user.username;
-                    document.getElementById('mockChatAvatar').src = userData.user.avatar;
-                }
-
-                const guildsRes = await fetch('/api/guilds');
-                const data = await guildsRes.json();
-
-                const grid = document.getElementById('guildsGrid');
-                if (!data.guilds || data.guilds.length === 0) {
-                    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; padding: 40px; color: var(--text-muted);">No active servers found. Add Starry to your server first!</div>';
+                if (userRes.status === 401 || userData.authenticated === false) {
+                    currentUser = null;
+                    loginBtn.style.display = 'inline-flex';
+                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Sign in with Discord to load your servers.</div>';
                     return;
                 }
-
+                if (!userRes.ok || !userData.authenticated || !userData.user) {
+                    throw new Error(userData.error || 'Discord session could not be verified (HTTP ' + userRes.status + ').');
+                }
+                currentUser = userData.user;
+                loginBtn.style.display = 'none';
+                userContainer.style.display = 'flex';
+                logoutBtn.style.display = 'inline-flex';
+                document.getElementById('userName').innerText = userData.user.username || 'Discord user';
+                document.getElementById('userAvatar').src = userData.user.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                document.getElementById('mockChatUsername').innerText = userData.user.username || 'Discord user';
+                document.getElementById('mockChatAvatar').src = userData.user.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                const guildsRes = await fetch('/api/guilds', { cache: 'no-store' });
+                const data = await guildsRes.json();
+                if (!guildsRes.ok) throw new Error(data.error || 'Could not load servers.');
+                if (!data.guilds || data.guilds.length === 0) {
+                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">No active servers found. Add Starry to your server first!</div>';
+                    return;
+                }
                 grid.innerHTML = data.guilds.map(g => `
                     <div class="guild-card">
                         <img src="${g.icon}" class="guild-icon" alt="${g.name}">
                         <div class="guild-name">${g.name}</div>
-                        <div class="guild-members">👥 ${g.memberCount.toLocaleString()} Members</div>
-                        <button class="btn btn-primary" style="width:100%;" onclick="openGuildSettings('${g.id}', '${g.name.replace(/'/g, "\\'")}')">⚙️ Manage Server</button>
+                        <div class="guild-members">👥 ${Number(g.memberCount || 0).toLocaleString()} Members</div>
+                        <button class="btn btn-primary" style="width:100%;" onclick="openGuildSettings('${g.id}', '${String(g.name).replace(/'/g, "\\'")}')">⚙️ Manage Server</button>
                     </div>
                 `).join('');
             } catch (e) {
-                console.error('Failed to load guilds:', e);
+                console.error('Dashboard authentication or loading failed:', e);
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Dashboard could not verify your login or load servers. Please refresh and try again.</div>';
+                const notice = document.getElementById('authNotice');
+                if (notice) { notice.textContent = 'Starry authentication service is temporarily unavailable: ' + e.message; notice.style.display = 'block'; }
             }
         }
-
         async function openGuildSettings(guildId, guildName) {
             currentGuildId = guildId;
             document.getElementById('panelGuildTitle').innerText = `⚙️ Manage: ${guildName}`;
