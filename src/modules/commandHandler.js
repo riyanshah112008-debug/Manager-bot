@@ -36,12 +36,18 @@ async function getGuildPrefix(guildId) {
         const mongoose = require('mongoose');
         if (mongoose.connection && mongoose.connection.readyState === 1) {
             const ServerSettings = require('../models/ServerSettings');
-            const settings = await Promise.race([
-                ServerSettings.findOne({ guildId }).select('prefix').lean(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
-            ]);
-            if (settings?.prefix) {
-                resolvedPrefix = settings.prefix;
+            // Keep first-use prefix resolution bounded; always clear the timeout when MongoDB wins.
+            let timeoutId;
+            try {
+                const settings = await Promise.race([
+                    ServerSettings.findOne({ guildId }).select('prefix').lean(),
+                    new Promise((_, reject) => {
+                        timeoutId = setTimeout(() => reject(new Error('prefix lookup timeout')), 350);
+                    })
+                ]);
+                if (settings?.prefix) resolvedPrefix = settings.prefix;
+            } finally {
+                if (timeoutId) clearTimeout(timeoutId);
             }
         }
     } catch (e) {}
@@ -201,10 +207,18 @@ class CommandRegistry {
         if (!client.prefixCommands) client.prefixCommands = new Collection();
         if (!client.aliases) client.aliases = new Collection();
 
-        // 1. Register Master Bundled Commands (Primary Source of Truth)
-        for (const cmd of allBundles) {
-            if (!cmd.name) continue;
-            const name = cmd.name.toLowerCase();
+        // 1. Register bundled commands once. The first valid implementation wins.
+        // This prevents later bundles from silently replacing a command with the same name.
+        const registerCommand = (cmd, source) => {
+            const commandName = cmd?.data?.name || cmd?.name;
+            if (!cmd || typeof cmd.execute !== 'function' || !commandName) return false;
+            const name = String(commandName).trim().toLowerCase();
+            if (!name) return false;
+            if (this.commands.has(name)) {
+                console.warn(`⚠️ [Command Registry] Duplicate command "${name}" from ${source}; keeping the first registration.`);
+                return false;
+            }
+
             this.commands.set(name, cmd);
             client.commands.set(name, cmd);
             client.prefixCommands.set(name, cmd);
@@ -214,15 +228,22 @@ class CommandRegistry {
                 this.categories.get(cmd.category).push(cmd);
             }
 
-            if (cmd.aliases && Array.isArray(cmd.aliases)) {
-                for (const alias of cmd.aliases) {
-                    const cleanAlias = alias.toLowerCase();
-                    this.aliases.set(cleanAlias, name);
-                    client.aliases.set(cleanAlias, name);
-                    client.prefixCommands.set(cleanAlias, cmd);
+            if (Array.isArray(cmd.aliases)) {
+                for (const rawAlias of cmd.aliases) {
+                    const alias = String(rawAlias || '').trim().toLowerCase();
+                    if (!alias || alias === name || this.commands.has(alias) || this.aliases.has(alias)) {
+                        if (alias) console.warn(`⚠️ [Command Registry] Alias collision "${alias}" on command "${name}" was skipped.`);
+                        continue;
+                    }
+                    this.aliases.set(alias, name);
+                    client.aliases.set(alias, name);
+                    client.prefixCommands.set(alias, cmd);
                 }
             }
-        }
+            return true;
+        };
+
+        for (const cmd of allBundles) registerCommand(cmd, 'bundle');
 
         // 2. Load standalone commands only if not already present in master bundles
         const commandsRoot = path.join(__dirname, '..', 'commands');
@@ -232,31 +253,8 @@ class CommandRegistry {
                 const cmdModule = require(file);
                 const name = (cmdModule?.data?.name || cmdModule?.name || path.basename(file, '.js')).toLowerCase();
                 
-                // Do not overwrite working master bundled commands with stubs
-                if (typeof cmdModule.execute === 'function') {
-                    if (!this.commands.has(name)) {
-                        this.commands.set(name, cmdModule);
-                        client.commands.set(name, cmdModule);
-                        client.prefixCommands.set(name, cmdModule);
-
-                        if (cmdModule.category) {
-                            if (!this.categories.has(cmdModule.category)) this.categories.set(cmdModule.category, []);
-                            this.categories.get(cmdModule.category).push(cmdModule);
-                        }
-
-                        // Register all aliases for standalone commands only if not already taken
-                        if (cmdModule.aliases && Array.isArray(cmdModule.aliases)) {
-                            for (const alias of cmdModule.aliases) {
-                                const cleanAlias = alias.toLowerCase();
-                                if (!this.commands.has(cleanAlias) && !this.aliases.has(cleanAlias)) {
-                                    this.aliases.set(cleanAlias, name);
-                                    client.aliases.set(cleanAlias, name);
-                                    client.prefixCommands.set(cleanAlias, cmdModule);
-                                }
-                            }
-                        }
-                    }
-                }
+                // Standalone command files supplement bundles; duplicate names and aliases are skipped.
+                registerCommand(cmdModule, file);
             } catch (err) {
                 // Ignore non-command utility scripts
             }

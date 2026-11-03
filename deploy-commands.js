@@ -693,14 +693,15 @@ commands.forEach(cmd => {
     if (cmd) {
         const jsonCmd = typeof cmd.toJSON === 'function' ? cmd.toJSON() : cmd;
         if (jsonCmd.name) {
+            const commandName = String(jsonCmd.name).trim().toLowerCase();
+            if (commandMap.has(commandName)) {
+                console.warn(`⚠️ [Slash Registry] Duplicate "/${commandName}" definition detected; keeping the first definition.`);
+                return;
+            }
             // Enable User Install (0 = Guild, 1 = User) and all Contexts (0 = Guild, 1 = Bot DM, 2 = Private Channel)
-            if (!jsonCmd.integration_types) {
-                jsonCmd.integration_types = [0, 1];
-            }
-            if (!jsonCmd.contexts) {
-                jsonCmd.contexts = [0, 1, 2];
-            }
-            commandMap.set(jsonCmd.name, jsonCmd);
+            if (!jsonCmd.integration_types) jsonCmd.integration_types = [0, 1];
+            if (!jsonCmd.contexts) jsonCmd.contexts = [0, 1, 2];
+            commandMap.set(commandName, jsonCmd);
         }
     }
 });
@@ -725,8 +726,17 @@ const safeChatInputs = chatInputList.slice(0, MAX_CHAT_INPUT_LIMIT);
 const safeUserContext = userContextList.slice(0, MAX_CONTEXT_LIMIT);
 const safeMsgContext = msgContextList.slice(0, MAX_CONTEXT_LIMIT);
 
+const omittedCommands = [
+    ...chatInputList.slice(MAX_CHAT_INPUT_LIMIT),
+    ...userContextList.slice(MAX_CONTEXT_LIMIT),
+    ...msgContextList.slice(MAX_CONTEXT_LIMIT)
+];
 const finalPayload = [...safeChatInputs, ...safeUserContext, ...safeMsgContext];
-console.log(`📊 [COMMAND AUDIT] Prepared ${finalPayload.length} application commands (${safeChatInputs.length}/100 chat inputs, ${safeUserContext.length}/5 user context, ${safeMsgContext.length}/5 msg context).`);
+console.log(`📊 [COMMAND AUDIT] Prepared ${finalPayload.length} unique application commands (${safeChatInputs.length}/100 chat inputs, ${safeUserContext.length}/5 user context, ${safeMsgContext.length}/5 msg context).`);
+if (omittedCommands.length) {
+    console.error(`❌ [COMMAND AUDIT] ${omittedCommands.length} commands exceed Discord's application-command limits and will NOT be registered:`);
+    console.error(omittedCommands.map(command => `/${command.name}`).join(', '));
+}
 
 // 4. GLOBAL DEPLOYMENT FUNCTION
 async function deployCommands(client) {
