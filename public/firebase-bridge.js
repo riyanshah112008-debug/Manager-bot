@@ -2,8 +2,8 @@
   "use strict";
 
   const RENDER_BACKEND = "https://manager-bot-1-6167.onrender.com";
-  const isFirebaseHost = /(^|\\.)web\\.app$/i.test(location.hostname) ||
-    /(^|\\.)firebaseapp\\.com$/i.test(location.hostname);
+  const isFirebaseHost = /(^|\.)web\.app$/i.test(location.hostname) ||
+    /(^|\.)firebaseapp\.com$/i.test(location.hostname);
   const backendOrigin = isFirebaseHost ? RENDER_BACKEND : location.origin;
   const sessionKey = "starry_dashboard_session";
 
