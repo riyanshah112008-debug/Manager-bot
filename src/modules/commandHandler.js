@@ -210,8 +210,9 @@ class CommandRegistry {
         // 1. Register bundled commands once. The first valid implementation wins.
         // This prevents later bundles from silently replacing a command with the same name.
         const registerCommand = (cmd, source) => {
-            if (!cmd || typeof cmd.execute !== 'function' || !cmd.name) return false;
-            const name = String(cmd.name).trim().toLowerCase();
+            const commandName = cmd?.data?.name || cmd?.name;
+            if (!cmd || typeof cmd.execute !== 'function' || !commandName) return false;
+            const name = String(commandName).trim().toLowerCase();
             if (!name) return false;
             if (this.commands.has(name)) {
                 console.warn(`⚠️ [Command Registry] Duplicate command "${name}" from ${source}; keeping the first registration.`);
