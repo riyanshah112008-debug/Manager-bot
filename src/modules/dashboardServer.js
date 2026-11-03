@@ -879,7 +879,7 @@ function setupDashboardRoutes(app, client) {
                 return res.status(400).json({ success: false, error: 'Invalid tier specified. Choose shield_plus, pro_cluster, or lifetime.' });
             }
 
-            const session = getSession(req);
+            const session = await getSession(req);
             const userId = session?.user?.id || null;
             const userTag = session?.user ? `${session.user.username}#${session.user.discriminator || '0'}` : 'Web Guest';
             const guildName = guildId && client ? (client.guilds.cache.get(guildId)?.name || '') : '';
@@ -945,7 +945,7 @@ function setupDashboardRoutes(app, client) {
     // GET /api/admin/orders - View Recent Orders (Bot Owners Only)
     app.get('/api/admin/orders', requireAuth, async (req, res) => {
         try {
-            const session = getSession(req);
+            const session = req.session;
             const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
             if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
 
