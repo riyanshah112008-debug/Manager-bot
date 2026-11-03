@@ -1,0 +1,20 @@
+/* Starry ambient 3D atmosphere — visual layer only, never blocks controls */
+#starry-ambient{
+  position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
+  opacity:.82;contain:strict;mix-blend-mode:screen;
+}
+body{isolation:isolate}
+body:before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 78% 18%,rgba(92,105,255,.12),transparent 35%),
+    radial-gradient(ellipse at 12% 76%,rgba(120,77,211,.09),transparent 38%),
+    linear-gradient(180deg,rgba(7,9,18,.05),rgba(7,9,18,.45));
+}
+body>*:not(#starry-ambient){position:relative;z-index:1}
+@media(max-width:700px){
+  #starry-ambient{opacity:.58}
+}
+@media(prefers-reduced-motion:reduce){
+  #starry-ambient{opacity:.35}
+}
