@@ -13,6 +13,7 @@ const PremiumKey = require('../models/PremiumKey');
 const PaymentOrder = require('../models/PaymentOrder');
 const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
+const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
@@ -27,8 +28,10 @@ const {
 } = require('../utils/paymentHelper');
 const config = require('../config');
 
-// In-Memory OAuth2 Session Store
+// Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 function setupDashboardRoutes(app, client) {
     app.use(express.json());
@@ -63,27 +66,30 @@ function setupDashboardRoutes(app, client) {
         next();
     });
 
-    // Helper: Session extractor
-    const getSession = (req) => {
+    // Helper: Session extractor. Raw tokens are never stored in MongoDB.
+    const getSession = async (req) => {
         const authHeader = req.headers.authorization;
         let token = null;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            token = authHeader.slice(7).trim();
-        } else if (req.query.session) {
-            token = req.query.session;
-        }
-        if (!token) return null;
-        const session = userSessions.get(token);
-        if (!session || session.expiresAt < Date.now()) {
-            userSessions.delete(token);
-            return null;
-        }
+        if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
+        else if (req.query.session) token = String(req.query.session);
+        if (!token || token.length > 4096) return null;
+        const cached = userSessions.get(token);
+        if (cached && cached.expiresAt > Date.now()) return { token, ...cached };
+        userSessions.delete(token);
+        const stored = await OAuthSession.findOne({ tokenHash: hashSessionToken(token), expiresAt: { $gt: new Date() } }).lean();
+        if (!stored) return null;
+        const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], expiresAt: new Date(stored.expiresAt).getTime() };
+        userSessions.set(token, session);
         return { token, ...session };
     };
 
     // 🛡️ Middleware: Require Authenticated Guild Administrator
     const requireGuildAdmin = async (req, res, next) => {
-        const session = getSession(req);
+        let session;
+        try { session = await getSession(req); } catch (error) {
+            console.error('Dashboard session lookup failed:', error);
+            return res.status(503).json({ success: false, error: 'Session service temporarily unavailable. Please retry.' });
+        }
         if (!session) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
@@ -141,8 +147,12 @@ function setupDashboardRoutes(app, client) {
     };
 
     // 🛡️ Middleware: Require Authenticated Discord User
-    const requireAuth = (req, res, next) => {
-        const session = getSession(req);
+    const requireAuth = async (req, res, next) => {
+        let session;
+        try { session = await getSession(req); } catch (error) {
+            console.error('Dashboard session lookup failed:', error);
+            return res.status(503).json({ success: false, error: 'Session service temporarily unavailable. Please retry.' });
+        }
         if (!session) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
@@ -178,14 +188,8 @@ function setupDashboardRoutes(app, client) {
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
         try {
             if (!clientSecret) {
-                // If secret not configured yet, generate demo user session
-                const sessionToken = crypto.randomBytes(32).toString('hex');
-                userSessions.set(sessionToken, {
-                    user: { id: 'demo_user', username: 'Discord Admin', avatar: null },
-                    guilds: [],
-                    expiresAt: Date.now() + (7 * 86400000)
-                });
-                return res.redirect(`${frontendBase}/dashboard.html?session=${sessionToken}`);
+                console.error('Discord OAuth client secret is not configured.');
+                return res.redirect(frontendBase + '/?error=oauth_not_configured');
             }
 
             const tokenParams = new URLSearchParams({
@@ -219,22 +223,29 @@ function setupDashboardRoutes(app, client) {
             });
             const userGuilds = await guildsRes.json();
 
+            if (!userData || !userData.id) return res.redirect(frontendBase + '/?error=profile_failed');
             const sessionToken = crypto.randomBytes(32).toString('hex');
-            userSessions.set(sessionToken, {
-                user: userData,
+            const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+            const sessionData = {
+                user: { id: String(userData.id), username: userData.username || 'Discord user', discriminator: userData.discriminator || '0', avatar: userData.avatar || null, email: userData.email || null },
                 guilds: Array.isArray(userGuilds) ? userGuilds : [],
-                expiresAt: Date.now() + (7 * 86400000)
-            });
-
-            res.redirect(`${frontendBase}/dashboard.html?session=${sessionToken}`);
+                expiresAt: expiresAt.getTime()
+            };
+            await OAuthSession.create({ tokenHash: hashSessionToken(sessionToken), user: sessionData.user, guilds: sessionData.guilds, expiresAt });
+            userSessions.set(sessionToken, sessionData);
+            res.redirect(frontendBase + '/dashboard.html?session=' + encodeURIComponent(sessionToken));
         } catch (e) {
             console.error('OAuth2 Callback Error:', e);
             res.redirect(`${frontendBase}/?error=oauth_error`);
         }
     });
 
-    app.get('/auth/user', (req, res) => {
-        const session = getSession(req);
+    app.get('/auth/user', async (req, res) => {
+        let session;
+        try { session = await getSession(req); } catch (error) {
+            console.error('Dashboard session lookup failed:', error);
+            return res.status(503).json({ authenticated: false, error: 'Session service temporarily unavailable.' });
+        }
         if (!session) {
             return res.json({ authenticated: false });
         }
@@ -269,10 +280,18 @@ function setupDashboardRoutes(app, client) {
         });
     });
 
-    app.get('/auth/logout', (req, res) => {
-        const session = getSession(req);
-        if (session) userSessions.delete(session.token);
-        res.json({ success: true, message: 'Logged out successfully.' });
+    app.get('/auth/logout', async (req, res) => {
+        try {
+            const session = await getSession(req);
+            if (session) {
+                userSessions.delete(session.token);
+                await OAuthSession.deleteOne({ tokenHash: hashSessionToken(session.token) });
+            }
+            res.json({ success: true, message: 'Logged out successfully.' });
+        } catch (error) {
+            console.error('Dashboard logout failed:', error);
+            res.status(503).json({ success: false, error: 'Could not complete logout. Please retry.' });
+        }
     });
 
     // ==========================================
