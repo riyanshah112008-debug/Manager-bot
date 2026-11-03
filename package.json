@@ -1,11 +1,12 @@
 {
   "name": "manager-bot",
-  "version": "1.0.0",
-  "description": "Starry Discord Bot with Voice AI and Management features",
+  "version": "2.0.0",
+  "private": true,
+  "description": "A modular Discord community manager with verification, tickets, reminders, and a server directory.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "deploy": "node deploy-commands.js"
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -17,7 +18,7 @@
     "@google/genai": "latest",
     "@noble/ciphers": "^2.4.0",
     "@snazzah/davey": "^0.1.12",
-    "@stablelib/xchacha20poly1305": "^2.0.1",
+    "@stablelib/xchacha20poly1305": "^2.0.0",
     "cors": "^2.8.5",
     "discord-api-types": "^0.38.0",
     "discord.js": "^14.15.0",

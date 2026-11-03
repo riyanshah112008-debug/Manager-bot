@@ -1,49 +1,45 @@
-# 🌟 Starry Manager Bot (Multi-Bot & Voice AI Suite)
+# Manager Bot — rewrite branch
 
-A high-performance Discord Manager & Multi-Bot clustering framework with Voice Audio DSP streaming, Advanced Moderation, Economy & Leveling, and Modern Web Dashboard.
+A clean, slash-command-first Discord community bot. This rewrite keeps the project’s distinctive community-management ideas—web-assisted role verification, ticket panels, a server bump directory, starboard, reminders, and a lightweight health dashboard—without importing code from Flav’s repositories.
 
----
+## Requirements
 
-## 🚀 How to Host on PC (Windows, macOS, Linux)
+- Node.js 20+
+- A Discord application and bot token
+- Enable the bot's **Server Members Intent** in the Discord Developer Portal for role verification.
 
-Hosting on PC is **100% automated**. You do not need to manually configure packages or build tools.
+## Run locally
 
-### 💻 Option A: Windows PC (1-Click Launch)
-1. **Download or Clone this Repository** to your PC.
-2. Ensure you have **Node.js (LTS version)** installed from [https://nodejs.org/](https://nodejs.org/).
-3. Double-click **`run.bat`** (or `start.bat`).
-   - The launcher will **automatically install all required dependencies**.
-   - It will **automatically deploy all Discord slash commands**.
-   - It will **start the bot 24/7** with automatic crash-recovery and restart.
-
----
-
-### 🍏 Option B: Mac / Linux / Termux (1-Command Launch)
-Open your terminal in this repository folder and run:
-```bash
-chmod +x run.sh && ./run.sh
-```
-*Or using PM2 on servers:*
-```bash
-./start.sh
+```sh
+npm install
+cp .env.example .env
+# Set DISCORD_TOKEN in .env
+npm start
 ```
 
----
+The bot registers its slash commands on startup. Invite it with `bot` and `applications.commands` scopes. Grant only the permissions needed for the features you enable (Manage Channels/Roles, Send Messages, Embed Links, and Moderate Members as applicable). Place the bot role above the verified role.
 
-## ⚙️ Configuration (`.env`)
-Fill in your environment variables in `.env` (or copy from `.env.example`):
-```env
-BOT_TOKEN=your_primary_bot_token
-CLIENT_ID=your_bot_client_id
-MONGODB_URI=your_mongodb_connection_string
-PORT=10000
-```
+## Commands
 
----
+- `/help` — command overview.
+- `/setup welcome|logs|verification|tickets|starboard` — configure guild features. Requires Manage Server.
+- `/verify panel` — post a verification button. The button assigns the configured role; it does not collect credentials or claim to perform CAPTCHA.
+- `/ticket panel|close` — publish a support panel or close the current ticket.
+- `/remind` — create a reminder in the current channel.
+- `/bump` — add or refresh your guild in the local server directory using a `discord.gg` invite.
+- `/directory` — view listed communities.
+- `/serverinfo` — show basic server information.
 
-## 🛠️ Management & Monitoring
-- **Check Status:** `./status.sh` or `pm2 status`
-- **View Live Logs:** `pm2 logs starry-bot`
-- **Stop Bot:** `./stop.sh` or `pm2 stop starry-bot`
-- **Restart Bot:** `./restart.sh` or `pm2 restart starry-bot`
-- **Web Dashboard:** Access via `http://localhost:10000` (or the public HTTPS tunnel).
+The HTTP service exposes `/health` and a read-only `/api/status`; it never accepts bot tokens or writes secrets to disk. Set `PORT` on hosting platforms. Persistent feature data is stored as JSON under `DATA_DIR` (default `./data`). Keep that directory on a persistent volume if reminders and configuration should survive redeployments.
+
+## Configuration and safety
+
+- Store `DISCORD_TOKEN` in your host's secret/environment settings, not in source control.
+- Keep role hierarchy and channel permissions least-privileged.
+- Verification buttons are single-purpose role assignment and require a configured role.
+- Ticket channels are private to the opener, bot, and configured support role.
+- Reminders mention no one except their owner.
+
+## Rewrite notes
+
+This version uses the existing Discord.js and Express dependencies. The rewrite replaces the active application entry point and project documentation. Older files are not loaded by the new entry point; they remain in Git history and in the repository tree so they can be removed in a later cleanup commit if desired.
