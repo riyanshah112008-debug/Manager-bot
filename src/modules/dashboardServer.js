@@ -245,13 +245,14 @@ function setupDashboardRoutes(app, client) {
     });
 
     app.get('/auth/user', async (req, res) => {
+        res.set('Cache-Control', 'no-store, private');
         let session;
         try { session = await getSession(req); } catch (error) {
             console.error('Dashboard session lookup failed:', error);
             return res.status(503).json({ authenticated: false, error: 'Session service temporarily unavailable.' });
         }
         if (!session) {
-            return res.json({ authenticated: false });
+            return res.status(401).json({ authenticated: false, error: 'Discord login required.' });
         }
 
         // Filter mutual guilds where user has MANAGE_GUILD (0x20) or ADMINISTRATOR (0x8)
