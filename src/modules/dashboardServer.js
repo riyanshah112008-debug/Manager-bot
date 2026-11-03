@@ -158,7 +158,7 @@ function setupDashboardRoutes(app, client) {
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\\/+$/, '');
+        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
 
         const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify%20guilds%20email`;
@@ -167,16 +167,15 @@ function setupDashboardRoutes(app, client) {
 
     app.get('/auth/callback', async (req, res) => {
         const code = req.query.code;
+        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
         if (!code) return res.redirect(`${frontendBase}/?error=no_code`);
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\\/+$/, '');
+        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
-        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\\/+$/, '');
-
         try {
             if (!clientSecret) {
                 // If secret not configured yet, generate demo user session
