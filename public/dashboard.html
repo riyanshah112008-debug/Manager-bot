@@ -354,6 +354,7 @@
                 <img id="userAvatar" src="" class="user-avatar" alt="Avatar">
                 <span id="userName" style="font-weight:700; font-size:0.9rem;">Admin</span>
             </div>
+            <button id="logoutBtn" class="btn btn-secondary" type="button" onclick="logoutDashboard()">Sign out</button>
             <a href="/auth/login" id="loginBtn" class="btn btn-primary">Login with Discord</a>
         </div>
     </header>
@@ -490,6 +491,16 @@
         let currentUser = null;
         let currentBoosterRole = null;
 
+        async function logoutDashboard() {
+            try { await fetch('/auth/logout'); }
+            catch (error) { console.warn('Logout request could not reach the server:', error); }
+            try {
+                localStorage.removeItem('starry_dashboard_session');
+                sessionStorage.removeItem('starry_dashboard_session');
+            } catch (_) {}
+            window.location.replace('/');
+        }
+
         async function initDashboard() {
             try {
                 const userRes = await fetch('/auth/user');
@@ -499,6 +510,7 @@
                     currentUser = userData.user;
                     document.getElementById('loginBtn').style.display = 'none';
                     document.getElementById('userContainer').style.display = 'flex';
+                    document.getElementById('logoutBtn').style.display = 'inline-flex';
                     document.getElementById('userName').innerText = userData.user.username;
                     document.getElementById('userAvatar').src = userData.user.avatar;
                     document.getElementById('mockChatUsername').innerText = userData.user.username;
