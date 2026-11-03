@@ -550,7 +550,6 @@
                 grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Dashboard could not verify your login or load servers. Please refresh and try again.</div>';
                 const notice = document.getElementById('authNotice');
                 if (notice) { notice.textContent = 'Starry authentication service is temporarily unavailable: ' + e.message; notice.style.display = 'block'; }
-                else loginBtn.style.display = 'inline-flex';
             }
         }
         async function openGuildSettings(guildId, guildName) {
