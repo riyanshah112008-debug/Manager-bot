@@ -1,0 +1,120 @@
+/* Starry dashboard — cohesive dark SaaS interface */
+:root{
+  color-scheme:dark;
+  --ui-bg:#090b12;--ui-surface:#101522;--ui-panel:#141c2d;--ui-panel-2:#19243a;
+  --ui-border:rgba(177,190,225,.12);--ui-border-strong:rgba(135,151,255,.36);
+  --ui-text:#eef1fb;--ui-muted:#98a4bd;--ui-primary:#7888ff;--ui-primary-2:#9a78ef;
+  --ui-success:#42c99a;--ui-danger:#f07883;--ui-radius:16px;
+  --ui-shadow:0 18px 50px rgba(0,0,0,.24);
+}
+html{scroll-behavior:smooth;background:var(--ui-bg)}
+body{
+  min-height:100vh!important;color:var(--ui-text)!important;
+  background:radial-gradient(ellipse at 15% -15%,rgba(103,119,255,.16),transparent 42%),
+    radial-gradient(ellipse at 95% 35%,rgba(154,120,239,.09),transparent 34%),var(--ui-bg)!important;
+  font-family:Inter,system-ui,sans-serif!important;letter-spacing:0!important;
+}
+body,*{font-family:Inter,system-ui,sans-serif}
+body *{box-sizing:border-box}
+::selection{background:rgba(120,136,255,.32);color:#fff}
+header{
+  position:sticky!important;top:0;z-index:100!important;
+  min-height:72px;padding:12px clamp(16px,4vw,48px)!important;
+  background:rgba(9,11,18,.86)!important;border-bottom:1px solid var(--ui-border)!important;
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+}
+.brand{gap:12px!important;color:var(--ui-text)!important}
+.brand-logo{
+  width:40px!important;height:40px!important;border-radius:13px!important;
+  background:linear-gradient(140deg,#687bff,#9b72e9)!important;
+  box-shadow:0 8px 24px rgba(105,123,255,.24)!important;font-size:0!important;
+  position:relative;
+}
+.brand-logo:after{content:"S";font:800 19px/1 Manrope,sans-serif;color:white}
+.brand-text h1{font:800 1.16rem/1.1 Manrope,sans-serif!important;letter-spacing:-.04em}
+.brand-text h1 span{color:#9b91ff!important}
+.user-nav{gap:10px!important;flex-wrap:wrap}
+.user-pill{background:#121929!important;border:1px solid var(--ui-border)!important;border-radius:999px!important;padding:6px 14px 6px 7px!important;color:var(--ui-text)}
+.user-avatar{width:30px!important;height:30px!important}
+.btn{
+  min-height:40px;padding:10px 15px!important;border-radius:10px!important;
+  border:1px solid var(--ui-border)!important;font-size:.84rem!important;font-weight:650!important;
+  letter-spacing:0!important;box-shadow:none!important;transition:transform .18s ease,border-color .18s ease,background .18s ease!important;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{
+  color:#fff!important;background:linear-gradient(135deg,#687bff,#8e70e8)!important;
+  border-color:rgba(146,151,255,.4)!important;box-shadow:0 8px 22px rgba(104,123,255,.18)!important;
+}
+.btn-primary:hover{box-shadow:0 10px 28px rgba(104,123,255,.28)!important}
+.btn-secondary,.btn-vote{
+  color:#dce3f7!important;background:rgba(255,255,255,.045)!important;
+  border-color:var(--ui-border)!important;
+}
+.btn-secondary:hover,.btn-vote:hover{background:rgba(255,255,255,.085)!important;border-color:var(--ui-border-strong)!important}
+.container{max-width:1240px!important;margin:0 auto!important;padding:38px clamp(16px,3vw,32px)!important}
+.section-header{margin-bottom:26px!important}
+.section-title{
+  color:var(--ui-text)!important;font:750 clamp(1.45rem,3vw,1.9rem)/1.2 Manrope,sans-serif!important;
+  letter-spacing:-.045em!important;gap:10px!important;margin-bottom:9px!important;
+}
+.section-desc{color:var(--ui-muted)!important;font-size:.94rem!important;line-height:1.65!important;max-width:720px}
+.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr))!important;gap:16px!important;margin-bottom:32px!important}
+.guild-card{
+  align-items:flex-start!important;text-align:left!important;position:relative;overflow:hidden;
+  min-height:210px;padding:22px!important;border-radius:var(--ui-radius)!important;
+  background:linear-gradient(155deg,rgba(23,32,51,.94),rgba(15,21,34,.96))!important;
+  border:1px solid var(--ui-border)!important;box-shadow:0 8px 28px rgba(0,0,0,.12)!important;
+  backdrop-filter:blur(14px);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease!important;
+}
+.guild-card:before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent,rgba(132,145,255,.65),transparent);opacity:0;transition:opacity .2s}
+.guild-card:hover{transform:translateY(-3px)!important;border-color:var(--ui-border-strong)!important;box-shadow:var(--ui-shadow)!important}
+.guild-card:hover:before{opacity:1}
+.guild-icon{width:54px!important;height:54px!important;border-radius:15px!important;margin:0 0 16px!important;border:1px solid var(--ui-border)!important}
+.guild-name{font:700 1rem/1.35 Manrope,sans-serif!important;margin-bottom:5px!important;color:var(--ui-text)}
+.guild-members{color:var(--ui-muted)!important;font-size:.82rem!important;margin-bottom:18px!important}
+.guild-card .btn{margin-top:auto}
+.settings-panel{
+  background:linear-gradient(150deg,rgba(21,29,46,.97),rgba(14,20,32,.98))!important;
+  border:1px solid var(--ui-border)!important;border-radius:20px!important;
+  padding:clamp(18px,3vw,30px)!important;box-shadow:var(--ui-shadow)!important;
+}
+.settings-panel h3,.settings-panel h4{font-family:Manrope,sans-serif!important;letter-spacing:-.025em}
+.form-group{margin-bottom:18px!important}
+.form-label{color:#dbe2f3!important;font-size:.83rem!important;font-weight:650!important;letter-spacing:.005em}
+.form-input{
+  min-height:44px;padding:11px 13px!important;border-radius:10px!important;
+  background:#0b111d!important;border:1px solid var(--ui-border)!important;color:var(--ui-text)!important;
+  font-size:.9rem!important;box-shadow:none!important;
+}
+.form-input::placeholder{color:#697792!important}
+.form-input:focus{border-color:var(--ui-primary)!important;box-shadow:0 0 0 3px rgba(120,136,255,.13)!important}
+.booster-studio-card{
+  background:linear-gradient(145deg,rgba(24,30,49,.92),rgba(16,21,35,.96))!important;
+  border:1px solid rgba(143,126,239,.23)!important;border-radius:16px!important;
+  box-shadow:none!important;padding:clamp(16px,3vw,24px)!important;
+}
+.booster-studio-header{align-items:flex-start!important}
+.booster-studio-header h4{color:#c4b7ff!important;font-size:1.05rem!important}
+.badge-booster{background:rgba(132,112,232,.12)!important;color:#c4b7ff!important;border:1px solid rgba(151,132,242,.24)!important;border-radius:999px!important}
+.mock-discord-chat{border-radius:12px!important;background:#202638!important;border:1px solid var(--ui-border)!important}
+.role-tag{border-radius:6px!important}
+.friend-pill{background:#101827!important;border-color:var(--ui-border)!important;color:#dce4f6}
+.toast{border:1px solid rgba(255,255,255,.12);border-radius:12px!important;box-shadow:var(--ui-shadow)!important}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #9b91ff!important;outline-offset:3px}
+@media(max-width:680px){
+  header{align-items:flex-start!important;gap:12px;flex-wrap:wrap;padding:12px 16px!important}
+  .user-nav{width:100%;justify-content:flex-start}
+  .user-nav .btn{flex:1;justify-content:center}
+  .container{padding-top:26px!important}
+  .guild-card{min-height:190px}
+  .settings-panel{border-radius:15px!important}
+  .settings-panel>div:first-child{gap:12px;align-items:flex-start!important}
+  .settings-panel>div:nth-child(2){grid-template-columns:1fr!important}
+  .settings-panel button{max-width:100%}
+  .booster-studio-card{margin-top:22px!important}
+  .toast{left:14px!important;right:14px!important;bottom:14px!important;text-align:center}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
