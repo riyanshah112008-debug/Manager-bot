@@ -7,17 +7,28 @@
   const backendOrigin = isFirebaseHost ? RENDER_BACKEND : location.origin;
   const sessionKey = "starry_dashboard_session";
 
-  // OAuth returns the short-lived session in the URL. Store it for this tab,
-  // then immediately remove it from the visible URL.
+  // Keep the signed session across tabs and browser restarts.
+  function getStoredSession() {
+    try { return localStorage.getItem(sessionKey) || sessionStorage.getItem(sessionKey); }
+    catch (_) { return null; }
+  }
+  function clearStoredSession() {
+    try { localStorage.removeItem(sessionKey); sessionStorage.removeItem(sessionKey); } catch (_) {}
+  }
   try {
     const params = new URLSearchParams(location.search);
     const session = params.get("session");
     if (session) {
-      sessionStorage.setItem(sessionKey, session);
+      try { localStorage.setItem(sessionKey, session); } catch (_) {
+        sessionStorage.setItem(sessionKey, session);
+      }
       params.delete("session");
       const cleanQuery = params.toString();
       history.replaceState({}, document.title,
         location.pathname + (cleanQuery ? "?" + cleanQuery : "") + location.hash);
+    } else {
+      const oldTabSession = sessionStorage.getItem(sessionKey);
+      if (oldTabSession && !localStorage.getItem(sessionKey)) localStorage.setItem(sessionKey, oldTabSession);
     }
   } catch (_) {}
 
@@ -50,12 +61,16 @@
     );
 
     try {
-      const token = sessionStorage.getItem(sessionKey);
+      const token = getStoredSession();
       if (token) headers.set("Authorization", "Bearer " + token);
     } catch (_) {}
 
     const requestInput = input instanceof Request ? new Request(target, input) : target;
-    return nativeFetch(requestInput, { ...(init || {}), headers, mode: "cors" });
+    return nativeFetch(requestInput, { ...(init || {}), headers, mode: "cors" }).then((response) => {
+      if (response.status === 401 && parsed.pathname !== "/auth/login") clearStoredSession();
+      if (parsed.pathname === "/auth/logout" && response.ok) clearStoredSession();
+      return response;
+    });
   };
 
   function rewriteBackendLinks(root) {
@@ -64,6 +79,10 @@
       const value = element.getAttribute(attr);
       if (!value || !value.startsWith("/")) return;
       const parsed = new URL(value, location.origin);
+      if (parsed.pathname === "/auth/login" && getStoredSession()) {
+        element.setAttribute(attr, "/dashboard.html");
+        return;
+      }
       if (isBackendPath(parsed.pathname)) {
         element.setAttribute(attr, backendOrigin + parsed.pathname + parsed.search + parsed.hash);
       }
@@ -75,6 +94,11 @@
     const link = event.target.closest && event.target.closest("a[href]");
     if (!link) return;
     const parsed = new URL(link.href, location.href);
+    if (parsed.pathname === "/auth/login" && getStoredSession()) {
+      event.preventDefault();
+      location.href = "/dashboard.html";
+      return;
+    }
     if (parsed.origin === location.origin && isBackendPath(parsed.pathname)) {
       event.preventDefault();
       location.href = backendOrigin + parsed.pathname + parsed.search + parsed.hash;
