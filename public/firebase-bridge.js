@@ -69,6 +69,11 @@
     return nativeFetch(requestInput, { ...(init || {}), headers, mode: "cors" }).then((response) => {
       if (response.status === 401 && parsed.pathname !== "/auth/login") clearStoredSession();
       if (parsed.pathname === "/auth/logout" && response.ok) clearStoredSession();
+      if (parsed.pathname === "/auth/user" && response.ok) {
+        response.clone().json().then((data) => {
+          if (data && data.authenticated === false) clearStoredSession();
+        }).catch(() => {});
+      }
       return response;
     });
   };
