@@ -962,7 +962,7 @@ function setupDashboardRoutes(app, client) {
     // POST /api/admin/orders/approve - Manually Approve Order (Bot Owners Only)
     app.post('/api/admin/orders/approve', requireAuth, actionLimiter, async (req, res) => {
         try {
-            const session = getSession(req);
+            const session = req.session;
             const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
             if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
 
@@ -979,7 +979,7 @@ function setupDashboardRoutes(app, client) {
     // POST /api/admin/orders/reject - Reject Order (Bot Owners Only)
     app.post('/api/admin/orders/reject', requireAuth, actionLimiter, async (req, res) => {
         try {
-            const session = getSession(req);
+            const session = req.session;
             const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
             if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
 
@@ -996,7 +996,7 @@ function setupDashboardRoutes(app, client) {
     // POST /api/admin/generate-key - Standalone Key Generator (Bot Owners Only)
     app.post('/api/admin/generate-key', requireAuth, actionLimiter, async (req, res) => {
         try {
-            const session = getSession(req);
+            const session = req.session;
             const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
             if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
 
