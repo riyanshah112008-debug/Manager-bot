@@ -718,19 +718,18 @@ client.once(Events.ClientReady, async () => {
     // Initialize 150+ Master Commands Registry & Unified Dispatcher
     commandRegistry.init(client);
 
-    try {
-        console.log("🔄 Auto-deploying updated command payload to Discord...");
-        let deploy = null;
-        try { deploy = require('../deploy-commands.js'); } catch (e1) {
-            try { deploy = require('./deploy-commands.js'); } catch (e2) {
-                try { deploy = require('../../deploy-commands.js'); } catch (e3) {}
-            }
+    // Global command registration is an explicit release task, not a bot-startup task.
+    // This avoids every worker/restart racing to overwrite the same application command set.
+    if (String(process.env.AUTO_DEPLOY_COMMANDS || '').toLowerCase() === 'true' && client.isPrimary !== false) {
+        try {
+            console.log("🔄 AUTO_DEPLOY_COMMANDS=true; syncing application commands...");
+            const deploy = require('../deploy-commands.js');
+            if (typeof deploy.deployCommands === 'function') await deploy.deployCommands(client);
+        } catch (err) {
+            console.warn("⚠️ Automatic command deployment failed:", err.message);
         }
-        if (deploy && typeof deploy.deployCommands === 'function') {
-            await deploy.deployCommands(client);
-        }
-    } catch (err) {
-        console.warn("⚠️ Automatic command deployment skipped or encountered error:", err.message);
+    } else {
+        console.log("ℹ️ Slash-command sync skipped at startup. Run npm run deploy after changing commands.");
     }
 });
 
