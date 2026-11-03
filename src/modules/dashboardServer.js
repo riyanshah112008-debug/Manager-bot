@@ -124,7 +124,11 @@ function setupDashboardRoutes(app, client) {
 
     // 🛡️ Middleware: Require Server Member
     const requireGuildMember = async (req, res, next) => {
-        const session = getSession(req);
+        let session;
+        try { session = await getSession(req); } catch (error) {
+            console.error('Dashboard session lookup failed:', error);
+            return res.status(503).json({ success: false, error: 'Session service temporarily unavailable. Please retry.' });
+        }
         if (!session) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
