@@ -1,0 +1,99 @@
+/* Manager Bot — professional visual system */
+:root{
+  --ui-bg:#0b1020;--ui-surface:#111a2d;--ui-panel:#151f34;--ui-panel-2:#192640;
+  --ui-border:rgba(181,198,228,.13);--ui-border-strong:rgba(143,164,255,.34);
+  --ui-text:#edf2ff;--ui-muted:#9aa9c2;--ui-primary:#788bff;--ui-primary-hover:#91a0ff;
+  --ui-success:#35c99a;--ui-warning:#e9b45c;--ui-danger:#ef777e;
+  --ui-radius:15px;--ui-shadow:0 18px 50px rgba(0,0,0,.22);
+}
+html{scroll-behavior:smooth}
+body{background:var(--ui-bg)!important;background-image:radial-gradient(ellipse at 50% -25%,rgba(86,111,190,.13),transparent 55%)!important;color:var(--ui-text)!important;font-family:Inter,"DM Sans",system-ui,sans-serif!important;letter-spacing:0!important}
+*{font-family:Inter,"DM Sans",system-ui,sans-serif!important}
+::selection{background:rgba(120,139,255,.32);color:#fff}
+a{color:inherit}
+header{background:rgba(11,16,32,.92)!important;border-bottom:1px solid var(--ui-border)!important;backdrop-filter:blur(18px)!important;padding:13px clamp(16px,4vw,48px)!important}
+.brand{gap:11px!important}
+.brand-logo{background:#6679ef!important;box-shadow:none!important;border-radius:12px!important;color:white!important}
+.brand-text h1{font-size:1.13rem!important;letter-spacing:-.035em!important}
+.brand-text p{font-weight:500!important;color:var(--ui-muted)!important}
+.brand-domain{background:none!important;color:#aab6ff!important;-webkit-text-fill-color:currentColor!important}
+.nav-tabs{background:#10192b!important;border:1px solid var(--ui-border)!important;border-radius:12px!important;padding:4px!important}
+.nav-tab{border-radius:9px!important;color:var(--ui-muted)!important;font-weight:600!important}
+.nav-tab.active{background:#29365b!important;color:#fff!important;box-shadow:none!important}
+.nav-tab:hover{background:#1a2740!important;color:#fff!important}
+.nav-actions{gap:9px!important}
+.btn{border-radius:10px!important;font-weight:650!important;letter-spacing:0!important;box-shadow:none!important;transition:background .18s,border-color .18s,transform .18s!important}
+.btn-primary{background:#6679ef!important;color:#fff!important;border:1px solid #788bff!important}
+.btn-primary:hover{background:#788bff!important;transform:translateY(-1px)!important;box-shadow:none!important}
+.btn-premium{background:#d7b36c!important;color:#1a1b22!important;box-shadow:none!important}
+.btn-premium:hover{background:#e7c47e!important;transform:translateY(-1px)!important}
+.btn-outline,.btn-secondary{background:#17233a!important;color:var(--ui-text)!important;border:1px solid var(--ui-border)!important}
+.btn-outline:hover,.btn-secondary:hover{background:#202e49!important;border-color:var(--ui-border-strong)!important}
+.btn-danger{background:#a94150!important}
+.container{max-width:1320px!important;padding:clamp(18px,3vw,36px)!important}
+.hero-banner{background:linear-gradient(120deg,#17233b,#141e33 65%,#182744)!important;border:1px solid var(--ui-border)!important;border-radius:20px!important;padding:clamp(26px,5vw,54px)!important;box-shadow:var(--ui-shadow)!important}
+.hero-banner:after,.hero-banner:before{opacity:.12!important}
+.hero-badge{background:#202f50!important;border:1px solid #35466d!important;color:#bdc8ff!important;border-radius:8px!important;font-weight:650!important;letter-spacing:.02em!important}
+.hero-banner h2{font-size:clamp(2rem,4.5vw,3.35rem)!important;line-height:1.08!important;letter-spacing:-.055em!important;max-width:850px!important}
+.hero-banner p{color:#b3bfd4!important;max-width:700px!important;font-size:1rem!important;line-height:1.75!important}
+.stats-grid{gap:14px!important}
+.stat-card,.setting-box,.price-card,.sidebar,.workspace-content,.guild-card,.settings-panel,.booster-studio-card{background:var(--ui-surface)!important;border:1px solid var(--ui-border)!important;border-radius:var(--ui-radius)!important;box-shadow:none!important;backdrop-filter:none!important}
+.stat-card{padding:21px!important}
+.stat-card:hover,.guild-card:hover,.price-card:hover{transform:translateY(-2px)!important;border-color:var(--ui-border-strong)!important}
+.stat-card h3{font-size:1.65rem!important;letter-spacing:-.04em!important}
+.stat-card p,.section-desc{color:var(--ui-muted)!important;font-weight:500!important}
+.workspace-layout{grid-template-columns:260px minmax(0,1fr)!important;gap:18px!important}
+.sidebar{padding:14px!important;gap:5px!important}
+.side-link{border:1px solid transparent!important;border-radius:9px!important;color:var(--ui-muted)!important;font-weight:600!important}
+.side-link.active{background:#202e4b!important;border-color:#34466d!important;color:#dce3ff!important}
+.workspace-content{padding:clamp(18px,3vw,30px)!important;min-width:0!important}
+.section-title{font-size:1.35rem!important;letter-spacing:-.035em!important;font-weight:700!important}
+.setting-box{padding:18px!important;background:#111a2d!important}
+.setting-header h4{font-weight:650!important}
+.select-input,.input-text,.textarea-input,.form-input{background:#0d1526!important;color:var(--ui-text)!important;border:1px solid var(--ui-border)!important;border-radius:9px!important;min-height:42px!important}
+.select-input:focus,.input-text:focus,.textarea-input:focus,.form-input:focus{border-color:var(--ui-primary)!important;box-shadow:0 0 0 3px rgba(120,139,255,.12)!important}
+input,select,textarea{accent-color:var(--ui-primary)}
+.switch input:checked+.slider{background:#6679ef!important}
+.slider{background:#35435b!important}
+.price-card{padding:27px!important}
+.price-card.featured{background:linear-gradient(180deg,#1b2948,#141f34)!important;border-color:#5366b4!important;box-shadow:0 12px 36px rgba(0,0,0,.18)!important}
+.price-badge{background:#6679ef!important;border-radius:7px!important}
+.price-val{letter-spacing:-.05em!important}
+.feature-list li{color:#c5d0e3!important}
+.redeem-box{background:#1b2940!important;border:1px solid var(--ui-border)!important;border-radius:14px!important}
+.crypto-coin-pill{background:#17233a!important;border:1px solid var(--ui-border)!important;border-radius:9px!important;color:#bdc8dc!important;box-shadow:none!important}
+.crypto-coin-pill.active{background:#26365b!important;border-color:#7588f4!important;box-shadow:none!important}
+.discord-preview-card,.mock-discord-chat{border-radius:10px!important;box-shadow:none!important}
+.toast{border-radius:10px!important;background:#236c59!important;box-shadow:var(--ui-shadow)!important}
+footer{border-top:1px solid var(--ui-border)!important;color:var(--ui-muted)!important}
+.guild-card{padding:20px!important;gap:9px!important}
+.guild-icon{border-radius:12px!important}
+.guild-name{font-weight:700!important;letter-spacing:-.02em!important}
+.guild-members{color:var(--ui-muted)!important}
+.settings-panel{padding:clamp(18px,3vw,28px)!important}
+.booster-studio-header{border-bottom:1px solid var(--ui-border)!important}
+.badge-booster{border-radius:7px!important}
+.friend-pill{background:#1a2942!important;border:1px solid var(--ui-border)!important;border-radius:8px!important}
+@media(max-width:900px){
+  header{flex-wrap:wrap!important;gap:12px!important;padding:12px 16px!important}
+  .nav-tabs{order:3;width:100%;overflow-x:auto;justify-content:flex-start}
+  .nav-tab{white-space:nowrap;padding:9px 12px!important}
+  .workspace-layout{grid-template-columns:1fr!important}
+  .sidebar{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .server-select-box{grid-column:1/-1}
+  .workspace-content{min-height:0!important}
+  .settings-grid{grid-template-columns:1fr!important}
+  .embed-builder-layout{grid-template-columns:1fr!important}
+}
+@media(max-width:560px){
+  .container{padding:16px!important;margin:12px auto!important}
+  .hero-banner{padding:25px 20px!important;border-radius:15px!important}
+  .hero-banner h2{font-size:2rem!important}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .stat-card{padding:15px!important}
+  .stat-card h3{font-size:1.4rem!important}
+  .sidebar{grid-template-columns:1fr!important}
+  .nav-actions{width:100%;justify-content:flex-end}
+  .price-card{padding:22px!important}
+  .redeem-box{align-items:stretch!important}
+}
