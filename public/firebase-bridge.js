@@ -1,19 +1,19 @@
 (() => {
 "use strict";
 const RENDER_BACKEND="https://manager-bot-1-6167.onrender.com";
-const isFirebaseHost=/(^|\\.)web\\.app$/i.test(location.hostname)||/(^|\\.)firebaseapp\\.com$/i.test(location.hostname);
+const isFirebaseHost=/(^|\.)web\.app$/i.test(location.hostname)||/(^|\.)firebaseapp\.com$/i.test(location.hostname);
 const backendOrigin=isFirebaseHost?RENDER_BACKEND:location.origin;
 const sessionKey="starry_dashboard_session";
-function safeGet(storage,key){try{return storage.getItem(key)}catch(_){return null}}
-function safeSet(storage,key,value){try{storage.setItem(key,value);return true}catch(_){return false}}
-function safeRemove(storage,key){try{storage.removeItem(key)}catch(_){}}
-function getStoredSession(){return safeGet(window.localStorage,sessionKey)||safeGet(window.sessionStorage,sessionKey)}
-function clearStoredSession(){safeRemove(window.localStorage,sessionKey);safeRemove(window.sessionStorage,sessionKey)}
+function safeGet(storageName,key){try{return window[storageName].getItem(key)}catch(_){return null}}
+function safeSet(storageName,key,value){try{window[storageName].setItem(key,value);return true}catch(_){return false}}
+function safeRemove(storageName,key){try{window[storageName].removeItem(key)}catch(_){}}
+function getStoredSession(){return safeGet("localStorage",sessionKey)||safeGet("sessionStorage",sessionKey)}
+function clearStoredSession(){safeRemove("localStorage",sessionKey);safeRemove("sessionStorage",sessionKey)}
 (function captureSessionFromUrl(){
  let params;try{params=new URLSearchParams(window.location.search)}catch(_){return}
  if(!params.has("session"))return;
  const token=params.get("session");
- if(token&&!safeSet(window.localStorage,sessionKey,token))safeSet(window.sessionStorage,sessionKey,token);
+ if(token&&!safeSet("localStorage",sessionKey,token))safeSet("sessionStorage",sessionKey,token);
  params.delete("session");const cleanQuery=params.toString();
  try{window.history.replaceState(window.history.state,document.title,window.location.pathname+(cleanQuery?"?"+cleanQuery:"")+window.location.hash)}catch(_){}
 })();
