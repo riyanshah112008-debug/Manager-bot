@@ -1033,106 +1033,6 @@ const commands = [
         }
     },
 
-    // 30. REDEEM (License Key Activation)
-    {
-        name: 'redeem',
-        aliases: ['activate', 'license'],
-        category: 'Utility',
-        description: 'Redeem a 16-character Starry Premium License Key.',
-        usage: ',redeem <license key>',
-        async execute(ctx) {
-            const keyInput = ctx.args ? ctx.args[0] : null;
-            if (!keyInput) {
-                return ctx.reply('❌ Please provide a 16-character license key!\n*Usage: `,redeem STRY-PRO-XXXX-XXXX`*');
-            }
-
-            const cleanKey = keyInput.trim().toUpperCase();
-            const PremiumKey = require('../../models/PremiumKey');
-            const ServerSettings = require('../../models/ServerSettings');
-
-            const license = await PremiumKey.findOne({ key: cleanKey, active: true });
-            if (!license) {
-                return ctx.reply('❌ Invalid or expired license key. Check your spelling or get a key on the dashboard!');
-            }
-
-            if (license.usedCount >= license.maxUses) {
-                return ctx.reply('❌ This license key has already reached its maximum redemptions.');
-            }
-
-            if ((license.redeemedBy || []).some(entry => String(entry.guildId || '') === String(ctx.guild.id))) {
-                return ctx.reply('❌ This license key has already been redeemed for this server.');
-            }
-
-            let expiresAt = null;
-            if (license.durationDays && license.durationDays > 0) {
-                expiresAt = new Date(Date.now() + license.durationDays * 24 * 60 * 60 * 1000);
-            }
-
-            let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
-            if (!settings) settings = new ServerSettings({ guildId: ctx.guild.id });
-
-            settings.premium = {
-                isPremium: true,
-                tier: license.tier,
-                expiresAt: expiresAt,
-                activatedBy: ctx.user.id
-            };
-            await settings.save();
-
-            // Sync with PremiumModel (PremiumGuilds) for both Guild and User
-            const mongoose = require('mongoose');
-            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
-            if (PremiumModel) {
-                await PremiumModel.findOneAndUpdate(
-                    { targetId: ctx.guild.id },
-                    { targetId: ctx.guild.id, type: 'guild', isPremium: true, activatedAt: new Date(), expiresAt: expiresAt },
-                    { upsert: true }
-                ).catch(() => {});
-            }
-
-            // Sync live RAM caches immediately
-            const expMs = expiresAt ? expiresAt.getTime() : null;
-            if (ctx.client && typeof ctx.client.setPremiumCache === 'function') {
-                ctx.client.setPremiumCache(ctx.guild.id, expMs);
-            }
-            const { invalidatePremiumCache } = require('../../utils/premiumHelper');
-            invalidatePremiumCache(ctx.guild.id);
-
-            // Dynamically auto-upgrade any existing BoosterRole documents in this server!
-            const BoosterRole = mongoose.models.BoosterRole || mongoose.model('BoosterRole');
-            if (BoosterRole) {
-                const tierMaxShares = license.tier === 'lifetime' ? 15 : (license.tier === 'pro_cluster' ? 10 : 5);
-                await BoosterRole.updateMany(
-                    { guildId: ctx.guild.id, maxShares: { $lt: tierMaxShares } },
-                    { $set: { maxShares: tierMaxShares } }
-                ).catch(() => {});
-            }
-
-            license.usedCount += 1;
-            license.redeemedBy.push({ userId: ctx.user.id, guildId: ctx.guild.id, redeemedAt: new Date() });
-            if (license.usedCount >= license.maxUses) license.active = false;
-            await license.save();
-
-            const embed = new EmbedBuilder()
-                .setColor('#F59E0B')
-                .setAuthor({ name: 'Starry Premium Activated!', iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' })
-                .setTitle(`🎉 Guild Upgraded to ${license.tier.toUpperCase()} Tier!`)
-                .setDescription(
-                    `Thank you for supporting Starry! Your server now has full access to all premium features:\n\n` +
-                    `⚡ **24/7 Studio Quality Voice (320kbps)**\n` +
-                    `🛡️ **Starry Anti-Nuke & Anti-Raid Shield**\n` +
-                    `💾 **Unlimited Daily Cloud Backups**\n` +
-                    `👑 **Web Captcha Verification Gateway**\n` +
-                    `💰 **2x Economy XP & Loot Multiplier**\n\n` +
-                    `🕒 **Expires:** \`${expiresAt ? expiresAt.toLocaleDateString() : 'Permanent Lifetime VIP'}\``
-                )
-                .setFooter({ text: 'Manage settings via ,dashboard or web control center' })
-                .setTimestamp();
-
-            return ctx.reply({ embeds: [embed] });
-        }
-    },
-
     // 31. PREMIUM (Perks & Status Explorer)
     {
         name: 'premium',
@@ -1177,7 +1077,7 @@ const commands = [
                     { name: '🌟 Pro Cluster ($12.99/mo | ₹999)', value: '• Everything in Shield Plus\n• Multi-Bot Worker Nodes\n• 3-Room Simultaneous Playback\n• 2x Economy XP & Loot Multiplier\n• Flag Neural Translator', inline: true },
                     { name: '👑 Lifetime VIP ($39.99 | ₹3,299)', value: '• Permanent Lifetime Access\n• Unlimited Server Transfers\n• Golden Crown VIP Badge\n• Top-Priority FLAC Nodes\n• VIP Game Packs & Appeal Portal', inline: true }
                 )
-                .setFooter({ text: `Use ,premium perks to view full breakdown • ,redeem <key> to activate` })
+                .setFooter({ text: `Use ,premium perks to view the available plans` })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
