@@ -29,6 +29,7 @@ const {
 } = require('../utils/paymentHelper');
 const config = require('../config');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
+const { parseSpotifyUrl, resolveSpotifyUrl, searchTracks } = require('../utils/spotifyApi');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -176,6 +177,19 @@ function setupDashboardRoutes(app, client) {
     };
 
     // ==========================================
+    // Spotify catalog search. Uses backend-only app credentials; no Spotify audio is streamed.
+    app.get('/api/spotify/search', requireAuth, async (req, res) => {
+        try {
+            const query = String(req.query.q || '').trim();
+            if (!query || query.length > 120) return res.status(400).json({ success: false, error: 'Enter a search query up to 120 characters.' });
+            const tracks = await searchTracks(query, 10);
+            return res.json({ success: true, tracks });
+        } catch (error) {
+            const status = error.status === 429 ? 429 : error.code === 'SPOTIFY_NOT_CONFIGURED' ? 503 : 502;
+            return res.status(status).json({ success: false, error: error.message || 'Spotify search is temporarily unavailable.' });
+        }
+    });
+
     // 🔐 DISCORD OAUTH2 AUTHENTICATION APIS
     // ==========================================
 
@@ -1106,16 +1120,35 @@ function setupDashboardRoutes(app, client) {
                 return res.status(503).json({ success: false, error: 'The assigned worker has no ready music search engine. Check its Lavalink connection.' });
             }
 
-            const resTrack = await player.search(query, { requester: musicClient.user });
-            if (!resTrack || !Array.isArray(resTrack.tracks) || resTrack.tracks.length === 0) {
-                return res.status(404).json({ success: false, error: 'No tracks found for search query.' });
+            let tracksToQueue = [];
+            const spotifyLink = parseSpotifyUrl(query);
+            if (spotifyLink) {
+                const collection = await resolveSpotifyUrl(query, { maxTracks: 25 });
+                for (let offset = 0; offset < collection.tracks.length; offset += 3) {
+                    const batch = collection.tracks.slice(offset, offset + 3);
+                    const matches = await Promise.all(batch.map(async metadata => {
+                        const found = await player.search('ytsearch:' + metadata.query, { requester: musicClient.user });
+                        const playable = found?.tracks?.[0];
+                        if (!playable) return null;
+                        return { ...playable, title: metadata.title || playable.title, author: metadata.artist || playable.author, thumbnail: metadata.artwork || playable.thumbnail, length: metadata.durationMs || playable.length };
+                    }));
+                    tracksToQueue.push(...matches.filter(Boolean));
+                }
+            } else {
+                const resTrack = await player.search(query, { requester: musicClient.user });
+                if (resTrack?.tracks?.length) tracksToQueue = [resTrack.tracks[0]];
             }
-            player.queue.add(resTrack.tracks[0]);
+            if (!tracksToQueue.length) {
+                return res.status(404).json({ success: false, error: 'No playable matches found. Check the Spotify link or try another search.' });
+            }
+            for (const track of tracksToQueue) player.queue.add(track);
             if (!player.playing && !player.paused) await player.play();
+            const firstTrack = tracksToQueue[0];
             return res.json({
                 success: true,
-                message: 'Queued "' + String(resTrack.tracks[0].title || query).slice(0, 160) + '" via ' + (assignment?.name || musicClient.user?.username || 'Starry') + '.',
-                track: { title: resTrack.tracks[0].title, author: resTrack.tracks[0].author, duration: resTrack.tracks[0].length }
+                message: 'Queued ' + tracksToQueue.length + ' track(s), starting with "' + String(firstTrack.title || query).slice(0, 160) + '" via ' + (assignment?.name || musicClient.user?.username || 'Starry') + '.',
+                track: { title: firstTrack.title, author: firstTrack.author, duration: firstTrack.length },
+                queued: tracksToQueue.length
             });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });

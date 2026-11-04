@@ -14,6 +14,7 @@ const {
     MessageFlags
 } = require('discord.js');
 const config = require('../../config');
+const { parseSpotifyUrl, resolveSpotifyUrl } = require('../../utils/spotifyApi');
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../../utils/contextHelper');
 const { StarryAudioEngine, formatTime, createProgressBar } = require('../../utils/nativeAudioEngine');
 const { requirePremium } = require('../../utils/premiumHelper');
@@ -142,7 +143,41 @@ const commands = [
             // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
             if (hasLavalink) {
                 try {
-                    const res = await manager.search(query, { requester: ctx.user });
+                    let res;
+                    const spotifyLink = parseSpotifyUrl(query);
+                    if (spotifyLink) {
+                        const spotifyCollection = await resolveSpotifyUrl(query, { maxTracks: 25 });
+                        const resolvedTracks = [];
+                        // Resolve Spotify metadata to playable Lavalink search results.
+                        // Spotify audio itself is never requested or streamed.
+                        for (let offset = 0; offset < spotifyCollection.tracks.length; offset += 3) {
+                            const batch = spotifyCollection.tracks.slice(offset, offset + 3);
+                            const results = await Promise.all(batch.map(async (metadata) => {
+                                const match = await manager.search('ytsearch:' + metadata.query, { requester: ctx.user });
+                                const playable = match?.tracks?.[0];
+                                if (!playable) return null;
+                                return {
+                                    ...playable,
+                                    title: metadata.title || playable.title,
+                                    author: metadata.artist || playable.author,
+                                    thumbnail: metadata.artwork || playable.thumbnail,
+                                    length: metadata.durationMs || playable.length,
+                                    spotifyUrl: metadata.spotifyUrl || null
+                                };
+                            }));
+                            resolvedTracks.push(...results.filter(Boolean));
+                        }
+                        if (!resolvedTracks.length) {
+                            throw new Error('Spotify metadata was found, but Lavalink could not find playable audio matches.');
+                        }
+                        res = {
+                            loadType: resolvedTracks.length > 1 ? 'playlist' : 'track',
+                            tracks: resolvedTracks,
+                            playlist: { name: spotifyLink.type === 'playlist' ? 'Spotify playlist' : spotifyLink.type === 'album' ? 'Spotify album' : 'Spotify track' }
+                        };
+                    } else {
+                        res = await manager.search(query, { requester: ctx.user });
+                    }
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                         throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
                     }
