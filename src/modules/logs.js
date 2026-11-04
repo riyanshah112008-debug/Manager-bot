@@ -11,6 +11,7 @@ const {
     AuditLogEvent
 } = require('discord.js');
 const mongoose = require('mongoose');
+const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
 
 const logSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -129,6 +130,10 @@ module.exports = (client) => {
         if (typeof client.getLogChannel === 'function') {
             const smartChannel = await client.getLogChannel(guild, type);
             if (smartChannel) return smartChannel;
+            try {
+                const dashboardConfig = await ServerSettings.findOne({ guildId: guild.id }).select('logging.dashboardConfigured').lean();
+                if (dashboardConfig?.logging?.dashboardConfigured) return null;
+            } catch (err) {}
         }
 
         try {
