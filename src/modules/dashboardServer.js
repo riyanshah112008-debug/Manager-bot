@@ -1096,8 +1096,7 @@ function setupDashboardRoutes(app, client) {
             }
             if (action === 'toggle247') player.is247 = value === undefined ? !player.is247 : Boolean(value);
             if (action === 'autoplay') {
-                if (!Object.prototype.hasOwnProperty.call(player, 'autoplay')) return res.status(400).json({ success: false, error: 'Autoplay is not supported by this player.' });
-                player.autoplay = value === undefined ? !player.autoplay : Boolean(value);
+                player.autoplay = value === undefined ? !Boolean(player.autoplay) : Boolean(value);
             }
 
             res.json({ success: true, message: 'Music player updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none', autoplay: Boolean(player.autoplay) } });
