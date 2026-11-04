@@ -531,6 +531,14 @@ function setupDashboardRoutes(app, client) {
                     filter: player.filter || 'clear',
                     autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')),
                     is247: Boolean(player.is247),
+                    position: Number(player.position || 0),
+                    history: Array.isArray(player.history) ? player.history.slice(-10).reverse().map(safeTrack) : [],
+                    capabilities: {
+                        seek: typeof player.seekTo === 'function',
+                        previous: typeof player.previous === 'function',
+                        queueEdit: Array.isArray(player.queue) && typeof player.remove === 'function' && typeof player.move === 'function',
+                        clearQueue: typeof player.clearQueue === 'function'
+                    },
                     botName: workerInfo?.name || client.user?.username || 'Starry'
                 } : null
             });
@@ -1062,6 +1070,48 @@ function setupDashboardRoutes(app, client) {
             return res.json({ success: true, message: 'Music control updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none', autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')), volume: Number(player.volume ?? 100) } });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // POST /api/guild/:id/music/queue - Queue management for the web music studio
+    app.post('/api/guild/:id/music/queue', actionLimiter, requireGuildMember, async (req, res) => {
+        try {
+            const guild = req.guild || client.guilds.cache.get(req.params.id);
+            if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
+            const player = client.multiBot?.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            if (!player) return res.status(400).json({ success: false, error: 'No active music session in this server.' });
+            const { action, position, to, seconds } = req.body || {};
+            if (action === 'remove') {
+                const index = Number(position);
+                if (!Number.isInteger(index) || index < 0) return res.status(400).json({ success: false, error: 'Choose a valid queue position.' });
+                if (Array.isArray(player.queue) && typeof player.remove === 'function') {
+                    if (!player.remove(index + 1)) return res.status(404).json({ success: false, error: 'That queue item no longer exists.' });
+                } else return res.status(400).json({ success: false, error: 'Queue editing is not supported by this music worker.' });
+            } else if (action === 'move') {
+                const from = Number(position), target = Number(to);
+                if (!Number.isInteger(from) || !Number.isInteger(target) || from < 0 || target < 0) return res.status(400).json({ success: false, error: 'Choose valid queue positions.' });
+                if (Array.isArray(player.queue) && typeof player.move === 'function') {
+                    if (!player.move(from + 1, target + 1)) return res.status(404).json({ success: false, error: 'That queue move is no longer valid.' });
+                } else return res.status(400).json({ success: false, error: 'Queue reordering is not supported by this music worker.' });
+            } else if (action === 'clear') {
+                if (typeof player.clearQueue === 'function') player.clearQueue();
+                else return res.status(400).json({ success: false, error: 'Clearing the queue is not supported by this music worker.' });
+            } else if (action === 'seek') {
+                const target = Number(seconds);
+                if (!Number.isFinite(target) || target < 0 || target > 86400) return res.status(400).json({ success: false, error: 'Choose a valid playback position.' });
+                if (typeof player.seekTo === 'function') {
+                    const moved = await player.seekTo(target);
+                    if (moved === false) return res.status(400).json({ success: false, error: 'This track could not be repositioned.' });
+                } else return res.status(400).json({ success: false, error: 'Seeking is not supported by this music worker.' });
+            } else if (action === 'previous') {
+                if (typeof player.previous === 'function') {
+                    if (!player.previous()) return res.status(400).json({ success: false, error: 'There is no previous track in this session.' });
+                } else return res.status(400).json({ success: false, error: 'Previous track is not supported by this music worker.' });
+            } else return res.status(400).json({ success: false, error: 'Unknown queue action.' });
+            return res.json({ success: true, message: 'Music queue updated.' });
+        } catch (e) {
+            console.error('Dashboard music queue action failed:', e);
+            return res.status(500).json({ success: false, error: 'The music queue could not be updated.' });
         }
     });
 
