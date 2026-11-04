@@ -529,6 +529,30 @@ function setupDashboardRoutes(app, client) {
                 settings = await ServerSettings.create({ guildId: guild.id });
             }
 
+            // The runtime premium guard also checks PremiumGuilds. Reflect that same
+            // effective entitlement in the dashboard if stale cleanup left a registry record.
+            const settingsPayload = settings.toObject ? settings.toObject() : { ...settings };
+            let effectivePremium = settingsPayload.premium || {};
+            try {
+                const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+                const activeGuildPremium = await PremiumModel.findOne({
+                    targetId: guild.id,
+                    isPremium: true,
+                    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
+                }).lean();
+                if (activeGuildPremium) {
+                    const recordExpiry = activeGuildPremium.expiresAt || null;
+                    effectivePremium = {
+                        ...effectivePremium,
+                        isPremium: true,
+                        tier: activeGuildPremium.tier || (!recordExpiry ? 'lifetime' : effectivePremium.tier || 'premium'),
+                        expiresAt: recordExpiry
+                    };
+                }
+            } catch (premiumStatusError) {
+                console.warn('Could not resolve effective dashboard premium status:', premiumStatusError.message);
+            }
+
             const channels = guild.channels.cache.map(c => ({
                 id: c.id,
                 name: c.name,
@@ -570,6 +594,7 @@ function setupDashboardRoutes(app, client) {
                     ownerId: guild.ownerId
                 },
                 settings,
+                effectivePremium,
                 channels,
                 roles,
                 publicUrl: getPublicUrl(),
@@ -1499,6 +1524,32 @@ function setupDashboardRoutes(app, client) {
             }
             if ((license.redeemedBy || []).some(entry => String(entry.guildId || '') === guildId)) {
                 return res.status(409).json({ success: false, error: 'This license has already been redeemed for this server.' });
+            }
+
+            // A finite key must never downgrade a server that already has lifetime access.
+            // Check both entitlement stores before consuming the key.
+            if (Number(license.durationDays) > 0) {
+                const [currentSettings, currentRegistryEntitlement] = await Promise.all([
+                    ServerSettings.findOne({ guildId }).select('premium').lean(),
+                    (mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds')).findOne({
+                        targetId: guildId,
+                        isPremium: true,
+                        $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }]
+                    }).lean()
+                ]);
+                const currentPremium = currentSettings?.premium;
+                const hasLifetimeSettings = Boolean(
+                    currentPremium?.isPremium &&
+                    currentPremium.tier === 'lifetime' &&
+                    !currentPremium.expiresAt
+                );
+                const hasLifetimeRegistry = Boolean(currentRegistryEntitlement);
+                if (hasLifetimeSettings || hasLifetimeRegistry) {
+                    return res.status(409).json({
+                        success: false,
+                        error: 'This server already has lifetime Premium. A finite-duration key cannot replace or downgrade that entitlement; the key has not been consumed.'
+                    });
+                }
             }
 
             const nextCount = Number(license.usedCount || 0) + 1;
