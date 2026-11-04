@@ -37,14 +37,12 @@ window.fetch=function(input,init){
 function rewriteBackendLinks(root){(root||document).querySelectorAll("a[href], form[action]").forEach(element=>{
  const attr=element.tagName==="FORM"?"action":"href",value=element.getAttribute(attr);if(!value||!value.startsWith("/"))return;
  const parsed=new URL(value,location.origin);
- if(parsed.pathname==="/auth/login"&&getStoredSession()){element.setAttribute(attr,"/dashboard.html");return}
  if(isBackendPath(parsed.pathname))element.setAttribute(attr,backendOrigin+parsed.pathname+parsed.search+parsed.hash)
 })}
 document.addEventListener("DOMContentLoaded",()=>rewriteBackendLinks());
 document.addEventListener("click",event=>{
  const link=event.target.closest&&event.target.closest("a[href]");if(!link)return;
  const parsed=new URL(link.href,location.href);
- if(parsed.pathname==="/auth/login"&&getStoredSession()){event.preventDefault();location.href="/dashboard.html";return}
  if(parsed.origin===location.origin&&isBackendPath(parsed.pathname)){event.preventDefault();location.href=backendOrigin+parsed.pathname+parsed.search+parsed.hash}
 },true);
 })();

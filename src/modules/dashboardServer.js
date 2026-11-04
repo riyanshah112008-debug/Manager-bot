@@ -106,15 +106,24 @@ function setupDashboardRoutes(app, client) {
 
         const isOwner = (config.BOT_OWNERS || []).includes(session.user?.id);
         const isGuildOwner = guild.ownerId === session.user?.id;
-        const userGuild = (session.guilds || []).find(g => g.id === guildId);
-        let hasAdminPerms = false;
-        if (userGuild) {
-            const perms = BigInt(userGuild.permissions || 0);
-            hasAdminPerms = (perms & BigInt(0x8)) === BigInt(0x8) || (perms & BigInt(0x20)) === BigInt(0x20);
-        }
-
-        if (!isOwner && !isGuildOwner && !hasAdminPerms) {
-            return res.status(403).json({ success: false, error: 'Access denied: You need Administrator or Manage Server permissions.' });
+        let member = null;
+        if (!isOwner && !isGuildOwner) {
+            // OAuth guild permissions are a login-time snapshot. Re-fetch the
+            // member so removed roles or revoked Manage Server access take effect immediately.
+            try {
+                member = await guild.members.fetch({ user: session.user.id, force: true });
+            } catch (error) {
+                if (error?.code === 10007) {
+                    return res.status(403).json({ success: false, error: 'Access denied: You are no longer a member of this server.' });
+                }
+                console.error('Live Discord permission check failed:', error);
+                return res.status(503).json({ success: false, error: 'Could not verify your current Discord permissions. Please retry.' });
+            }
+            const hasAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
+            const hasManageServer = member.permissions.has(PermissionFlagsBits.ManageGuild);
+            if (!hasAdmin && !hasManageServer) {
+                return res.status(403).json({ success: false, error: 'Access denied: You need Administrator or Manage Server permissions.' });
+            }
         }
 
         req.session = session;
@@ -168,20 +177,44 @@ function setupDashboardRoutes(app, client) {
     // 🔐 DISCORD OAUTH2 AUTHENTICATION APIS
     // ==========================================
 
-    app.get('/auth/login', (req, res) => {
+    // ==========================================
+    // 🔐 DISCORD OAUTH2 AUTHENTICATION APIS
+    // ==========================================
+
+    // OAuth state is held in a short-lived HttpOnly cookie so it survives a
+    // Render restart and works without process-local session state.
+    app.get('/auth/login', actionLimiter, (req, res) => {
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
         const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
-
-        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify%20guilds%20email`;
-        res.redirect(authUrl);
+        const state = crypto.randomBytes(24).toString('hex');
+        const secureCookie = proto === 'https' ? '; Secure' : '';
+        res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
+        res.set('Cache-Control', 'no-store');
+        const authUrl = new URL('https://discord.com/oauth2/authorize');
+        authUrl.searchParams.set('client_id', clientId);
+        authUrl.searchParams.set('redirect_uri', redirectUri);
+        authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('scope', 'identify guilds email');
+        authUrl.searchParams.set('state', state);
+        res.redirect(authUrl.toString());
     });
 
-    app.get('/auth/callback', async (req, res) => {
-        const code = req.query.code;
+    app.get('/auth/callback', actionLimiter, async (req, res) => {
+        const code = typeof req.query.code === 'string' ? req.query.code : '';
+        const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
         const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+        const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
+        const cookieState = cookiePart ? cookiePart.slice('starry_oauth_state='.length) : '';
+        const secureCookie = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
+        res.set('Set-Cookie', `starry_oauth_state=; Max-Age=0; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
+        if (req.query.error) return res.redirect(`${frontendBase}/?error=discord_authorization_denied`);
+        const validState = returnedState && cookieState &&
+            returnedState.length === cookieState.length &&
+            crypto.timingSafeEqual(Buffer.from(returnedState), Buffer.from(cookieState));
+        if (!validState) return res.redirect(`${frontendBase}/?error=oauth_state_invalid`);
         if (!code) return res.redirect(`${frontendBase}/?error=no_code`);
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
@@ -190,114 +223,141 @@ function setupDashboardRoutes(app, client) {
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
         const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
+
         try {
             if (!clientSecret) {
                 console.error('Discord OAuth client secret is not configured.');
-                return res.redirect(frontendBase + '/?error=oauth_not_configured');
+                return res.redirect(`${frontendBase}/?error=oauth_not_configured`);
             }
 
             const tokenParams = new URLSearchParams({
                 client_id: clientId,
                 client_secret: clientSecret,
                 grant_type: 'authorization_code',
-                code: code,
+                code,
                 redirect_uri: redirectUri
             });
-
             const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: tokenParams.toString()
             });
-
-            const tokenData = await tokenRes.json();
-            if (!tokenData.access_token) {
+            const tokenData = await tokenRes.json().catch(() => ({}));
+            if (!tokenRes.ok || !tokenData.access_token) {
+                console.error('Discord OAuth token exchange failed:', tokenRes.status, tokenData.error || tokenData.message || 'unknown_error');
                 return res.redirect(`${frontendBase}/?error=token_failed`);
             }
 
-            // Fetch User Profile
-            const userRes = await fetch('https://discord.com/api/users/@me', {
-                headers: { Authorization: `Bearer ${tokenData.access_token}` }
-            });
-            const userData = await userRes.json();
+            const discordHeaders = { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' };
+            const [userRes, guildsRes] = await Promise.all([
+                fetch('https://discord.com/api/users/@me', { headers: discordHeaders }),
+                fetch('https://discord.com/api/users/@me/guilds', { headers: discordHeaders })
+            ]);
+            const [userData, userGuilds] = await Promise.all([
+                userRes.json().catch(() => ({})),
+                guildsRes.json().catch(() => null)
+            ]);
+            if (!userRes.ok || !userData.id) {
+                console.error('Discord OAuth profile request failed:', userRes.status);
+                return res.redirect(`${frontendBase}/?error=profile_failed`);
+            }
+            if (!guildsRes.ok || !Array.isArray(userGuilds)) {
+                console.error('Discord OAuth guild request failed:', guildsRes.status);
+                return res.redirect(`${frontendBase}/?error=guilds_failed`);
+            }
 
-            // Fetch User Guilds
-            const guildsRes = await fetch('https://discord.com/api/users/@me/guilds', {
-                headers: { Authorization: `Bearer ${tokenData.access_token}` }
-            });
-            const userGuilds = await guildsRes.json();
-
-            if (!userData || !userData.id) return res.redirect(frontendBase + '/?error=profile_failed');
             const sessionToken = crypto.randomBytes(32).toString('hex');
             const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
             const sessionData = {
-                user: { id: String(userData.id), username: userData.username || 'Discord user', discriminator: userData.discriminator || '0', avatar: userData.avatar || null, email: userData.email || null },
-                guilds: Array.isArray(userGuilds) ? userGuilds : [],
+                user: {
+                    id: String(userData.id),
+                    username: userData.username || 'Discord user',
+                    globalName: userData.global_name || userData.username || 'Discord user',
+                    discriminator: userData.discriminator || '0',
+                    avatar: userData.avatar || null,
+                    email: userData.email || null
+                },
+                guilds: userGuilds,
                 expiresAt: expiresAt.getTime()
             };
-            await OAuthSession.create({ tokenHash: hashSessionToken(sessionToken), user: sessionData.user, guilds: sessionData.guilds, expiresAt });
+
+            // Persist before redirecting; never send a session that cannot be reloaded.
+            await OAuthSession.create({
+                tokenHash: hashSessionToken(sessionToken),
+                user: sessionData.user,
+                guilds: sessionData.guilds,
+                expiresAt
+            });
             userSessions.set(sessionToken, sessionData);
-            res.redirect(frontendBase + '/dashboard.html?session=' + encodeURIComponent(sessionToken));
-        } catch (e) {
-            console.error('OAuth2 Callback Error:', e);
-            res.redirect(`${frontendBase}/?error=oauth_error`);
+            res.set('Cache-Control', 'no-store');
+            return res.redirect(`${frontendBase}/dashboard.html?session=${encodeURIComponent(sessionToken)}`);
+        } catch (error) {
+            console.error('Discord OAuth callback failed:', error);
+            return res.redirect(`${frontendBase}/?error=oauth_error`);
         }
     });
 
     app.get('/auth/user', async (req, res) => {
         res.set('Cache-Control', 'no-store, private');
         let session;
-        try { session = await getSession(req); } catch (error) {
+        try {
+            session = await getSession(req);
+        } catch (error) {
             console.error('Dashboard session lookup failed:', error);
             return res.status(503).json({ authenticated: false, error: 'Session service temporarily unavailable.' });
         }
-        if (!session) {
-            return res.status(401).json({ authenticated: false, error: 'Discord login required.' });
-        }
+        if (!session) return res.status(401).json({ authenticated: false, error: 'Discord login required.' });
 
-        // Filter mutual guilds where user has MANAGE_GUILD (0x20) or ADMINISTRATOR (0x8)
         const manageableGuilds = (session.guilds || []).filter(g => {
-            const perms = BigInt(g.permissions || 0);
-            const hasAdmin = (perms & BigInt(0x8)) === BigInt(0x8);
-            const hasManage = (perms & BigInt(0x20)) === BigInt(0x20);
-            return g.owner || hasAdmin || hasManage;
-        }).map(g => {
-            const botInGuild = client.guilds.cache.has(g.id);
-            return {
-                id: g.id,
-                name: g.name,
-                icon: g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png',
-                botInGuild,
-                owner: g.owner
-            };
-        });
+            try {
+                const permissions = BigInt(g.permissions || 0);
+                return Boolean(g.owner) || (permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20);
+            } catch (_) {
+                return false;
+            }
+        }).map(g => ({
+            id: g.id,
+            name: g.name,
+            icon: g.icon
+                ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`
+                : 'https://cdn.discordapp.com/embed/avatars/0.png',
+            botInGuild: client.guilds.cache.has(g.id),
+            owner: Boolean(g.owner)
+        }));
 
+        const avatarExtension = session.user.avatar && session.user.avatar.startsWith('a_') ? 'gif' : 'png';
         res.json({
             authenticated: true,
             user: {
                 id: session.user.id,
                 username: session.user.username,
+                globalName: session.user.globalName || session.user.username,
                 discriminator: session.user.discriminator,
-                avatar: session.user.avatar ? `https://cdn.discordapp.com/avatars/${session.user.id}/${session.user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png',
+                avatar: session.user.avatar
+                    ? `https://cdn.discordapp.com/avatars/${session.user.id}/${session.user.avatar}.${avatarExtension}?size=128`
+                    : `https://cdn.discordapp.com/embed/avatars/${Number(session.user.discriminator || 0) % 6}.png`,
                 email: session.user.email
             },
             guilds: manageableGuilds
         });
     });
 
-    app.get('/auth/logout', async (req, res) => {
+    const destroySession = async (req, res) => {
         try {
             const session = await getSession(req);
             if (session) {
                 userSessions.delete(session.token);
                 await OAuthSession.deleteOne({ tokenHash: hashSessionToken(session.token) });
             }
-            res.json({ success: true, message: 'Logged out successfully.' });
+            res.set('Cache-Control', 'no-store');
+            return res.json({ success: true, message: 'Logged out successfully.' });
         } catch (error) {
             console.error('Dashboard logout failed:', error);
-            res.status(503).json({ success: false, error: 'Could not complete logout. Please retry.' });
+            return res.status(503).json({ success: false, error: 'Could not complete logout. Please retry.' });
         }
-    });
+    };
+    app.get('/auth/logout', destroySession);
+    app.post('/auth/logout', destroySession);
 
     // ==========================================
     // ⭐ TOP.GG WEBHOOK & VOTE REDIRECT

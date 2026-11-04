@@ -27,4 +27,42 @@
 
   const year = document.querySelector("#current-year");
   if (year) year.textContent = String(new Date().getFullYear());
+
+  // The landing page uses the same Render-backed OAuth session as the dashboard.
+  async function loadDiscordProfile() {
+    const login = document.querySelector("#landing-login");
+    const profile = document.querySelector("#landing-profile");
+    const avatar = document.querySelector("#landing-avatar");
+    const username = document.querySelector("#landing-username");
+    if (!login || !profile) return;
+
+    try {
+      const response = await fetch("/auth/user", { cache: "no-store", headers: { "Accept": "application/json" } });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data.authenticated || !data.user) return;
+      const user = data.user;
+      if (avatar) {
+        avatar.src = user.avatar || "https://cdn.discordapp.com/embed/avatars/0.png";
+        avatar.onerror = () => { avatar.src = "https://cdn.discordapp.com/embed/avatars/0.png"; };
+      }
+      if (username) username.textContent = user.globalName || user.username || "Discord user";
+      login.hidden = true;
+      profile.hidden = false;
+    } catch (error) {
+      console.warn("Starry could not load the Discord profile yet:", error);
+    }
+  }
+
+  const logout = document.querySelector("#landing-logout");
+  if (logout) logout.addEventListener("click", async () => {
+    logout.disabled = true;
+    logout.textContent = "Signing out…";
+    try { await fetch("/auth/logout", { method: "POST", cache: "no-store" }); } catch (_) {}
+    try { localStorage.removeItem("starry_dashboard_session"); } catch (_) {}
+    try { sessionStorage.removeItem("starry_dashboard_session"); } catch (_) {}
+    window.location.reload();
+  });
+
+  loadDiscordProfile();
 })();

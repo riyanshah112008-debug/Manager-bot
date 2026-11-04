@@ -41,3 +41,13 @@ body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .site-footer{background:#081321;border-color:rgba(112,195,226,.16)}
 @media(max-width:680px){body:before{background-size:38px 38px;opacity:.14}.hero-visual{padding-top:22px}}
 @media(prefers-reduced-motion:reduce){body:before{animation:none}}
+
+
+/* Shared Discord account controls on the public landing page */
+.nav-actions{min-width:0}
+.landing-profile{display:flex;align-items:center;gap:9px;min-width:0}
+.landing-profile[hidden]{display:none}
+.landing-profile img{width:29px;height:29px;border-radius:50%;object-fit:cover;border:1px solid rgba(105,220,245,.55)}
+.landing-profile span{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#eaf7ff;font-size:.76rem;font-weight:700}
+.landing-profile button{cursor:pointer}
+@media(max-width:680px){.landing-profile{gap:5px}.landing-profile span{display:none}.landing-profile .button{padding:0 7px;font-size:.62rem}}
