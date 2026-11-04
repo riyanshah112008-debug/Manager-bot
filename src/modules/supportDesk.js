@@ -19,10 +19,10 @@ async function aiReply(c){
   if(!match)throw new Error('Unstructured AI response');
   const parsed=JSON.parse(match[0]),confidence=['high','medium','low'].includes(parsed.confidence)?parsed.confidence:'low',reply=String(parsed.reply||'').trim().slice(0,5000);
   if(!reply)throw new Error('Empty AI response');
-  return {reply,confidence,needsHuman:Boolean(parsed.needsHuman)||confidence==='low',reason:parsed.needsHuman?'AI requested human review':null};
+  return {reply,confidence,needsHuman:Boolean(parsed.needsHuman)||confidence==='low',reason:parsed.needsHuman?'AI requested human review':null,model:'Gemini 2.5 Flash'};
  }catch(e){console.warn('[Support Desk] AI failed:',e.message);return {reply:'I can’t confidently resolve this right now, so I’ve moved it to the human support queue. Your messages are saved here.',confidence:'low',needsHuman:true,reason:'AI unavailable or uncertain'}}
 }
-async function notifyAgents(client,c,reason){for(const id of agentIds()){try{const u=await client.users.fetch(id);await u.send(['**Starry Support needs a human agent**','Conversation: '+c.conversationId,'Customer: '+c.username+' ('+c.userId+')','Subject: '+c.subject,'Reason: '+String(reason||'Human requested').slice(0,250),'Open: https://manager-bot-96c07.web.app/support.html'].join('\n'))}catch(e){console.warn('[Support Desk] Agent DM failed:',e.message)}}}
+async function notifyAgents(client,c,reason,config){for(const id of [...new Set([...agentIds(),...(config.BOT_OWNERS||[])])]){try{const u=await client.users.fetch(id);await u.send(['**Starry Support needs a human agent**','Conversation: '+c.conversationId,'Customer: '+c.username+' ('+c.userId+')','Subject: '+c.subject,'Reason: '+String(reason||'Human requested').slice(0,250),'Open: https://manager-bot-96c07.web.app/support.html'].join('\n'))}catch(e){console.warn('[Support Desk] Agent DM failed:',e.message)}}}
 
 function setupSupportDeskRoutes(app,{requireAuth,client,config}){
  const limiter=rateLimit({windowMs:60000,max:12,standardHeaders:true,legacyHeaders:false,message:{success:false,error:'Please wait before sending another support message.'}});
@@ -37,9 +37,9 @@ function setupSupportDeskRoutes(app,{requireAuth,client,config}){
   if(content.length<5||content.length>4000)return res.status(400).json({success:false,error:'Your first message must be between 5 and 4,000 characters.'});
   const u=req.session.user||{},c=await SupportConversation.create({conversationId:'ST-'+crypto.randomBytes(5).toString('hex').toUpperCase(),userId:String(u.id),username:userName(u),subject,status:'ai_active',messages:[{senderType:'customer',senderId:String(u.id),senderName:userName(u),content}]});
   const human=/\b(human|real person|support agent|staff member|talk to someone|live agent)\b/i.test(content),answer=human?{reply:'Of course. I’ve moved this conversation to the human support queue.',needsHuman:true,reason:'Customer requested a human agent'}:await aiReply(c);
-  c.messages.push({senderType:'ai',senderName:'Starry AI',content:answer.reply,aiModel:'Gemini 2.5 Flash'});
+  c.messages.push({senderType:'ai',senderName:'Starry AI',content:answer.reply,aiModel:answer.model||'Gemini 2.5 Flash'});
   if(answer.needsHuman){c.status='waiting_agent';c.priority='high';c.escalatedReason=answer.reason||'AI could not confidently resolve the issue'}
-  await c.save();if(answer.needsHuman)await notifyAgents(client,c,c.escalatedReason);
+  await c.save();if(answer.needsHuman)await notifyAgents(client,c,c.escalatedReason,config);
   res.status(201).json({success:true,conversation:expose(c,true),escalated:Boolean(answer.needsHuman)});
  }catch(e){console.error('[Support Desk] create:',e);res.status(500).json({success:false,error:'Could not create the support conversation.'})}});
  app.get('/api/support/conversations/:conversationId',requireAuth,async(req,res)=>{try{
@@ -59,7 +59,7 @@ function setupSupportDeskRoutes(app,{requireAuth,client,config}){
    const human=Boolean(req.body.requestHuman)||/\b(human|real person|support agent|staff member|talk to someone|live agent)\b/i.test(content);
    c.messages.push({senderType:'customer',senderId:id,senderName:userName(req.session.user),content});
    if(c.status==='closed'){c.status='ai_active';c.closedAt=null;c.assignedAgentId=null;c.assignedAgentName=null}
-   if(human){c.status='waiting_agent';c.priority='high';c.escalatedReason='Customer requested a human agent';c.messages.push({senderType:'system',senderName:'Starry Support',content:'Your conversation has been moved to the human support queue.'});await c.save();await notifyAgents(client,c,c.escalatedReason)}
+   if(human){c.status='waiting_agent';c.priority='high';c.escalatedReason='Customer requested a human agent';c.messages.push({senderType:'system',senderName:'Starry Support',content:'Your conversation has been moved to the human support queue.'});await c.save();await notifyAgents(client,c,c.escalatedReason,config)}
    else if(c.status==='ai_active'){await c.save();const answer=await aiReply(c);c.messages.push({senderType:'ai',senderName:'Starry AI',content:answer.reply,aiModel:'Gemini 2.5 Flash'});if(answer.needsHuman){c.status='waiting_agent';c.priority='high';c.escalatedReason=answer.reason||'AI could not confidently resolve the issue'}await c.save();if(answer.needsHuman)await notifyAgents(client,c,c.escalatedReason)}
    else await c.save();
   }
