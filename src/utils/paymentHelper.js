@@ -1,6 +1,6 @@
 // Starry Premium catalogue and read-only legacy order status helpers.
-// Checkout and entitlement activation are intentionally unavailable until a
-// real payment provider with signed webhook verification has been configured.
+// This module exposes no payment mutation, key redemption, or manual activation APIs.
+// Checkout remains disabled until a provider's signed webhook can verify and activate payments.
 const PaymentOrder = require('../models/PaymentOrder');
 
 // Master Tier Catalog
