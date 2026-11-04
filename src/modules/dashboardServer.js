@@ -172,53 +172,47 @@ function setupDashboardRoutes(app, client) {
     // 🔐 DISCORD OAUTH2 AUTHENTICATION APIS
     // ==========================================
 
-    // One-time OAuth state prevents login CSRF and is consumed on callback.
-    const oauthStates = new Map();
-    const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-    const pruneOAuthStates = () => {
-        const now = Date.now();
-        for (const [state, createdAt] of oauthStates) {
-            if (now - createdAt > OAUTH_STATE_TTL_MS) oauthStates.delete(state);
-        }
-    };
-
+    // OAuth state is held in a short-lived HttpOnly cookie so it survives a
+    // Render restart and works without process-local session state.
     app.get('/auth/login', actionLimiter, (req, res) => {
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
+        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
-        pruneOAuthStates();
         const state = crypto.randomBytes(24).toString('hex');
-        oauthStates.set(state, Date.now());
+        const secureCookie = proto === 'https' ? '; Secure' : '';
+        res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
+        res.set('Cache-Control', 'no-store');
         const authUrl = new URL('https://discord.com/oauth2/authorize');
         authUrl.searchParams.set('client_id', clientId);
         authUrl.searchParams.set('redirect_uri', redirectUri);
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('scope', 'identify guilds email');
         authUrl.searchParams.set('state', state);
-        res.set('Cache-Control', 'no-store');
         res.redirect(authUrl.toString());
     });
 
     app.get('/auth/callback', actionLimiter, async (req, res) => {
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
-        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\\/+$/, '');
+        const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
+        const cookieState = cookiePart ? decodeURIComponent(cookiePart.slice('starry_oauth_state='.length)) : '';
+        const secureCookie = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
+        res.set('Set-Cookie', `starry_oauth_state=; Max-Age=0; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
         if (req.query.error) return res.redirect(`${frontendBase}/?error=discord_authorization_denied`);
-        const stateCreatedAt = oauthStates.get(returnedState);
-        if (!returnedState || !stateCreatedAt || Date.now() - stateCreatedAt > OAUTH_STATE_TTL_MS) {
-            oauthStates.delete(returnedState);
-            return res.redirect(`${frontendBase}/?error=oauth_state_invalid`);
-        }
-        oauthStates.delete(returnedState);
+        const validState = returnedState && cookieState &&
+            returnedState.length === cookieState.length &&
+            crypto.timingSafeEqual(Buffer.from(returnedState), Buffer.from(cookieState));
+        if (!validState) return res.redirect(`${frontendBase}/?error=oauth_state_invalid`);
         if (!code) return res.redirect(`${frontendBase}/?error=no_code`);
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
+        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
 
         try {
