@@ -28,6 +28,45 @@
   const year = document.querySelector("#current-year");
   if (year) year.textContent = String(new Date().getFullYear());
 
+  // Show safe, actionable OAuth diagnostics without ever exposing secrets or tokens.
+  function showAuthMessage(message) {
+    const panel = document.querySelector("#landing-auth-message");
+    if (!panel) return;
+    panel.textContent = message;
+    panel.hidden = !message;
+  }
+
+  const authErrors = {
+    discord_authorization_denied: "Discord authorization was cancelled. Choose Sign in and approve Starry to continue.",
+    oauth_state_invalid: "Discord returned an invalid or expired sign-in check. Start again from this website.",
+    no_code: "Discord did not return a sign-in response. Please try again.",
+    oauth_not_configured: "Starry's Discord OAuth client secret is not configured on the backend. The site owner must add it in Render.",
+    token_failed: "Discord rejected the OAuth token exchange. Check the Discord client ID, secret and exact callback URL in the backend settings.",
+    profile_failed: "Starry could not retrieve your Discord profile. Please try again in a moment.",
+    guilds_failed: "Starry could not retrieve your Discord server list. Please try again.",
+    session_store_unavailable: "Sign-in reached Starry, but its MongoDB session store is disconnected. The backend needs its database connection restored.",
+    session_store_failed: "Discord approved the sign-in, but Starry could not save your session. The backend session database needs attention.",
+    oauth_error: "Starry could not finish sign-in. Check the backend logs for the OAuth callback error."
+  };
+
+  const queryError = new URLSearchParams(window.location.search).get("error");
+  if (queryError) showAuthMessage(authErrors[queryError] || "Sign-in could not be completed. Please try again.");
+
+  async function checkAuthService() {
+    try {
+      const response = await fetch("/auth/status", { cache: "no-store", headers: { "Accept": "application/json" } });
+      if (!response.ok) throw new Error("Auth status unavailable");
+      const status = await response.json();
+      if (!status.oauthConfigured) {
+        showAuthMessage("Discord sign-in is not fully configured on the Starry backend. The site owner must check the OAuth client ID, client secret and callback URL in Render.");
+      } else if (!status.mongoConfigured || !status.mongoConnected) {
+        showAuthMessage("Discord sign-in is configured, but Starry's session database is not connected. The backend needs its MongoDB connection restored.");
+      }
+    } catch (_) {
+      if (!queryError) showAuthMessage("Starry's sign-in service could not be reached. Please retry later; the website itself is still available.");
+    }
+  }
+
   // The landing page uses the same Render-backed OAuth session as the dashboard.
   async function loadDiscordProfile() {
     const login = document.querySelector("#landing-login");
@@ -70,6 +109,7 @@
   });
 
   loadDiscordProfile();
+  checkAuthService();
 
   // A session can be captured from the OAuth return URL before this script runs.
   // Re-check once after the browser has restored local storage on navigation.
