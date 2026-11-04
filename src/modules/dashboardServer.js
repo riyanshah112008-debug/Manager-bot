@@ -946,6 +946,7 @@ function setupDashboardRoutes(app, client) {
     // Spotify playlist library: scoped to the authenticated Discord user, never a client-supplied user ID.
     app.get('/api/guild/:id/music/playlists', requireGuildMember, async (req, res) => {
         try {
+            const spotifyManager = require('./spotifyManager');
             const playlists = await spotifyManager.getUserPlaylists(req.session.user.id);
             res.set('Cache-Control', 'no-store, private');
             res.json({ success: true, ...playlists });
@@ -961,6 +962,7 @@ function setupDashboardRoutes(app, client) {
             const isSpotifyPlaylist = /^https:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]+(?:[?].*)?$/i.test(url) || /^[A-Za-z0-9]{16,64}$/.test(url);
             if (!isSpotifyPlaylist) return res.status(400).json({ success: false, error: 'Enter a valid Spotify playlist link or playlist ID.' });
             if (name.length > 80) return res.status(400).json({ success: false, error: 'Playlist name must be 80 characters or fewer.' });
+            const spotifyManager = require('./spotifyManager');
             const saved = await spotifyManager.savePlaylist(req.session.user.id, url, name || null);
             res.json({ success: true, message: 'Spotify playlist saved to your Starry library.', playlist: { id: saved.playlist.id, name: saved.finalName, url: saved.playlist.url, trackCount: saved.playlist.trackCount, imageUrl: saved.playlist.imageUrl }, totalSaved: saved.totalSaved });
         } catch (error) {
@@ -972,6 +974,7 @@ function setupDashboardRoutes(app, client) {
         try {
             const identifier = String(req.body?.identifier || '').trim();
             if (!identifier || identifier.length > 200) return res.status(400).json({ success: false, error: 'Choose a saved playlist to remove.' });
+            const spotifyManager = require('./spotifyManager');
             const result = await spotifyManager.removePlaylist(req.session.user.id, identifier);
             if (!result.success) return res.status(404).json({ success: false, error: result.message });
             res.json({ success: true, message: 'Playlist removed from your Starry library.' });
