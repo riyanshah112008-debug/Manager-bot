@@ -763,6 +763,67 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
 
             const payload = req.body;
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                return res.status(400).json({ success: false, error: 'Settings payload must be an object.' });
+            }
+            if (payload.prefix !== undefined && (typeof payload.prefix !== 'string' || payload.prefix.trim().length < 1 || payload.prefix.trim().length > 3)) {
+                return res.status(400).json({ success: false, error: 'Command prefix must contain 1 to 3 characters.' });
+            }
+            if (payload.triggerWord !== undefined && (typeof payload.triggerWord !== 'string' || payload.triggerWord.trim().length < 1 || payload.triggerWord.trim().length > 32)) {
+                return res.status(400).json({ success: false, error: 'Assistant trigger word must contain 1 to 32 characters.' });
+            }
+            if (payload.logging !== undefined) {
+                const allowedLogKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                if (!payload.logging || typeof payload.logging !== 'object' || Array.isArray(payload.logging) ||
+                    Object.keys(payload.logging).some(key => !allowedLogKeys.has(key))) {
+                    return res.status(400).json({ success: false, error: 'Invalid logging settings.' });
+                }
+                for (const [key, rawId] of Object.entries(payload.logging)) {
+                    if (typeof rawId !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
+                    const channelId = rawId.trim();
+                    if (channelId) {
+                        const channel = guild.channels.cache.get(channelId);
+                        if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                            return res.status(400).json({ success: false, error: 'Each log destination must be a text channel in this server.' });
+                        }
+                    }
+                    payload.logging[key] = channelId;
+                }
+            }
+            if (payload.antinuke !== undefined) {
+                const policy = payload.antinuke;
+                const boolKeys = ['enabled', 'blockUnapprovedBots', 'blockWebhookCreation', 'panicLockdown'];
+                const numberKeys = ['maxChannelDeletions', 'maxRoleDeletions', 'maxBans', 'maxKicks'];
+                const allowedKeys = new Set([...boolKeys, ...numberKeys, 'action', 'quarantineRoleId', 'whitelistedUsers', 'whitelistedRoles']);
+                if (!policy || typeof policy !== 'object' || Array.isArray(policy) || Object.keys(policy).some(key => !allowedKeys.has(key))) {
+                    return res.status(400).json({ success: false, error: 'Invalid Anti-Nuke policy.' });
+                }
+                for (const key of boolKeys) {
+                    if (policy[key] !== undefined && typeof policy[key] !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be enabled or disabled.' });
+                }
+                for (const key of numberKeys) {
+                    if (policy[key] !== undefined && (!Number.isInteger(Number(policy[key])) || Number(policy[key]) < 1 || Number(policy[key]) > 50)) {
+                        return res.status(400).json({ success: false, error: key + ' must be a whole number from 1 to 50.' });
+                    }
+                    if (policy[key] !== undefined) policy[key] = Number(policy[key]);
+                }
+                if (policy.action !== undefined && !['quarantine', 'timeout', 'kick', 'ban'].includes(policy.action)) {
+                    return res.status(400).json({ success: false, error: 'Choose a valid Anti-Nuke response.' });
+                }
+                if (policy.quarantineRoleId !== undefined) {
+                    if (typeof policy.quarantineRoleId !== 'string') return res.status(400).json({ success: false, error: 'Quarantine role must be a role ID.' });
+                    const roleId = policy.quarantineRoleId.trim();
+                    if (roleId && (!guild.roles.cache.has(roleId) || guild.roles.cache.get(roleId).managed || roleId === guild.id)) {
+                        return res.status(400).json({ success: false, error: 'Choose a manageable role from this server for quarantine.' });
+                    }
+                    policy.quarantineRoleId = roleId;
+                }
+                for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
+                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].some(value => typeof value !== 'string'))) {
+                        return res.status(400).json({ success: false, error: key + ' must be a list of Discord IDs.' });
+                    }
+                }
+            }
             let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
@@ -771,7 +832,7 @@ function setupDashboardRoutes(app, client) {
                 const { setCachedPrefix } = require('./commandHandler');
                 setCachedPrefix(guild.id, payload.prefix);
             }
-            if (payload.triggerWord) settings.triggerWord = payload.triggerWord;
+            if (payload.triggerWord !== undefined) settings.triggerWord = payload.triggerWord.trim();
             if (payload.antinuke) settings.antinuke = { ...settings.antinuke.toObject(), ...payload.antinuke };
             if (payload.automod) settings.automod = { ...settings.automod.toObject(), ...payload.automod };
             if (payload.verification) settings.verification = { ...settings.verification.toObject(), ...payload.verification };
