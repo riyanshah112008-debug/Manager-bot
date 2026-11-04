@@ -502,34 +502,7 @@ function setupDashboardRoutes(app, client) {
             const guild = req.guild || client.guilds.cache.get(req.params.id);
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
-            if (payload.embedTheme !== undefined) {
-                const theme = payload.embedTheme;
-                const allowedThemeKeys = new Set(['color', 'footer', 'footerIcon', 'authorName', 'authorIcon']);
-                if (!theme || typeof theme !== 'object' || Array.isArray(theme) || Object.keys(theme).some(key => !allowedThemeKeys.has(key))) {
-                    return res.status(400).json({ success: false, error: 'Invalid embed theme settings.' });
-                }
-                if (theme.color !== undefined && (typeof theme.color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(theme.color.trim()))) {
-                    return res.status(400).json({ success: false, error: 'Embed accent color must be a valid 3- or 6-digit hex color.' });
-                }
-                for (const key of ['footer', 'authorName']) {
-                    if (theme[key] !== undefined && (typeof theme[key] !== 'string' || theme[key].length > (key === 'footer' ? 2048 : 256))) {
-                        return res.status(400).json({ success: false, error: key + ' is too long or invalid.' });
-                    }
-                    if (theme[key] !== undefined) theme[key] = theme[key].trim();
-                }
-                for (const key of ['footerIcon', 'authorIcon']) {
-                    if (theme[key] !== undefined) {
-                        if (typeof theme[key] !== 'string' || theme[key].length > 500) return res.status(400).json({ success: false, error: key + ' must be a valid image URL.' });
-                        const value = theme[key].trim();
-                        if (value) {
-                            try { const parsed = new URL(value); if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(); }
-                            catch (_) { return res.status(400).json({ success: false, error: key + ' must be an HTTP or HTTPS URL.' }); }
-                        }
-                        theme[key] = value;
-                    }
-                }
-                if (theme.color !== undefined) theme.color = theme.color.trim();
-            }
+
             let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: guild.id });
@@ -1006,6 +979,34 @@ function setupDashboardRoutes(app, client) {
                         return res.status(400).json({ success: false, error: key + ' must be a list of Discord IDs.' });
                     }
                 }
+            }
+            if (payload.embedTheme !== undefined) {
+                const theme = payload.embedTheme;
+                const allowedThemeKeys = new Set(['color', 'footer', 'footerIcon', 'authorName', 'authorIcon']);
+                if (!theme || typeof theme !== 'object' || Array.isArray(theme) || Object.keys(theme).some(key => !allowedThemeKeys.has(key))) {
+                    return res.status(400).json({ success: false, error: 'Invalid embed theme settings.' });
+                }
+                if (theme.color !== undefined && (typeof theme.color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(theme.color.trim()))) {
+                    return res.status(400).json({ success: false, error: 'Embed accent color must be a valid 3- or 6-digit hex color.' });
+                }
+                for (const key of ['footer', 'authorName']) {
+                    if (theme[key] !== undefined && (typeof theme[key] !== 'string' || theme[key].length > (key === 'footer' ? 2048 : 256))) {
+                        return res.status(400).json({ success: false, error: key + ' is too long or invalid.' });
+                    }
+                    if (theme[key] !== undefined) theme[key] = theme[key].trim();
+                }
+                for (const key of ['footerIcon', 'authorIcon']) {
+                    if (theme[key] !== undefined) {
+                        if (typeof theme[key] !== 'string' || theme[key].length > 500) return res.status(400).json({ success: false, error: key + ' must be a valid image URL.' });
+                        const value = theme[key].trim();
+                        if (value) {
+                            try { const parsed = new URL(value); if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(); }
+                            catch (_) { return res.status(400).json({ success: false, error: key + ' must be an HTTP or HTTPS URL.' }); }
+                        }
+                        theme[key] = value;
+                    }
+                }
+                if (theme.color !== undefined) theme.color = theme.color.trim();
             }
             let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
