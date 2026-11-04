@@ -503,6 +503,96 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // 📅 Discord Scheduled Events dashboard APIs.
+    app.get('/api/guild/:id/events', requireGuildAdmin, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const guild = req.guild;
+            if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageEvents)) {
+                return res.status(403).json({ success: false, error: 'Starry needs the Manage Events permission in this server.' });
+            }
+            const events = await guild.scheduledEvents.fetch();
+            res.json({ success: true, events: [...events.values()].map(event => ({
+                id: event.id,
+                name: event.name,
+                description: event.description || '',
+                start: event.scheduledStartAt?.toISOString() || null,
+                end: event.scheduledEndAt?.toISOString() || null,
+                status: event.status,
+                entityType: event.entityType,
+                location: event.entityMetadata?.location || null,
+                channelId: event.channelId || null,
+                userCount: event.userCount ?? null,
+                url: event.url || null
+            })).sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0)) });
+        } catch (error) {
+            console.error('Dashboard scheduled events fetch failed:', error);
+            res.status(500).json({ success: false, error: 'Could not load Discord scheduled events.' });
+        }
+    });
+
+    app.post('/api/guild/:id/events', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const guild = req.guild, body = req.body || {};
+            if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageEvents)) {
+                return res.status(403).json({ success: false, error: 'Starry needs the Manage Events permission in this server.' });
+            }
+            const name = String(body.name || '').trim();
+            const description = String(body.description || '').trim();
+            const type = body.type === 'voice' ? 'voice' : 'external';
+            const start = new Date(body.start), end = new Date(body.end);
+            if (!name || name.length > 100) return res.status(400).json({ success: false, error: 'Event name is required and must be 100 characters or fewer.' });
+            if (description.length > 1000) return res.status(400).json({ success: false, error: 'Description must be 1,000 characters or fewer.' });
+            if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start <= new Date() || end <= start) {
+                return res.status(400).json({ success: false, error: 'Choose a future start time and an end time after the start.' });
+            }
+            if (start.getTime() > Date.now() + 365 * 24 * 60 * 60 * 1000) {
+                return res.status(400).json({ success: false, error: 'Discord scheduled events can only be created up to one year ahead.' });
+            }
+            const options = {
+                name, description: description || null,
+                scheduledStartTime: start, scheduledEndTime: end,
+                privacyLevel: 2,
+                entityType: type === 'voice' ? 2 : 3
+            };
+            if (type === 'voice') {
+                const channel = guild.channels.cache.get(String(body.channelId || ''));
+                if (!channel || !channel.isVoiceBased()) return res.status(400).json({ success: false, error: 'Choose a valid voice channel from this server.' });
+                options.channel = channel;
+            } else {
+                const location = String(body.location || '').trim();
+                if (location.length < 2 || location.length > 100) return res.status(400).json({ success: false, error: 'External event location must be between 2 and 100 characters.' });
+                options.entityMetadata = { location };
+            }
+            const event = await guild.scheduledEvents.create(options);
+            res.status(201).json({ success: true, message: 'Discord scheduled event created.', event: {
+                id: event.id, name: event.name, start: event.scheduledStartAt?.toISOString() || null,
+                end: event.scheduledEndAt?.toISOString() || null, status: event.status,
+                entityType: event.entityType, location: event.entityMetadata?.location || null,
+                channelId: event.channelId || null, url: event.url || null
+            }});
+        } catch (error) {
+            console.error('Dashboard scheduled event create failed:', error);
+            res.status(500).json({ success: false, error: 'Discord could not create this event. Check Starry’s permissions and the event details.' });
+        }
+    });
+
+    app.delete('/api/guild/:id/events/:eventId', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const guild = req.guild;
+            if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageEvents)) {
+                return res.status(403).json({ success: false, error: 'Starry needs the Manage Events permission in this server.' });
+            }
+            const event = await guild.scheduledEvents.fetch(req.params.eventId).catch(() => null);
+            if (!event || event.guildId !== guild.id) return res.status(404).json({ success: false, error: 'Scheduled event not found in this server.' });
+            await event.delete('Cancelled from the Starry dashboard');
+            res.json({ success: true, message: 'Scheduled event cancelled.' });
+        } catch (error) {
+            console.error('Dashboard scheduled event delete failed:', error);
+            res.status(500).json({ success: false, error: 'Could not cancel this scheduled event.' });
+        }
+    });
+
     // 📈 Leveling and economy dashboard APIs (Discord admin guarded).
     app.get('/api/guild/:id/leveling', requireGuildAdmin, async (req, res) => {
         try {
