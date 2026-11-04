@@ -411,7 +411,7 @@ class MultiBotManager {
         }
         const selectors = [{ _id: tokenIdOrUserId }];
         if (storedToken) selectors.push({ token: storedToken });
-        else if (tokenIdOrUserId && !/^\\d{17,20}$/.test(String(tokenIdOrUserId))) selectors.push({ token: tokenIdOrUserId });
+        else if (tokenIdOrUserId && !/^[0-9]{17,20}$/.test(String(tokenIdOrUserId))) selectors.push({ token: tokenIdOrUserId });
         await MultiBotToken.deleteOne({ $or: selectors }).catch(() => {});
         return removed;
     }
