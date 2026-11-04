@@ -644,17 +644,7 @@ const commands = [
         }
     },
 
-    // 17. AFK
-    {
-        name: 'afk',
-        category: 'Utility',
-        description: 'Set an AFK status that notifies users who mention you.',
-        usage: ',afk [reason]',
-        async execute(ctx) {
-            const reason = ctx.args.join(' ') || 'AFK (Away From Keyboard)';
-            return ctx.reply(`💤 **${ctx.user.username} is now AFK:** ${reason}`);
-        }
-    },
+    // AFK is handled by src/modules/afk.js so it can track status and mentions.
 
     // 18. TRANSLATE
     {

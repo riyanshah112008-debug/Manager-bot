@@ -502,6 +502,7 @@ function setupDashboardRoutes(app, client) {
             const guild = req.guild || client.guilds.cache.get(req.params.id);
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
+
             let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: guild.id });
@@ -979,6 +980,34 @@ function setupDashboardRoutes(app, client) {
                     }
                 }
             }
+            if (payload.embedTheme !== undefined) {
+                const theme = payload.embedTheme;
+                const allowedThemeKeys = new Set(['color', 'footer', 'footerIcon', 'authorName', 'authorIcon']);
+                if (!theme || typeof theme !== 'object' || Array.isArray(theme) || Object.keys(theme).some(key => !allowedThemeKeys.has(key))) {
+                    return res.status(400).json({ success: false, error: 'Invalid embed theme settings.' });
+                }
+                if (theme.color !== undefined && (typeof theme.color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(theme.color.trim()))) {
+                    return res.status(400).json({ success: false, error: 'Embed accent color must be a valid 3- or 6-digit hex color.' });
+                }
+                for (const key of ['footer', 'authorName']) {
+                    if (theme[key] !== undefined && (typeof theme[key] !== 'string' || theme[key].length > (key === 'footer' ? 2048 : 256))) {
+                        return res.status(400).json({ success: false, error: key + ' is too long or invalid.' });
+                    }
+                    if (theme[key] !== undefined) theme[key] = theme[key].trim();
+                }
+                for (const key of ['footerIcon', 'authorIcon']) {
+                    if (theme[key] !== undefined) {
+                        if (typeof theme[key] !== 'string' || theme[key].length > 500) return res.status(400).json({ success: false, error: key + ' must be a valid image URL.' });
+                        const value = theme[key].trim();
+                        if (value) {
+                            try { const parsed = new URL(value); if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(); }
+                            catch (_) { return res.status(400).json({ success: false, error: key + ' must be an HTTP or HTTPS URL.' }); }
+                        }
+                        theme[key] = value;
+                    }
+                }
+                if (theme.color !== undefined) theme.color = theme.color.trim();
+            }
             let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
@@ -989,6 +1018,7 @@ function setupDashboardRoutes(app, client) {
                 setCachedPrefix(guild.id, normalizedPrefix);
             }
             if (payload.triggerWord !== undefined) settings.triggerWord = payload.triggerWord.trim();
+            if (payload.embedTheme) settings.embedTheme = { ...(settings.embedTheme?.toObject?.() || settings.embedTheme || {}), ...payload.embedTheme };
             if (payload.antinuke) settings.antinuke = { ...settings.antinuke.toObject(), ...payload.antinuke };
             if (payload.automod) settings.automod = { ...settings.automod.toObject(), ...payload.automod };
             if (payload.verification) settings.verification = { ...settings.verification.toObject(), ...payload.verification };
@@ -1004,6 +1034,10 @@ function setupDashboardRoutes(app, client) {
             if (payload.mediaPerms) settings.mediaPerms = { ...settings.mediaPerms?.toObject(), ...payload.mediaPerms };
 
             await settings.save();
+            if (payload.embedTheme) {
+                const { setCachedTheme } = require('./embedVisuality');
+                setCachedTheme(guild.id, settings.embedTheme?.toObject?.() || settings.embedTheme);
+            }
             if (payload.logging && typeof client.invalidateLogSettings === 'function') client.invalidateLogSettings(guild.id);
             res.json({ success: true, message: 'Settings saved successfully!', settings });
         } catch (e) {
@@ -1017,26 +1051,49 @@ function setupDashboardRoutes(app, client) {
             const guild = req.guild || client.guilds.cache.get(req.params.id);
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
 
-            const { channelId, title, description, color, author, thumbnail, image, footer } = req.body;
+            const { channelId, title, description, color, author, authorIcon, thumbnail, image, footer, footerIcon } = req.body || {};
             const channel = guild.channels.cache.get(channelId);
-            if (!channel || !channel.isTextBased()) {
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
                 return res.status(400).json({ success: false, error: 'Invalid text channel selected.' });
             }
-
-            const embed = new EmbedBuilder();
-            if (title) embed.setTitle(title);
-            if (description) embed.setDescription(description);
-            if (color) embed.setColor(color);
-            if (author) embed.setAuthor({ name: author });
-            if (thumbnail) embed.setThumbnail(thumbnail);
-            if (image) embed.setImage(image);
-            if (footer) embed.setFooter({ text: footer });
+            const cleanText = (value, max, label) => {
+                if (value === undefined || value === null || value === '') return '';
+                if (typeof value !== 'string' || value.length > max) throw Object.assign(new Error(label + ' is too long or invalid.'), { status: 400 });
+                return value.trim();
+            };
+            const cleanUrl = (value, label) => {
+                const raw = cleanText(value, 500, label);
+                if (!raw) return '';
+                try { const parsed = new URL(raw); if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(); }
+                catch (_) { throw Object.assign(new Error(label + ' must be an HTTP or HTTPS URL.'), { status: 400 }); }
+                return raw;
+            };
+            const embedTitle = cleanText(title, 256, 'Embed title');
+            const embedDescription = cleanText(description, 4096, 'Embed description');
+            const explicitColor = cleanText(color, 7, 'Embed color');
+            if (explicitColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
+                return res.status(400).json({ success: false, error: 'Embed accent color must be a valid hex color.' });
+            }
+            const theme = (await ServerSettings.findOne({ guildId: guild.id }))?.embedTheme || {};
+            const authorName = cleanText(author, 256, 'Embed author') || theme.authorName || '';
+            const authorImage = cleanUrl(authorIcon, 'Author icon') || theme.authorIcon || '';
+            const footerText = cleanText(footer, 2048, 'Embed footer') || theme.footer || '';
+            const footerImage = cleanUrl(footerIcon, 'Footer icon') || theme.footerIcon || '';
+            const thumbUrl = cleanUrl(thumbnail, 'Thumbnail URL');
+            const imageUrl = cleanUrl(image, 'Image URL');
+            const embed = new EmbedBuilder().setColor(explicitColor || theme.color || config.EMBED_COLORS?.PRIMARY || '#5865F2');
+            if (embedTitle) embed.setTitle(embedTitle);
+            if (embedDescription) embed.setDescription(embedDescription);
+            if (authorName) embed.setAuthor({ name: authorName, ...(authorImage ? { iconURL: authorImage } : {}) });
+            if (thumbUrl) embed.setThumbnail(thumbUrl);
+            if (imageUrl) embed.setImage(imageUrl);
+            if (footerText) embed.setFooter({ text: footerText, ...(footerImage ? { iconURL: footerImage } : {}) });
             embed.setTimestamp();
 
             await channel.send({ embeds: [embed] });
             res.json({ success: true, message: `Embed successfully dispatched to #${channel.name}!` });
         } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            res.status(e.status || 500).json({ success: false, error: e.message });
         }
     });
 
