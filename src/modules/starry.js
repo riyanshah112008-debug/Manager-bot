@@ -532,9 +532,13 @@ module.exports = async (client) => {
     client.getLogChannel = async (guild, logType = 'misc') => {
         if (!guild) return null;
         const type = String(logType).toLowerCase();
-        const cacheKey = guild.id + ':' + type;\n        const cached = dashboardLogCache.get(cacheKey);
+        const cacheKey = guild.id + ':' + type;
+        const cached = dashboardLogCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) {
-            return cached.channelId ? guild.channels.cache.get(cached.channelId) || null : null;
+            if (!cached.channelId) return null;
+            const cachedChannel = guild.channels.cache.get(cached.channelId);
+            if (cachedChannel) return cachedChannel;
+            dashboardLogCache.delete(cacheKey);
         }
 
         const configuredField = dashboardLogFields[type] || 'serverLogChannel';
