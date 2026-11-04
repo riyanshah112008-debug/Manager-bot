@@ -1034,6 +1034,10 @@ function setupDashboardRoutes(app, client) {
             if (payload.mediaPerms) settings.mediaPerms = { ...settings.mediaPerms?.toObject(), ...payload.mediaPerms };
 
             await settings.save();
+            if (payload.embedTheme) {
+                const { setCachedTheme } = require('./embedVisuality');
+                setCachedTheme(guild.id, settings.embedTheme?.toObject?.() || settings.embedTheme);
+            }
             if (payload.logging && typeof client.invalidateLogSettings === 'function') client.invalidateLogSettings(guild.id);
             res.json({ success: true, message: 'Settings saved successfully!', settings });
         } catch (e) {
