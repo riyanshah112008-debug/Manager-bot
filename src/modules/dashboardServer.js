@@ -18,6 +18,7 @@ const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
+const multiBot = require('./multiBot');
 const {
     TIER_CONFIG,
     createPaymentOrder,
@@ -885,6 +886,45 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Authenticated multi-bot cluster controls. Only configured Starry owners may change worker roles.
+    app.get('/api/dashboard/multibot/stats', requireAuth, async (req, res) => {
+        try {
+            const stats = multiBot.getClusterStats();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, canManage: config.isBotOwner(req.session.user?.id, client), ...stats });
+        } catch (error) {
+            res.status(500).json({ success: false, error: 'Could not load the multi-bot cluster.' });
+        }
+    });
+
+    app.post('/api/dashboard/multibot/:botId/role', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            if (!config.isBotOwner(req.session.user?.id, client)) return res.status(403).json({ success: false, error: 'Only a Starry bot owner can change cluster worker roles.' });
+            const role = String(req.body?.role || '');
+            if (!['all', 'moderation', 'music', 'utility', 'economy', 'social'].includes(role)) return res.status(400).json({ success: false, error: 'Choose a valid worker role.' });
+            const result = await multiBot.setRole(String(req.params.botId), role);
+            if (!result.success) return res.status(404).json({ success: false, error: result.message || 'Worker not found.' });
+            res.json({ success: true, message: 'Worker role updated.', botId: req.params.botId, role });
+        } catch (error) {
+            res.status(500).json({ success: false, error: 'Could not update this worker role.' });
+        }
+    });
+
+    // Live music session and queue for the web player.
+    app.get('/api/guild/:id/music', requireGuildMember, async (req, res) => {
+        try {
+            const guild = req.guild || client.guilds.cache.get(req.params.id);
+            const player = multiBot.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            if (!player) return res.json({ success: true, active: false, player: null, queue: [] });
+            const current = player.currentTrack || player.queue?.current || null;
+            const queued = typeof player.queue?.slice === 'function' ? player.queue.slice(0, 30) : (Array.isArray(player.queue?.tracks) ? player.queue.tracks.slice(0, 30) : []);
+            const cleanTrack = track => track ? ({ title: track.title || 'Unknown track', author: track.author || track.artist || 'Unknown artist', uri: track.uri || track.url || '', thumbnail: track.thumbnail || track.artworkUrl || '', duration: track.length || track.duration || 0, requester: typeof track.requester === 'string' ? track.requester : (track.requester?.username || ''), source: track.sourceName || track.source || '' }) : null;
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, active: true, player: { currentTrack: cleanTrack(current), paused: Boolean(player.paused), playing: Boolean(player.playing || current), volume: Number(player.volume ?? 100), loop: player.loop || 'none', filter: player.filter || 'clear', autoplay: Boolean(player.autoplay), is247: Boolean(player.is247), voiceChannelId: player.voiceId || player.voiceChannel?.id || '' }, queue: queued.map(cleanTrack).filter(Boolean) });
+        } catch (error) {
+            res.status(500).json({ success: false, error: 'Could not load the live music session.' });
+        }
+    });
     // POST /api/guild/:id/music/control - Remote Web Player Controls (Member Guarded)
     app.post('/api/guild/:id/music/control', actionLimiter, requireGuildMember, async (req, res) => {
         try {
@@ -898,14 +938,19 @@ function setupDashboardRoutes(app, client) {
                 return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
             }
 
-            if (action === 'pause') player.pause ? player.pause() : null;
-            if (action === 'skip') player.skip ? player.skip() : null;
-            if (action === 'stop') player.stop ? player.stop() : null;
-            if (action === 'volume' && value !== undefined) player.setVolume ? player.setVolume(Number(value)) : null;
-            if (action === 'filter' && value) player.setFilter ? await player.setFilter(value) : null;
-            if (action === 'toggle247') player.is247 = !player.is247;
-
-            res.json({ success: true, message: `Action ${action} executed.`, player: { paused: player.paused, is247: player.is247 } });
+            const allowedFilters = new Set(['clear', 'bass', 'bassboost', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop']);
+            if (action === 'pause') { if (typeof player.pause === 'function') player.pause(!player.paused); }
+            else if (action === 'resume') { if (typeof player.pause === 'function') player.pause(false); }
+            else if (action === 'skip') { if (typeof player.skip === 'function') player.skip(); }
+            else if (action === 'stop') { if (typeof player.destroy === 'function') await player.destroy(); else if (typeof player.stop === 'function') await player.stop(); }
+            else if (action === 'volume' && value !== undefined) { const volume = Number(value); if (!Number.isInteger(volume) || volume < 0 || volume > 200) return res.status(400).json({ success: false, error: 'Volume must be a whole number from 0 to 200.' }); if (typeof player.setVolume === 'function') await player.setVolume(volume); }
+            else if (action === 'filter') { if (!allowedFilters.has(String(value))) return res.status(400).json({ success: false, error: 'Choose a supported audio filter.' }); if (typeof player.setFilter === 'function') await player.setFilter(String(value)); }
+            else if (action === 'shuffle') { if (typeof player.queue?.shuffle !== 'function') return res.status(400).json({ success: false, error: 'Queue shuffle is not supported by this music session.' }); player.queue.shuffle(); }
+            else if (action === 'loop') { if (!['none', 'track', 'queue'].includes(String(value))) return res.status(400).json({ success: false, error: 'Choose no loop, track loop, or queue loop.' }); if (typeof player.setLoop === 'function') await player.setLoop(String(value)); else player.loop = String(value); }
+            else if (action === 'autoplay') { player.autoplay = !player.autoplay; }
+            else if (action === 'toggle247') { player.is247 = !player.is247; }
+            else return res.status(400).json({ success: false, error: 'Unsupported music action.' });
+            res.json({ success: true, message: 'Music control updated.', player: { paused: player.paused, is247: player.is247, autoplay: player.autoplay, loop: player.loop, volume: player.volume } });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
