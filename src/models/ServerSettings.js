@@ -64,6 +64,7 @@ const serverSettingsSchema = new mongoose.Schema({
 
     // 📜 Starry Audit & Security Telemetry Logging
     logging: {
+        dashboardConfigured: { type: Boolean, default: false },
         modLogChannel: { type: String, default: '' },
         messageLogChannel: { type: String, default: '' },
         voiceLogChannel: { type: String, default: '' },
