@@ -39,8 +39,8 @@ const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.E
 
 // Audio DSP Filter FFmpeg argument definitions (Studio Mastering with Dynamic Limiter - ZERO Crackling & 100% Intact Vocals)
 const FILTER_ARGS = {
-    clear: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
-    flat: ['-af', 'volume=1.0,alimiter=limit=0.98:attack=5:release=50:asc=true:level=false'],
+    clear: ['-af', 'volume=1.0'],
+    flat: ['-af', 'volume=1.0'],
     empowering: [
         '-af',
         'volume=0.78,' +
