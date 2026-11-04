@@ -592,14 +592,15 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
-    // Cluster management is global, so only the bot owner or selected Discord server owner may change worker accounts.
+    // Worker tokens are global cluster credentials, not per-server settings.
+    // Only Starry bot owners may view or mutate the shared worker pool.
     const requireClusterManager = (req, res, next) => {
         const userId = String(req.session?.user?.id || '');
         const isBotOwner = typeof config.isBotOwner === 'function'
             ? config.isBotOwner(userId, client)
             : (config.BOT_OWNERS || []).includes(userId);
-        if (isBotOwner || (req.guild && req.guild.ownerId === userId)) return next();
-        return res.status(403).json({ success: false, error: 'Only the Starry bot owner or this Discord server owner can manage the global Multi-Bot cluster.' });
+        if (isBotOwner) return next();
+        return res.status(403).json({ success: false, error: 'Only Starry bot owners can manage the global Multi-Bot cluster.' });
     };
 
     app.get('/api/guild/:id/commands', requireGuildAdmin, (req, res) => {
@@ -648,8 +649,13 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
-            const hasPremium = await isServerOrUserPremium(req.guild.id, req.session.user.id, client);
-            if (!hasPremium) return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires Starry Pro Cluster or Lifetime premium.' });
+            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
+            const premium = premiumSettings?.premium;
+            const premiumActive = Boolean(premium?.isPremium) &&
+                (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
+            if (!premiumActive || !['pro_cluster', 'lifetime'].includes(premium.tier)) {
+                return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires active Starry Pro Cluster or Lifetime premium on this server.' });
+            }
             const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
             const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 64) : '';
             const role = typeof req.body?.role === 'string' ? req.body.role : 'all';
