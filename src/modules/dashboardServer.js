@@ -549,6 +549,34 @@ function setupDashboardRoutes(app, client) {
         return res.status(403).json({ success: false, error: 'Only the Starry bot owner or this Discord server owner can manage the global Multi-Bot cluster.' });
     };
 
+    app.get('/api/guild/:id/commands', requireGuildAdmin, (req, res) => {
+        try {
+            const catalog = new Map();
+            for (const collection of [client.commands, client.prefixCommands]) {
+                if (!collection || typeof collection.values !== 'function') continue;
+                for (const command of collection.values()) {
+                    const definition = typeof command.data?.toJSON === 'function' ? command.data.toJSON() : (command.data || {});
+                    const name = String(definition.name || command.name || command.commandName || '').trim();
+                    if (!name) continue;
+                    const item = {
+                        name,
+                        description: String(definition.description || command.description || 'Starry Discord command').slice(0, 240),
+                        category: String(command.category || definition.category || 'General').slice(0, 48),
+                        usage: String(command.usage || ('/' + name)).slice(0, 180),
+                        aliases: Array.isArray(command.aliases) ? command.aliases.map(alias => String(alias).slice(0, 48)).slice(0, 12) : []
+                    };
+                    const existing = catalog.get(name);
+                    if (!existing || item.description.length > existing.description.length) catalog.set(name, item);
+                }
+            }
+            const commands = Array.from(catalog.values()).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+            return res.json({ success: true, count: commands.length, commands });
+        } catch (error) {
+            console.error('Dashboard command catalogue failed:', error?.message || error);
+            return res.status(500).json({ success: false, error: 'Could not load Starry command catalogue.' });
+        }
+    });
+
     app.get('/api/guild/:id/multibot', requireGuildAdmin, requireClusterManager, (req, res) => {
         try {
             res.set('Cache-Control', 'no-store, private');
