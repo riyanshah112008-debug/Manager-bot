@@ -146,8 +146,8 @@ class CommandContext {
         // Automatic Server Embed Theme Visuality Application
         if (this.guildId && payload.embeds && Array.isArray(payload.embeds)) {
             try {
-                const { getGuildThemeSync } = require('../modules/embedVisuality');
-                const theme = getGuildThemeSync(this.guildId);
+                const { getGuildTheme } = require('../modules/embedVisuality');
+                const theme = await getGuildTheme(this.guildId);
                 if (theme && (theme.color || theme.footer)) {
                     for (const emb of payload.embeds) {
                         const targetData = emb.data || emb;
