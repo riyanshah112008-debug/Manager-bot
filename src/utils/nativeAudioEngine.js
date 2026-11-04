@@ -52,21 +52,16 @@ const FILTER_ARGS = {
         'equalizer=f=12000:width_type=q:w=1.0:g=2.2,' +
         'alimiter=limit=0.96:attack=7:release=100:asc=true:level=false'
     ],
-    // 🔊 TRUE CLEAN SUB-BASS VIBRATION (Zero Clipping • Crystal-Clear Vocals):
-    // Pre-attenuation volume=0.70 gives clean +3.5dB headroom.
-    // Heavy 50Hz boost (+7.2dB) gives driver vibration rumble you can clearly feel.
-    // Deep 38Hz resonance (+3.2dB) adds low-end punch.
-    // Mud scoop at 250Hz (-3.0dB) isolates sub-bass so human vocals are never masked.
-    // Vocal clarity boost at 3200Hz (+2.5dB) guarantees lyrics remain razor-sharp.
-    // Limiter with release=100ms eliminates wave cycle modulation and vocal crackling!
+    // Bass preset with conservative gain staging to prevent low-frequency clipping.
+    // The preamp leaves headroom for the EQ boosts; the limiter catches remaining peaks.
     bass: [
         '-af',
-        'volume=0.70,' +
-        'bass=g=7.2:f=50:w=0.6,' +
-        'equalizer=f=38:width_type=q:w=1.2:g=3.2,' +
-        'equalizer=f=250:width_type=q:w=1.2:g=-3.0,' +
-        'equalizer=f=3200:width_type=q:w=1.0:g=2.5,' +
-        'alimiter=limit=0.95:attack=7:release=100:asc=true:level=false'
+        'volume=0.50,' +
+        'bass=g=4.0:f=70:w=0.6,' +
+        'equalizer=f=38:width_type=q:w=1.2:g=1.5,' +
+        'equalizer=f=250:width_type=q:w=1.2:g=-2.0,' +
+        'equalizer=f=3200:width_type=q:w=1.0:g=1.5,' +
+        'alimiter=limit=0.90:attack=5:release=180:asc=true:level=false'
     ],
     '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.85:offset_l=0:offset_r=0.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
     nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-1.5,alimiter=limit=0.98:attack=7:release=100:asc=true:level=false'],
