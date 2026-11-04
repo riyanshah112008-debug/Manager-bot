@@ -18,6 +18,7 @@ const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
+const multiBot = require('./multiBot');
 const {
     TIER_CONFIG,
     createPaymentOrder,
@@ -461,6 +462,45 @@ function setupDashboardRoutes(app, client) {
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
+    });
+
+    // Owner-only multi-bot cluster controls. Tokens are never returned to the browser.
+    const requireClusterOwner = (req, res, next) => {
+        if (!config.isBotOwner(req.session?.user?.id, client)) return res.status(403).json({ success: false, error: 'Only the Starry bot owner can manage the multi-bot cluster.' });
+        next();
+    };
+
+    app.get('/api/cluster', requireAuth, requireClusterOwner, (req, res) => {
+        try {
+            const stats = multiBot.getClusterStats();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, stats: {
+                totalPhysicalBots: stats.totalPhysicalBots, totalVirtualNodes: stats.totalVirtualNodes,
+                totalGuilds: stats.totalGuilds, totalUsers: stats.totalUsers, physicalBots: stats.physicalBots,
+                virtualNodes: stats.virtualNodes.map(node => ({ id: node.id, name: node.name, emoji: node.emoji, role: node.role, commands: node.commands, activity: node.activity }))
+            }, roles: Object.entries(multiBot.ROLE_PRESETS).map(([id, role]) => ({ id, name: role.name, emoji: role.emoji })) });
+        } catch (error) { console.error('Multi-bot cluster status failed:', error); res.status(500).json({ success: false, error: 'Could not load the multi-bot cluster.' }); }
+    });
+
+    app.post('/api/cluster/bots/:botId/role', actionLimiter, requireAuth, requireClusterOwner, async (req, res) => {
+        try {
+            const botId = String(req.params.botId || '').trim(), role = String(req.body?.role || '').trim();
+            if (!/^\\d{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
+            if (!Object.prototype.hasOwnProperty.call(multiBot.ROLE_PRESETS, role)) return res.status(400).json({ success: false, error: 'Choose a valid worker role.' });
+            const result = await multiBot.setRole(botId, role);
+            if (!result.success) return res.status(404).json({ success: false, error: result.message || 'Bot worker not found.' });
+            res.json({ success: true, message: 'Worker role updated.' });
+        } catch (error) { console.error('Multi-bot role update failed:', error); res.status(400).json({ success: false, error: error.message || 'Could not update worker role.' }); }
+    });
+
+    app.delete('/api/cluster/bots/:botId', actionLimiter, requireAuth, requireClusterOwner, async (req, res) => {
+        try {
+            const botId = String(req.params.botId || '').trim();
+            if (!/^\\d{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
+            const removed = await multiBot.removeToken(botId);
+            if (!removed) return res.status(404).json({ success: false, error: 'Worker bot was not found in the active cluster.' });
+            res.json({ success: true, message: 'Worker disconnected and its saved token entry was removed.' });
+        } catch (error) { console.error('Multi-bot worker removal failed:', error); res.status(400).json({ success: false, error: error.message || 'Could not remove worker bot.' }); }
     });
 
     // GET /api/guild/:id - Fetch live settings, channels, roles, and status
