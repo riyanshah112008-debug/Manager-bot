@@ -377,7 +377,7 @@ const levelingModule = (client) => {
     async function initSettings() {
         try {
             const settings = await LevelSettings.find();
-            settings.forEach(s => settingsCache.set(s.guildId, { enabled: s.enabled, logChannelId: s.logChannelId }));
+            settings.forEach(s => settingsCache.set(s.guildId, { ...s.toObject(), enabled: s.enabled !== false, logChannelId: s.logChannelId || null }));
             console.log('✅ Leveling Module Loaded (MongoDB Synced)');
         } catch (err) {}
     }
