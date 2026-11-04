@@ -23,6 +23,7 @@ const prism = require('prism-media');
 const streamResolver = require('./streamResolverClient');
 const { 
     EmbedBuilder, 
+    PermissionsBitField,
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
@@ -390,6 +391,8 @@ class StarryGuildPlayer {
         this.autoplay = false;
         this.nowPlayingMessage = null;
         this.audioResource = null;
+        this.audioBitrateKbps = 128;
+        this.audioQualityLabel = '128 kbps';
         this.paused = false;
         this.destroyed = false;
         this.isPlaying = false;
@@ -563,6 +566,34 @@ class StarryGuildPlayer {
         return this.playTrack();
     }
 
+    async configureAudioQuality() {
+        const guild = this.voiceChannel?.guild || this.client?.guilds?.cache?.get(this.guildId);
+        const premium = Boolean(this.client?.isPremium?.(this.guildId));
+        const tier = Number(guild?.premiumTier || 0);
+        const tierCaps = [96000, 128000, 256000, 384000];
+        const guildMax = Math.min(384000, Number(guild?.maximumBitrate) || tierCaps[tier] || 96000);
+
+        // Premium servers use the highest bitrate their own Discord boost tier allows.
+        if (premium && this.voiceChannel && Number(this.voiceChannel.bitrate || 0) < guildMax) {
+            try {
+                const botMember = guild?.members?.me || await guild?.members?.fetchMe?.().catch(() => null);
+                const canManage = botMember && this.voiceChannel.permissionsFor(botMember)?.has(PermissionsBitField.Flags.ManageChannels);
+                if (canManage) {
+                    this.voiceChannel = await this.voiceChannel.setBitrate(guildMax, 'Starry Premium audio quality');
+                }
+            } catch (error) {
+                console.warn(`[Premium Audio] Could not raise voice channel bitrate in ${this.guildId}:`, error.message || error);
+            }
+        }
+
+        const channelCap = Number(this.voiceChannel?.bitrate) || guildMax;
+        const encoderTarget = premium ? 384000 : 128000;
+        const effectiveBitrate = Math.max(16000, Math.min(encoderTarget, guildMax, channelCap));
+        this.audioBitrateKbps = Math.floor(effectiveBitrate / 1000);
+        this.audioQualityLabel = `${this.audioBitrateKbps} kbps${premium ? ' • Premium' : ''}`;
+        return this.audioBitrateKbps;
+    }
+
     createFilteredResource(streamOrPath, isFile = false, customHeaders = null) {
         const activeFilter = getFilterArgs(this.filter, this.volume);
 
@@ -597,7 +628,9 @@ class StarryGuildPlayer {
                         ...inputArgs,
                         ...activeFilter,
                         '-c:a', 'libopus',
-                        '-b:a', '128k',
+                        '-ar', '48000',
+                        '-ac', '2',
+                        '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-f', 'opus'
                     ]
@@ -615,7 +648,9 @@ class StarryGuildPlayer {
                         '-i', 'pipe:0',
                         ...activeFilter,
                         '-c:a', 'libopus',
-                        '-b:a', '128k',
+                        '-ar', '48000',
+                        '-ac', '2',
+                        '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-f', 'opus'
                     ]
@@ -660,6 +695,7 @@ class StarryGuildPlayer {
         this.currentTrack = track;
 
         try {
+            await this.configureAudioQuality();
             await this.connect();
             let targetUrl = track.url;
             let audioResource = null;
@@ -836,6 +872,7 @@ class StarryGuildPlayer {
                 `**Length**  ${formatTime(track.duration)}   ·   **Volume**  ${this.volume}%\n` +
                 `**Requested by**  ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `**Source**  ${track.source || 'Audio stream'}   ·   **EQ**  ${filterName}\n` +
+                `**Voice bitrate**  ${this.audioQualityLabel || 'Negotiated by Discord'}\n` +
                 `**Up next**  ${this.queue.length} ${this.queue.length === 1 ? 'track' : 'tracks'}\n\n` +
                 `*Use the controls below to manage playback, queue and sound settings.*`
             )
@@ -1022,7 +1059,9 @@ class StarryGuildPlayer {
                         '-i', file,
                         ...activeFilter,
                         '-c:a', 'libopus',
-                        '-b:a', '128k',
+                        '-ar', '48000',
+                        '-ac', '2',
+                        '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-f', 'opus'
                     ]
