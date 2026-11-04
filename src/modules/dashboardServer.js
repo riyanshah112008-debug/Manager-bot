@@ -178,8 +178,7 @@ function setupDashboardRoutes(app, client) {
     // Cluster administration is restricted to configured Starry bot owners.
     const requireBotOwner = async (req, res, next) => {
         await requireAuth(req, res, () => {
-            const owners = (config.BOT_OWNERS || []).map(String);
-            if (!owners.includes(String(req.session?.user?.id || ''))) {
+            if (!config.isBotOwner(req.session?.user?.id, client)) {
                 return res.status(403).json({ success: false, error: 'Access denied: only configured Starry bot owners can manage the bot cluster.' });
             }
             next();
