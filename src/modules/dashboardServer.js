@@ -1022,8 +1022,8 @@ function setupDashboardRoutes(app, client) {
             const workerVoice = musicGuild.channels.cache.get(vChannel.id);
             const workerText = musicGuild.channels.cache.get(tChannel.id) || workerVoice;
             const botMember = musicGuild.members.me || musicGuild.members.cache.get(musicClient.user.id);
-            const permissions = workerVoice?.permissionsFor(botMember);
-            if (!workerVoice || !permissions?.has(PermissionFlagsBits.Connect) || !permissions?.has(PermissionFlagsBits.Speak)) {
+            const permissions = botMember ? workerVoice?.permissionsFor(botMember) : null;
+            if (!workerVoice || !botMember || !permissions?.has(PermissionFlagsBits.Connect) || !permissions?.has(PermissionFlagsBits.Speak)) {
                 return res.status(403).json({ success: false, error: 'The selected music worker needs Connect and Speak permissions in that voice channel.' });
             }
             const manager = musicClient.manager;
