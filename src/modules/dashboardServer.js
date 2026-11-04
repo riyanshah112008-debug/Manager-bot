@@ -776,7 +776,7 @@ function setupDashboardRoutes(app, client) {
             if (payload.automod) settings.automod = { ...settings.automod.toObject(), ...payload.automod };
             if (payload.verification) settings.verification = { ...settings.verification.toObject(), ...payload.verification };
             if (payload.autorole) settings.autorole = { ...settings.autorole.toObject(), ...payload.autorole };
-            if (payload.logging) settings.logging = { ...settings.logging.toObject(), ...payload.logging };
+            if (payload.logging) settings.logging = { ...settings.logging.toObject(), ...payload.logging, dashboardConfigured: true };
             if (payload.boosterRoleSystem) settings.boosterRoleSystem = { ...settings.boosterRoleSystem?.toObject(), ...payload.boosterRoleSystem };
             if (payload.music) {
                 settings.music = { ...settings.music.toObject(), ...payload.music };
