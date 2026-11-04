@@ -107,7 +107,7 @@ FILTER_ARGS.relax = FILTER_ARGS.soft;
 FILTER_ARGS.vintage = FILTER_ARGS.radio;
 
 function getFilterArgs(filterName, volumePercent = 100) {
-    const rawFilter = (filterName && FILTER_ARGS[filterName]) ? FILTER_ARGS[filterName] : FILTER_ARGS.empowering;
+    const rawFilter = (filterName && FILTER_ARGS[filterName]) ? FILTER_ARGS[filterName] : FILTER_ARGS.clear;
     const volScale = Math.max(0.05, Math.min(2.0, (volumePercent || 100) / 100));
     const filterStr = rawFilter[1];
     const adjustedFilterStr = filterStr.replace(/volume=([0-9.]+)/, (match, baseVol) => {
@@ -386,7 +386,7 @@ class StarryGuildPlayer {
         this.previousTrack = null;
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
-        this.filter = 'empowering';
+        this.filter = 'clear';
         this.is247 = false;
         this.autoplay = false;
         this.nowPlayingMessage = null;
@@ -914,8 +914,8 @@ class StarryGuildPlayer {
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
-                { label: '⭐ Studio Hi-Fi Master (Empowering)', description: 'Audiophile punch, deep sub-bass, silky vocals & wide stage', value: 'empowering', emoji: '✨' },
-                { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
+                { label: 'Natural / Unprocessed (Default)', description: 'No EQ boost or artificial spatial processing', value: 'clear', emoji: '🎼' },
+                { label: 'Empowering EQ', description: 'Bass and treble enhancement; may color the original mix', value: 'empowering', emoji: '✨' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
                 { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
