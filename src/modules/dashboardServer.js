@@ -560,7 +560,7 @@ function setupDashboardRoutes(app, client) {
                     currentTrack: player.currentTrack || null,
                     queue,
                     paused: player.paused || false,
-                    volume: player.volume || 100,
+                    volume: Number.isFinite(Number(player.volume)) ? Number(player.volume) : 100,
                     loop: player.loop || 'none',
                     filter: player.filter || 'clear',
                     is247: player.is247 || false
@@ -947,7 +947,7 @@ function setupDashboardRoutes(app, client) {
                 return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
             }
 
-            if (action === 'pause') player.pause ? player.pause() : null;
+            if (action === 'pause') { if (player.paused) player.resume ? player.resume() : null; else player.pause ? player.pause() : null; }
             if (action === 'skip') player.skip ? player.skip() : null;
             if (action === 'stop') player.stop ? player.stop() : null;
             if (action === 'volume' && value !== undefined) player.setVolume ? player.setVolume(Number(value)) : null;
