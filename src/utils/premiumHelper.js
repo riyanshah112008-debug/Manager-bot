@@ -83,8 +83,8 @@ const ALL_PREMIUM_FEATURES = [
         name: 'Dynamic Orbit Voice Room Custom Bitrate',
         category: 'Voice Management',
         tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
-        commands: [',vc lock', ',vc bitrate', ',vc limit'],
-        description: 'Join-to-create temporary voice channels with high-fidelity 384kbps audio bitrate, custom access control, and VIP voice lounges.'
+        commands: [',vc lock', ',vc private', ',vc invite @member', ',vc bitrate', ',vc limit'],
+        description: 'Premium audio encoding up to 384 kbps where the Discord server boost tier permits it, automatic voice-channel bitrate tuning when Starry has Manage Channels, and private join-to-create rooms with lock, unlock, and member invites.'
     },
     {
         id: 'economy_multiplier',
