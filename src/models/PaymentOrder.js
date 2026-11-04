@@ -44,7 +44,6 @@ const paymentOrderSchema = new mongoose.Schema({
         sparse: true 
     },
     notes: { type: String, default: '' },
-    licenseKey: { type: String, default: null },
     paymentDetails: {
         type: mongoose.Schema.Types.Mixed,
         default: {}
