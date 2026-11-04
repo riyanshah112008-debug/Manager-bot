@@ -544,14 +544,20 @@ module.exports = async (client) => {
             const settingKey = logSettingByType[normalizedType];
             if (settingKey) {
                 const config = await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean();
-                const configuredId = config?.logging?.[settingKey];
-                if (configuredId) {
+                if (config?.logging?.dashboardConfigured) {
+                    const configuredId = config.logging[settingKey];
+                    if (!configuredId) {
+                        logChannelCache.set(cacheKey, { channelId: null, expiresAt: Date.now() + 30000 });
+                        return null;
+                    }
                     const configuredChannel = guild.channels.cache.get(configuredId) ||
                         await guild.channels.fetch(configuredId).catch(() => null);
                     if (configuredChannel && configuredChannel.isTextBased() && typeof configuredChannel.send === 'function') {
                         logChannelCache.set(cacheKey, { channelId: configuredChannel.id, expiresAt: Date.now() + 30000 });
                         return configuredChannel;
                     }
+                    logChannelCache.set(cacheKey, { channelId: null, expiresAt: Date.now() + 10000 });
+                    return null;
                 }
             }
         } catch (err) {
