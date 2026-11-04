@@ -357,9 +357,14 @@ function setupDashboardRoutes(app, client) {
     // ==========================================
     
     // GET /api/guilds - Return all guilds the bot is currently serving
-    app.get('/api/guilds', async (req, res) => {
+    app.get('/api/guilds', requireAuth, async (req, res) => {
         try {
-            const guilds = client.guilds.cache.map(g => ({
+            res.set('Cache-Control', 'no-store, private');
+            const manageableGuildIds = new Set((req.session.guilds || []).filter(g => {
+                const permissions = BigInt(g.permissions || 0);
+                return Boolean(g.owner) || (permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20);
+            }).map(g => String(g.id)));
+            const guilds = client.guilds.cache.filter(g => manageableGuildIds.has(g.id)).map(g => ({
                 id: g.id,
                 name: g.name,
                 icon: g.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
@@ -374,9 +379,10 @@ function setupDashboardRoutes(app, client) {
     });
 
     // GET /api/guild/:id - Fetch live settings, channels, roles, and status
-    app.get('/api/guild/:id', async (req, res) => {
+    app.get('/api/guild/:id', requireGuildAdmin, async (req, res) => {
         try {
-            const guild = client.guilds.cache.get(req.params.id);
+            res.set('Cache-Control', 'no-store, private');
+            const guild = req.guild || client.guilds.cache.get(req.params.id);
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
             let settings = await ServerSettings.findOne({ guildId: guild.id });
