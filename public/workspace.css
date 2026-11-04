@@ -32,3 +32,6 @@
 /* Spotify catalogue discovery */
 .spotify-discover-panel{grid-column:1/-1!important;background:linear-gradient(125deg,#17243bfa,#151b32f7 55%,#242044e8);border-color:#a6a0ff2b}.spotify-results{display:grid;gap:5px;margin-top:15px}.spotify-result-row{display:grid;grid-template-columns:46px minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px;border:1px solid var(--line);border-radius:11px;background:#0b1423a8}.spotify-result-row img{width:46px;height:46px;object-fit:cover;border-radius:8px;background:#0b1423}.spotify-result-copy{min-width:0}.spotify-result-copy strong,.spotify-result-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spotify-result-copy strong{font-size:.76rem}.spotify-result-copy small{font-size:.65rem;color:var(--muted);margin-top:4px}.spotify-footnote{margin:14px 0 0;color:#8998b4;font-size:.65rem;line-height:1.65}
 @media(max-width:560px){.spotify-result-row{grid-template-columns:40px minmax(0,1fr) auto;gap:8px;padding:7px}.spotify-result-row img{width:40px;height:40px}.spotify-result-row .btn{padding:7px 9px;font-size:.62rem}}
+
+/* Multi-platform music discovery */
+.spotify-discover-panel .music-kicker{color:#b8c0ff}.spotify-result-row{transition:border-color .18s,background .18s}.spotify-result-row:hover{border-color:#a5aaff66;background:#111d31}.spotify-result-copy small{line-height:1.45}
