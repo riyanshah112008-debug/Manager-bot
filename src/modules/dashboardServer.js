@@ -17,15 +17,7 @@ const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
-const {
-    TIER_CONFIG,
-    createPaymentOrder,
-    submitPaymentProof,
-    approvePaymentOrder,
-    rejectPaymentOrder,
-    getOrderStatus,
-    generateStandaloneKey
-} = require('../utils/paymentHelper');
+const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const config = require('../config');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
@@ -1491,59 +1483,13 @@ function setupDashboardRoutes(app, client) {
         });
     });
 
-    // POST /api/premium/checkout - Create Pending Checkout Session (Never issues free keys)
-    app.post('/api/premium/checkout', actionLimiter, async (req, res) => {
-        try {
-            const { tier, method, cryptoCoin, guildId } = req.body;
-            if (!tier || !TIER_CONFIG[tier]) {
-                return res.status(400).json({ success: false, error: 'Invalid tier specified. Choose Shield Plus, Pro Cluster, Platinum, or Supreme Lifetime.' });
-            }
-
-            const session = await getSession(req);
-            const userId = session?.user?.id || null;
-            const userTag = session?.user ? `${session.user.username}#${session.user.discriminator || '0'}` : 'Web Guest';
-            const guildName = guildId && client ? (client.guilds.cache.get(guildId)?.name || '') : '';
-
-            const order = await createPaymentOrder({
-                tier,
-                method: method || 'crypto',
-                cryptoCoin: cryptoCoin || 'usdt_trc20',
-                guildId: guildId || null,
-                guildName,
-                userId,
-                userTag
-            });
-
-            res.json({
-                success: true,
-                message: 'Payment order generated successfully. Complete payment to verify.',
-                order
-            });
-        } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
-        }
-    });
-
-    // POST /api/premium/submit-proof - Submit UTR / TxID / TxHash for Verification
-    app.post('/api/premium/submit-proof', actionLimiter, async (req, res) => {
-        try {
-            const { orderId, utr, method, cryptoCoin, notes } = req.body;
-            if (!orderId) return res.status(400).json({ success: false, error: 'Missing orderId parameter.' });
-            if (!utr) return res.status(400).json({ success: false, error: 'Please enter your Transaction Hash, PayPal ID, or UPI UTR number.' });
-
-            const result = await submitPaymentProof({
-                orderId,
-                utr,
-                method,
-                cryptoCoin,
-                notes,
-                client
-            });
-
-            res.json(result);
-        } catch (e) {
-            res.status(400).json({ success: false, error: e.message });
-        }
+    // Checkout is deliberately unavailable until a real provider and signed webhook are configured.
+    app.post('/api/premium/checkout', actionLimiter, (req, res) => {
+        res.status(503).json({
+            success: false,
+            code: 'PAYMENTS_NOT_CONFIGURED',
+            error: 'Starry checkout is not active yet. No payment methods are currently accepting money.'
+        });
     });
 
     // GET /api/premium/order/:orderId - Check Live Order Status (Polling endpoint)
@@ -1579,59 +1525,8 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
-    // POST /api/admin/orders/approve - Manually Approve Order (Bot Owners Only)
-    app.post('/api/admin/orders/approve', requireAuth, actionLimiter, async (req, res) => {
-        try {
-            const session = req.session;
-            const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
-            if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
-
-            const { orderId } = req.body;
-            if (!orderId) return res.status(400).json({ success: false, error: 'Missing orderId.' });
-
-            const result = await approvePaymentOrder(orderId, `Web Admin [${session.user.username}]`, client);
-            res.json(result);
-        } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
-        }
-    });
-
-    // POST /api/admin/orders/reject - Reject Order (Bot Owners Only)
-    app.post('/api/admin/orders/reject', requireAuth, actionLimiter, async (req, res) => {
-        try {
-            const session = req.session;
-            const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
-            if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
-
-            const { orderId, reason } = req.body;
-            if (!orderId) return res.status(400).json({ success: false, error: 'Missing orderId.' });
-
-            const result = await rejectPaymentOrder(orderId, `Web Admin [${session.user.username}]`, reason, client);
-            res.json(result);
-        } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
-        }
-    });
-
-    // POST /api/admin/generate-key - Standalone Key Generator (Bot Owners Only)
-    app.post('/api/admin/generate-key', requireAuth, actionLimiter, async (req, res) => {
-        try {
-            const session = req.session;
-            const isOwner = session && (config.BOT_OWNERS || []).includes(session.user?.id);
-            if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
-
-            const { tier, durationDays } = req.body;
-            const result = await generateStandaloneKey({
-                tier: tier || 'pro_cluster',
-                durationDays: durationDays !== undefined ? parseInt(durationDays) : null,
-                createdBy: `Web Owner [${session.user.username}]`
-            });
-
-            res.json({ success: true, ...result });
-        } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
-        }
-    });
+    // Payment approval and key-generation endpoints have been removed.
+    // Premium entitlements will only be granted by verified provider webhooks.
 
     // GET /api/spotify/login - Initiate Spotify OAuth2 Authorization
     app.get('/api/spotify/login', (req, res) => {
