@@ -848,6 +848,7 @@ function setupDashboardRoutes(app, client) {
             if (payload.mediaPerms) settings.mediaPerms = { ...settings.mediaPerms?.toObject(), ...payload.mediaPerms };
 
             await settings.save();
+            if (payload.logging && typeof client.invalidateLogSettings === 'function') client.invalidateLogSettings(guild.id);
             res.json({ success: true, message: 'Settings saved successfully!', settings });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
