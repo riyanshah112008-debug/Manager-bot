@@ -525,7 +525,10 @@ module.exports = async (client) => {
         roles: 'memberLogChannel',
         misc: 'serverLogChannel'
     };
-    client.invalidateLogSettings = (guildId) => {\n        const prefix = String(guildId) + ':';\n        for (const key of dashboardLogCache.keys()) if (key.startsWith(prefix)) dashboardLogCache.delete(key);\n    };
+    client.invalidateLogSettings = (guildId) => {
+        const prefix = String(guildId) + ':';
+        for (const key of dashboardLogCache.keys()) if (key.startsWith(prefix)) dashboardLogCache.delete(key);
+    };
     client.getLogChannel = async (guild, logType = 'misc') => {
         if (!guild) return null;
         const type = String(logType).toLowerCase();
