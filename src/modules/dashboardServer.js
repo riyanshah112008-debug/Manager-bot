@@ -18,6 +18,7 @@ const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
+const multiBot = require('./multiBot');
 const {
     TIER_CONFIG,
     createPaymentOrder,
@@ -172,6 +173,40 @@ function setupDashboardRoutes(app, client) {
         }
         req.session = session;
         next();
+    };
+
+    // Resolve active music players across the physical worker fleet, matching the bot command router.
+    const getClusterMusicPlayer = (guildId) => {
+        const workers = [client, ...Array.from(multiBot.instances.values()).map(info => info.client).filter(Boolean)];
+        const visited = new Set();
+        for (const worker of workers) {
+            if (!worker || visited.has(worker)) continue;
+            visited.add(worker);
+            const kazagumo = worker.manager?.getPlayer(guildId);
+            if (kazagumo) {
+                const audio = require('../utils/musicManager');
+                return {
+                    currentTrack: kazagumo.queue?.current || kazagumo.currentTrack || null,
+                    queue: kazagumo.queue || [],
+                    paused: Boolean(kazagumo.paused),
+                    playing: Boolean(kazagumo.playing || kazagumo.queue?.current),
+                    volume: Number.isFinite(Number(kazagumo.volume)) ? Number(kazagumo.volume) : 100,
+                    loop: kazagumo.loop || 'none',
+                    filter: kazagumo.data?.get('activeFilter') || 'clear',
+                    is247: false,
+                    supports247: false,
+                    pause: () => kazagumo.pause(true),
+                    resume: () => kazagumo.pause(false),
+                    skip: () => kazagumo.skip(),
+                    stop: () => kazagumo.destroy(),
+                    setVolume: value => kazagumo.setVolume(value),
+                    setFilter: value => audio.applyKazagumoFilter(kazagumo, value)
+                };
+            }
+            const native = StarryAudioEngine.getPlayer(guildId, worker);
+            if (native && !native.destroyed && (native.currentTrack || native.queue?.length)) return native;
+        }
+        return null;
     };
 
     // ==========================================
@@ -463,6 +498,45 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Owner-only multi-bot cluster controls. Tokens are never returned to the browser.
+    const requireClusterOwner = (req, res, next) => {
+        if (!config.isBotOwner(req.session?.user?.id, client)) return res.status(403).json({ success: false, error: 'Only the Starry bot owner can manage the multi-bot cluster.' });
+        next();
+    };
+
+    app.get('/api/cluster', requireAuth, requireClusterOwner, (req, res) => {
+        try {
+            const stats = multiBot.getClusterStats();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, stats: {
+                totalPhysicalBots: stats.totalPhysicalBots, totalVirtualNodes: stats.totalVirtualNodes,
+                totalGuilds: stats.totalGuilds, totalUsers: stats.totalUsers, physicalBots: stats.physicalBots,
+                virtualNodes: stats.virtualNodes.map(node => ({ id: node.id, name: node.name, emoji: node.emoji, role: node.role, commands: node.commands, activity: node.activity }))
+            }, roles: Object.entries(multiBot.ROLE_PRESETS).map(([id, role]) => ({ id, name: role.name, emoji: role.emoji })) });
+        } catch (error) { console.error('Multi-bot cluster status failed:', error); res.status(500).json({ success: false, error: 'Could not load the multi-bot cluster.' }); }
+    });
+
+    app.post('/api/cluster/bots/:botId/role', actionLimiter, requireAuth, requireClusterOwner, async (req, res) => {
+        try {
+            const botId = String(req.params.botId || '').trim(), role = String(req.body?.role || '').trim();
+            if (!/^[0-9]{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
+            if (!Object.prototype.hasOwnProperty.call(multiBot.ROLE_PRESETS, role)) return res.status(400).json({ success: false, error: 'Choose a valid worker role.' });
+            const result = await multiBot.setRole(botId, role);
+            if (!result.success) return res.status(404).json({ success: false, error: result.message || 'Bot worker not found.' });
+            res.json({ success: true, message: 'Worker role updated.' });
+        } catch (error) { console.error('Multi-bot role update failed:', error); res.status(400).json({ success: false, error: error.message || 'Could not update worker role.' }); }
+    });
+
+    app.delete('/api/cluster/bots/:botId', actionLimiter, requireAuth, requireClusterOwner, async (req, res) => {
+        try {
+            const botId = String(req.params.botId || '').trim();
+            if (!/^[0-9]{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
+            const removed = await multiBot.removeToken(botId);
+            if (!removed) return res.status(404).json({ success: false, error: 'Worker bot was not found in the active cluster.' });
+            res.json({ success: true, message: 'Worker disconnected and its saved token entry was removed.' });
+        } catch (error) { console.error('Multi-bot worker removal failed:', error); res.status(400).json({ success: false, error: error.message || 'Could not remove worker bot.' }); }
+    });
+
     // GET /api/guild/:id - Fetch live settings, channels, roles, and status
     app.get('/api/guild/:id', requireGuildAdmin, async (req, res) => {
         try {
@@ -492,7 +566,15 @@ function setupDashboardRoutes(app, client) {
                 managed: r.managed
             }));
 
-            const player = StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const player = getClusterMusicPlayer(guild.id);
+            const queueSource = player?.queue;
+            const queuedTracks = Array.isArray(queueSource) ? queueSource : (Array.isArray(queueSource?.queue) ? queueSource.queue : (Array.isArray(queueSource?.tracks) ? queueSource.tracks : []));
+            const queue = queuedTracks.slice(0, 12).map(track => ({
+                title: track?.title || track?.info?.title || 'Unknown track',
+                author: track?.author || track?.info?.author || '',
+                length: Number(track?.length || track?.info?.length || 0),
+                thumbnail: track?.thumbnail || track?.artworkUrl || track?.info?.artworkUrl || ''
+            }));
 
             res.json({
                 success: true,
@@ -510,11 +592,13 @@ function setupDashboardRoutes(app, client) {
                 player: player ? {
                     playing: player.currentTrack ? true : false,
                     currentTrack: player.currentTrack || null,
+                    queue,
                     paused: player.paused || false,
-                    volume: player.volume || 100,
+                    volume: Number.isFinite(Number(player.volume)) ? Number(player.volume) : 100,
                     loop: player.loop || 'none',
                     filter: player.filter || 'clear',
-                    is247: player.is247 || false
+                    is247: player.is247 || false,
+                    supports247: player.supports247 === false ? false : typeof player.is247 === 'boolean'
                 } : null
             });
         } catch (e) {
@@ -892,18 +976,18 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
 
             const { action, value } = req.body;
-            const player = StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const player = getClusterMusicPlayer(guild.id);
 
             if (!player) {
                 return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
             }
 
-            if (action === 'pause') player.pause ? player.pause() : null;
+            if (action === 'pause') { if (player.paused) player.resume ? player.resume() : null; else player.pause ? player.pause() : null; }
             if (action === 'skip') player.skip ? player.skip() : null;
             if (action === 'stop') player.stop ? player.stop() : null;
             if (action === 'volume' && value !== undefined) player.setVolume ? player.setVolume(Number(value)) : null;
             if (action === 'filter' && value) player.setFilter ? await player.setFilter(value) : null;
-            if (action === 'toggle247') player.is247 = !player.is247;
+            if (action === 'toggle247') { if (player.supports247 === false || typeof player.is247 !== 'boolean') return res.status(400).json({ success: false, error: '24/7 persistence is not supported by the active worker audio engine.' }); player.is247 = !player.is247; }
 
             res.json({ success: true, message: `Action ${action} executed.`, player: { paused: player.paused, is247: player.is247 } });
         } catch (e) {
@@ -928,18 +1012,34 @@ function setupDashboardRoutes(app, client) {
 
             const tChannel = textChannelId ? guild.channels.cache.get(textChannelId) : (guild.channels.cache.find(c => c.isTextBased()) || vChannel);
 
-            let player = StarryAudioEngine.getPlayer(guild.id);
-            if (!player && client.manager) {
-                player = await client.manager.createPlayer({
+            const worker = multiBot.getMusicWorker(guild, vChannel);
+            if (!worker?.client || !worker.isAvailable) {
+                return res.status(409).json({ success: false, error: 'All Starry music workers are busy. Try again when a worker is free.' });
+            }
+            const musicClient = worker.client;
+            const musicGuild = musicClient.guilds.cache.get(guild.id);
+            if (!musicGuild) return res.status(409).json({ success: false, error: 'The selected music worker is not connected to this server.' });
+            const workerVoice = musicGuild.channels.cache.get(vChannel.id);
+            const workerText = musicGuild.channels.cache.get(tChannel.id) || workerVoice;
+            const botMember = musicGuild.members.me || musicGuild.members.cache.get(musicClient.user.id);
+            const permissions = botMember ? workerVoice?.permissionsFor(botMember) : null;
+            if (!workerVoice || !botMember || !permissions?.has(PermissionFlagsBits.Connect) || !permissions?.has(PermissionFlagsBits.Speak)) {
+                return res.status(403).json({ success: false, error: 'The selected music worker needs Connect and Speak permissions in that voice channel.' });
+            }
+            const manager = musicClient.manager;
+            if (!manager) return res.status(503).json({ success: false, error: 'The selected music worker has no audio manager available.' });
+            let player = manager.getPlayer(guild.id);
+            if (!player) {
+                player = await manager.createPlayer({
                     guildId: guild.id,
-                    textId: tChannel.id,
-                    voiceId: vChannel.id,
+                    textId: workerText.id,
+                    voiceId: workerVoice.id,
                     deaf: true
                 });
             }
 
             if (player && player.search) {
-                const resTrack = await player.search(query, { requester: client.user });
+                const resTrack = await player.search(query, { requester: musicClient.user });
                 if (!resTrack || !resTrack.tracks || resTrack.tracks.length === 0) {
                     return res.status(404).json({ success: false, error: 'No tracks found for search query.' });
                 }
