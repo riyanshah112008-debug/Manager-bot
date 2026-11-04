@@ -4,6 +4,7 @@
 // Discord OAuth2 • Top.gg Webhook • Remote API • Payment Gateway • Premium Key Manager
 // ==========================================
 const express = require('express');
+const mongoose = require('mongoose');
 const path = require('path');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
