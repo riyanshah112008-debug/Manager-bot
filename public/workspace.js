@@ -72,8 +72,13 @@ async function loadEvents(){const list=$("#eventList");try{const d=await request
 async function loadWelcome(){try{const d=await request("/api/guild/"+guildId+"/welcome");settings.welcome=d.settings||{};const w=d.settings||{};const set=(id,value)=>{const el=$("#"+id);if(el)el.value=value??""};set("welcomeChannel",w.channelId||"");set("welcomeTitle",w.title||"");set("welcomeDescription",w.description||"");set("welcomePing",w.pingContent||"");set("welcomeColor",w.color||"#FF73FA");set("welcomeFooter",w.footer||"");set("welcomeImage",w.image||"");set("welcomeThumbnail",w.thumbnail||"avatar")}catch(e){const el=$("#welcomeFeedback");if(el)el.innerHTML=status(e.message,"bad")}}
 async function loadLeveling(){try{const d=await request("/api/guild/"+guildId+"/leveling");settings.leveling=d.settings||{};const enabled=$("#levelEnabled");if(enabled)enabled.checked=d.settings?.enabled!==false;const channel=$("#levelLogChannel");if(channel)channel.value=d.settings?.logChannelId||"";const title=$("#levelTitle");if(title)title.value=d.settings?.title||"Congratulations {user}!";const color=$("#levelColor");if(color)color.value=d.settings?.color||"#5865F2";const desc=$("#levelDescription");if(desc)desc.value=d.settings?.description||"";const st=d.stats||{};$("#levelStats").innerHTML=[["Members tracked",st.membersTracked||0],["Total XP",Number(st.totalXp||0).toLocaleString()],["Messages",Number(st.totalMessages||0).toLocaleString()],["Highest level",st.highestLevel||0]].map(([k,v])=>'<div class="tile"><span><small>'+k+'</small><strong>'+v+'</strong></span></div>').join("");$("#levelLeaderboard").innerHTML='<h3>Top XP members</h3>'+(d.leaderboard||[]).map((u,i)=>'<div class="check-row"><strong>#'+(i+1)+' · '+esc(u.userId)+'</strong><span>Level '+Number(u.level||0)+' · '+Number(u.xp||0).toLocaleString()+' XP</span></div>').join("")||'<div class="empty">No XP records yet.</div>'}catch(e){$("#levelStats").innerHTML=status(e.message,"bad")}}
 async function loadEconomy(){try{const d=await request("/api/guild/"+guildId+"/economy");const st=d.stats||{};$("#economyStats").innerHTML=[["Members tracked",st.membersTracked||0],["Total credits",Number(st.totalCredits||0).toLocaleString()],["Total XP",Number(st.totalXp||0).toLocaleString()],["Prestige levels",st.totalPrestige||0]].map(([k,v])=>'<div class="tile"><span><small>'+k+'</small><strong>'+v+'</strong></span></div>').join("");$("#economyLeaderboard").innerHTML=(d.leaderboard||[]).map((u,i)=>'<div class="check-row"><strong>#'+(i+1)+' · '+esc(u.userId)+'</strong><span>'+Number(u.credits||0).toLocaleString()+' credits</span></div>').join("")||'<div class="empty">No economy records yet.</div>'}catch(e){$("#economyStats").innerHTML=status(e.message,"bad");$("#economyLeaderboard").textContent=e.message}}
+function setPremiumFeedback(message,type=""){
+ const host=$("#premiumFeedback");if(!host)return;
+ const notice=document.createElement("div");notice.className="status"+(type?" "+type:"");notice.setAttribute("role","status");notice.textContent=String(message??"");host.replaceChildren(notice);
+}
 function renderPremium(){
- const active=settings?.premium?.isPremium&&(!settings.premium.expiresAt||new Date(settings.premium.expiresAt).getTime()>Date.now());
+ const premium=settings?.effectivePremium||settings?.premium||{};
+ const active=Boolean(premium.isPremium&&(!premium.expiresAt||new Date(premium.expiresAt).getTime()>Date.now()));
  const tierNames={shield_plus:"Shield Plus",pro_cluster:"Pro Cluster",platinum:"Platinum",lifetime:"Supreme Lifetime"};
  const current=active?'<div class="premium-current"><span class="premium-current-mark">✦</span><div><strong>'+esc(tierNames[settings.premium.tier]||settings.premium.tier||"Premium")+' active</strong><small>'+(settings.premium.expiresAt?'Expires '+new Date(settings.premium.expiresAt).toLocaleDateString():'Lifetime entitlement')+'</small></div><span class="pill">ACTIVE</span></div>':'<div class="premium-current inactive"><span class="premium-current-mark">✧</span><div><strong>No active Premium on this server</strong><small>Choose a plan or redeem a license key below.</small></div><span class="pill">FREE</span></div>';
  const plans=[
@@ -92,7 +97,19 @@ function renderPage(){const host=$("#workspace");if(!host)return;if(!guildId){ho
 async function saveGroup(key,fields,overrides={}){const body={...overrides};for(const [field,type] of Object.entries(fields)){const el=$("#"+field);if(!el)continue;if(type!=="array")body[field]=type==="bool"?el.checked:type==="number"?Number(el.value):el.value}try{const d=await request("/api/guild/"+guildId+"/settings",{method:"POST",body:JSON.stringify({[key]:body})});settings=d.settings||settings;feedback("Settings saved successfully.","good")}catch(e){feedback(e.message,"bad")}}
 function feedback(msg,type=""){const el=$("#feedback")||$("#playFeedback")||$("#logFeedback");if(el)el.innerHTML=status(msg,type)}
 function wire(){
-$("#redeemPremium")?.addEventListener("click",async()=>{const key=$("#premiumKey")?.value.trim();if(!key){$("#premiumFeedback").innerHTML=status("Enter your Premium license key.","bad");return}const button=$("#redeemPremium");button.disabled=true;button.textContent="Verifying…";try{const d=await request("/api/premium/redeem",{method:"POST",body:JSON.stringify({key,guildId})});$("#premiumFeedback").innerHTML=status(d.message||"Premium activated successfully.","good");$("#premiumKey").value="";await loadGuild();renderPage()}catch(e){$("#premiumFeedback").innerHTML=status(e.message,"bad")}finally{button.disabled=false;button.textContent="Redeem key"}});
+$("#redeemPremium")?.addEventListener("click",async()=>{
+ const key=$("#premiumKey")?.value.trim();
+ if(!key){setPremiumFeedback("Enter your Premium license key.","bad");return}
+ const button=$("#redeemPremium");button.disabled=true;button.textContent="Verifying…";
+ try{
+  const d=await request("/api/premium/redeem",{method:"POST",body:JSON.stringify({key,guildId})});
+  $("#premiumKey").value="";
+  await loadGuild();
+  renderPage();
+  setPremiumFeedback(d.message||"Premium activated successfully.","good");
+ }catch(e){setPremiumFeedback(e.message,"bad")}
+ finally{const currentButton=$("#redeemPremium");if(currentButton){currentButton.disabled=false;currentButton.textContent="Redeem key"}}
+});
 
 ["title","color","author","authorIcon","description","thumbnail","image","footer","footerIcon"].forEach(id=>$("#"+id)?.addEventListener("input",updateEmbedPreview));updateEmbedPreview();
 $("#saveSecurity")?.addEventListener("click",()=>{for(const id of ["maxChannelDeletions","maxRoleDeletions","maxBans","maxKicks"]){const n=Number($("#"+id).value);if(!Number.isInteger(n)||n<1||n>50){feedback("All protection thresholds must be whole numbers from 1 to 50.","bad");return}}saveGroup("antinuke",{enabled:"bool",blockUnapprovedBots:"bool",blockWebhookCreation:"bool",panicLockdown:"bool",maxChannelDeletions:"number",maxRoleDeletions:"number",maxBans:"number",maxKicks:"number",action:"text",quarantineRoleId:"text"})});
