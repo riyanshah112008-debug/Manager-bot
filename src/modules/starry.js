@@ -514,30 +514,71 @@ module.exports = async (client) => {
     start60sChannelTelemetryLoop(client);
 
     // Dynamic routing to specific log channels (Cache + API Fetch Fallback)
+    const logChannelCache = new Map();
+    const logSettingByType = {
+        access: 'memberLogChannel',
+        moderate: 'modLogChannel',
+        messages: 'messageLogChannel',
+        voice: 'voiceLogChannel',
+        channels: 'serverLogChannel',
+        members: 'memberLogChannel',
+        misc: 'serverLogChannel'
+    };
+    client.invalidateLogChannelCache = (guildId) => {
+        for (const key of logChannelCache.keys()) {
+            if (key.startsWith(String(guildId) + ':')) logChannelCache.delete(key);
+        }
+    };
+
     client.getLogChannel = async (guild, logType = 'misc') => {
         if (!guild) return null;
-        const typeMap = {
-            'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
-            'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
-            'messages': ['logs-messages', 'message-logs', 'chat-logs'],
-            'voice': ['logs-voice', 'voice-logs', 'vc-logs'],
-            'channels': ['logs-channels', 'channel-logs'],
-            'members': ['logs-members', 'member-logs', 'role-logs']
-        };
-        const targetNames = typeMap[logType.toLowerCase()] || typeMap['access'];
+        const normalizedType = String(logType || 'misc').toLowerCase();
+        const cacheKey = guild.id + ':' + normalizedType;
+        const cached = logChannelCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.channelId ? (guild.channels.cache.get(cached.channelId) || null) : null;
+        }
 
-        // 1. Direct cache lookup first
-        let ch = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-        if (ch) return ch;
-
-        // 2. Fallback to fetching all channels via API
+        // Explicit dashboard routing takes priority over channel-name discovery.
         try {
-            const fetchedChannels = await guild.channels.fetch();
-            ch = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-            if (ch) return ch;
-            return fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+            const settingKey = logSettingByType[normalizedType];
+            if (settingKey) {
+                const config = await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean();
+                const configuredId = config?.logging?.[settingKey];
+                if (configuredId) {
+                    const configuredChannel = guild.channels.cache.get(configuredId) ||
+                        await guild.channels.fetch(configuredId).catch(() => null);
+                    if (configuredChannel && configuredChannel.isTextBased() && typeof configuredChannel.send === 'function') {
+                        logChannelCache.set(cacheKey, { channelId: configuredChannel.id, expiresAt: Date.now() + 30000 });
+                        return configuredChannel;
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Starry configured log-channel lookup failed:', err.message);
+        }
+
+        const typeMap = {
+            access: ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
+            moderate: ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
+            messages: ['logs-messages', 'message-logs', 'chat-logs'],
+            voice: ['logs-voice', 'voice-logs', 'vc-logs'],
+            channels: ['logs-channels', 'channel-logs'],
+            members: ['logs-members', 'member-logs', 'role-logs']
+        };
+        const targetNames = typeMap[normalizedType] || typeMap.access;
+        try {
+            let channel = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+            if (!channel) {
+                const fetchedChannels = await guild.channels.fetch();
+                channel = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name))) ||
+                    fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+            }
+            logChannelCache.set(cacheKey, { channelId: channel?.id || null, expiresAt: Date.now() + 30000 });
+            return channel;
         } catch (err) {
             console.error('❌ Log Channel Fetch Error:', err);
+            logChannelCache.set(cacheKey, { channelId: null, expiresAt: Date.now() + 10000 });
             return null;
         }
     };
