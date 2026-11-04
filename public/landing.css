@@ -10,3 +10,34 @@
 @media(max-width:900px){.primary-nav{gap:16px}.hero{gap:25px;min-height:580px}.hero h1{font-size:clamp(3rem,7vw,4.5rem)}.preview-body{grid-template-columns:115px 1fr}.feature-grid{grid-template-columns:repeat(2,1fr)}.split-inner{gap:35px}}
 @media(max-width:680px){.site-header{height:66px}.nav-shell{width:calc(100% - 30px);gap:12px}.menu-toggle{display:flex;margin-left:auto;width:40px;height:40px;border:1px solid var(--line);border-radius:9px;background:#151e30;flex-direction:column;align-items:center;justify-content:center;gap:5px}.menu-toggle span{width:16px;height:2px;background:#e8ecfb;border-radius:2px}.primary-nav{display:none;position:absolute;top:65px;left:0;right:0;padding:16px 20px 20px;background:#0d1422;border-bottom:1px solid var(--line);flex-direction:column;align-items:stretch;gap:0}.primary-nav.open{display:flex}.primary-nav a{padding:12px 4px}.nav-actions .button-quiet{display:none}.nav-actions{margin-left:0}.nav-actions .button{min-height:37px;padding:0 10px;font-size:.68rem}.brand-name{font-size:1.2rem}.section-wrap,.wrap{width:calc(100% - 34px)}.hero{grid-template-columns:1fr;min-height:0;padding:70px 0 55px;gap:28px}.hero h1{font-size:clamp(3.15rem,14vw,4.5rem)}.hero-lead{font-size:.93rem}.hero-visual{padding:12px 10px 20px}.dashboard-preview{transform:none}.preview-body{grid-template-columns:100px 1fr;min-height:270px}.preview-sidebar{padding:13px 8px}.preview-main{padding:14px 11px}.preview-stat{padding:8px}.preview-stat b{font-size:.9rem}.fc1{right:-5px;top:0}.fc2{left:-4px;bottom:0}.float-card{font-size:.6rem;padding:9px}.trust-inner{width:calc(100% - 34px);justify-content:center;padding:17px 0;gap:12px 20px}.trust-inner span{width:100%;text-align:center}.trust-inner b{font-size:.65rem}.section{padding:70px 0}.section-heading{display:block}.section-heading p{margin-top:14px}.feature-grid{grid-template-columns:1fr 1fr;gap:9px}.feature-card{min-height:160px;padding:16px}.feature-card h3{font-size:.85rem}.feature-card p{font-size:.7rem}.feature-icon{margin-bottom:12px}.split-section{padding:65px 0}.split-inner{grid-template-columns:1fr;gap:30px}.split-copy h2,.section-heading h2,.cta-panel h2{font-size:2.5rem}.faq-grid{grid-template-columns:1fr}.cta-section{padding:15px 0 65px}.cta-panel{padding:35px 20px}.footer-inner{width:calc(100% - 34px);flex-wrap:wrap}.footer-links{width:100%;flex-wrap:wrap}.hero-proof{font-size:.7rem}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+/* JARVIS-inspired holographic atmosphere */
+:root{--bg:#0a1220;--panel:#142238;--panel2:#1a2c45;--line:rgba(145,205,238,.17);--text:#f2f8ff;--muted:#a8bbce;--accent:#55d9f5;--violet:#8d9dff;--green:#70f0cf}
+body{background:radial-gradient(ellipse at 78% 18%,rgba(27,170,216,.16),transparent 34%),radial-gradient(ellipse at 16% 76%,rgba(74,111,220,.13),transparent 38%),linear-gradient(135deg,#091321 0%,#101e32 52%,#0a1424 100%);color:var(--text)}
+body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(87,190,224,.075) 1px,transparent 1px),linear-gradient(90deg,rgba(87,190,224,.075) 1px,transparent 1px);background-size:54px 54px;transform:perspective(700px) rotateX(58deg) scale(1.8);transform-origin:50% 100%;opacity:.2;mask-image:linear-gradient(to bottom,transparent 12%,#000 70%,#000 100%);animation:jarvis-grid 24s linear infinite}
+@keyframes jarvis-grid{from{background-position:0 0,0 0}to{background-position:0 54px,54px 0}}
+#starry-ambient{opacity:.9;filter:drop-shadow(0 0 10px rgba(53,205,244,.18))}
+.noise{opacity:.055}
+.site-header{background:rgba(8,18,31,.82);border-bottom-color:rgba(111,202,235,.19)}
+.brand-mark{border-color:#5bdcf277;background:linear-gradient(145deg,#16405a,#132b43);box-shadow:0 0 22px #3bc9ee26}
+.brand-mark span{background:#9cecff}.brand-name span{color:#5bdcf2}
+.button-primary{background:linear-gradient(115deg,#168db8,#477de0);box-shadow:0 9px 28px #168db83d}
+.button-secondary,.button-quiet{background:rgba(24,45,67,.82);border-color:rgba(125,203,231,.22)}
+.button-secondary:hover,.button-quiet:hover{border-color:#65d9f1aa;background:#1b3b55}
+.hero h1 span,.section-heading h2 span,.split-copy h2 span,.cta-panel h2 span{color:#62dff4;text-shadow:0 0 28px rgba(67,207,239,.2)}
+.eyebrow{color:#a8d4e5}.status-dot{background:#69f2d4;box-shadow:0 0 14px #69f2d4}
+.hero-lead,.section-heading p,.split-copy p,.cta-panel p{color:#b1c2d4}
+.dashboard-preview{border-color:rgba(92,213,243,.36);background:rgba(9,24,39,.9);box-shadow:0 30px 100px #0009,0 0 42px rgba(37,177,218,.12)}
+.preview-top{background:#10263b}.preview-sidebar{background:#0b1b2d}
+.preview-stat,.preview-panel,.control-row,.faq-item{background:rgba(20,42,64,.84);border-color:rgba(112,195,226,.17)}
+.preview-stat b{color:#e4f8ff}.preview-bars i{background:linear-gradient(#74e8fa,#238fc6);box-shadow:0 0 12px #36bfe333}
+.side-item.selected{background:#31b8d32b;color:#e9fbff}.side-item b,.feature-icon{color:#7ce6fa}
+.float-card{background:rgba(14,39,59,.95);border-color:#61d7f26b;box-shadow:0 12px 36px #0009,0 0 22px #38c8e522}
+.trust-strip{background:rgba(10,25,41,.76);border-color:rgba(112,195,226,.16)}.trust-inner b{color:#b9e8f5}
+.feature-card{background:linear-gradient(145deg,rgba(21,48,70,.91),rgba(13,30,49,.91));border-color:rgba(112,195,226,.16)}
+.feature-card:hover{border-color:#60d9f188;background:linear-gradient(145deg,rgba(24,65,87,.95),rgba(15,37,59,.95))}
+.feature-icon{background:rgba(49,190,218,.13);border-color:rgba(99,218,242,.22)}
+.split-section{background:linear-gradient(110deg,rgba(16,39,59,.8),rgba(10,25,42,.76));border-color:rgba(112,195,226,.16)}
+.cta-panel{border-color:rgba(99,218,242,.32);background:radial-gradient(ellipse at 90% 0%,rgba(40,196,225,.19),transparent 45%),linear-gradient(120deg,#18364d,#10243a);box-shadow:0 25px 80px #0005,0 0 48px rgba(39,184,218,.08)}
+.site-footer{background:#081321;border-color:rgba(112,195,226,.16)}
+@media(max-width:680px){body:before{background-size:38px 38px;opacity:.14}.hero-visual{padding-top:22px}}
+@media(prefers-reduced-motion:reduce){body:before{animation:none}}
