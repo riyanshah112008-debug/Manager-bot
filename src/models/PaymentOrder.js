@@ -16,11 +16,12 @@ const paymentOrderSchema = new mongoose.Schema({
     tier: { 
         type: String, 
         required: true, 
-        enum: ['shield_plus', 'pro_cluster', 'lifetime'] 
+        enum: ['shield_plus', 'pro_cluster', 'platinum', 'lifetime'] 
     },
     tierName: { type: String, default: '' },
-    amountInr: { type: Number, required: true },
-    amountUsd: { type: Number, required: true },
+    amountEur: { type: Number, required: true, min: 0 },
+    amountInr: { type: Number, default: null },
+    amountUsd: { type: Number, default: null },
     durationDays: { type: Number, default: 30 },
     method: { 
         type: String, 
