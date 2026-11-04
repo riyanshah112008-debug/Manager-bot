@@ -481,14 +481,14 @@ function setupDashboardRoutes(app, client) {
             }
             if (body.image !== undefined) {
                 const value = String(body.image || '').trim();
-                if (value && (!/^https?:\\/\\//i.test(value) || value.length > 1000)) {
+                if (value && (!/^https?:\/\//i.test(value) || value.length > 1000)) {
                     return res.status(400).json({ success: false, error: 'Banner must be a valid HTTP or HTTPS URL.' });
                 }
                 updates.image = value;
             }
             if (body.thumbnail !== undefined) {
                 const value = String(body.thumbnail || 'avatar').trim();
-                if (value.toLowerCase() !== 'avatar' && (!/^https?:\\/\\//i.test(value) || value.length > 1000)) {
+                if (value.toLowerCase() !== 'avatar' && (!/^https?:\/\//i.test(value) || value.length > 1000)) {
                     return res.status(400).json({ success: false, error: 'Thumbnail must be “avatar” or a valid HTTP or HTTPS URL.' });
                 }
                 updates.thumbnail = value;
