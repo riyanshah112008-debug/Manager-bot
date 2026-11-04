@@ -1,0 +1,26 @@
+name: Backend and dashboard syntax checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  syntax:
+    name: Check Node.js syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate backend and dashboard scripts
+        run: |
+          node --check src/index.js
+          node --check src/modules/dashboardServer.js
+          node --check public/firebase-bridge.js
+          node --check public/landing.js
+          node --check public/workspace.js
