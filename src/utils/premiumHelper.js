@@ -18,7 +18,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'voice_247',
         name: '24/7 Voice Channel Persistence',
         category: 'Music & Audio',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',247', '/247', ',stay', ',alwayson'],
         description: 'Keeps the bot in your voice channel 24/7 without disconnecting when members leave, ensuring zero-latency startup and uninterrupted radio.'
     },
@@ -26,7 +26,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'audio_dsp_filters',
         name: 'Studio DSP Hi-Fi Audio Filters',
         category: 'Music & Audio',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',bass', ',8d', ',nightcore', ',daycore', ',vaporwave', ',lofi', ',reverb', ',karaoke', ',surround', ',electronic', ',soft', ',radio', ',treble', ',pop', ',filter'],
         description: 'Access 15 studio-grade audio DSP effects: Physical Vibration Bass, 360° 8D Audio, Lo-Fi Chill, Slowed & Reverb, Karaoke Vocal Remover, 3D Surround, EDM/Club Master, Soft Chill, Retro Radio, Nightcore, Daycore, Vaporwave, Treble Boost, and Pop Clarity.'
     },
@@ -34,7 +34,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'cloud_backups',
         name: 'Server Cloud Backup & Instant Restore',
         category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',backup', ',restore <id>'],
         description: 'Create encrypted cloud snapshots of your entire server architecture (channels, categories, roles, permissions) with 1-click disaster recovery.'
     },
@@ -42,7 +42,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'emergency_lockdown',
         name: 'Emergency Server Lockdown Shield',
         category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',lockdown', ',unlockdown', ',masslock'],
         description: 'Instantaneous server-wide lockdown across all public text channels to neutralize raids and unauthorized permissions changes.'
     },
@@ -50,7 +50,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'multibot_custom_nodes',
         name: 'Multi-Bot Worker Node Summoning',
         category: 'Multi-Bot Cluster',
-        tier: 'Pro Cluster / Lifetime',
+        tier: 'Pro Cluster / Platinum / Lifetime',
         commands: [',multibot add <token> <role>', ',multibot setrole'],
         description: 'Connect custom secondary bot tokens to your server cluster for simultaneous multi-channel audio playback and specialized worker task partitioning.'
     },
@@ -58,7 +58,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'emoji_stealer',
         name: 'Bulk Emoji & Animated Sticker Stealer',
         category: 'Utility & Customization',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',steal', ',emojisteal', '/steal'],
         description: 'Extract and upload emojis and animated stickers from other servers directly into your server in seconds.'
     },
@@ -66,7 +66,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'flag_translator',
         name: 'Real-Time Flag Reaction Neural Translator',
         category: 'Utility & Localization',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: ['Reaction with flag emojis (e.g. 🇪🇸, 🇯🇵, 🇫🇷)'],
         description: 'Instant multi-language translation cards triggered automatically when server members react to messages with country flag emojis.'
     },
@@ -74,7 +74,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'web_captcha_gateway',
         name: 'Web Captcha Anti-Bot Verification Gateway',
         category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',verify-setup', '/verify-setup'],
         description: 'High-security browser-based human verification portal that prevents raid bots and malicious alternate accounts from gaining member roles.'
     },
@@ -82,7 +82,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'orbit_voice_boost',
         name: 'Dynamic Orbit Voice Room Custom Bitrate',
         category: 'Voice Management',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',vc lock', ',vc bitrate', ',vc limit'],
         description: 'Join-to-create temporary voice channels with high-fidelity 384kbps audio bitrate, custom access control, and VIP voice lounges.'
     },
@@ -90,7 +90,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'economy_multiplier',
         name: '2x Economy XP, Drop Rate & Loot Multiplier',
         category: 'Economy & Progression',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',daily', ',fish', ',mine', ',work', 'Random Chest Drops'],
         description: 'Enjoy double credits, faster leveling XP, elevated rare/legendary loot chest spawn rates, and reduced gathering cooldowns.'
     },
@@ -98,7 +98,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'moderation_appeals',
         name: 'Enhanced Moderation DM & Appeal Portal',
         category: 'Moderation',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: ['Automated on kick, ban, timeout'],
         description: 'Detailed moderation infraction direct messages with official server branding, case IDs, and custom appeal website links.'
     },
@@ -106,7 +106,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'vip_games',
         name: 'VIP Extended Truth or Dare Challenge Packs',
         category: 'Mini-Games',
-        tier: 'Shield Plus / Pro Cluster / Lifetime',
+        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',truth', ',dare', '/truth', '/dare'],
         description: 'Access exclusive unfiltered truth questions and daring challenge decks for party gaming.'
     }
@@ -260,7 +260,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
         new ButtonBuilder()
             .setLabel('Dashboard & Web Center')
             .setStyle(ButtonStyle.Link)
-            .setURL('https://starry-bot.loca.lt')
+            .setURL('https://manager-bot-96c07.web.app/premium.html')
             .setEmoji('🌐')
     );
 
@@ -302,7 +302,7 @@ function createPremiumPerksPayload(prefix = ',') {
         new ButtonBuilder()
             .setLabel('Dashboard & Web Center')
             .setStyle(ButtonStyle.Link)
-            .setURL('https://starry-bot.loca.lt')
+            .setURL('https://manager-bot-96c07.web.app/premium.html')
             .setEmoji('🌐')
     );
 
