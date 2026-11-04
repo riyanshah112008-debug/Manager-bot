@@ -437,6 +437,84 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // 📈 Leveling and economy dashboard APIs (Discord admin guarded).
+    app.get('/api/guild/:id/leveling', requireGuildAdmin, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const leveling = require('./leveling');
+            const { LevelSettings, LevelUser } = leveling;
+            const guildId = req.guild.id;
+            const settings = await LevelSettings.findOne({ guildId }).lean() || {
+                enabled: true, logChannelId: null, title: 'Congratulations {user}!',
+                description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
+                color: '#5865F2', image: '', thumbnail: 'avatar',
+                footer: '{server} • Leveling System', pingContent: '**Level Up:** <@{user}>', authorName: 'LEVEL UP UNLOCKED'
+            };
+            const [membersTracked, totals, leaderboard] = await Promise.all([
+                LevelUser.countDocuments({ guildId }),
+                LevelUser.aggregate([{ $match: { guildId } }, { $group: { _id: null, totalXp: { $sum: '$xp' }, totalMessages: { $sum: '$messages' }, highestLevel: { $max: '$level' } } }]),
+                LevelUser.find({ guildId }).sort({ xp: -1 }).limit(10).select('userId xp level messages').lean()
+            ]);
+            res.json({ success: true, settings, stats: { membersTracked, totalXp: totals[0]?.totalXp || 0, totalMessages: totals[0]?.totalMessages || 0, highestLevel: totals[0]?.highestLevel || 0 }, leaderboard });
+        } catch (error) {
+            console.error('Dashboard leveling API failed:', error);
+            res.status(500).json({ success: false, error: 'Could not load leveling data.' });
+        }
+    });
+
+    app.post('/api/guild/:id/leveling/settings', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const leveling = require('./leveling');
+            const { LevelSettings } = leveling;
+            const guild = req.guild, body = req.body || {}, updates = {};
+            if (typeof body.enabled === 'boolean') updates.enabled = body.enabled;
+            if (body.logChannelId !== undefined) {
+                const channelId = String(body.logChannelId || '').trim();
+                const channel = channelId ? guild.channels.cache.get(channelId) : null;
+                if (channelId && (!channel || !channel.isTextBased())) return res.status(400).json({ success: false, error: 'Choose a valid text channel from this server.' });
+                updates.logChannelId = channelId || null;
+            }
+            for (const key of ['title', 'description', 'footer', 'pingContent', 'authorName']) {
+                if (body[key] === undefined) continue;
+                if (typeof body[key] !== 'string' || body[key].length > (key === 'description' ? 1800 : 300)) return res.status(400).json({ success: false, error: 'Invalid ' + key + ' value.' });
+                updates[key] = body[key].trim();
+            }
+            if (body.color !== undefined) {
+                if (typeof body.color !== 'string' || !/^#(?:[0-9a-f]{3}){1,2}$/i.test(body.color.trim())) return res.status(400).json({ success: false, error: 'Color must be a valid hex value.' });
+                updates.color = body.color.trim();
+            }
+            for (const key of ['image', 'thumbnail']) {
+                if (body[key] === undefined) continue;
+                const value = String(body[key] || '').trim();
+                if (key === 'thumbnail' && value.toLowerCase() === 'avatar') { updates.thumbnail = 'avatar'; continue; }
+                if (value && (!/^https?:\/\//i.test(value) || value.length > 1000)) return res.status(400).json({ success: false, error: 'Image fields must be valid HTTP or HTTPS URLs.' });
+                updates[key] = value;
+            }
+            const settings = await LevelSettings.findOneAndUpdate({ guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true });
+            leveling.settingsCache.set(guild.id, { ...(leveling.settingsCache.get(guild.id) || {}), ...updates });
+            res.json({ success: true, settings, message: 'Leveling settings saved.' });
+        } catch (error) {
+            console.error('Dashboard leveling settings save failed:', error);
+            res.status(500).json({ success: false, error: 'Could not save leveling settings.' });
+        }
+    });
+
+    app.get('/api/guild/:id/economy', requireGuildAdmin, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const guildId = req.guild.id;
+            const [membersTracked, totals, leaderboard] = await Promise.all([
+                User.countDocuments({ guildId }),
+                User.aggregate([{ $match: { guildId } }, { $group: { _id: null, totalCredits: { $sum: '$credits' }, totalXp: { $sum: '$xp' }, totalPrestige: { $sum: '$prestige' } } }]),
+                User.find({ guildId }).sort({ credits: -1 }).limit(10).select('userId credits xp prestige').lean()
+            ]);
+            res.json({ success: true, stats: { membersTracked, totalCredits: totals[0]?.totalCredits || 0, totalXp: totals[0]?.totalXp || 0, totalPrestige: totals[0]?.totalPrestige || 0 }, leaderboard });
+        } catch (error) {
+            console.error('Dashboard economy API failed:', error);
+            res.status(500).json({ success: false, error: 'Could not load economy data.' });
+        }
+    });
+
     // POST /api/guild/:id/settings - Save updated Starry settings (Admin Guarded)
     app.post('/api/guild/:id/settings', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
