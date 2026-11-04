@@ -60,7 +60,7 @@ function setupSupportDeskRoutes(app,{requireAuth,client,config}){
    c.messages.push({senderType:'customer',senderId:id,senderName:userName(req.session.user),content});
    if(c.status==='closed'){c.status='ai_active';c.closedAt=null;c.assignedAgentId=null;c.assignedAgentName=null}
    if(human){c.status='waiting_agent';c.priority='high';c.escalatedReason='Customer requested a human agent';c.messages.push({senderType:'system',senderName:'Starry Support',content:'Your conversation has been moved to the human support queue.'});await c.save();await notifyAgents(client,c,c.escalatedReason,config)}
-   else if(c.status==='ai_active'){await c.save();const answer=await aiReply(c);c.messages.push({senderType:'ai',senderName:'Starry AI',content:answer.reply,aiModel:'Gemini 2.5 Flash'});if(answer.needsHuman){c.status='waiting_agent';c.priority='high';c.escalatedReason=answer.reason||'AI could not confidently resolve the issue'}await c.save();if(answer.needsHuman)await notifyAgents(client,c,c.escalatedReason)}
+   else if(c.status==='ai_active'){await c.save();const answer=await aiReply(c);c.messages.push({senderType:'ai',senderName:'Starry AI',content:answer.reply,aiModel:answer.model||'Gemini 2.5 Flash'});if(answer.needsHuman){c.status='waiting_agent';c.priority='high';c.escalatedReason=answer.reason||'AI could not confidently resolve the issue'}await c.save();if(answer.needsHuman)await notifyAgents(client,c,c.escalatedReason,config)}
    else await c.save();
   }
   res.json({success:true,conversation:expose(c,true)});
