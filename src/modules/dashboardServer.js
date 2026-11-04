@@ -827,10 +827,11 @@ function setupDashboardRoutes(app, client) {
             let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
-            if (payload.prefix) {
-                settings.prefix = payload.prefix;
+            if (payload.prefix !== undefined) {
+                const normalizedPrefix = payload.prefix.trim();
+                settings.prefix = normalizedPrefix;
                 const { setCachedPrefix } = require('./commandHandler');
-                setCachedPrefix(guild.id, payload.prefix);
+                setCachedPrefix(guild.id, normalizedPrefix);
             }
             if (payload.triggerWord !== undefined) settings.triggerWord = payload.triggerWord.trim();
             if (payload.antinuke) settings.antinuke = { ...settings.antinuke.toObject(), ...payload.antinuke };
