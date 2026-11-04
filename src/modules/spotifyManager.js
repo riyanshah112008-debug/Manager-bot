@@ -8,8 +8,8 @@ const spotifyUrlInfo = require('spotify-url-info')(fetch);
 const UserSpotify = require('../models/UserSpotify');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 
-const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '4bb67b7dfc094233a07c29e8f6b4751f';
-const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || 'a746a92237184c3abf71db9241334d01';
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
 
 class SpotifyManager {
     constructor() {
@@ -18,6 +18,7 @@ class SpotifyManager {
     }
 
     async getAppToken() {
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) return null;
         if (this.appToken && Date.now() < this.appTokenExpires - 60000) {
             return this.appToken;
         }
@@ -44,6 +45,7 @@ class SpotifyManager {
     }
 
     getOAuthUrl(userId, redirectUri) {
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) throw new Error('Spotify integration is not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to the backend environment.');
         const scopes = [
             'playlist-read-private',
             'playlist-read-collaborative',
@@ -65,6 +67,7 @@ class SpotifyManager {
     }
 
     async handleOAuthCallback(code, redirectUri, stateUserId) {
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) throw new Error('Spotify integration is not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to the backend environment.');
         if (!code || !stateUserId) throw new Error('Missing authorization code or user state.');
 
         const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
@@ -113,6 +116,7 @@ class SpotifyManager {
     }
 
     async refreshUserToken(userDoc) {
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) return null;
         if (!userDoc || !userDoc.refreshToken) return null;
         try {
             const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
