@@ -186,7 +186,7 @@ function setupDashboardRoutes(app, client) {
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\\/+$/, '');
+        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
         pruneOAuthStates();
         const state = crypto.randomBytes(24).toString('hex');
@@ -204,7 +204,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/auth/callback', actionLimiter, async (req, res) => {
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
-        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\\/+$/, '');
+        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
         if (req.query.error) return res.redirect(`${frontendBase}/?error=discord_authorization_denied`);
         const stateCreatedAt = oauthStates.get(returnedState);
         if (!returnedState || !stateCreatedAt || Date.now() - stateCreatedAt > OAUTH_STATE_TTL_MS) {
@@ -218,7 +218,7 @@ function setupDashboardRoutes(app, client) {
         const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\\/+$/, '');
+        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
         const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
 
         try {
