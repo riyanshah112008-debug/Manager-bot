@@ -404,16 +404,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         return { success: false, error: `Order '${cleanOrderId}' not found.` };
     }
 
-    // Legacy orders created before EUR became the canonical currency may not have amountEur.
-    // Never guess a historical EUR amount from INR/USD without a recorded exchange rate.
-    // Keep the order reviewable/rejectable, but fail closed before issuing any key.
-    if (order.amountEur === null || order.amountEur === undefined || !Number.isFinite(Number(order.amountEur))) {
-        return {
-            success: false,
-            error: 'This legacy order has no recorded EUR amount. Reconcile its original payment evidence and recorded exchange rate before approval; no license key was issued.'
-        };
-    }
-
     if (order.status === 'completed' && order.licenseKey) {
         return {
             success: true,
@@ -421,6 +411,16 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
             alreadyCompleted: true,
             key: order.licenseKey,
             order
+        };
+    }
+
+    // Legacy orders created before EUR became the canonical currency may not have amountEur.
+    // Never guess a historical EUR amount from INR/USD without a recorded exchange rate.
+    // Keep the order reviewable/rejectable, but fail closed before issuing any key.
+    if (order.amountEur === null || order.amountEur === undefined || !Number.isFinite(Number(order.amountEur))) {
+        return {
+            success: false,
+            error: 'This legacy order has no recorded EUR amount. Reconcile its original payment evidence and recorded exchange rate before approval; no license key was issued.'
         };
     }
 
