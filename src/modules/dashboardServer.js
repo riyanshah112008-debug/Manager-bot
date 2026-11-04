@@ -21,6 +21,7 @@ const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const config = require('../config');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
+const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
 const { setupSupportDeskRoutes } = require('./supportDesk');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
@@ -28,6 +29,14 @@ const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+function bestPlayableMusicMatch(tracks, query) {
+    const ranked = rankAndFilterCanonicalTracks(Array.isArray(tracks) ? tracks : [], query);
+    const candidate = ranked[0];
+    if (!candidate) return null;
+    // Reject weak title/artist matches instead of silently queueing a different song.
+    return scoreTrack(candidate, query, 0) >= 180 ? candidate : null;
+}
 
 function setupDashboardRoutes(app, client) {
     app.use(express.json());
@@ -201,13 +210,21 @@ function setupDashboardRoutes(app, client) {
             const manager = client.manager;
             if (!manager || typeof manager.search !== 'function') return res.status(503).json({ success: false, error: 'The music search provider is not ready. Try again when Lavalink is connected.' });
             let searchQuery = query;
+            let matchQuery = query;
             const spotifyLink = parseSpotifyUrl(query);
             if (spotifyLink) {
                 const metadata = await resolveSpotifyUrl(query);
-                searchQuery = 'ytsearch:' + metadata.tracks[0].query;
+                const first = metadata?.tracks?.[0];
+                if (!first?.query) return res.status(404).json({ success: false, error: 'No playable track metadata was found in that Spotify link.' });
+                matchQuery = first.query;
+                searchQuery = 'ytmsearch:' + first.query;
             }
-            const result = await manager.search(searchQuery, { requester: req.session.user });
-            const tracks = (result?.tracks || []).slice(0, 8).map(track => ({
+            let result = await manager.search(searchQuery, { requester: req.session.user });
+            if ((!result?.tracks?.length) && spotifyLink) {
+                result = await manager.search('ytsearch:' + matchQuery, { requester: req.session.user });
+            }
+            const rankedTracks = rankAndFilterCanonicalTracks(result?.tracks || [], matchQuery);
+            const tracks = rankedTracks.slice(0, 8).map(track => ({
                 title: String(track.title || 'Unknown track').slice(0, 180),
                 artist: String(track.author || 'Unknown artist').slice(0, 120),
                 durationMs: Number(track.length) || 0,
@@ -1248,9 +1265,14 @@ function setupDashboardRoutes(app, client) {
                 for (let offset = 0; offset < collection.tracks.length; offset += 3) {
                     const batch = collection.tracks.slice(offset, offset + 3);
                     const matches = await Promise.all(batch.map(async metadata => {
-                        const found = await player.search('ytsearch:' + metadata.query, { requester: musicClient.user });
-                        const playable = found?.tracks?.[0];
-                        if (!playable) return null;
+                        if (!metadata?.query) return null;
+                        let found = await player.search('ytmsearch:' + metadata.query, { requester: musicClient.user });
+                        if (!found?.tracks?.length) found = await player.search('ytsearch:' + metadata.query, { requester: musicClient.user });
+                        const playable = bestPlayableMusicMatch(found?.tracks, metadata.query);
+                        if (!playable) {
+                            console.warn('[Music Match] Skipped weak Spotify-to-audio match:', metadata.query);
+                            return null;
+                        }
                         return { ...playable, title: metadata.title || playable.title, author: metadata.artist || playable.author, thumbnail: metadata.artwork || playable.thumbnail, length: metadata.durationMs || playable.length };
                     }));
                     tracksToQueue.push(...matches.filter(Boolean));
