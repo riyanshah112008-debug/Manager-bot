@@ -1023,12 +1023,12 @@ function setupDashboardRoutes(app, client) {
                 if (typeof player.pause !== 'function') return res.status(400).json({ success: false, error: 'Pause is not supported by this player.' });
                 player.pause(!Boolean(player.paused));
             } else if (action === 'skip') {
-                if (typeof player.skip === 'function') player.skip();
-                else if (typeof player.queue?.next === 'function') player.queue.next();
+                if (typeof player.skip === 'function') await player.skip();
+                else if (typeof player.queue?.next === 'function') await player.queue.next();
                 else return res.status(400).json({ success: false, error: 'Skip is not supported by this player.' });
             } else if (action === 'stop') {
-                if (typeof player.stop === 'function') player.stop();
-                else if (typeof player.destroy === 'function') player.destroy();
+                if (typeof player.stop === 'function') await player.stop();
+                else if (typeof player.destroy === 'function') await player.destroy();
                 else return res.status(400).json({ success: false, error: 'Stop is not supported by this player.' });
             } else if (action === 'volume') {
                 const volume = Number(value);
