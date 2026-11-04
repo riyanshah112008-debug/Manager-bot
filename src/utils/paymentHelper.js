@@ -19,6 +19,7 @@ const TIER_CONFIG = {
         usd: 4.99,
         inr: 399,
         durationDays: 30,
+        maxGuilds: 1,
         tag: 'SHIELD'
     },
     pro_cluster: {
@@ -27,6 +28,7 @@ const TIER_CONFIG = {
         usd: 12.99,
         inr: 999,
         durationDays: 30,
+        maxGuilds: 3,
         tag: 'PRO'
     },
     lifetime: {
@@ -35,9 +37,18 @@ const TIER_CONFIG = {
         usd: 39.99,
         inr: 3299,
         durationDays: -1,
+        maxGuilds: 9999,
         tag: 'LIFE'
     }
 };
+
+function assertPaymentsNotConfigured() {
+    // Checkout remains closed until verified Razorpay and crypto-provider adapters,
+    // server-side signature checks, and provider webhooks are implemented.
+    const error = new Error('Starry checkout is temporarily unavailable while verified payment providers are being configured. Do not send any payment yet.');
+    error.code = 'PAYMENTS_NOT_CONFIGURED';
+    throw error;
+}
 
 function buildQrUrl(dataUri) {
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(dataUri)}`;
@@ -47,12 +58,12 @@ function buildQrUrl(dataUri) {
  * Multi-Network Crypto Configuration
  */
 function getCryptoConfig() {
-    const usdtTrc20 = process.env.CRYPTO_USDT_TRC20 || 'TF1n7dG7K8x9p2Ym3w4Q5r6T7u8V9w0X1Z';
-    const usdtBep20 = process.env.CRYPTO_USDT_BEP20 || '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
-    const sol = process.env.CRYPTO_SOL || '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
-    const btc = process.env.CRYPTO_BTC || 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
-    const eth = process.env.CRYPTO_ETH || '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
-    const ltc = process.env.CRYPTO_LTC || 'LQt94eX9x4uR6vM7k5y2h3j4k5l6z7x8c9';
+    const usdtTrc20 = process.env.CRYPTO_USDT_TRC20 || '';
+    const usdtBep20 = process.env.CRYPTO_USDT_BEP20 || '';
+    const sol = process.env.CRYPTO_SOL || '';
+    const btc = process.env.CRYPTO_BTC || '';
+    const eth = process.env.CRYPTO_ETH || '';
+    const ltc = process.env.CRYPTO_LTC || '';
 
     return {
         usdt_trc20: {
@@ -62,7 +73,7 @@ function getCryptoConfig() {
             network: 'TRON Network (TRC-20)',
             badge: '⚡ Lowest Fee & Fastest',
             address: usdtTrc20,
-            qrUrl: buildQrUrl(usdtTrc20),
+            qrUrl: usdtTrc20 ? buildQrUrl(usdtTrc20) : null,
             explorerUrl: 'https://tronscan.org/#/transaction/',
             instructions: 'Send exact USDT amount via TRC-20 network only.'
         },
@@ -73,7 +84,7 @@ function getCryptoConfig() {
             network: 'Solana Mainnet (SPL)',
             badge: '🚀 Sub-second Finality',
             address: sol,
-            qrUrl: buildQrUrl(sol),
+            qrUrl: sol ? buildQrUrl(sol) : null,
             explorerUrl: 'https://solscan.io/tx/',
             instructions: 'Send SOL to this address on Solana mainnet.'
         },
@@ -84,7 +95,7 @@ function getCryptoConfig() {
             network: 'Bitcoin Mainnet (Native)',
             badge: '🔒 Native Blockchain',
             address: btc,
-            qrUrl: buildQrUrl(`bitcoin:${btc}`),
+            qrUrl: btc ? buildQrUrl(`bitcoin:${btc}`) : null,
             explorerUrl: 'https://www.blockchain.com/explorer/transactions/btc/',
             instructions: 'Send BTC from any Bitcoin wallet or exchange.'
         },
@@ -95,7 +106,7 @@ function getCryptoConfig() {
             network: 'Ethereum Mainnet (ERC-20)',
             badge: '💎 Ethereum Network',
             address: eth,
-            qrUrl: buildQrUrl(`ethereum:${eth}`),
+            qrUrl: eth ? buildQrUrl(`ethereum:${eth}`) : null,
             explorerUrl: 'https://etherscan.io/tx/',
             instructions: 'Send ETH or ERC-20 tokens to this address.'
         },
@@ -106,7 +117,7 @@ function getCryptoConfig() {
             network: 'BNB Smart Chain (BEP-20)',
             badge: '🟡 Ultra Low Gas Fee',
             address: usdtBep20,
-            qrUrl: buildQrUrl(usdtBep20),
+            qrUrl: usdtBep20 ? buildQrUrl(usdtBep20) : null,
             explorerUrl: 'https://bscscan.com/tx/',
             instructions: 'Send USDT on BNB Smart Chain (BEP-20) network.'
         },
@@ -117,7 +128,7 @@ function getCryptoConfig() {
             network: 'Litecoin Mainnet',
             badge: '⚡ Low Transfer Fee',
             address: ltc,
-            qrUrl: buildQrUrl(`litecoin:${ltc}`),
+            qrUrl: ltc ? buildQrUrl(`litecoin:${ltc}`) : null,
             explorerUrl: 'https://blockchair.com/litecoin/transaction/',
             instructions: 'Send LTC to this address.'
         }
@@ -128,16 +139,16 @@ function getCryptoConfig() {
  * PayPal Gateway Configuration
  */
 function getPaypalConfig(orderId, amountUsd) {
-    const email = process.env.PAYPAL_EMAIL || 'starrypayments@gmail.com';
-    const rawMeUrl = process.env.PAYPAL_ME_URL || 'https://paypal.me/StarryVIP';
+    const email = process.env.PAYPAL_EMAIL || '';
+    const rawMeUrl = process.env.PAYPAL_ME_URL || '';
     const cleanMe = rawMeUrl.replace(/\/+$/, '');
-    const directPayUrl = `${cleanMe}/${amountUsd}USD`;
+    const directPayUrl = cleanMe ? `${cleanMe}/${amountUsd}USD` : '';
 
     return {
         email,
         paypalMeUrl: directPayUrl,
         baseMeUrl: cleanMe,
-        qrUrl: buildQrUrl(directPayUrl),
+        qrUrl: directPayUrl ? buildQrUrl(directPayUrl) : null,
         instructions: `Click "Pay via PayPal" or transfer $${amountUsd} USD to ${email}. In the note, include Order Reference "${orderId}".`
     };
 }
@@ -146,18 +157,18 @@ function getPaypalConfig(orderId, amountUsd) {
  * UPI Gateway Configuration
  */
 function getUpiConfig(orderId, amountInr) {
-    const upiId = process.env.UPI_ID || 'starrybot@upi';
-    const payeeName = process.env.UPI_NAME || 'Starry VIP Network';
+    const upiId = process.env.UPI_ID || '';
+    const payeeName = process.env.UPI_NAME || '';
     const cleanPa = encodeURIComponent(upiId);
     const cleanPn = encodeURIComponent(payeeName);
     const cleanTn = encodeURIComponent(`Starry VIP ${orderId}`);
-    const upiUri = `upi://pay?pa=${cleanPa}&pn=${cleanPn}&am=${amountInr}&cu=INR&tn=${cleanTn}`;
+    const upiUri = upiId ? `upi://pay?pa=${cleanPa}&pn=${cleanPn}&am=${amountInr}&cu=INR&tn=${cleanTn}` : '';
 
     return {
         upiId,
         payeeName,
         upiUri,
-        qrUrl: buildQrUrl(upiUri),
+        qrUrl: upiUri ? buildQrUrl(upiUri) : null,
         instructions: `Scan QR code or open in UPI app. Pay ₹${amountInr} and enter the 12-digit UPI UTR number from your payment receipt.`
     };
 }
@@ -166,7 +177,7 @@ function getUpiConfig(orderId, amountInr) {
  * Card Gateway Configuration
  */
 function getCardConfig(orderId, amountUsd) {
-    const cardUrl = process.env.CARD_GATEWAY_URL || 'https://checkout.stripe.com';
+    const cardUrl = process.env.CARD_GATEWAY_URL || '';
     return {
         cardUrl,
         instructions: `Click below to pay $${amountUsd} USD via Credit/Debit card. Enter your payment receipt or reference number below.`
@@ -185,6 +196,7 @@ async function createPaymentOrder({
     userId = null, 
     userTag = 'Web Guest' 
 }) {
+    assertPaymentsNotConfigured();
     const tierData = TIER_CONFIG[tier];
     if (!tierData) {
         throw new Error(`Invalid tier '${tier}'. Available tiers: shield_plus, pro_cluster, lifetime`);
@@ -279,6 +291,7 @@ async function submitPaymentProof({
     notes = '', 
     client = null 
 }) {
+    assertPaymentsNotConfigured();
     if (!orderId) throw new Error('Order ID is required.');
     if (!utr || typeof utr !== 'string') throw new Error('Payment reference or Transaction ID is required.');
 
@@ -437,14 +450,14 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         key: generatedKey,
         tier: order.tier,
         durationDays: durationDays,
-        maxUses: 1,
+        maxUses: tierData.maxGuilds || 1,
         usedCount: order.guildId ? 1 : 0,
         redeemedBy: order.guildId ? [{
             userId: order.userId || 'Payment System',
             guildId: order.guildId,
             redeemedAt: new Date()
         }] : [],
-        active: order.guildId ? false : true,
+        active: order.guildId ? (tierData.maxGuilds || 1) > 1 : true,
         createdBy: `Order [${order.orderId}] Verified by ${adminIdentifier}`
     });
 
@@ -503,34 +516,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         }
     }
 
-    // Auto-activate User account so the customer has Starry Premium user privileges
-    let userActivated = false;
-    if (order.userId) {
-        try {
-            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
-            if (PremiumModel) {
-                await PremiumModel.findOneAndUpdate(
-                    { targetId: order.userId },
-                    {
-                        targetId: order.userId,
-                        type: 'user',
-                        isPremium: true,
-                        activatedAt: new Date(),
-                        expiresAt: expiresAt
-                    },
-                    { upsert: true }
-                ).catch(() => {});
-            }
-
-            if (client && typeof client.setPremiumCache === 'function') {
-                client.setPremiumCache(order.userId, expMs);
-            }
-            userActivated = true;
-        } catch (uErr) {
-            console.error('⚠️ Auto-activation user error:', uErr.message);
-        }
-    }
-
     // Update Order Status
     order.status = 'completed';
     order.licenseKey = generatedKey;
@@ -546,9 +531,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
                 let activationNote = '';
                 if (autoActivated) {
                     activationNote += `\n✅ **Auto-Activation:** Server ID \`${order.guildId}\` is now fully upgraded to **${order.tierName}**!`;
-                }
-                if (userActivated) {
-                    activationNote += `\n👑 **User Premium Status:** Your Discord user account has been activated with **${order.tierName}** perks!`;
                 }
                 activationNote += `\n\n💡 *To activate or transfer premium to any server, use \`,redeem ${generatedKey}\` in that server.*`;
 
@@ -575,7 +557,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         key: generatedKey,
         tier: order.tier,
         autoActivated,
-        userActivated,
         guildId: order.guildId,
         userId: order.userId,
         order
@@ -666,7 +647,7 @@ async function generateStandaloneKey({ tier = 'pro_cluster', durationDays = null
         key: generatedKey,
         tier: tierData.id,
         durationDays: finalDays,
-        maxUses: 1,
+        maxUses: tierData.maxGuilds || 1,
         usedCount: 0,
         createdBy: createdBy
     });

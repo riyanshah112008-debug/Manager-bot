@@ -1059,6 +1059,10 @@ const commands = [
                 return ctx.reply('❌ This license key has already reached its maximum redemptions.');
             }
 
+            if ((license.redeemedBy || []).some(entry => String(entry.guildId || '') === String(ctx.guild.id))) {
+                return ctx.reply('❌ This license key has already been redeemed for this server.');
+            }
+
             let expiresAt = null;
             if (license.durationDays && license.durationDays > 0) {
                 expiresAt = new Date(Date.now() + license.durationDays * 24 * 60 * 60 * 1000);
@@ -1084,18 +1088,12 @@ const commands = [
                     { targetId: ctx.guild.id, type: 'guild', isPremium: true, activatedAt: new Date(), expiresAt: expiresAt },
                     { upsert: true }
                 ).catch(() => {});
-                await PremiumModel.findOneAndUpdate(
-                    { targetId: ctx.user.id },
-                    { targetId: ctx.user.id, type: 'user', isPremium: true, activatedAt: new Date(), expiresAt: expiresAt },
-                    { upsert: true }
-                ).catch(() => {});
             }
 
             // Sync live RAM caches immediately
             const expMs = expiresAt ? expiresAt.getTime() : null;
             if (ctx.client && typeof ctx.client.setPremiumCache === 'function') {
                 ctx.client.setPremiumCache(ctx.guild.id, expMs);
-                ctx.client.setPremiumCache(ctx.user.id, expMs);
             }
             const { invalidatePremiumCache } = require('../../utils/premiumHelper');
             invalidatePremiumCache(ctx.guild.id);

@@ -34,6 +34,7 @@ const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 function setupDashboardRoutes(app, client) {
@@ -76,12 +77,32 @@ function setupDashboardRoutes(app, client) {
         if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
         else if (req.query.session) token = String(req.query.session);
         if (!token || token.length > 4096) return null;
+        const now = Date.now();
+        const tokenHash = hashSessionToken(token);
+        const renewIfNeeded = async (session) => {
+            // Rolling 30-day inactivity window; extend only when fewer than 23 days remain.
+            if (session.expiresAt - now > SESSION_TTL_MS - SESSION_RENEW_WINDOW_MS) return;
+            const nextExpiry = new Date(now + SESSION_TTL_MS);
+            const renewed = await OAuthSession.updateOne(
+                { tokenHash, expiresAt: { $gt: new Date(now) } },
+                { $set: { expiresAt: nextExpiry } }
+            );
+            if (renewed.matchedCount > 0) session.expiresAt = nextExpiry.getTime();
+        };
         const cached = userSessions.get(token);
-        if (cached && cached.expiresAt > Date.now()) return { token, ...cached };
+        if (cached && cached.expiresAt > now) {
+            try { await renewIfNeeded(cached); } catch (error) {
+                console.warn('Dashboard session renewal deferred:', error.message);
+            }
+            return { token, ...cached };
+        }
         userSessions.delete(token);
-        const stored = await OAuthSession.findOne({ tokenHash: hashSessionToken(token), expiresAt: { $gt: new Date() } }).lean();
+        const stored = await OAuthSession.findOne({ tokenHash, expiresAt: { $gt: new Date(now) } }).lean();
         if (!stored) return null;
         const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], expiresAt: new Date(stored.expiresAt).getTime() };
+        try { await renewIfNeeded(session); } catch (error) {
+            console.warn('Dashboard session renewal deferred:', error.message);
+        }
         userSessions.set(token, session);
         return { token, ...session };
     };
@@ -571,14 +592,15 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
-    // Cluster management is global, so only the bot owner or selected Discord server owner may change worker accounts.
+    // Worker tokens are global cluster credentials, not per-server settings.
+    // Only Starry bot owners may view or mutate the shared worker pool.
     const requireClusterManager = (req, res, next) => {
         const userId = String(req.session?.user?.id || '');
         const isBotOwner = typeof config.isBotOwner === 'function'
             ? config.isBotOwner(userId, client)
             : (config.BOT_OWNERS || []).includes(userId);
-        if (isBotOwner || (req.guild && req.guild.ownerId === userId)) return next();
-        return res.status(403).json({ success: false, error: 'Only the Starry bot owner or this Discord server owner can manage the global Multi-Bot cluster.' });
+        if (isBotOwner) return next();
+        return res.status(403).json({ success: false, error: 'Only Starry bot owners can manage the global Multi-Bot cluster.' });
     };
 
     app.get('/api/guild/:id/commands', requireGuildAdmin, (req, res) => {
@@ -627,8 +649,13 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
-            const hasPremium = await isServerOrUserPremium(req.guild.id, req.session.user.id, client);
-            if (!hasPremium) return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires Starry Pro Cluster or Lifetime premium.' });
+            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
+            const premium = premiumSettings?.premium;
+            const premiumActive = Boolean(premium?.isPremium) &&
+                (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
+            if (!premiumActive || !['pro_cluster', 'lifetime'].includes(premium.tier)) {
+                return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires active Starry Pro Cluster or Lifetime premium on this server.' });
+            }
             const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
             const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 64) : '';
             const role = typeof req.body?.role === 'string' ? req.body.role : 'all';
@@ -1485,53 +1512,95 @@ function setupDashboardRoutes(app, client) {
         });
     });
 
-    // POST /api/premium/redeem - Redeem License Key
-    app.post('/api/premium/redeem', async (req, res) => {
+    // POST /api/premium/redeem - Authenticated, guild-scoped license redemption
+    app.post('/api/premium/redeem', requireAuth, actionLimiter, async (req, res) => {
+        let reservedLicense = null;
+        let reservedCount = null;
         try {
-            const { key, guildId, userId } = req.body;
-            if (!key) return res.status(400).json({ success: false, error: 'Please provide a valid license key.' });
+            const { key, guildId: rawGuildId } = req.body;
+            const guildId = typeof rawGuildId === 'string' ? rawGuildId.trim() : '';
+            const userId = String(req.session.user.id);
+            if (!key || typeof key !== 'string' || key.trim().length > 64) {
+                return res.status(400).json({ success: false, error: 'Please provide a valid license key.' });
+            }
+            if (!/^\d{17,20}$/.test(guildId)) {
+                return res.status(400).json({ success: false, error: 'Select a valid Discord server before redeeming this key.' });
+            }
+
+            const guild = client.guilds.cache.get(guildId);
+            if (!guild) return res.status(404).json({ success: false, error: 'Starry is not currently in the selected server.' });
+            if (guild.ownerId !== userId) {
+                const member = await guild.members.fetch(userId).catch(() => null);
+                if (!member || (!member.permissions.has(PermissionFlagsBits.Administrator) &&
+                    !member.permissions.has(PermissionFlagsBits.ManageGuild))) {
+                    return res.status(403).json({ success: false, error: 'You need Administrator or Manage Server permission in this server.' });
+                }
+            }
 
             const cleanKey = key.trim().toUpperCase();
             const license = await PremiumKey.findOne({ key: cleanKey, active: true });
-
-            if (!license) {
-                return res.status(404).json({ success: false, error: 'Invalid or expired license key.' });
+            if (!license || license.usedCount >= license.maxUses) {
+                return res.status(404).json({ success: false, error: 'Invalid, expired, or fully redeemed license key.' });
+            }
+            if ((license.redeemedBy || []).some(entry => String(entry.guildId || '') === guildId)) {
+                return res.status(409).json({ success: false, error: 'This license has already been redeemed for this server.' });
             }
 
-            if (license.usedCount >= license.maxUses) {
-                return res.status(400).json({ success: false, error: 'This license key has already reached its maximum redemptions.' });
+            const nextCount = Number(license.usedCount || 0) + 1;
+            const reservation = await PremiumKey.updateOne(
+                { _id: license._id, active: true, usedCount: Number(license.usedCount || 0), 'redeemedBy.guildId': { $ne: guildId } },
+                { $inc: { usedCount: 1 }, $push: { redeemedBy: { userId, guildId, redeemedAt: new Date() } } }
+            );
+            if (reservation.modifiedCount !== 1) {
+                return res.status(409).json({ success: false, error: 'This key was just redeemed elsewhere or has reached its redemption limit. Please retry.' });
             }
+            reservedLicense = license._id;
+            reservedCount = nextCount;
 
-            let expiresAt = null;
-            if (license.durationDays && license.durationDays > 0) {
-                expiresAt = new Date(Date.now() + license.durationDays * 24 * 60 * 60 * 1000);
-            }
-
-            if (guildId) {
-                let settings = await ServerSettings.findOne({ guildId });
-                if (!settings) settings = new ServerSettings({ guildId });
-                settings.premium = {
-                    isPremium: true,
-                    tier: license.tier,
-                    expiresAt: expiresAt,
-                    activatedBy: userId || 'Web'
-                };
-                await settings.save();
-            }
-
-            license.usedCount += 1;
-            license.redeemedBy.push({ userId, guildId, redeemedAt: new Date() });
-            if (license.usedCount >= license.maxUses) license.active = false;
-            await license.save();
-
-            res.json({
-                success: true,
-                message: `🎉 Premium Tier [${license.tier.toUpperCase()}] successfully activated!`,
+            const expiresAt = license.durationDays > 0
+                ? new Date(Date.now() + license.durationDays * 24 * 60 * 60 * 1000)
+                : null;
+            let settings = await ServerSettings.findOne({ guildId });
+            if (!settings) settings = new ServerSettings({ guildId });
+            settings.premium = {
+                isPremium: true,
                 tier: license.tier,
-                expiresAt: expiresAt ? expiresAt.toLocaleDateString() : 'Permanent Lifetime VIP'
+                expiresAt,
+                activatedBy: userId
+            };
+            await settings.save();
+
+            if (nextCount >= license.maxUses) {
+                await PremiumKey.updateOne({ _id: license._id, usedCount: nextCount }, { $set: { active: false } });
+            }
+
+            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
+            await PremiumModel.findOneAndUpdate(
+                { targetId: guildId },
+                { targetId: guildId, type: 'guild', isPremium: true, activatedAt: new Date(), expiresAt },
+                { upsert: true }
+            ).catch(() => {});
+            if (client && typeof client.setPremiumCache === 'function') {
+                client.setPremiumCache(guildId, expiresAt ? expiresAt.getTime() : null);
+            }
+            require('../utils/premiumHelper').invalidatePremiumCache(guildId);
+
+            return res.json({
+                success: true,
+                message: `Starry ${license.tier.toUpperCase()} activated for this server.`,
+                tier: license.tier,
+                expiresAt: expiresAt ? expiresAt.toISOString() : null,
+                remainingRedemptions: Math.max(0, Number(license.maxUses || 1) - nextCount)
             });
         } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            if (reservedLicense && reservedCount !== null) {
+                await PremiumKey.updateOne(
+                    { _id: reservedLicense, usedCount: reservedCount },
+                    { $inc: { usedCount: -1 }, $pull: { redeemedBy: { guildId: String(req.body.guildId || '').trim() } }, $set: { active: true } }
+                ).catch(() => {});
+            }
+            console.error('Premium license redemption failed:', e);
+            return res.status(500).json({ success: false, error: 'Could not complete premium activation. Please retry or contact Starry support.' });
         }
     });
 

@@ -8,12 +8,18 @@ function safeGet(storageName,key){try{return window[storageName].getItem(key)}ca
 function safeSet(storageName,key,value){try{window[storageName].setItem(key,value);return true}catch(_){return false}}
 function safeRemove(storageName,key){try{window[storageName].removeItem(key)}catch(_){}}
 function getStoredSession(){return safeGet("localStorage",sessionKey)||safeGet("sessionStorage",sessionKey)}
+function storeSession(token){
+ const tabSaved=safeSet("sessionStorage",sessionKey,token);
+ const durableSaved=safeSet("localStorage",sessionKey,token);
+ if(!durableSaved)safeRemove("localStorage",sessionKey);
+ return durableSaved||tabSaved
+}
 function clearStoredSession(){safeRemove("localStorage",sessionKey);safeRemove("sessionStorage",sessionKey)}
 (function captureSessionFromUrl(){
  let params;try{params=new URLSearchParams(window.location.search)}catch(_){return}
  if(!params.has("session"))return;
  const token=params.get("session");
- if(token&&!safeSet("localStorage",sessionKey,token))safeSet("sessionStorage",sessionKey,token);
+ if(token)storeSession(token);
  params.delete("session");const cleanQuery=params.toString();
  // OAuth currently returns to dashboard.html. Store the token, then return to
  // the homepage so its Discord profile controls can render immediately.
@@ -33,7 +39,8 @@ window.fetch=function(input,init){
  const token=getStoredSession();if(token)headers.set("Authorization","Bearer "+token);
  const requestInput=input instanceof Request?new Request(target,input):target;
  return nativeFetch(requestInput,{...(init||{}),headers,mode:"cors"}).then(response=>{
-  if(response.status===401&&parsed.pathname!=="/auth/login")clearStoredSession();
+  // Only a failed canonical session check may invalidate the saved login.
+  if(response.status===401&&parsed.pathname==="/auth/user")clearStoredSession();
   if(parsed.pathname==="/auth/logout"&&response.ok)clearStoredSession();
   if(parsed.pathname==="/auth/user"&&response.ok)response.clone().json().then(data=>{if(data&&data.authenticated===false)clearStoredSession()}).catch(()=>{});
   return response
