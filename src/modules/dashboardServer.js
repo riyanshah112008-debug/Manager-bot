@@ -653,7 +653,7 @@ function setupDashboardRoutes(app, client) {
             const premium = premiumSettings?.premium;
             const premiumActive = Boolean(premium?.isPremium) &&
                 (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
-            if (!premiumActive || !['pro_cluster', 'lifetime'].includes(premium.tier)) {
+            if (!premiumActive || !['pro_cluster', 'platinum', 'lifetime'].includes(premium.tier)) {
                 return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires active Starry Pro Cluster or Lifetime premium on this server.' });
             }
             const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
@@ -1451,64 +1451,19 @@ function setupDashboardRoutes(app, client) {
     // 2. PAYMENT, CHECKOUT & PREMIUM SUITE
     // ==========================================
 
-    // GET /api/premium/tiers - Pricing plans & features
+    // GET /api/premium/tiers - Canonical Starry EUR pricing and feature catalogue
     app.get('/api/premium/tiers', (req, res) => {
+        res.set('Cache-Control', 'public, max-age=300');
         res.json({
             success: true,
-            tiers: [
-                {
-                    id: 'shield_plus',
-                    name: 'Starry Shield Plus',
-                    price: '$4.99',
-                    billing: 'Monthly',
-                    priceUpi: '₹399 / mo',
-                    priceCrypto: '5 USDT',
-                    badge: 'ESSENTIAL',
-                    features: [
-                        '⚡ 24/7 Studio Quality Voice (320kbps, No-Disconnect)',
-                        '🛡️ Starry Anti-Nuke & Anti-Raid Shield',
-                        '👑 Web Captcha Verification Gateway (Anti-Bot Raids)',
-                        '💾 Daily Automated Cloud Server Backups (10 Snapshots)',
-                        '💰 2x Economy XP & Timed Loot Chest Boost',
-                        '📊 Full Audit Logs (Deletions, Voice States, Mod Cases)'
-                    ]
-                },
-                {
-                    id: 'pro_cluster',
-                    name: 'Starry Pro Cluster',
-                    price: '$12.99',
-                    billing: 'Monthly',
-                    priceUpi: '₹999 / mo',
-                    priceCrypto: '14 USDT',
-                    badge: 'MOST POPULAR',
-                    features: [
-                        '🌟 ALL Shield Plus features active across 3 Guilds',
-                        '🤖 White-Label Custom Bot Branding (Name & Avatar)',
-                        '🛡️ Anti-Nuke God Mode with 1-Click Snapshot Rollback',
-                        '🎵 3-Room Multi-Bot Music Suite (Starry 1, 2, 3)',
-                        '🔮 AI Smart Auto-Moderator (Powered by Gemini AI)',
-                        '🎫 Unlimited Support Ticket Panels with Web Transcripts',
-                        '👑 Priority Node Queue & 0ms Command Latency'
-                    ]
-                },
-                {
-                    id: 'lifetime',
-                    name: 'Starry Supreme Lifetime VIP',
-                    price: '$39.99',
-                    billing: 'One-Time Lifetime',
-                    priceUpi: '₹3,299 Lifetime',
-                    priceCrypto: '42 USDT',
-                    badge: 'BEST VALUE',
-                    features: [
-                        '♾️ Permanent Lifetime VIP Access (All Future Updates Included)',
-                        '🌐 Unlimited Guild Activations & Bot Clones',
-                        '💎 Golden Starry VIP Badge & Custom Profile Embed Title',
-                        '🚀 Dedicated High-Performance FLAC Lossless Audio Stream Worker',
-                        '🔒 Maximum Enterprise Anti-Nuke Protection',
-                        '👑 Direct Access to Private Beta & VIP Developer Support'
-                    ]
-                }
-            ]
+            currency: 'EUR',
+            tiers: Object.values(TIER_CONFIG).map(tier => ({
+                id: tier.id, name: tier.name, price: `€${tier.eur}`,
+                amount: tier.eur,
+                billing: tier.durationDays === -1 ? 'One-time' : 'Monthly',
+                durationDays: tier.durationDays, maxGuilds: tier.maxGuilds,
+                badge: tier.badge, features: tier.features
+            }))
         });
     });
 
@@ -1609,7 +1564,7 @@ function setupDashboardRoutes(app, client) {
         try {
             const { tier, method, cryptoCoin, guildId } = req.body;
             if (!tier || !TIER_CONFIG[tier]) {
-                return res.status(400).json({ success: false, error: 'Invalid tier specified. Choose shield_plus, pro_cluster, or lifetime.' });
+                return res.status(400).json({ success: false, error: 'Invalid tier specified. Choose Shield Plus, Pro Cluster, Platinum, or Supreme Lifetime.' });
             }
 
             const session = await getSession(req);
