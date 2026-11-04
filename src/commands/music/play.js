@@ -169,7 +169,7 @@ module.exports = {
                 )
                 .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,` })
                 .setTimestamp();
-              return replyFunc.call(interaction, { embeds: [embed] });
+              return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
             }
           }
           return;
@@ -229,7 +229,7 @@ module.exports = {
           .setTimestamp();
 
         const replyFunc = interaction.editReply || interaction.reply;
-        return replyFunc.call(interaction, { embeds: [embed] });
+        return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
       } else {
         const track = result.tracks[0];
         if (!player.currentTrack) {
@@ -264,7 +264,7 @@ module.exports = {
             .setTimestamp();
 
           const replyFunc = interaction.editReply || interaction.reply;
-          return replyFunc.call(interaction, { embeds: [embed] });
+          return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
         }
       }
 
