@@ -7,7 +7,7 @@ const sessionKey="starry_dashboard_session";
 function safeGet(storageName,key){try{return window[storageName].getItem(key)}catch(_){return null}}
 function safeSet(storageName,key,value){try{window[storageName].setItem(key,value);return true}catch(_){return false}}
 function safeRemove(storageName,key){try{window[storageName].removeItem(key)}catch(_){}}
-function getStoredSession(){return safeGet("sessionStorage",sessionKey)||safeGet("localStorage",sessionKey)}
+function getStoredSession(){return safeGet("localStorage",sessionKey)||safeGet("sessionStorage",sessionKey)}
 function storeSession(token){
  const tabSaved=safeSet("sessionStorage",sessionKey,token);
  const durableSaved=safeSet("localStorage",sessionKey,token);
