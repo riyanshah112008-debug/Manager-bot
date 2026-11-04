@@ -734,6 +734,14 @@ class StarryGuildPlayer {
 
                     const resolved = await streamResolver.resolve(query);
                     if (resolved) {
+                        track._audioSourceInfo = {
+                            container: resolved.ext || (resolved.file ? 'cached file' : 'stream'),
+                            codec: resolved.codec || 'unknown',
+                            sourceBitrateKbps: Number.isFinite(Number(resolved.abr)) ? Math.round(Number(resolved.abr)) : null,
+                            sampleRate: resolved.sampleRate || null,
+                            channels: resolved.channels || null
+                        };
+                        console.info(`[Audio Source ${this.guildId}] ${track.title}: ${JSON.stringify(track._audioSourceInfo)}`);
                         if (resolved.file && fs.existsSync(resolved.file)) {
                             track._resolvedFile = resolved.file;
                             audioResource = this.createFilteredResource(resolved.file, true);
