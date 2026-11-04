@@ -428,7 +428,8 @@ class MultiBotManager {
             const client = info.client;
             if (!client || !client.user) continue;
 
-            const clientGuild = client.guilds.cache.get(guildId) || guild;
+            const clientGuild = client.guilds.cache.get(guildId);
+            if (!clientGuild) continue;
             const member = clientGuild.members.me || clientGuild.members.cache.get(client.user.id);
             if (member && member.voice && member.voice.channelId === voiceChannelId) {
                 return {
