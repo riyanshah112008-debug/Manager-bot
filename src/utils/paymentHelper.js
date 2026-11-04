@@ -598,6 +598,7 @@ async function getOrderStatus(orderId) {
         status: order.status,
         tier: order.tier,
         tierName: order.tierName,
+        amountEur: order.amountEur,
         amountInr: order.amountInr,
         amountUsd: order.amountUsd,
         method: order.method,
