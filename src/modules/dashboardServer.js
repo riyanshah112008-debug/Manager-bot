@@ -437,6 +437,72 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // ✨ Welcome dashboard APIs use the existing WelcomeSettings model and guildMemberAdd engine.
+    app.get('/api/guild/:id/welcome', requireGuildAdmin, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const { WelcomeSettings } = require('./welcome');
+            const settings = await WelcomeSettings.findOne({ guildId: req.guild.id }).lean();
+            res.json({ success: true, configured: Boolean(settings), settings: settings || {
+                channelId: '', title: '✨ WELCOME TO {server} ✨',
+                description: '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟',
+                color: '#FF73FA', image: 'https://cdn.otakugifs.xyz/gifs/wave/61621fefb2bce465.gif',
+                thumbnail: 'avatar', footer: '✨ Enjoy your stellar journey in {server}! ✨',
+                pingContent: '💫 Welcome {user}! Grab a seat and enjoy your stay! 🥂'
+            }});
+        } catch (error) {
+            console.error('Dashboard welcome API failed:', error);
+            res.status(500).json({ success: false, error: 'Could not load welcome settings.' });
+        }
+    });
+
+    app.post('/api/guild/:id/welcome', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const { WelcomeSettings } = require('./welcome');
+            const guild = req.guild, body = req.body || {}, updates = {};
+            const channelId = String(body.channelId || '').trim();
+            const channel = channelId ? guild.channels.cache.get(channelId) : null;
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                return res.status(400).json({ success: false, error: 'Choose a valid text channel from this server.' });
+            }
+            updates.channelId = channelId;
+            for (const [key, limit] of [['title', 256], ['description', 4000], ['footer', 2048], ['pingContent', 2000]]) {
+                if (body[key] === undefined) continue;
+                if (typeof body[key] !== 'string' || body[key].length > limit) {
+                    return res.status(400).json({ success: false, error: key + ' must be text with at most ' + limit + ' characters.' });
+                }
+                updates[key] = body[key].trim();
+            }
+            if (body.color !== undefined) {
+                if (typeof body.color !== 'string' || !/^#(?:[0-9a-f]{3}){1,2}$/i.test(body.color.trim())) {
+                    return res.status(400).json({ success: false, error: 'Color must be a valid hex value.' });
+                }
+                updates.color = body.color.trim();
+            }
+            if (body.image !== undefined) {
+                const value = String(body.image || '').trim();
+                if (value && (!/^https?:\\/\\//i.test(value) || value.length > 1000)) {
+                    return res.status(400).json({ success: false, error: 'Banner must be a valid HTTP or HTTPS URL.' });
+                }
+                updates.image = value;
+            }
+            if (body.thumbnail !== undefined) {
+                const value = String(body.thumbnail || 'avatar').trim();
+                if (value.toLowerCase() !== 'avatar' && (!/^https?:\\/\\//i.test(value) || value.length > 1000)) {
+                    return res.status(400).json({ success: false, error: 'Thumbnail must be “avatar” or a valid HTTP or HTTPS URL.' });
+                }
+                updates.thumbnail = value;
+            }
+            const settings = await WelcomeSettings.findOneAndUpdate(
+                { guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true }
+            ).lean();
+            res.json({ success: true, settings, message: 'Welcome settings saved. New members will receive the configured welcome card.' });
+        } catch (error) {
+            console.error('Dashboard welcome settings save failed:', error);
+            res.status(500).json({ success: false, error: 'Could not save welcome settings.' });
+        }
+    });
+
     // 📈 Leveling and economy dashboard APIs (Discord admin guarded).
     app.get('/api/guild/:id/leveling', requireGuildAdmin, async (req, res) => {
         try {
