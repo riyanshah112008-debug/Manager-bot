@@ -136,7 +136,7 @@ module.exports = {
                 `👤 **Curator / Artist:** \`${res.tracks[0]?.author || 'Featured Artist'}\`\n` +
                 `🕒 **Total Estimated Playtime:** \`${totalDurationStr}\`\n` +
                 `🔠 **Queue Status:** Currently playing • \`${player.queue.length}\` songs in queue\n` +
-                `🔊 **Mastering:** \`Lavalink Studio Hi-Fi Active\`\n\n` +
+                `🔊 **Mastering:** \`Lavalink audio stream active\`\n\n` +
                 `📝 **Upcoming Tracks Preview:**\n` +
                 `${previewTracks}${remainingCount}`
               )
@@ -153,7 +153,7 @@ module.exports = {
               player.queue.add(track);
               const embed = new EmbedBuilder()
                 .setColor('#5865F2')
-                .setAuthor({ name: 'Track Queued • Original Studio Hi-Fi Active', iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
+                .setAuthor({ name: 'Track queued', iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
                 .setTitle(track.title ? track.title.substring(0, 90) : 'Track')
                 .setURL(track.uri || 'https://discord.gg')
                 .setThumbnail(track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80')
@@ -161,8 +161,8 @@ module.exports = {
                   `👤 **Artist:** \`${track.author || 'Artist'}\`\n` +
                   `🕒 **Duration:** \`${formatTime(track.length)}\`\n` +
                   `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
-                  `🌐 **Source:** \`${track.sourceName || 'Lavalink Hi-Fi'}\`\n` +
-                  `🔊 **Sound Profile:** \`⭐ Studio Hi-Fi Master (Original Release)\``
+                  `🌐 **Source:** \`${track.sourceName || 'Lavalink'}\`\n` +
+                  `🔊 **Sound Profile:** \`⭐ Balanced Studio EQ\``
                 )
                 .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,` })
                 .setTimestamp();
@@ -218,7 +218,7 @@ module.exports = {
             `👤 **Curator / Artist:** \`${result.author || 'Featured Artist'}\`\n` +
             `🕒 **Total Estimated Playtime:** \`${totalDurationStr}\`\n` +
             `🔠 **Queue Status:** Currently playing • \`${player.queue.length}\` songs in queue\n` +
-            `🔊 **Mastering:** \`Empowering Hi-Fi Dynamic EQ Active\`\n\n` +
+            `🔊 **Mastering:** \`Balanced EQ profile active\`\n\n` +
             `📝 **Upcoming Tracks Preview:**\n` +
             `${previewTracks}${remainingCount}`
           )
@@ -254,8 +254,8 @@ module.exports = {
               `👤 **Artist:** \`${track.author || 'Artist'}\`\n` +
               `🕒 **Duration:** \`${formatTime(track.duration)}\`\n` +
               `🔢 **Queue Position:** \`#${player.queue.length}\`\n` +
-              `🌐 **Source:** \`${track.source || 'Studio Hi-Fi'}\`\n` +
-              `🔊 **Sound Profile:** \`Empowering Master Dynamic EQ\``
+              `🌐 **Source:** \`${track.source || 'Audio source'}\`\n` +
+              `🔊 **Sound Profile:** \`Balanced Studio EQ\``
             )
             .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,` })
             .setTimestamp();

@@ -694,30 +694,7 @@ class StarryGuildPlayer {
                 } catch (srErr) {}
             }
 
-            // 3. Primary Cloud Streamer: Pure JS SoundCloud Streaming via play-dl (320kbps Hi-Fi)
-            if (!audioResource) {
-                try {
-                    await refreshSoundCloudToken();
-                    const primaryArtist = (track.author || '').split(',')[0].trim();
-                    const scSearchQuery = `${primaryArtist} ${track.title}`.trim() || track.title;
-                    let scResults = await play.search(scSearchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
-                    if (!scResults || scResults.length === 0) {
-                        scResults = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
-                    }
-                    const targetSc = scResults?.[0];
-                    const scUrl = targetSc?.permalink || targetSc?.url;
-                    if (scUrl) {
-                        const stream = await play.stream(scUrl, { quality: 2 }).catch(() => null);
-                        if (stream && stream.stream) {
-                            audioResource = this.createFilteredResource(stream.stream, false);
-                        }
-                    }
-                } catch (scErr) {
-                    console.warn('⚠️ [SoundCloud Streamer Fallback]:', scErr.message || scErr);
-                }
-            }
-
-            // 4. Secondary Cloud Streamer: YouTube Audio via streamResolver, play-dl or @distube/ytdl-core
+            // 3. Preserve the selected YouTube track before trying unrelated catalogue fallbacks.
             if (!audioResource) {
                 try {
                     let ytUrl = targetUrl;
@@ -750,6 +727,29 @@ class StarryGuildPlayer {
                     }
                 } catch (ytErr) {
                     console.warn('⚠️ [YouTube Streamer Fallback]:', ytErr.message || ytErr);
+                }
+            }
+
+            // 4. Last-resort SoundCloud search fallback. Keep YouTube as the preferred match for YouTube tracks.
+            if (!audioResource) {
+                try {
+                    await refreshSoundCloudToken();
+                    const primaryArtist = (track.author || '').split(',')[0].trim();
+                    const scSearchQuery = `${primaryArtist} ${track.title}`.trim() || track.title;
+                    let scResults = await play.search(scSearchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    if (!scResults || scResults.length === 0) {
+                        scResults = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
+                    }
+                    const targetSc = scResults?.[0];
+                    const scUrl = targetSc?.permalink || targetSc?.url;
+                    if (scUrl) {
+                        const stream = await play.stream(scUrl, { quality: 2 }).catch(() => null);
+                        if (stream && stream.stream) {
+                            audioResource = this.createFilteredResource(stream.stream, false);
+                        }
+                    }
+                } catch (scErr) {
+                    console.warn('⚠️ [SoundCloud Streamer Fallback]:', scErr.message || scErr);
                 }
             }
 

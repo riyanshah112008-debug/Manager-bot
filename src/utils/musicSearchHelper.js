@@ -72,7 +72,7 @@ function formatChoiceLabel(title, artist, duration) {
 
 /**
  * Builds the 5-button platform action row matching Jockie Music's UI:
- * [🟠 SoundCloud] [🟢 Spotify] [🍎 Apple Music] [🎵 YouTube Music] [❌ Cancel]
+ * [🟠 SoundCloud] [🟢 Spotify] [🎵 YouTube Music] [❌ Cancel]
  */
 function buildSearchSourceRow(searchId) {
     return new ActionRowBuilder().addComponents(
@@ -85,11 +85,6 @@ function buildSearchSourceRow(searchId) {
             .setCustomId(`search_src_sp:${searchId}`)
             .setEmoji('🟢')
             .setLabel('Spotify')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`search_src_am:${searchId}`)
-            .setEmoji('🍎')
-            .setLabel('Apple Music')
             .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId(`search_src_ytm:${searchId}`)
@@ -293,7 +288,6 @@ async function handleSearchButton(interaction, client) {
     const sourceNames = {
         sc: 'SoundCloud 🟠',
         sp: 'Spotify 🟢',
-        am: 'Apple Music 🍎',
         ytm: 'YouTube Music 🎵'
     };
     const sourceName = sourceNames[sourceKey] || 'Unknown';
@@ -326,11 +320,6 @@ async function handleSearchButton(interaction, client) {
                 searchResult = await manager.search(`scsearch:${session.query}`, { requester: interaction.user });
             }
         } else if (sourceKey === 'sp') {
-            searchResult = await manager.search(session.query, { requester: interaction.user, engine: 'spotify' });
-            if (!searchResult || !searchResult.tracks?.length) {
-                searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });
-            }
-        } else if (sourceKey === 'am') {
             searchResult = await manager.search(session.query, { requester: interaction.user, engine: 'spotify' });
             if (!searchResult || !searchResult.tracks?.length) {
                 searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });

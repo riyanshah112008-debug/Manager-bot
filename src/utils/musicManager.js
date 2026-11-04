@@ -366,7 +366,7 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
-            { label: '⭐ Studio Hi-Fi Master (Empowering)', description: 'Audiophile punch, deep sub-bass, silky vocals & wide stage', value: 'empowering', emoji: '✨' },
+            { label: '⭐ Balanced Studio EQ', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
             { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
             { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -769,13 +769,13 @@ async function applyKazagumoFilter(player, filterName) {
             case 'audiophile':
             case 'master':
             case 'studio':
-                // ⭐ PRO STUDIO AUDIOPHILE MASTERING (Clean Headroom • Zero Distortion • Crystal Clear Vocals)
+                // ⭐ BALANCED STUDIO-STYLE EQ (headroom-preserving; source quality varies)
                 // - Deep, clean sub-bass (40Hz: +0.14, 63Hz: +0.10, 25Hz: +0.06)
                 // - Tight punch at 100Hz (+0.04)
                 // - Subtractive mud-scoop at 250Hz (-0.12) and 160Hz (-0.04) to cleanly de-mask vocals without artificial gain
                 // - Natural vocal clarity & presence: 1.0kHz (+0.02), 1.6kHz (+0.04), 2.5kHz (+0.05), 4.0kHz (+0.03)
                 // - Silky airy highs: 10kHz (+0.06), 16kHz (+0.04)
-                // - Master volume set to 0.80 (~2.0dB digital headroom) ensuring zero clipping or voice cracking into Discord Opus 48kHz
+                // - Master volume set to 0.80 (~2.0dB digital headroom) to reduce clipping risk in the encoded Discord Opus output
                 // - In-phase stereo (channelMix: null) for crystal-clear centered vocals and zero comb-filtering
                 await shoukakuPlayer.setFilters({
                     volume: 0.80,
@@ -1103,7 +1103,7 @@ function createMusicManager(client) {
         player.data.set('previousTrack', track);
         recordTrackHistory(player, track);
 
-        // 🔊 PRO STUDIO HI-FI DSP MASTERING: Automatically apply empowering studio master out of the box
+        // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
         const activeFilter = player.data.get('activeFilter') || 'empowering';
         player.data.set('activeFilter', activeFilter);
         await applyKazagumoFilter(player, activeFilter).catch(() => {});
@@ -1176,13 +1176,13 @@ function createMusicManager(client) {
                 `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Spotify'}\n` +
-                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'empowering' ? '⭐ Studio Hi-Fi Master (Empowering)' : currentActiveFilter.toUpperCase()}\`\n` +
+                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'empowering' ? '⭐ Balanced Studio EQ' : currentActiveFilter.toUpperCase()}\`\n` +
                 `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
                 `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`
             )
             .setFooter({ 
-                text: `Starry Hi-Fi Music Engine • Loop: ${player.loop.toUpperCase()} • Autoplay: ${isAutoplay ? 'ON' : 'OFF'} • Volume: ${player.volume || 100}%`, 
+                text: `Starry Music Engine • Loop: ${player.loop.toUpperCase()} • Autoplay: ${isAutoplay ? 'ON' : 'OFF'} • Volume: ${player.volume || 100}%`, 
                 iconURL: client.user ? client.user.displayAvatarURL() : undefined 
             });
 
