@@ -19,7 +19,7 @@ const paymentOrderSchema = new mongoose.Schema({
         enum: ['shield_plus', 'pro_cluster', 'platinum', 'lifetime'] 
     },
     tierName: { type: String, default: '' },
-    amountEur: { type: Number, required: true, min: 0 },
+    amountEur: { type: Number, default: null, min: 0 }, // Optional for legacy orders; new orders must set the canonical EUR amount.
     amountInr: { type: Number, default: null },
     amountUsd: { type: Number, default: null },
     durationDays: { type: Number, default: 30 },
