@@ -19,6 +19,7 @@ const TIER_CONFIG = {
         usd: 4.99,
         inr: 399,
         durationDays: 30,
+        maxGuilds: 1,
         tag: 'SHIELD'
     },
     pro_cluster: {
@@ -27,6 +28,7 @@ const TIER_CONFIG = {
         usd: 12.99,
         inr: 999,
         durationDays: 30,
+        maxGuilds: 3,
         tag: 'PRO'
     },
     lifetime: {
@@ -35,6 +37,7 @@ const TIER_CONFIG = {
         usd: 39.99,
         inr: 3299,
         durationDays: -1,
+        maxGuilds: 9999,
         tag: 'LIFE'
     }
 };
@@ -447,14 +450,14 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         key: generatedKey,
         tier: order.tier,
         durationDays: durationDays,
-        maxUses: 1,
+        maxUses: tierData.maxGuilds || 1,
         usedCount: order.guildId ? 1 : 0,
         redeemedBy: order.guildId ? [{
             userId: order.userId || 'Payment System',
             guildId: order.guildId,
             redeemedAt: new Date()
         }] : [],
-        active: order.guildId ? false : true,
+        active: order.guildId ? (tierData.maxGuilds || 1) > 1 : true,
         createdBy: `Order [${order.orderId}] Verified by ${adminIdentifier}`
     });
 
@@ -513,34 +516,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         }
     }
 
-    // Auto-activate User account so the customer has Starry Premium user privileges
-    let userActivated = false;
-    if (order.userId) {
-        try {
-            const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
-            if (PremiumModel) {
-                await PremiumModel.findOneAndUpdate(
-                    { targetId: order.userId },
-                    {
-                        targetId: order.userId,
-                        type: 'user',
-                        isPremium: true,
-                        activatedAt: new Date(),
-                        expiresAt: expiresAt
-                    },
-                    { upsert: true }
-                ).catch(() => {});
-            }
-
-            if (client && typeof client.setPremiumCache === 'function') {
-                client.setPremiumCache(order.userId, expMs);
-            }
-            userActivated = true;
-        } catch (uErr) {
-            console.error('⚠️ Auto-activation user error:', uErr.message);
-        }
-    }
-
     // Update Order Status
     order.status = 'completed';
     order.licenseKey = generatedKey;
@@ -556,9 +531,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
                 let activationNote = '';
                 if (autoActivated) {
                     activationNote += `\n✅ **Auto-Activation:** Server ID \`${order.guildId}\` is now fully upgraded to **${order.tierName}**!`;
-                }
-                if (userActivated) {
-                    activationNote += `\n👑 **User Premium Status:** Your Discord user account has been activated with **${order.tierName}** perks!`;
                 }
                 activationNote += `\n\n💡 *To activate or transfer premium to any server, use \`,redeem ${generatedKey}\` in that server.*`;
 
@@ -585,7 +557,6 @@ async function approvePaymentOrder(orderId, adminIdentifier = 'System Admin', cl
         key: generatedKey,
         tier: order.tier,
         autoActivated,
-        userActivated,
         guildId: order.guildId,
         userId: order.userId,
         order
@@ -676,7 +647,7 @@ async function generateStandaloneKey({ tier = 'pro_cluster', durationDays = null
         key: generatedKey,
         tier: tierData.id,
         durationDays: finalDays,
-        maxUses: 1,
+        maxUses: tierData.maxGuilds || 1,
         usedCount: 0,
         createdBy: createdBy
     });
