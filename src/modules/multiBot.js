@@ -398,16 +398,21 @@ class MultiBotManager {
 
     async removeToken(tokenIdOrUserId) {
         let removed = false;
+        let storedToken = null;
         for (const [id, info] of this.instances.entries()) {
-            if (id === tokenIdOrUserId || info.token === tokenIdOrUserId) {
+            if (id === tokenIdOrUserId || info.token === tokenIdOrUserId || info.client?.user?.id === tokenIdOrUserId) {
                 if (info.isPrimary) throw new Error('Cannot remove primary bot.');
+                storedToken = info.token || null;
                 try { info.client.destroy(); } catch (e) {}
                 this.instances.delete(id);
                 removed = true;
                 break;
             }
         }
-        await MultiBotToken.deleteOne({ $or: [{ token: tokenIdOrUserId }, { _id: tokenIdOrUserId }] }).catch(() => {});
+        const selectors = [{ _id: tokenIdOrUserId }];
+        if (storedToken) selectors.push({ token: storedToken });
+        else if (tokenIdOrUserId && !/^\\d{17,20}$/.test(String(tokenIdOrUserId))) selectors.push({ token: tokenIdOrUserId });
+        await MultiBotToken.deleteOne({ $or: selectors }).catch(() => {});
         return removed;
     }
 
