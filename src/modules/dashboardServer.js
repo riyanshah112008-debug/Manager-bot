@@ -193,7 +193,8 @@ function setupDashboardRoutes(app, client) {
                     volume: Number.isFinite(Number(kazagumo.volume)) ? Number(kazagumo.volume) : 100,
                     loop: kazagumo.loop || 'none',
                     filter: kazagumo.data?.get('activeFilter') || 'clear',
-                    is247: Boolean(kazagumo.data?.get('is247')),
+                    is247: false,
+                    supports247: false,
                     pause: () => kazagumo.pause(true),
                     resume: () => kazagumo.pause(false),
                     skip: () => kazagumo.skip(),
@@ -596,7 +597,8 @@ function setupDashboardRoutes(app, client) {
                     volume: Number.isFinite(Number(player.volume)) ? Number(player.volume) : 100,
                     loop: player.loop || 'none',
                     filter: player.filter || 'clear',
-                    is247: player.is247 || false
+                    is247: player.is247 || false,
+                    supports247: player.supports247 === false ? false : typeof player.is247 === 'boolean'
                 } : null
             });
         } catch (e) {
@@ -985,7 +987,7 @@ function setupDashboardRoutes(app, client) {
             if (action === 'stop') player.stop ? player.stop() : null;
             if (action === 'volume' && value !== undefined) player.setVolume ? player.setVolume(Number(value)) : null;
             if (action === 'filter' && value) player.setFilter ? await player.setFilter(value) : null;
-            if (action === 'toggle247') player.is247 = !player.is247;
+            if (action === 'toggle247') { if (player.supports247 === false || typeof player.is247 !== 'boolean') return res.status(400).json({ success: false, error: '24/7 persistence is not supported by the active worker audio engine.' }); player.is247 = !player.is247; }
 
             res.json({ success: true, message: `Action ${action} executed.`, player: { paused: player.paused, is247: player.is247 } });
         } catch (e) {
