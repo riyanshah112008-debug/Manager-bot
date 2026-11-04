@@ -13,33 +13,10 @@ const config = require('../config');
 
 // Master Tier Catalog
 const TIER_CONFIG = {
-    shield_plus: {
-        id: 'shield_plus',
-        name: 'Starry Shield Plus',
-        usd: 4.99,
-        inr: 399,
-        durationDays: 30,
-        maxGuilds: 1,
-        tag: 'SHIELD'
-    },
-    pro_cluster: {
-        id: 'pro_cluster',
-        name: 'Starry Pro Cluster',
-        usd: 12.99,
-        inr: 999,
-        durationDays: 30,
-        maxGuilds: 3,
-        tag: 'PRO'
-    },
-    lifetime: {
-        id: 'lifetime',
-        name: 'Starry Supreme Lifetime VIP',
-        usd: 39.99,
-        inr: 3299,
-        durationDays: -1,
-        maxGuilds: 9999,
-        tag: 'LIFE'
-    }
+    shield_plus: { id: 'shield_plus', name: 'Starry Shield Plus', eur: 10, usd: null, inr: null, durationDays: 30, maxGuilds: 1, tag: 'SHIELD', badge: 'ESSENTIAL', features: ['24/7 voice channel persistence','Studio DSP audio filters','Server backup and restore tools','Emergency server lockdown controls','Web CAPTCHA verification gateway','Advanced emoji and animated sticker tools','Flag-reaction translation tools','Enhanced moderation appeals and audit tools','Premium economy and mini-game perks'] },
+    pro_cluster: { id: 'pro_cluster', name: 'Starry Pro Cluster', eur: 50, usd: null, inr: null, durationDays: 30, maxGuilds: 3, tag: 'PRO', badge: 'PROFESSIONAL', features: ['Everything in Shield Plus','Premium access across up to 3 servers','Custom multi-bot worker nodes','Worker role specialisation and cluster controls','Expanded server-wide premium capacity'] },
+    platinum: { id: 'platinum', name: 'Starry Platinum', eur: 120, usd: null, inr: null, durationDays: 30, maxGuilds: 10, tag: 'PLAT', badge: 'ULTIMATE', features: ['Everything in Pro Cluster','Premium access across up to 10 servers','Expanded multi-bot cluster capacity','Highest standard premium server allowance','Priority access to Starry feature releases'] },
+    lifetime: { id: 'lifetime', name: 'Starry Supreme Lifetime', eur: 800, usd: null, inr: null, durationDays: -1, maxGuilds: 9999, tag: 'LIFE', badge: 'LIFETIME', features: ['Everything in Platinum','One-time payment — no recurring subscription','Lifetime premium entitlement','Unlimited server redemptions, subject to fair-use safeguards','Standard Premium feature updates included'] }
 };
 
 function assertPaymentsNotConfigured() {
@@ -199,7 +176,7 @@ async function createPaymentOrder({
     assertPaymentsNotConfigured();
     const tierData = TIER_CONFIG[tier];
     if (!tierData) {
-        throw new Error(`Invalid tier '${tier}'. Available tiers: shield_plus, pro_cluster, lifetime`);
+        throw new Error(`Invalid tier '${tier}'. Available tiers: shield_plus, pro_cluster, platinum, lifetime`);
     }
 
     const cleanMethod = (method || 'crypto').toLowerCase().trim();
@@ -255,6 +232,7 @@ async function createPaymentOrder({
         guildName,
         tier: tierData.id,
         tierName: tierData.name,
+        amountEur: tierData.eur,
         amountInr: tierData.inr,
         amountUsd: tierData.usd,
         durationDays: tierData.durationDays,
@@ -268,6 +246,7 @@ async function createPaymentOrder({
         orderId: order.orderId,
         tier: order.tier,
         tierName: order.tierName,
+        amountEur: order.amountEur,
         amountInr: order.amountInr,
         amountUsd: order.amountUsd,
         durationDays: order.durationDays,
@@ -395,7 +374,7 @@ async function notifyOwnersOfSubmittedProof(order, client) {
             `A customer has submitted a payment reference for settlement verification.\n\n` +
             `• **Order ID:** \`${order.orderId}\`\n` +
             `• **Tier:** **${order.tierName}**\n` +
-            `• **Amount:** **$${order.amountUsd}** (₹${order.amountInr})\n` +
+            `• **Amount:** **€${order.amountEur} EUR**\n` +
             `• **Method:** ${methodEmoji} **${methodDisplay}**\n` +
             `• **Transaction / TxHash:** \`${order.utr}\`${explorerLink}\n` +
             `• **Target Server:** ${order.guildId ? `\`${order.guildId}\` (${order.guildName || 'Unknown'})` : '*None Specified*'}\n` +
