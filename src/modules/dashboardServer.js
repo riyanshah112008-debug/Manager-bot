@@ -181,6 +181,25 @@ function setupDashboardRoutes(app, client) {
     // 🔐 DISCORD OAUTH2 AUTHENTICATION APIS
     // ==========================================
 
+    // Public, secret-free diagnostics so login failures are actionable without exposing credentials.
+    app.get('/auth/status', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        const mongoConnected = mongoose.connection.readyState === 1;
+        const clientSecretConfigured = Boolean(process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET);
+        const clientIdConfigured = Boolean(process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id);
+        const redirectConfigured = Boolean(process.env.DISCORD_REDIRECT_URI || process.env.RENDER_EXTERNAL_URL || getPublicUrl());
+        res.json({
+            service: 'ok',
+            oauthConfigured: clientIdConfigured && clientSecretConfigured && redirectConfigured,
+            clientSecretConfigured,
+            clientIdConfigured,
+            redirectConfigured,
+            mongoConfigured: Boolean(process.env.MONGO_URI),
+            mongoConnected,
+            sessionStoreReady: mongoConnected
+        });
+    });
+
     // OAuth state is held in a short-lived HttpOnly cookie so it survives a
     // Render restart and works without process-local session state.
     app.get('/auth/login', actionLimiter, (req, res) => {
@@ -282,6 +301,10 @@ function setupDashboardRoutes(app, client) {
             };
 
             // Persist before redirecting; never send a session that cannot be reloaded.
+            if (mongoose.connection.readyState !== 1) {
+                console.error('Discord OAuth session storage is unavailable: MongoDB is not connected.');
+                return res.redirect(`${frontendBase}/?error=session_store_unavailable`);
+            }
             await OAuthSession.create({
                 tokenHash: hashSessionToken(sessionToken),
                 user: sessionData.user,
@@ -293,7 +316,8 @@ function setupDashboardRoutes(app, client) {
             return res.redirect(`${frontendBase}/dashboard.html?session=${encodeURIComponent(sessionToken)}`);
         } catch (error) {
             console.error('Discord OAuth callback failed:', error);
-            return res.redirect(`${frontendBase}/?error=oauth_error`);
+            const storageUnavailable = mongoose.connection.readyState !== 1;
+            return res.redirect(`${frontendBase}/?error=${storageUnavailable ? 'session_store_unavailable' : 'session_store_failed'}`);
         }
     });
 
