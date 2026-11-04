@@ -975,6 +975,7 @@ function setupDashboardRoutes(app, client) {
                     loop: player.loop || 'none',
                     filter: player.filter || 'clear',
                     is247: Boolean(player.is247),
+                    autoplay: Boolean(player.autoplay),
                     position: Number(player.position || 0)
                 },
                 queue: rawQueue.slice(0, 50).map(normalize),
@@ -995,7 +996,7 @@ function setupDashboardRoutes(app, client) {
             const player = multiBot.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || client.manager?.getPlayer(guild.id);
             if (!player) return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
 
-            const allowed = ['pause', 'resume', 'skip', 'previous', 'stop', 'volume', 'filter', 'shuffle', 'clear', 'loop', 'toggle247'];
+            const allowed = ['pause', 'resume', 'skip', 'previous', 'stop', 'volume', 'filter', 'shuffle', 'clear', 'remove', 'loop', 'toggle247', 'autoplay'];
             if (!allowed.includes(action)) return res.status(400).json({ success: false, error: 'Unsupported music action.' });
             if (action === 'pause') {
                 if (typeof player.pause === 'function') player.pause(true);
@@ -1036,6 +1037,19 @@ function setupDashboardRoutes(app, client) {
                 else if (Array.isArray(player.queue)) player.queue.splice(0);
                 else return res.status(400).json({ success: false, error: 'Queue clearing is not supported by this player.' });
             }
+            if (action === 'remove') {
+                const position = Number(value);
+                if (!Number.isInteger(position) || position < 1 || position > 50) return res.status(400).json({ success: false, error: 'Choose a valid queue position.' });
+                if (typeof player.remove === 'function') {
+                    const removed = player.remove(position);
+                    if (!removed) return res.status(404).json({ success: false, error: 'That queue position does not exist.' });
+                } else if (Array.isArray(player.queue)) {
+                    if (position > player.queue.length) return res.status(404).json({ success: false, error: 'That queue position does not exist.' });
+                    player.queue.splice(position - 1, 1);
+                } else if (typeof player.queue?.remove === 'function') {
+                    player.queue.remove(position - 1);
+                } else return res.status(400).json({ success: false, error: 'Queue item removal is not supported by this player.' });
+            }
             if (action === 'loop') {
                 const mode = String(value || 'none');
                 if (!['none', 'track', 'queue'].includes(mode)) return res.status(400).json({ success: false, error: 'Invalid loop mode.' });
@@ -1043,8 +1057,12 @@ function setupDashboardRoutes(app, client) {
                 else player.loop = mode;
             }
             if (action === 'toggle247') player.is247 = value === undefined ? !player.is247 : Boolean(value);
+            if (action === 'autoplay') {
+                if (!Object.prototype.hasOwnProperty.call(player, 'autoplay')) return res.status(400).json({ success: false, error: 'Autoplay is not supported by this player.' });
+                player.autoplay = value === undefined ? !player.autoplay : Boolean(value);
+            }
 
-            res.json({ success: true, message: 'Music player updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none' } });
+            res.json({ success: true, message: 'Music player updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none', autoplay: Boolean(player.autoplay) } });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
