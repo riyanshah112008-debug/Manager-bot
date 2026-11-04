@@ -34,6 +34,7 @@ const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 function setupDashboardRoutes(app, client) {
@@ -76,12 +77,32 @@ function setupDashboardRoutes(app, client) {
         if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
         else if (req.query.session) token = String(req.query.session);
         if (!token || token.length > 4096) return null;
+        const now = Date.now();
+        const tokenHash = hashSessionToken(token);
+        const renewIfNeeded = async (session) => {
+            // Rolling 30-day inactivity window; extend only when fewer than 23 days remain.
+            if (session.expiresAt - now > SESSION_TTL_MS - SESSION_RENEW_WINDOW_MS) return;
+            const nextExpiry = new Date(now + SESSION_TTL_MS);
+            const renewed = await OAuthSession.updateOne(
+                { tokenHash, expiresAt: { $gt: new Date(now) } },
+                { $set: { expiresAt: nextExpiry } }
+            );
+            if (renewed.matchedCount > 0) session.expiresAt = nextExpiry.getTime();
+        };
         const cached = userSessions.get(token);
-        if (cached && cached.expiresAt > Date.now()) return { token, ...cached };
+        if (cached && cached.expiresAt > now) {
+            try { await renewIfNeeded(cached); } catch (error) {
+                console.warn('Dashboard session renewal deferred:', error.message);
+            }
+            return { token, ...cached };
+        }
         userSessions.delete(token);
-        const stored = await OAuthSession.findOne({ tokenHash: hashSessionToken(token), expiresAt: { $gt: new Date() } }).lean();
+        const stored = await OAuthSession.findOne({ tokenHash, expiresAt: { $gt: new Date(now) } }).lean();
         if (!stored) return null;
         const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], expiresAt: new Date(stored.expiresAt).getTime() };
+        try { await renewIfNeeded(session); } catch (error) {
+            console.warn('Dashboard session renewal deferred:', error.message);
+        }
         userSessions.set(token, session);
         return { token, ...session };
     };
