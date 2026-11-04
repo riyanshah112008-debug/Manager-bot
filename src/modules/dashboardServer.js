@@ -29,7 +29,7 @@ const {
 } = require('../utils/paymentHelper');
 const config = require('../config');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
-const { parseSpotifyUrl, resolveSpotifyUrl, searchTracks } = require('../utils/spotifyApi');
+const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -177,16 +177,33 @@ function setupDashboardRoutes(app, client) {
     };
 
     // ==========================================
-    // Spotify catalog search. Uses backend-only app credentials; no Spotify audio is streamed.
-    app.get('/api/spotify/search', requireAuth, async (req, res) => {
+    // Multi-platform discovery via Starry's configured Lavalink provider. No Spotify API credentials required.
+    app.get('/api/guild/:id/music/search', requireGuildMember, async (req, res) => {
         try {
             const query = String(req.query.q || '').trim();
-            if (!query || query.length > 120) return res.status(400).json({ success: false, error: 'Enter a search query up to 120 characters.' });
-            const tracks = await searchTracks(query, 10);
+            if (!query || query.length > 160) return res.status(400).json({ success: false, error: 'Enter a search query up to 160 characters.' });
+            const manager = client.manager;
+            if (!manager || typeof manager.search !== 'function') return res.status(503).json({ success: false, error: 'The music search provider is not ready. Try again when Lavalink is connected.' });
+            let searchQuery = query;
+            const spotifyLink = parseSpotifyUrl(query);
+            if (spotifyLink) {
+                const metadata = await resolveSpotifyUrl(query);
+                searchQuery = 'ytsearch:' + metadata.tracks[0].query;
+            }
+            const result = await manager.search(searchQuery, { requester: req.session.user });
+            const tracks = (result?.tracks || []).slice(0, 8).map(track => ({
+                title: String(track.title || 'Unknown track').slice(0, 180),
+                artist: String(track.author || 'Unknown artist').slice(0, 120),
+                durationMs: Number(track.length) || 0,
+                artwork: track.thumbnail || null,
+                source: String(track.sourceName || track.pluginInfo?.sourceName || 'Audio source'),
+                uri: track.uri || null,
+                query: track.uri || track.identifier || query
+            }));
             return res.json({ success: true, tracks });
         } catch (error) {
-            const status = error.status === 429 ? 429 : error.code === 'SPOTIFY_NOT_CONFIGURED' ? 503 : 502;
-            return res.status(status).json({ success: false, error: error.message || 'Spotify search is temporarily unavailable.' });
+            const status = error.code === 'SPOTIFY_COLLECTION_UNAVAILABLE' ? 400 : error.status === 429 ? 429 : 502;
+            return res.status(status).json({ success: false, error: error.message || 'Music search is temporarily unavailable.' });
         }
     });
 
