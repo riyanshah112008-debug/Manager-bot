@@ -513,33 +513,63 @@ module.exports = async (client) => {
 
     start60sChannelTelemetryLoop(client);
 
-    // Dynamic routing to specific log channels (Cache + API Fetch Fallback)
+    // Dashboard-configured log routing with a short cache and legacy name-based fallback.
+    const dashboardLogCache = new Map();
+    const dashboardLogFields = {
+        access: 'memberLogChannel',
+        moderate: 'modLogChannel',
+        messages: 'messageLogChannel',
+        voice: 'voiceLogChannel',
+        channels: 'serverLogChannel',
+        members: 'memberLogChannel',
+        roles: 'memberLogChannel',
+        misc: 'serverLogChannel'
+    };
+    client.invalidateLogSettings = (guildId) => dashboardLogCache.delete(String(guildId));
     client.getLogChannel = async (guild, logType = 'misc') => {
         if (!guild) return null;
-        const typeMap = {
-            'access': ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
-            'moderate': ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
-            'messages': ['logs-messages', 'message-logs', 'chat-logs'],
-            'voice': ['logs-voice', 'voice-logs', 'vc-logs'],
-            'channels': ['logs-channels', 'channel-logs'],
-            'members': ['logs-members', 'member-logs', 'role-logs']
-        };
-        const targetNames = typeMap[logType.toLowerCase()] || typeMap['access'];
-
-        // 1. Direct cache lookup first
-        let ch = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-        if (ch) return ch;
-
-        // 2. Fallback to fetching all channels via API
-        try {
-            const fetchedChannels = await guild.channels.fetch();
-            ch = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
-            if (ch) return ch;
-            return fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
-        } catch (err) {
-            console.error('❌ Log Channel Fetch Error:', err);
-            return null;
+        const type = String(logType).toLowerCase();
+        const cached = dashboardLogCache.get(guild.id);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.channelId ? guild.channels.cache.get(cached.channelId) || null : null;
         }
+
+        const configuredField = dashboardLogFields[type] || 'serverLogChannel';
+        try {
+            const serverSettings = await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean();
+            const configuredId = serverSettings?.logging?.[configuredField];
+            const configuredChannel = configuredId ? guild.channels.cache.get(String(configuredId)) : null;
+            if (configuredChannel && configuredChannel.isTextBased() && typeof configuredChannel.send === 'function') {
+                dashboardLogCache.set(guild.id, { channelId: configuredChannel.id, expiresAt: Date.now() + 15000 });
+                return configuredChannel;
+            }
+        } catch (error) {
+            console.error('Dashboard log routing lookup failed:', error);
+        }
+
+        const typeMap = {
+            access: ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
+            moderate: ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
+            messages: ['logs-messages', 'message-logs', 'chat-logs'],
+            voice: ['logs-voice', 'voice-logs', 'vc-logs'],
+            channels: ['logs-channels', 'channel-logs'],
+            members: ['logs-members', 'member-logs', 'role-logs'],
+            roles: ['logs-members', 'member-logs', 'role-logs'],
+            misc: ['logs-server', 'server-logs', 'mod-logs', 'logs']
+        };
+        const targetNames = typeMap[type] || typeMap.access;
+        let channel = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+        if (!channel) {
+            try {
+                const fetchedChannels = await guild.channels.fetch();
+                channel = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name))) ||
+                    fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+            } catch (error) {
+                console.error('Log channel discovery failed:', error);
+            }
+        }
+        dashboardLogCache.set(guild.id, { channelId: channel?.id || null, expiresAt: Date.now() + 15000 });
+        return channel || null;
     };
 
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
