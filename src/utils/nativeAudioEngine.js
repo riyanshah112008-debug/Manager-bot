@@ -108,7 +108,8 @@ FILTER_ARGS.vintage = FILTER_ARGS.radio;
 
 function getFilterArgs(filterName, volumePercent = 100) {
     const rawFilter = (filterName && FILTER_ARGS[filterName]) ? FILTER_ARGS[filterName] : FILTER_ARGS.clear;
-    const volScale = Math.max(0.05, Math.min(2.0, (volumePercent || 100) / 100));
+    const numericVolume = Number.isFinite(Number(volumePercent)) ? Number(volumePercent) : 100;
+    const volScale = Math.max(0, Math.min(2.0, numericVolume / 100));
     const filterStr = rawFilter[1];
     const adjustedFilterStr = filterStr.replace(/volume=([0-9.]+)/, (match, baseVol) => {
         const adjustedVol = (parseFloat(baseVol) * volScale).toFixed(2);
@@ -404,7 +405,7 @@ class StarryGuildPlayer {
         this.player = createAudioPlayer({
             behaviors: {
                 noSubscriber: NoSubscriberBehavior.Play,
-                maxMissedFrames: 250
+                maxMissedFrames: 5
             }
         });
         this.connection = null;
@@ -609,8 +610,10 @@ class StarryGuildPlayer {
                         '-reconnect_delay_max', '3',
                         '-rw_timeout', '15000000',
                         '-buffer_size', '2048k',
-                        '-analyzeduration', '0',
-                        '-probesize', '65536'
+                        '-analyzeduration', '1000000',
+                        '-probesize', '1000000',
+                        '-thread_queue_size', '512',
+                        '-fflags', '+genpts+discardcorrupt'
                     );
                     if (customHeaders && typeof customHeaders === 'object' && Object.keys(customHeaders).length > 0) {
                         const headerStr = Object.entries(customHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n';
@@ -632,19 +635,26 @@ class StarryGuildPlayer {
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
+                        '-application', 'audio',
+                        '-compression_level', '10',
+                        '-frame_duration', '20',
                         '-f', 'opus'
                     ]
                 });
-                ffmpeg.on('error', err => console.warn('⚠️ [FFmpeg File Filter Notice]:', err.message || err));
+                ffmpeg.on('error', err => console.warn(`[FFmpeg ${this.guildId}] process error:`, err.message || err));
+                ffmpeg.on('close', code => { if (code !== 0) console.warn(`[FFmpeg ${this.guildId}] exited with code ${code}`); });
                 return createAudioResource(ffmpeg, {
                     inputType: StreamType.OggOpus
                 });
             } else {
                 const ffmpeg = new prism.FFmpeg({
                     args: [
-                        '-analyzeduration', '0',
-                        '-probesize', '65536',
-                        '-loglevel', '0',
+                        '-hide_banner',
+                        '-loglevel', 'warning',
+                        '-analyzeduration', '1000000',
+                        '-probesize', '1000000',
+                        '-thread_queue_size', '512',
+                        '-fflags', '+genpts+discardcorrupt',
                         '-i', 'pipe:0',
                         ...activeFilter,
                         '-c:a', 'libopus',
@@ -652,10 +662,14 @@ class StarryGuildPlayer {
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
+                        '-application', 'audio',
+                        '-compression_level', '10',
+                        '-frame_duration', '20',
                         '-f', 'opus'
                     ]
                 });
-                ffmpeg.on('error', err => console.warn('⚠️ [FFmpeg Stream Filter Notice]:', err.message || err));
+                ffmpeg.on('error', err => console.warn(`[FFmpeg ${this.guildId}] stream error:`, err.message || err));
+                ffmpeg.on('close', code => { if (code !== 0) console.warn(`[FFmpeg ${this.guildId}] exited with code ${code}`); });
                 if (typeof streamOrPath.on === 'function') {
                     streamOrPath.on('error', err => console.warn('⚠️ [Input Audio Stream Notice]:', err.message || err));
                 }
@@ -665,10 +679,8 @@ class StarryGuildPlayer {
                 });
             }
         } catch (e) {
-            console.warn('⚠️ [Audio Filter Fallback]:', e.message || e);
-            return createAudioResource(streamOrPath, {
-                inputType: isFile ? StreamType.Arbitrary : StreamType.Arbitrary
-            });
+            console.warn(`[Audio Pipeline ${this.guildId}] FFmpeg setup failed:`, e.message || e);
+            throw e;
         }
     }
 
@@ -853,8 +865,8 @@ class StarryGuildPlayer {
             ? track.thumbnail 
             : (this.client.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
 
-        const filterName = (this.filter === 'clear' || !this.filter || this.filter === 'empowering')
-            ? 'Empowering Master (Hi-Fi)'
+        const filterName = (!this.filter || this.filter === 'clear' || this.filter === 'flat')
+            ? 'Natural / Unprocessed'
             : this.filter.toUpperCase();
 
         const embed = new EmbedBuilder()
