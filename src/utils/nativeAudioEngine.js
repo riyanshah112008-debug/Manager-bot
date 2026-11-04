@@ -32,6 +32,8 @@ const {
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const config = require('../config');
 
+const MUSIC_DASHBOARD_URL = 'https://manager-bot-96c07.web.app/music.html';
+
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
 // Audio DSP Filter FFmpeg argument definitions (Studio Mastering with Dynamic Limiter - ZERO Crackling & 100% Intact Vocals)
@@ -822,24 +824,23 @@ class StarryGuildPlayer {
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
             .setAuthor({ 
-                name: `Now Playing • ${this.client.user?.username || 'Starry Audio'}`, 
-                iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                name: `NOW PLAYING  •  ${this.client.user?.username || 'STARRY'}`, 
+                iconURL: this.client.user?.displayAvatarURL({ dynamic: true })
             })
             .setTitle(track.title ? track.title.substring(0, 95) : 'Audio Track')
             .setURL(track.url || 'https://discord.gg')
             .setThumbnail(trackThumb)
             .setDescription(
-                `ℹ️ **Song Details**\n` +
-                `▶️ **Status:** ${this.paused ? '⏸️ Paused' : 'Playing'} | ⚙️ **Loop:** ${this.loop === 'none' ? 'Off' : this.loop === 'track' ? '🔂 Track' : '🔁 Queue'}\n` +
-                `🕒 **Duration:** ${formatTime(track.duration)} | 🔊 **Volume:** ${this.volume}%\n` +
-                `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
-                `🌐 **Source:** ${track.source || 'Studio Master'}\n` +
-                `🎛️ **Mastering:** \`${filterName}\`\n` +
-                `🔠 **Queue:** \`${this.queue.length}\` songs remaining\n\n` +
-                `⚙️ **Playback & Empowering DSP (1-Year Response Lifetime)**\n` +
-                `Use the interactive controls below to manage your audio session.`
+                `▶️ **${this.paused ? 'Paused' : 'Playing now'}**  ·  ${this.loop === 'none' ? 'Loop off' : this.loop === 'track' ? 'Track loop' : 'Queue loop'}\n\n` +
+                `**Artist**  ${track.author || 'Unknown artist'}\n` +
+                `**Length**  ${formatTime(track.duration)}   ·   **Volume**  ${this.volume}%\n` +
+                `**Requested by**  ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
+                `**Source**  ${track.source || 'Audio stream'}   ·   **EQ**  ${filterName}\n` +
+                `**Up next**  ${this.queue.length} ${this.queue.length === 1 ? 'track' : 'tracks'}\n\n` +
+                `*Use the controls below to manage playback, queue and sound settings.*`
             )
-            .setFooter({ text: `Starry Music Engine • Bot: ${this.client.user ? this.client.user.tag : 'Starry'}`, iconURL: this.client.user ? this.client.user.displayAvatarURL() : undefined });
+            .setFooter({ text: `STARRY MUSIC  •  ${this.client.user ? this.client.user.tag : 'Music Player'}`, iconURL: this.client.user ? this.client.user.displayAvatarURL() : undefined })
+            .setTimestamp();
 
         // Row 1: 4 buttons (No mobile wrapping)
         const row1 = new ActionRowBuilder().addComponents(
@@ -869,7 +870,8 @@ class StarryGuildPlayer {
                 .setLabel(this.autoplay ? 'Autoplay: ON' : 'Autoplay: OFF')
                 .setStyle(this.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success)
+            new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setLabel('Music Dashboard').setEmoji('🎛️').setStyle(ButtonStyle.Link).setURL(MUSIC_DASHBOARD_URL)
         );
 
         // Row 4: High-Fidelity Audio DSP Filters

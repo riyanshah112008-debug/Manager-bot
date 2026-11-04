@@ -3,9 +3,12 @@
 // File Path: commands/play.js
 // Bulletproof Native Audio Streamer
 // ==========================================
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 const config = require('../../config');
+
+const MUSIC_DASHBOARD_URL = 'https://manager-bot-96c07.web.app/music.html';
+const dashboardLink = () => [new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('Open Music Dashboard').setEmoji('🎛️').setStyle(ButtonStyle.Link).setURL(MUSIC_DASHBOARD_URL))];
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
@@ -142,7 +145,7 @@ module.exports = {
               )
               .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,`, iconURL: interaction.user.displayAvatarURL() })
               .setTimestamp();
-            return replyFunc.call(interaction, { embeds: [embed] });
+            return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
           } else {
             const track = res.tracks[0];
             if (!player.playing && !player.paused && !player.queue.current) {
@@ -166,7 +169,7 @@ module.exports = {
                 )
                 .setFooter({ text: `Requested by ${interaction.user.tag} • Prefix: ,` })
                 .setTimestamp();
-              return replyFunc.call(interaction, { embeds: [embed] });
+              return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
             }
           }
           return;
@@ -226,7 +229,7 @@ module.exports = {
           .setTimestamp();
 
         const replyFunc = interaction.editReply || interaction.reply;
-        return replyFunc.call(interaction, { embeds: [embed] });
+        return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
       } else {
         const track = result.tracks[0];
         if (!player.currentTrack) {
@@ -261,7 +264,7 @@ module.exports = {
             .setTimestamp();
 
           const replyFunc = interaction.editReply || interaction.reply;
-          return replyFunc.call(interaction, { embeds: [embed] });
+          return replyFunc.call(interaction, { embeds: [embed], components: dashboardLink() });
         }
       }
 
