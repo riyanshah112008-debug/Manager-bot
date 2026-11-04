@@ -39,7 +39,7 @@ def _bg_cache_track(source_url, vid_id):
     try:
         out_tmpl = os.path.join(CACHE_DIR, f"{vid_id}.%(ext)s")
         download_opts = {
-            'format': 'bestaudio/ba/b',
+            'format': 'bestaudio/best',
             'outtmpl': out_tmpl,
             'quiet': True,
             'no_warnings': True,
@@ -52,7 +52,7 @@ def _bg_cache_track(source_url, vid_id):
         pass
 
 ydl_track_opts = {
-    'format': 'bestaudio/ba/b',
+    'format': 'bestaudio/best',
     'quiet': True,
     'no_warnings': True,
     'noplaylist': True,
@@ -185,7 +185,9 @@ for line in sys.stdin:
                     if matches and os.path.isfile(matches[0]) and os.path.getsize(matches[0]) > 50000:
                         cached_file = matches[0]
 
-                if not cached_file and vid_id:
+                # Avoid downloading the full track in parallel with live playback.
+                # This duplicates bandwidth and disk I/O on small hosts and can cause underruns.
+                if not cached_file and vid_id and os.getenv('STARRY_AUDIO_BACKGROUND_CACHE', 'false').lower() == 'true':
                     target_source = video.get('webpage_url') or query
                     threading.Thread(target=_bg_cache_track, args=(target_source, vid_id), daemon=True).start()
 
@@ -196,7 +198,13 @@ for line in sys.stdin:
                     'file': cached_file,
                     'title': video.get('title'),
                     'duration': video.get('duration'),
-                    'headers': video.get('http_headers') or {}
+                    'headers': video.get('http_headers') or {},
+                    'format_id': video.get('format_id'),
+                    'ext': video.get('ext'),
+                    'acodec': video.get('acodec'),
+                    'abr': video.get('abr'),
+                    'asr': video.get('asr'),
+                    'audio_channels': video.get('audio_channels')
                 }
             else:
                 resp = {'id': req_id, 'status': 'error', 'message': 'No playable audio stream found'}
