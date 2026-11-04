@@ -28,6 +28,7 @@ const {
     generateStandaloneKey
 } = require('../utils/paymentHelper');
 const config = require('../config');
+const { isServerOrUserPremium } = require('../utils/premiumHelper');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -566,6 +567,8 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
+            const hasPremium = await isServerOrUserPremium(req.guild.id, req.session.user.id, client);
+            if (!hasPremium) return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires Starry Pro Cluster or Lifetime premium.' });
             const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
             const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 64) : '';
             const role = typeof req.body?.role === 'string' ? req.body.role : 'all';
@@ -1005,6 +1008,8 @@ function setupDashboardRoutes(app, client) {
                 if (typeof player.setVolume !== 'function') return res.status(400).json({ success: false, error: 'Volume control is not supported by this player.' });
                 player.setVolume(volume);
             } else if (action === 'filter') {
+                const hasPremium = await isServerOrUserPremium(guild.id, req.session?.user?.id, client);
+                if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro Cluster or Lifetime premium.' });
                 const allowed = new Set(['clear', 'flat', 'empowering', 'bass', 'bassboost', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop']);
                 if (typeof value !== 'string' || !allowed.has(value)) return res.status(400).json({ success: false, error: 'Choose a supported audio profile.' });
                 if (typeof player.setFilter !== 'function') return res.status(400).json({ success: false, error: 'Audio profiles are not supported by this player.' });
