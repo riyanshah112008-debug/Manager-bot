@@ -187,7 +187,7 @@ class MusicControllerEngine {
             .setCustomId('ctrl_filter')
             .setPlaceholder(t(lang, 'music.filter_placeholder'))
             .addOptions([
-                { label: '⭐ Studio Hi-Fi Master (Empowering)', description: 'Audiophile punch, deep sub-bass, silky vocals & wide stage', value: 'empowering', emoji: '✨' },
+                { label: '⭐ Balanced Studio EQ', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
                 { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio sound', value: 'clear', emoji: '🚫' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -249,7 +249,7 @@ class MusicControllerEngine {
 
         if (track) {
             const rawFilter = (player.filter || player.data?.get('activeFilter') || 'clear').toLowerCase();
-            let filterName = 'Empowering Master (Hi-Fi)';
+            let filterName = 'Balanced Studio EQ';
             if (rawFilter === 'bass' || rawFilter === 'vibrate' || rawFilter === 'vibration' || rawFilter === 'bassboost' || rawFilter === 'deepbass' || rawFilter === 'subwoofer') filterName = '🔊 Bass (Physical Vibration)';
             else if (rawFilter === '8d') filterName = '🌀 8D Spatial Audio';
             else if (rawFilter === 'nightcore') filterName = '✨ Nightcore';
@@ -283,7 +283,7 @@ class MusicControllerEngine {
                     `👤 **Artist:** \`${track.author || 'Featured Artist'}\`\n` +
                     `🕒 **Duration:** \`${formatTime(track.duration)}\` | 🔊 **Volume:** \`${volumeVal}%\`\n` +
                     `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
-                    `🌐 **Source:** \`${track.source || 'Spotify'}\` | 🎛️ **Audio Master:** \`${filterName}\`\n` +
+                    `🌐 **Source:** \`${track.source || 'Spotify'}\` | 🎛️ **Audio profile:** \`${filterName}\`\n` +
                     `🔠 **Queue:** \`${queueLen}\` songs in queue\n\n` +
                     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                     `💬 *Send any song name or Spotify/YouTube link in this channel to add to queue!*`
@@ -845,7 +845,7 @@ class MusicControllerEngine {
                     `• **Physical Vibration Sub-Bass DSP** & 24/7 Mode\n` +
                     `• **Dedicated Worker Tokens** for 0s lag\n` +
                     `• **Spotify, SoundCloud & Web Resolution** with zero delay\n` +
-                    `• **Global Autoplay Engine** with studio mastering\n\n` +
+                    `• **Global Autoplay Engine** with selectable audio profiles\n\n` +
                     `Use \`,premium\` to view your tier or redeem an activation license.`
                 )
                 .setFooter({ text: 'Starry Premium System' });
