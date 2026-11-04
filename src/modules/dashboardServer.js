@@ -113,7 +113,11 @@ function setupDashboardRoutes(app, client) {
             try {
                 member = await guild.members.fetch({ user: session.user.id, force: true });
             } catch (error) {
-                return res.status(403).json({ success: false, error: 'Access denied: You must currently be a member with Administrator or Manage Server permissions.' });
+                if (error?.code === 10007) {
+                    return res.status(403).json({ success: false, error: 'Access denied: You are no longer a member of this server.' });
+                }
+                console.error('Live Discord permission check failed:', error);
+                return res.status(503).json({ success: false, error: 'Could not verify your current Discord permissions. Please retry.' });
             }
             const hasAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
             const hasManageServer = member.permissions.has(PermissionFlagsBits.ManageGuild);
