@@ -872,6 +872,7 @@ class StarryGuildPlayer {
                 `**Length**  ${formatTime(track.duration)}   ·   **Volume**  ${this.volume}%\n` +
                 `**Requested by**  ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `**Source**  ${track.source || 'Audio stream'}   ·   **EQ**  ${filterName}\n` +
+                `**Voice bitrate**  ${this.audioQualityLabel || 'Negotiated by Discord'}\n` +
                 `**Up next**  ${this.queue.length} ${this.queue.length === 1 ? 'track' : 'tracks'}\n\n` +
                 `*Use the controls below to manage playback, queue and sound settings.*`
             )
