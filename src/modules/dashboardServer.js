@@ -485,7 +485,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/cluster/bots/:botId/role', actionLimiter, requireAuth, requireClusterOwner, async (req, res) => {
         try {
             const botId = String(req.params.botId || '').trim(), role = String(req.body?.role || '').trim();
-            if (!/^\\d{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
+            if (!/^[0-9]{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
             if (!Object.prototype.hasOwnProperty.call(multiBot.ROLE_PRESETS, role)) return res.status(400).json({ success: false, error: 'Choose a valid worker role.' });
             const result = await multiBot.setRole(botId, role);
             if (!result.success) return res.status(404).json({ success: false, error: result.message || 'Bot worker not found.' });
@@ -496,7 +496,7 @@ function setupDashboardRoutes(app, client) {
     app.delete('/api/cluster/bots/:botId', actionLimiter, requireAuth, requireClusterOwner, async (req, res) => {
         try {
             const botId = String(req.params.botId || '').trim();
-            if (!/^\\d{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
+            if (!/^[0-9]{17,20}$/.test(botId)) return res.status(400).json({ success: false, error: 'Invalid Discord bot ID.' });
             const removed = await multiBot.removeToken(botId);
             if (!removed) return res.status(404).json({ success: false, error: 'Worker bot was not found in the active cluster.' });
             res.json({ success: true, message: 'Worker disconnected and its saved token entry was removed.' });
@@ -533,6 +533,14 @@ function setupDashboardRoutes(app, client) {
             }));
 
             const player = StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const queueSource = player?.queue;
+            const queuedTracks = Array.isArray(queueSource) ? queueSource : (Array.isArray(queueSource?.queue) ? queueSource.queue : (Array.isArray(queueSource?.tracks) ? queueSource.tracks : []));
+            const queue = queuedTracks.slice(0, 12).map(track => ({
+                title: track?.title || track?.info?.title || 'Unknown track',
+                author: track?.author || track?.info?.author || '',
+                length: Number(track?.length || track?.info?.length || 0),
+                thumbnail: track?.thumbnail || track?.artworkUrl || track?.info?.artworkUrl || ''
+            }));
 
             res.json({
                 success: true,
@@ -550,6 +558,7 @@ function setupDashboardRoutes(app, client) {
                 player: player ? {
                     playing: player.currentTrack ? true : false,
                     currentTrack: player.currentTrack || null,
+                    queue,
                     paused: player.paused || false,
                     volume: player.volume || 100,
                     loop: player.loop || 'none',
