@@ -106,15 +106,20 @@ function setupDashboardRoutes(app, client) {
 
         const isOwner = (config.BOT_OWNERS || []).includes(session.user?.id);
         const isGuildOwner = guild.ownerId === session.user?.id;
-        const userGuild = (session.guilds || []).find(g => g.id === guildId);
-        let hasAdminPerms = false;
-        if (userGuild) {
-            const perms = BigInt(userGuild.permissions || 0);
-            hasAdminPerms = (perms & BigInt(0x8)) === BigInt(0x8) || (perms & BigInt(0x20)) === BigInt(0x20);
-        }
-
-        if (!isOwner && !isGuildOwner && !hasAdminPerms) {
-            return res.status(403).json({ success: false, error: 'Access denied: You need Administrator or Manage Server permissions.' });
+        let member = null;
+        if (!isOwner && !isGuildOwner) {
+            // OAuth guild permissions are a login-time snapshot. Re-fetch the
+            // member so removed roles or revoked Manage Server access take effect immediately.
+            try {
+                member = await guild.members.fetch({ user: session.user.id, force: true });
+            } catch (error) {
+                return res.status(403).json({ success: false, error: 'Access denied: You must currently be a member with Administrator or Manage Server permissions.' });
+            }
+            const hasAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
+            const hasManageServer = member.permissions.has(PermissionFlagsBits.ManageGuild);
+            if (!hasAdmin && !hasManageServer) {
+                return res.status(403).json({ success: false, error: 'Access denied: You need Administrator or Manage Server permissions.' });
+            }
         }
 
         req.session = session;
