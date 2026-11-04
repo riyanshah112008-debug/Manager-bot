@@ -84,3 +84,6 @@
 .support-state{font-weight:700}
 @media(max-width:850px){.support-columns{grid-template-columns:1fr}.support-list-panel{max-height:270px;overflow:auto}.support-chat-panel{min-height:480px}}
 @media(max-width:560px){.support-toolbar{align-items:flex-start;flex-direction:column}.support-toolbar-actions{width:100%}.support-toolbar-actions .btn{flex:1}.support-chat-head{align-items:flex-start;flex-direction:column}.support-agent-actions{width:100%}.support-messages{padding:11px;min-height:280px}.support-message{max-width:96%}.support-reply-actions{align-items:flex-start;flex-direction:column}.support-reply-actions>div{display:flex;width:100%}.support-reply-actions .btn{flex:1}}
+
+/* Dashboard home module directory */
+.module-directory{display:grid;gap:17px}.module-category{min-width:0}.module-category h3{margin:0 0 9px;color:#b6c2df;font:800 .68rem Manrope,sans-serif;letter-spacing:.11em;text-transform:uppercase}.module-category .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.module-category .tile{min-height:65px;padding:11px 12px}.module-category .tile-icon{width:34px;height:34px;flex-basis:34px;border-radius:10px}@media(max-width:560px){.module-category .tiles{grid-template-columns:1fr}}
