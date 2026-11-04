@@ -1084,12 +1084,14 @@ function setupDashboardRoutes(app, client) {
             if (requestedText && !requestedText.isTextBased()) return res.status(400).json({ success: false, error: 'Choose a valid text channel in this server.' });
 
             const worker = multiBot.getMusicWorker(guild, vChannel);
+            if (worker && worker.isAvailable === false) return res.status(409).json({ success: false, error: 'All Starry music workers are currently busy. Try again when a voice worker is free.' });
             const workerClient = worker?.client || client;
             const workerGuild = workerClient.guilds.cache.get(guild.id) || (workerClient === client ? guild : null);
             if (!workerGuild) return res.status(400).json({ success: false, error: 'The selected music worker is not installed in this server.' });
             const workerVoice = workerGuild.channels.cache.get(vChannel.id);
             const workerText = requestedText ? workerGuild.channels.cache.get(requestedText.id) : (workerGuild.channels.cache.find(c => c.isTextBased()) || workerVoice);
             if (!workerVoice || !workerVoice.isVoiceBased()) return res.status(400).json({ success: false, error: 'The selected music worker cannot access that voice channel.' });
+            if (!workerText || !workerText.isTextBased()) return res.status(400).json({ success: false, error: 'The selected music worker cannot access a text channel for requests.' });
 
             let player = StarryAudioEngine.getPlayer(guild.id, workerClient) || workerClient.manager?.getPlayer(guild.id);
             if (!player && workerClient.manager) {
