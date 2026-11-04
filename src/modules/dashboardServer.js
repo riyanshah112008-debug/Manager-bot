@@ -198,7 +198,7 @@ function setupDashboardRoutes(app, client) {
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
         const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\\/+$/, '');
         const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
-        const cookieState = cookiePart ? decodeURIComponent(cookiePart.slice('starry_oauth_state='.length)) : '';
+        const cookieState = cookiePart ? cookiePart.slice('starry_oauth_state='.length) : '';
         const secureCookie = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
         res.set('Set-Cookie', `starry_oauth_state=; Max-Age=0; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
         if (req.query.error) return res.redirect(`${frontendBase}/?error=discord_authorization_denied`);
