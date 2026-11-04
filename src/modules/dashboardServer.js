@@ -944,6 +944,42 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Spotify playlist library: scoped to the authenticated Discord user, never a client-supplied user ID.
+    app.get('/api/guild/:id/music/playlists', requireGuildMember, async (req, res) => {
+        try {
+            const playlists = await spotifyManager.getUserPlaylists(req.session.user.id);
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, ...playlists });
+        } catch (error) {
+            res.status(500).json({ success: false, error: 'Could not load your Spotify library.' });
+        }
+    });
+
+    app.post('/api/guild/:id/music/playlists', actionLimiter, requireGuildMember, async (req, res) => {
+        try {
+            const url = String(req.body?.url || '').trim();
+            const name = String(req.body?.name || '').trim();
+            const isSpotifyPlaylist = /^https:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]+(?:[?].*)?$/i.test(url) || /^[A-Za-z0-9]{16,64}$/.test(url);
+            if (!isSpotifyPlaylist) return res.status(400).json({ success: false, error: 'Enter a valid Spotify playlist link or playlist ID.' });
+            if (name.length > 80) return res.status(400).json({ success: false, error: 'Playlist name must be 80 characters or fewer.' });
+            const saved = await spotifyManager.savePlaylist(req.session.user.id, url, name || null);
+            res.json({ success: true, message: 'Spotify playlist saved to your Starry library.', playlist: { id: saved.playlist.id, name: saved.finalName, url: saved.playlist.url, trackCount: saved.playlist.trackCount, imageUrl: saved.playlist.imageUrl }, totalSaved: saved.totalSaved });
+        } catch (error) {
+            res.status(400).json({ success: false, error: error.message || 'Could not save this Spotify playlist.' });
+        }
+    });
+
+    app.delete('/api/guild/:id/music/playlists', actionLimiter, requireGuildMember, async (req, res) => {
+        try {
+            const identifier = String(req.body?.identifier || '').trim();
+            if (!identifier || identifier.length > 200) return res.status(400).json({ success: false, error: 'Choose a saved playlist to remove.' });
+            const result = await spotifyManager.removePlaylist(req.session.user.id, identifier);
+            if (!result.success) return res.status(404).json({ success: false, error: result.message });
+            res.json({ success: true, message: 'Playlist removed from your Starry library.' });
+        } catch (error) {
+            res.status(500).json({ success: false, error: 'Could not remove this playlist.' });
+        }
+    });
     // GET /api/guild/:id/music/state - Safe, normalized queue state for the web player.
     app.get('/api/guild/:id/music/state', requireGuildMember, (req, res) => {
         try {
@@ -1105,9 +1141,11 @@ function setupDashboardRoutes(app, client) {
             if (!player || typeof player.search !== 'function') return res.status(503).json({ success: false, error: 'No compatible music player is ready on the selected worker.' });
             const result = await player.search(String(query).trim(), { requester: req.member?.user || client.user });
             if (!result?.tracks?.length) return res.status(404).json({ success: false, error: 'No tracks found for that search.' });
-            player.queue.add(result.tracks[0]);
+            const isPlaylist = result.loadType === 'playlist' || Boolean(result.playlistName) || result.tracks.length > 1 && /spotify\.com\/playlist\//i.test(String(query));
+            const tracksToQueue = isPlaylist ? result.tracks.slice(0, 100) : [result.tracks[0]];
+            for (const track of tracksToQueue) player.queue.add(track);
             if (!player.playing && !player.paused) await player.play();
-            res.json({ success: true, message: 'Track added to the music queue.', track: { title: result.tracks[0].title, author: result.tracks[0].author }, worker: workerClient.user?.tag || 'Starry worker' });
+            res.json({ success: true, message: isPlaylist ? 'Playlist added to the music queue (' + tracksToQueue.length + ' tracks).' : 'Track added to the music queue.', track: { title: result.tracks[0].title, author: result.tracks[0].author }, queued: tracksToQueue.length, worker: workerClient.user?.tag || 'Starry worker' });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
