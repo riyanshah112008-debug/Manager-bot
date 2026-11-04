@@ -15,6 +15,11 @@ function clearStoredSession(){safeRemove("localStorage",sessionKey);safeRemove("
  const token=params.get("session");
  if(token&&!safeSet("localStorage",sessionKey,token))safeSet("sessionStorage",sessionKey,token);
  params.delete("session");const cleanQuery=params.toString();
+ // OAuth currently returns to dashboard.html. Store the token, then return to
+ // the homepage so its Discord profile controls can render immediately.
+ if(window.location.pathname.endsWith("/dashboard.html")){
+  try{window.location.replace("/"+(cleanQuery?"?"+cleanQuery:"")+window.location.hash);return}catch(_){}
+ }
  try{window.history.replaceState(window.history.state,document.title,window.location.pathname+(cleanQuery?"?"+cleanQuery:"")+window.location.hash)}catch(_){}
 })();
 function isBackendPath(pathname){return pathname.startsWith("/api/")||pathname.startsWith("/auth/")||pathname==="/setup"||pathname.startsWith("/verify")||pathname==="/vote"||pathname==="/health"||pathname==="/ping"}

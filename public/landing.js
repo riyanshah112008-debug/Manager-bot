@@ -49,6 +49,11 @@
       if (username) username.textContent = user.globalName || user.username || "Discord user";
       login.hidden = true;
       profile.hidden = false;
+      document.querySelectorAll('a[href="/auth/login"]').forEach(link => {
+        link.href = "/dashboard.html";
+        if (link.textContent.toLowerCase().includes("dashboard")) return;
+        link.textContent = "Open dashboard →";
+      });
     } catch (error) {
       console.warn("Starry could not load the Discord profile yet:", error);
     }
@@ -65,4 +70,8 @@
   });
 
   loadDiscordProfile();
+
+  // A session can be captured from the OAuth return URL before this script runs.
+  // Re-check once after the browser has restored local storage on navigation.
+  window.addEventListener("pageshow", () => loadDiscordProfile());
 })();
