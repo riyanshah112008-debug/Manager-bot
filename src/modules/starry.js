@@ -525,11 +525,11 @@ module.exports = async (client) => {
         roles: 'memberLogChannel',
         misc: 'serverLogChannel'
     };
-    client.invalidateLogSettings = (guildId) => dashboardLogCache.delete(String(guildId));
+    client.invalidateLogSettings = (guildId) => {\n        const prefix = String(guildId) + ':';\n        for (const key of dashboardLogCache.keys()) if (key.startsWith(prefix)) dashboardLogCache.delete(key);\n    };
     client.getLogChannel = async (guild, logType = 'misc') => {
         if (!guild) return null;
         const type = String(logType).toLowerCase();
-        const cached = dashboardLogCache.get(guild.id);
+        const cacheKey = guild.id + ':' + type;\n        const cached = dashboardLogCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) {
             return cached.channelId ? guild.channels.cache.get(cached.channelId) || null : null;
         }
@@ -540,7 +540,7 @@ module.exports = async (client) => {
             const configuredId = serverSettings?.logging?.[configuredField];
             const configuredChannel = configuredId ? guild.channels.cache.get(String(configuredId)) : null;
             if (configuredChannel && configuredChannel.isTextBased() && typeof configuredChannel.send === 'function') {
-                dashboardLogCache.set(guild.id, { channelId: configuredChannel.id, expiresAt: Date.now() + 15000 });
+                dashboardLogCache.set(cacheKey, { channelId: configuredChannel.id, expiresAt: Date.now() + 15000 });
                 return configuredChannel;
             }
         } catch (error) {
@@ -568,7 +568,7 @@ module.exports = async (client) => {
                 console.error('Log channel discovery failed:', error);
             }
         }
-        dashboardLogCache.set(guild.id, { channelId: channel?.id || null, expiresAt: Date.now() + 15000 });
+        dashboardLogCache.set(cacheKey, { channelId: channel?.id || null, expiresAt: Date.now() + 15000 });
         return channel || null;
     };
 
