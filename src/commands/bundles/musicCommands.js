@@ -146,7 +146,7 @@ const commands = [
                     let res;
                     const spotifyLink = parseSpotifyUrl(query);
                     if (spotifyLink) {
-                        const spotifyCollection = await resolveSpotifyUrl(query, { maxTracks: 25 });
+                        const spotifyCollection = await resolveSpotifyUrl(query);
                         const resolvedTracks = [];
                         // Resolve Spotify metadata to playable Lavalink search results.
                         // Spotify audio itself is never requested or streamed.
@@ -173,7 +173,7 @@ const commands = [
                         res = {
                             loadType: resolvedTracks.length > 1 ? 'playlist' : 'track',
                             tracks: resolvedTracks,
-                            playlist: { name: spotifyLink.type === 'playlist' ? 'Spotify playlist' : spotifyLink.type === 'album' ? 'Spotify album' : 'Spotify track' }
+                            playlist: { name: 'Spotify track match' }
                         };
                     } else {
                         res = await manager.search(query, { requester: ctx.user });
