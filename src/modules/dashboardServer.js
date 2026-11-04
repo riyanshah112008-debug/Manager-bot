@@ -1054,14 +1054,14 @@ function setupDashboardRoutes(app, client) {
             }
             const cleanText = (value, max, label) => {
                 if (value === undefined || value === null || value === '') return '';
-                if (typeof value !== 'string' || value.length > max) throw new Error(label + ' is too long or invalid.');
+                if (typeof value !== 'string' || value.length > max) throw Object.assign(new Error(label + ' is too long or invalid.'), { status: 400 });
                 return value.trim();
             };
             const cleanUrl = (value, label) => {
                 const raw = cleanText(value, 500, label);
                 if (!raw) return '';
                 try { const parsed = new URL(raw); if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(); }
-                catch (_) { throw new Error(label + ' must be an HTTP or HTTPS URL.'); }
+                catch (_) { throw Object.assign(new Error(label + ' must be an HTTP or HTTPS URL.'), { status: 400 }); }
                 return raw;
             };
             const embedTitle = cleanText(title, 256, 'Embed title');
@@ -1089,7 +1089,7 @@ function setupDashboardRoutes(app, client) {
             await channel.send({ embeds: [embed] });
             res.json({ success: true, message: `Embed successfully dispatched to #${channel.name}!` });
         } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            res.status(e.status || 500).json({ success: false, error: e.message });
         }
     });
 
