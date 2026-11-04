@@ -28,6 +28,7 @@ const {
     generateStandaloneKey
 } = require('../utils/paymentHelper');
 const config = require('../config');
+const { isServerOrUserPremium } = require('../utils/premiumHelper');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -492,7 +493,19 @@ function setupDashboardRoutes(app, client) {
                 managed: r.managed
             }));
 
-            const player = StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const player = client.multiBot?.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const currentTrack = player?.currentTrack || player?.queue?.current || null;
+            const queueSource = Array.isArray(player?.queue) ? player.queue : (Array.isArray(player?.queue?.tracks) ? player.queue.tracks : []);
+            const workerInfo = player && Array.from(client.multiBot?.instances?.values?.() || []).find(info =>
+                info.client?.manager?.getPlayer(guild.id) === player || StarryAudioEngine.getPlayer(guild.id, info.client) === player
+            );
+            const safeTrack = track => track ? ({
+                title: String(track.title || 'Unknown track').slice(0, 200),
+                author: String(track.author || track.artist || 'Unknown artist').slice(0, 120),
+                duration: Number(track.length || track.duration || 0),
+                thumbnail: typeof track.thumbnail === 'string' ? track.thumbnail : (typeof track.artworkUrl === 'string' ? track.artworkUrl : ''),
+                url: typeof track.uri === 'string' ? track.uri : (typeof track.url === 'string' ? track.url : '')
+            }) : null;
 
             res.json({
                 success: true,
@@ -508,17 +521,128 @@ function setupDashboardRoutes(app, client) {
                 roles,
                 publicUrl: getPublicUrl(),
                 player: player ? {
-                    playing: player.currentTrack ? true : false,
-                    currentTrack: player.currentTrack || null,
-                    paused: player.paused || false,
-                    volume: player.volume || 100,
+                    playing: Boolean(currentTrack && !player.paused),
+                    currentTrack: safeTrack(currentTrack),
+                    queue: queueSource.slice(0, 25).map(safeTrack),
+                    queueLength: Number(player.queue?.length ?? queueSource.length),
+                    paused: Boolean(player.paused),
+                    volume: Number(player.volume ?? 100),
                     loop: player.loop || 'none',
                     filter: player.filter || 'clear',
-                    is247: player.is247 || false
+                    autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')),
+                    is247: Boolean(player.is247),
+                    botName: workerInfo?.name || client.user?.username || 'Starry'
                 } : null
             });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // Cluster management is global, so only the bot owner or selected Discord server owner may change worker accounts.
+    const requireClusterManager = (req, res, next) => {
+        const userId = String(req.session?.user?.id || '');
+        const isBotOwner = typeof config.isBotOwner === 'function'
+            ? config.isBotOwner(userId, client)
+            : (config.BOT_OWNERS || []).includes(userId);
+        if (isBotOwner || (req.guild && req.guild.ownerId === userId)) return next();
+        return res.status(403).json({ success: false, error: 'Only the Starry bot owner or this Discord server owner can manage the global Multi-Bot cluster.' });
+    };
+
+    app.get('/api/guild/:id/commands', requireGuildAdmin, (req, res) => {
+        try {
+            const catalog = new Map();
+            for (const collection of [client.commands, client.prefixCommands]) {
+                if (!collection || typeof collection.values !== 'function') continue;
+                for (const command of collection.values()) {
+                    const definition = typeof command.data?.toJSON === 'function' ? command.data.toJSON() : (command.data || {});
+                    const name = String(definition.name || command.name || command.commandName || '').trim();
+                    if (!name) continue;
+                    const item = {
+                        name,
+                        description: String(definition.description || command.description || 'Starry Discord command').slice(0, 240),
+                        category: String(command.category || definition.category || 'General').slice(0, 48),
+                        usage: String(command.usage || ('/' + name)).slice(0, 180),
+                        aliases: Array.isArray(command.aliases) ? command.aliases.map(alias => String(alias).slice(0, 48)).slice(0, 12) : []
+                    };
+                    const existing = catalog.get(name);
+                    if (!existing || item.description.length > existing.description.length) catalog.set(name, item);
+                }
+            }
+            const commands = Array.from(catalog.values()).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+            return res.json({ success: true, count: commands.length, commands });
+        } catch (error) {
+            console.error('Dashboard command catalogue failed:', error?.message || error);
+            return res.status(500).json({ success: false, error: 'Could not load Starry command catalogue.' });
+        }
+    });
+
+    app.get('/api/guild/:id/multibot', requireGuildAdmin, requireClusterManager, (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const cluster = client.multiBot || require('./multiBot');
+            const stats = cluster.getClusterStats();
+            const roles = Object.entries(cluster.ROLE_PRESETS || {}).map(([value, preset]) => ({
+                value, label: preset.name, emoji: preset.emoji
+            }));
+            // Cluster statistics intentionally contain no bot tokens or credential material.
+            return res.json({ success: true, stats, roles });
+        } catch (error) {
+            return res.status(500).json({ success: false, error: 'Could not load Multi-Bot cluster status.' });
+        }
+    });
+
+    app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
+        try {
+            const cluster = client.multiBot || require('./multiBot');
+            const hasPremium = await isServerOrUserPremium(req.guild.id, req.session.user.id, client);
+            if (!hasPremium) return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires Starry Pro Cluster or Lifetime premium.' });
+            const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+            const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 64) : '';
+            const role = typeof req.body?.role === 'string' ? req.body.role : 'all';
+            if (!token || token.length > 256) return res.status(400).json({ success: false, error: 'Enter a valid Discord bot token (maximum 256 characters).' });
+            if (role && !cluster.ROLE_PRESETS?.[role]) return res.status(400).json({ success: false, error: 'Choose a valid worker specialization.' });
+            const worker = await cluster.addToken(token, role, name || 'Worker Bot', req.session.user.id);
+            if (!worker?.client?.user) return res.status(502).json({ success: false, error: 'The worker could not connect to Discord.' });
+            return res.status(201).json({
+                success: true,
+                message: 'Worker bot connected and saved to the Starry cluster.',
+                bot: { id: worker.client.user.id, name: worker.name, role: worker.role }
+            });
+        } catch (error) {
+            const message = String(error?.message || 'Could not connect worker bot.');
+            const status = /already connected|primary|token|discord rejected/i.test(message) ? 400 : 502;
+            return res.status(status).json({ success: false, error: message });
+        }
+    });
+
+    app.patch('/api/guild/:id/multibot/workers/:botId/role', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
+        try {
+            const cluster = client.multiBot || require('./multiBot');
+            const worker = cluster.instances.get(String(req.params.botId));
+            if (!worker) return res.status(404).json({ success: false, error: 'Worker bot is not connected.' });
+            if (worker.isPrimary) return res.status(400).json({ success: false, error: 'The primary Starry bot role is managed separately.' });
+            const role = typeof req.body?.role === 'string' ? req.body.role : '';
+            if (!cluster.ROLE_PRESETS?.[role]) return res.status(400).json({ success: false, error: 'Choose a valid worker specialization.' });
+            const result = await cluster.setRole(String(req.params.botId), role);
+            if (!result.success) return res.status(404).json({ success: false, error: result.message });
+            return res.json({ success: true, message: 'Worker specialization updated.' });
+        } catch (error) {
+            return res.status(500).json({ success: false, error: 'Could not update worker specialization.' });
+        }
+    });
+
+    app.delete('/api/guild/:id/multibot/workers/:botId', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
+        try {
+            const cluster = client.multiBot || require('./multiBot');
+            const worker = cluster.instances.get(String(req.params.botId));
+            if (!worker) return res.status(404).json({ success: false, error: 'Worker bot is not connected.' });
+            if (worker.isPrimary) return res.status(400).json({ success: false, error: 'The primary Starry bot cannot be disconnected here.' });
+            const removed = await cluster.removeToken(String(req.params.botId));
+            if (!removed) return res.status(404).json({ success: false, error: 'Worker bot was not removed.' });
+            return res.json({ success: true, message: 'Worker disconnected and removed from the saved cluster.' });
+        } catch (error) {
+            return res.status(500).json({ success: false, error: 'Could not disconnect worker bot.' });
         }
     });
 
@@ -891,21 +1015,51 @@ function setupDashboardRoutes(app, client) {
             const guild = req.guild || client.guilds.cache.get(req.params.id);
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
 
-            const { action, value } = req.body;
-            const player = StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const { action, value } = req.body || {};
+            const player = client.multiBot?.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            if (!player) return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
 
-            if (!player) {
-                return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
+            if (action === 'pause') {
+                if (typeof player.pause !== 'function') return res.status(400).json({ success: false, error: 'Pause is not supported by this player.' });
+                player.pause(!Boolean(player.paused));
+            } else if (action === 'skip') {
+                if (typeof player.skip === 'function') await player.skip();
+                else if (typeof player.queue?.next === 'function') await player.queue.next();
+                else return res.status(400).json({ success: false, error: 'Skip is not supported by this player.' });
+            } else if (action === 'stop') {
+                if (typeof player.stop === 'function') await player.stop();
+                else if (typeof player.destroy === 'function') await player.destroy();
+                else return res.status(400).json({ success: false, error: 'Stop is not supported by this player.' });
+            } else if (action === 'volume') {
+                const volume = Number(value);
+                if (!Number.isInteger(volume) || volume < 1 || volume > 150) return res.status(400).json({ success: false, error: 'Volume must be a whole number from 1 to 150.' });
+                if (typeof player.setVolume !== 'function') return res.status(400).json({ success: false, error: 'Volume control is not supported by this player.' });
+                player.setVolume(volume);
+            } else if (action === 'filter') {
+                const hasPremium = await isServerOrUserPremium(guild.id, req.session?.user?.id, client);
+                if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro Cluster or Lifetime premium.' });
+                const allowed = new Set(['clear', 'flat', 'empowering', 'bass', 'bassboost', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop']);
+                if (typeof value !== 'string' || !allowed.has(value)) return res.status(400).json({ success: false, error: 'Choose a supported audio profile.' });
+                if (typeof player.setFilter !== 'function') return res.status(400).json({ success: false, error: 'Audio profiles are not supported by this player.' });
+                await player.setFilter(value);
+            } else if (action === 'loop') {
+                if (!['none', 'track', 'queue'].includes(value)) return res.status(400).json({ success: false, error: 'Choose Off, Track or Queue repeat mode.' });
+                if (typeof player.setLoop === 'function') player.setLoop(value);
+                else player.loop = value;
+            } else if (action === 'autoplay') {
+                const enabled = Boolean(value);
+                player.data?.set?.('autoplay', enabled);
+                player.autoplay = enabled;
+                if (enabled && player.queue?.length === 0) {
+                    try { require('../utils/musicManager').triggerAutoplayBuffer(player, true).catch(() => {}); } catch (_) {}
+                }
+            } else if (action === 'toggle247') {
+                player.is247 = value === undefined ? !player.is247 : Boolean(value);
+            } else {
+                return res.status(400).json({ success: false, error: 'Unknown music control action.' });
             }
 
-            if (action === 'pause') player.pause ? player.pause() : null;
-            if (action === 'skip') player.skip ? player.skip() : null;
-            if (action === 'stop') player.stop ? player.stop() : null;
-            if (action === 'volume' && value !== undefined) player.setVolume ? player.setVolume(Number(value)) : null;
-            if (action === 'filter' && value) player.setFilter ? await player.setFilter(value) : null;
-            if (action === 'toggle247') player.is247 = !player.is247;
-
-            res.json({ success: true, message: `Action ${action} executed.`, player: { paused: player.paused, is247: player.is247 } });
+            return res.json({ success: true, message: 'Music control updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none', autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')), volume: Number(player.volume ?? 100) } });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
@@ -928,27 +1082,41 @@ function setupDashboardRoutes(app, client) {
 
             const tChannel = textChannelId ? guild.channels.cache.get(textChannelId) : (guild.channels.cache.find(c => c.isTextBased()) || vChannel);
 
-            let player = StarryAudioEngine.getPlayer(guild.id);
-            if (!player && client.manager) {
-                player = await client.manager.createPlayer({
+            const assignment = client.multiBot?.getMusicWorker(guild, vChannel);
+            if (assignment && assignment.isAvailable === false) {
+                return res.status(409).json({ success: false, error: 'All Starry music workers are currently occupied. Try another voice channel or wait for a worker to become free.' });
+            }
+            const musicClient = assignment?.client || client;
+            const musicGuild = musicClient.guilds.cache.get(guild.id) || (musicClient === client ? guild : null);
+            if (!musicGuild) return res.status(409).json({ success: false, error: 'The selected music worker has not joined this Discord server yet. Invite it first.' });
+            const musicVoice = musicGuild.channels.cache.get(vChannel.id);
+            const musicText = musicGuild.channels.cache.get(tChannel.id) || musicGuild.channels.cache.find(channel => channel.isTextBased());
+            if (!musicVoice?.isVoiceBased()) return res.status(400).json({ success: false, error: 'The selected worker cannot access that voice channel.' });
+
+            let player = StarryAudioEngine.getPlayer(guild.id, musicClient) || (musicClient.manager ? musicClient.manager.getPlayer(guild.id) : null);
+            if (!player && musicClient.manager) {
+                player = await musicClient.manager.createPlayer({
                     guildId: guild.id,
-                    textId: tChannel.id,
-                    voiceId: vChannel.id,
+                    textId: musicText?.id || vChannel.id,
+                    voiceId: musicVoice.id,
                     deaf: true
                 });
             }
-
-            if (player && player.search) {
-                const resTrack = await player.search(query, { requester: client.user });
-                if (!resTrack || !resTrack.tracks || resTrack.tracks.length === 0) {
-                    return res.status(404).json({ success: false, error: 'No tracks found for search query.' });
-                }
-                player.queue.add(resTrack.tracks[0]);
-                if (!player.playing && !player.paused) await player.play();
-                return res.json({ success: true, message: `🎵 Queued from Web: **${resTrack.tracks[0].title}**`, track: resTrack.tracks[0] });
+            if (!player || typeof player.search !== 'function' || !player.queue?.add) {
+                return res.status(503).json({ success: false, error: 'The assigned worker has no ready music search engine. Check its Lavalink connection.' });
             }
 
-            res.json({ success: true, message: `Dispatched play request for: ${query}` });
+            const resTrack = await player.search(query, { requester: musicClient.user });
+            if (!resTrack || !Array.isArray(resTrack.tracks) || resTrack.tracks.length === 0) {
+                return res.status(404).json({ success: false, error: 'No tracks found for search query.' });
+            }
+            player.queue.add(resTrack.tracks[0]);
+            if (!player.playing && !player.paused) await player.play();
+            return res.json({
+                success: true,
+                message: 'Queued "' + String(resTrack.tracks[0].title || query).slice(0, 160) + '" via ' + (assignment?.name || musicClient.user?.username || 'Starry') + '.',
+                track: { title: resTrack.tracks[0].title, author: resTrack.tracks[0].author, duration: resTrack.tracks[0].length }
+            });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }

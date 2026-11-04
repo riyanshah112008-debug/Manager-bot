@@ -369,12 +369,33 @@ class MultiBotManager {
     }
 
     async addToken(token, role = 'all', name = 'Worker Bot', addedBy = 'Admin') {
-        if (!token) throw new Error('Token is required.');
-        if (token === this.primaryToken) throw new Error('Cannot add primary bot token as secondary.');
-
+        const clean = cleanToken(token);
+        if (!clean) throw new Error('A Discord bot token is required.');
+        if (clean === this.primaryToken) throw new Error('The primary Starry bot cannot be added as a worker.');
         const validRole = ROLE_PRESETS[role] ? role : 'all';
-        await MultiBotToken.updateOne({ token }, { token, name, role: validRole, addedBy, enabled: true }, { upsert: true });
-        const spawned = await this.spawnWorker(token, name, validRole);
+        const verification = await verifyDiscordToken(clean);
+        if (!verification.valid || !verification.bot?.id) {
+            throw new Error('Discord rejected this bot token. Check that it belongs to a bot account and try again.');
+        }
+        if (String(verification.bot.id) === String(this.primaryClient?.user?.id || '')) {
+            throw new Error('The primary Starry bot cannot be added as a worker.');
+        }
+        const existing = this.instances.get(String(verification.bot.id));
+        if (existing) throw new Error('This bot is already connected to the Starry cluster.');
+        const safeName = String(name || verification.bot.username || 'Worker Bot').trim().slice(0, 64) || 'Worker Bot';
+        const spawned = await this.spawnWorker(clean, safeName, validRole);
+        if (!spawned) throw new Error('The bot token was valid, but the worker could not finish connecting. Check its gateway status and try again.');
+        try {
+            await MultiBotToken.updateOne(
+                { token: clean },
+                { token: clean, name: safeName, role: validRole, addedBy: String(addedBy || 'Admin'), enabled: true },
+                { upsert: true }
+            );
+        } catch (error) {
+            try { spawned.client.destroy(); } catch (_) {}
+            this.instances.delete(String(spawned.client?.user?.id || verification.bot.id));
+            throw new Error('Worker connected but could not be saved to the cluster database. Please retry.');
+        }
         return spawned;
     }
 
@@ -398,16 +419,19 @@ class MultiBotManager {
 
     async removeToken(tokenIdOrUserId) {
         let removed = false;
+        let storedToken = null;
         for (const [id, info] of this.instances.entries()) {
-            if (id === tokenIdOrUserId || info.token === tokenIdOrUserId) {
-                if (info.isPrimary) throw new Error('Cannot remove primary bot.');
-                try { info.client.destroy(); } catch (e) {}
+            if (id === String(tokenIdOrUserId) || info.token === tokenIdOrUserId) {
+                if (info.isPrimary) throw new Error('Cannot remove the primary Starry bot.');
+                storedToken = info.token || null;
+                try { info.client.destroy(); } catch (_) {}
                 this.instances.delete(id);
                 removed = true;
                 break;
             }
         }
-        await MultiBotToken.deleteOne({ $or: [{ token: tokenIdOrUserId }, { _id: tokenIdOrUserId }] }).catch(() => {});
+        const lookup = storedToken || tokenIdOrUserId;
+        await MultiBotToken.deleteOne({ $or: [{ token: lookup }, { _id: lookup }] }).catch(() => {});
         return removed;
     }
 
