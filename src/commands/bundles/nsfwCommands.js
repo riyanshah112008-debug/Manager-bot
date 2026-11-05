@@ -43,7 +43,7 @@ const PROMPTS = {
 };
 
 function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
-function targetOf(ctx) { return ctx.message?.mentions?.users?.first() || null; }
+function targetOf(ctx) { return ctx.options?.getUser('user') || ctx.message?.mentions?.users?.first() || null; }
 
 async function allowed(ctx) {
     const result = await isNsfwAllowed(ctx);
