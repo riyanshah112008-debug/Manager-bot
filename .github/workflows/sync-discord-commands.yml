@@ -1,0 +1,33 @@
+name: Sync Discord slash commands
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Register current Starry commands with Discord
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Register global slash commands
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: |
+          if [ -z "$DISCORD_TOKEN" ]; then
+            echo "::error::Add DISCORD_TOKEN under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          npm run deploy
