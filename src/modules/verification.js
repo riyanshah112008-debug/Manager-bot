@@ -50,6 +50,7 @@ async function grantVerified(member, role, client, method) {
 module.exports = client => {
   client.verifyMap ||= new Map();
   const pending = new Map();
+  client.verifyAcceptedRules ||= new Set();
   const key = (guildId, userId) => `${guildId}:${userId}`;
 
   client.on(Events.GuildMemberAdd, async member => {
@@ -92,6 +93,7 @@ module.exports = client => {
         if (member.roles.cache.has(role.id)) return interaction.reply({ content: 'You are already verified.', ephemeral: true });
 
         const method = interaction.customId.replace('starry_verify_', '');
+        if (cfg.requireRules && method !== 'rules' && !client.verifyAcceptedRules.has(key(interaction.guildId, interaction.user.id))) return interaction.reply({ content: 'Please read and accept the server rules first.', ephemeral: true });
         if (method === 'math') {
           const a = crypto.randomInt(2, 10), b = crypto.randomInt(2, 10);
           pending.set(key(interaction.guildId, interaction.user.id), { answer: String(a + b), expires: Date.now() + 5 * 60000, attempts: 0 });
@@ -128,7 +130,9 @@ module.exports = client => {
         if (!member) return interaction.reply({ content: 'Member not found.', ephemeral: true });
         const ageError = ageFailure(member, cfg);
         if (ageError) return interaction.reply({ content: ageError, ephemeral: true });
+        client.verifyAcceptedRules.add(key(interaction.guildId, interaction.user.id));
         const role = await resolveTargetRole(interaction.guild, cfg.roleId);
+        if (cfg.requireRules) return interaction.reply({ content: '✅ Rules accepted. Now choose another verification method to complete the checks.', ephemeral: true });
         await grantVerified(member, role, client, 'rules acceptance');
         return interaction.reply({ content: '✅ Rules accepted. You are verified.', ephemeral: true });
       }
