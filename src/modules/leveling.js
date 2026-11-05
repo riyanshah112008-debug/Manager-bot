@@ -45,7 +45,7 @@ const LevelSettingsSchema = new mongoose.Schema({
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '{server} • Leveling System' },
     pingContent: { type: String, default: DEFAULT_LEVEL_UP_MESSAGE },
-    roleRewards: { type: [{ level: { type: Number, min: 1, max: 10000 }, roleId: { type: String } }], default: [] }
+    roleRewards: { type: [{ level: { type: Number, min: 1, max: 10000 }, roleId: { type: String } }], default: [] },
     authorName: { type: String, default: 'LEVEL UP UNLOCKED' }
 });
 const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', LevelSettingsSchema);
