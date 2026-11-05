@@ -51,6 +51,7 @@ const serverSettingsSchema = new mongoose.Schema({
         channelId: { type: String, default: '' },
         logChannelId: { type: String, default: '' },
         minAccountAgeDays: { type: Number, default: 3 },
+        ageAction: { type: String, enum: ['warn', 'quarantine', 'reject'], default: 'reject' },
         requireAvatar: { type: Boolean, default: false },
         requireRules: { type: Boolean, default: false },
         rulesText: { type: String, default: '' },
