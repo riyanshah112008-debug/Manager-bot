@@ -47,8 +47,6 @@ module.exports = {
         new ButtonBuilder().setCustomId('starry_verify_open').setLabel('Start verification').setEmoji('🛡️').setStyle(ButtonStyle.Primary)
       );
       const message = await channel.send({ embeds: [embed], components: [row] });
-      settings.verification.panelMessageId = message.id;
-      await settings.save();
       return interaction.editReply({ content: '✅ Multi-method verification is enabled and the panel is live in ' + channel + '. Minimum account age: ' + minAge + ' day(s). Configure methods, rules and logging in the dashboard’s Verification module.' });
     } catch (error) {
       console.error('[verify-setup]', error);
