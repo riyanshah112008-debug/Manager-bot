@@ -150,10 +150,8 @@ const commands = [
         description: 'Show all commands in Starry After Dark.',
         usage: ',nsfwhelp',
         async execute(ctx) {
-            return ctx.reply('**🌙 Starry After Dark — Social Commands**\n' +
-                'nsfwconsent on/off · nsfwflirt @user · nsfwtease @user · nsfwmakeout @user · nsfwdate @user · nsfwcompliment @user\n' +
-                'nsfwchemistry @user · nsfwtension @user · nsfwship @user · nsfwcouple @user · nsfwrate @user\n' +
-                'nsfwtruth · nsfwdare · nsfwfantasy · nsfwsecret · nsfwconfess <message> · nsfwafterdark\n\n' +
+            return ctx.reply('**🌙 Starry After Dark — One Command, Full Suite**\n' +
+                '`/nsfw` or `,nsfw` → choose a sub-option: server, dms, consent, flirt, tease, makeout, date, compliment, chemistry, tension, ship, couple, rate, truth, dare, fantasy, secret, confess, afterdark, help.\n\n' +
                 '**Safety:** Server owner activation and age-restricted channel required. DMs are individually opt-in. Targeted commands require both members to opt in. All content is non-graphic.');
         }
     }
