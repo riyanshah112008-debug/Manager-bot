@@ -523,8 +523,8 @@ app.post('/verify', async (req, res) => {
             return res.send(`
                 <body style="background-color:#1e1f22; color:white; font-family:sans-serif; text-align:center; padding-top:15vh;">
                     <h1 style="color:#faa81a;">⚠️ Role Hierarchy Misconfiguration</h1>
-                    <p style="color:#b5bac1;">The role <b>${escapeVerificationHtml(targetRole.name)}</b> is above or equal to the bot role in Server Settings.</p>
-                    <p style="color:#949ba4;">Ask an administrator to drag the bot role above <b>${escapeVerificationHtml(targetRole.name)}</b>.</p>
+                    <p style="color:#b5bac1;">The configured verification role is above or equal to the bot role in Server Settings.</p>
+                    <p style="color:#949ba4;">Ask an administrator to move the bot role above the configured verification role.</p>
                 </body>
             `);
         }
@@ -550,8 +550,8 @@ app.post('/verify', async (req, res) => {
             <body style="background-color:#1e1f22; color:white; font-family:system-ui, -apple-system, sans-serif; text-align:center; padding-top:18vh;">
                 <div style="max-width:440px; margin:0 auto; background:#2b2d31; padding:35px 25px; border-radius:12px; border:1px solid #3f4147;">
                     <h1 style="color:#23a559; font-size:42px; margin:0 0 10px;">✅ Success!</h1>
-                    <h3 style="color:#ffffff; margin:0 0 15px;">You are now verified in ${escapeVerificationHtml(guild.name)}</h3>
-                    <p style="color:#949ba4; font-size:15px; margin:0 0 25px;">You have received the <b>${targetRole.name}</b> role. You may close this tab and return to Discord.</p>
+                    <h3 style="color:#ffffff; margin:0 0 15px;">Your Discord verification was successful.</h3>
+                    <p style="color:#949ba4; font-size:15px; margin:0 0 25px;">Your verified role has been assigned. You may close this tab and return to Discord.</p>
                 </div>
             </body></html>
         `);
