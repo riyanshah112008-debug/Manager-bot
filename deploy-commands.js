@@ -147,15 +147,18 @@ if (botavatarModule && botavatarModule.data) {
     masterPayloads.push(botavatarModule.data.toJSON ? botavatarModule.data.toJSON() : botavatarModule.data);
 }
 
-const afterDarkSlashCommands = [
-    { name: 'nsfwserver', description: 'Enable or disable Starry NSFW for this server', default_member_permissions: '32', options: [{ name: 'choice', type: 3, required: true, description: 'Server NSFW setting', choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
-    { name: 'nsfwdm', description: 'Enable or disable your personal NSFW mode in DMs', options: [{ name: 'choice', type: 3, required: true, description: 'Your private setting', choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
-    { name: 'nsfwconsent', description: 'Opt in or out of Starry social interactions', options: [{ name: 'choice', type: 3, required: true, description: 'Your consent preference', choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }, { name: 'Status', value: 'status' }] }] },
-    ...['nsfwflirt','nsfwtease','nsfwmakeout','nsfwdate','nsfwcompliment','nsfwchemistry','nsfwtension','nsfwship','nsfwcouple','nsfwrate'].map(name => ({ name, description: 'Opt-in, non-graphic Starry social interaction', options: [{ name: 'user', type: 6, required: true, description: 'Another member who has opted in' }] })),
-    ...['nsfwtruth','nsfwdare','nsfwfantasy','nsfwsecret','nsfwafterdark'].map(name => ({ name, description: 'A non-graphic Starry After Dark social prompt' })),
-    { name: 'nsfwconfess', description: 'Share a short, non-explicit confession', options: [{ name: 'message', type: 3, required: true, description: 'Keep it non-explicit and respectful' }] },
-    { name: 'nsfwhelp', description: 'Show Starry After Dark social commands' }
-];
+const afterDarkSlashCommands = [{
+    name: 'nsfw',
+    description: '🌙 Starry After Dark — all social features in one command',
+    options: [
+        { type: 1, name: 'server', description: 'Enable or disable the suite for this server', options: [{ type: 3, name: 'choice', description: 'Server setting', required: true, choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
+        { type: 1, name: 'dms', description: 'Set your personal private NSFW mode', options: [{ type: 3, name: 'choice', description: 'Your DM setting', required: true, choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
+        { type: 1, name: 'consent', description: 'Opt in or out of social interactions', options: [{ type: 3, name: 'choice', description: 'Your consent preference', required: true, choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }, { name: 'Status', value: 'status' }] }] },
+        ...['flirt','tease','makeout','date','compliment','chemistry','tension','ship','couple','rate'].map(name => ({ type: 1, name, description: 'Opt-in, non-graphic social interaction', options: [{ type: 6, name: 'user', description: 'Another member who has opted in', required: true }] })),
+        ...['truth','dare','fantasy','secret','afterdark','help'].map(name => ({ type: 1, name, description: 'A non-graphic Starry After Dark prompt or help' })),
+        { type: 1, name: 'confess', description: 'Share a short, non-explicit confession', options: [{ type: 3, name: 'message', description: 'Keep it non-explicit and respectful', required: true }] }
+    ]
+}];
 
 const commands = [
     ...masterPayloads,
