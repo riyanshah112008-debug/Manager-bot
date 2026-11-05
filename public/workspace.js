@@ -34,7 +34,7 @@ function renderVerification(){
  return pageHeader("Server Verification","Configure the verification gate, accepted methods, account-age checks and audit logging.")+
  '<div class="grid">'+
  card("Verification policy","The bot only grants the verified role after a selected method succeeds.",check("vEnabled","Enable verification","Activate the verification gate",v.enabled)+
- '<div class="form-grid">'+select("vRole","Verified member role",roleOpts,v.roleId||"")+select("vUnverifiedRole","Unverified / restricted role",roleOpts,v.unverifiedRoleId||"")+select("vChannel","Panel channel",channelOpts,v.channelId||"")+select("vLogChannel","Verification log channel",logOpts,v.logChannelId||"")+input("vAge","Minimum account age (days)",v.minAccountAgeDays??3,"number")+'</div>'+
+ '<div class="form-grid">'+select("vRole","Verified member role",roleOpts,v.roleId||"")+select("vUnverifiedRole","Unverified / restricted role",roleOpts,v.unverifiedRoleId||"")+select("vChannel","Panel channel",channelOpts,v.channelId||"")+select("vLogChannel","Verification log channel",logOpts,v.logChannelId||"")+input("vAge","Minimum account age (days)",v.minAccountAgeDays??3,"number")+select("vAgeAction","When account is too new",[["reject","Reject verification"],["quarantine","Keep restricted until old enough"],["warn","Warn but allow verification"]],v.ageAction||"reject")+'</div>'+
  check("vAvatar","Require profile picture","Reject accounts without a Discord avatar",v.requireAvatar)+
  check("vRulesRequired","Require rules acceptance","Require rules confirmation as part of the gate",v.requireRules)+
  '<div class="field full"><label for="vRulesText">Server rules shown during verification</label><textarea id="vRulesText" rows="5" maxlength="1800" placeholder="Enter the rules members must accept…">'+esc(v.rulesText||"")+'</textarea></div>'+
@@ -187,8 +187,9 @@ $("#saveSecurity")?.addEventListener("click",()=>{for(const id of ["maxChannelDe
 $("#saveVerification")?.addEventListener("click",async()=>{
  const age=Number($("#vAge").value);
  if(!Number.isInteger(age)||age<0||age>3650){feedback("Minimum account age must be a whole number from 0 to 3650.","bad");return}
- const body={enabled:$("#vEnabled").checked,roleId:$("#vRole").value,unverifiedRoleId:$("#vUnverifiedRole").value,channelId:$("#vChannel").value,logChannelId:$("#vLogChannel").value,minAccountAgeDays:age,requireAvatar:$("#vAvatar").checked,requireRules:$("#vRulesRequired").checked,rulesText:$("#vRulesText").value,methods:{button:$("#vMethodButton").checked,math:$("#vMethodMath").checked,captcha:$("#vMethodCaptcha").checked,dm:$("#vMethodDm").checked,rules:$("#vMethodRules").checked}};
+ const body={enabled:$("#vEnabled").checked,roleId:$("#vRole").value,unverifiedRoleId:$("#vUnverifiedRole").value,channelId:$("#vChannel").value,logChannelId:$("#vLogChannel").value,minAccountAgeDays:age,ageAction:$("#vAgeAction").value,requireAvatar:$("#vAvatar").checked,requireRules:$("#vRulesRequired").checked,rulesText:$("#vRulesText").value,methods:{button:$("#vMethodButton").checked,math:$("#vMethodMath").checked,captcha:$("#vMethodCaptcha").checked,dm:$("#vMethodDm").checked,rules:$("#vMethodRules").checked}};
  if(body.enabled&&!body.roleId){feedback("Choose a verified member role before enabling verification.","bad");return}
+ if(body.requireRules&&!body.methods.rules){feedback("Enable Rules acceptance when mandatory rules acceptance is selected.","bad");return}
  if(body.enabled&&!Object.values(body.methods).some(Boolean)){feedback("Enable at least one verification method.","bad");return}
  try{const d=await request("/api/guild/"+guildId+"/settings",{method:"POST",body:JSON.stringify({verification:body})});settings=d.settings||settings;feedback("Verification settings saved.","good")}catch(e){feedback(e.message,"bad")}
 });
