@@ -253,4 +253,37 @@ commands.push(
     }
 );
 
-module.exports = commands;
+// Expose one public prefix command. Individual handlers remain private implementation details.
+const internalCommands = new Map(commands.map(command => [command.name, command]));
+const nsfwSubcommands = {
+    server: 'nsfwserver', dms: 'nsfwdm', consent: 'nsfwconsent',
+    flirt: 'nsfwflirt', tease: 'nsfwtease', makeout: 'nsfwmakeout',
+    date: 'nsfwdate', compliment: 'nsfwcompliment',
+    chemistry: 'nsfwchemistry', tension: 'nsfwtension', ship: 'nsfwship',
+    couple: 'nsfwcouple', rate: 'nsfwrate',
+    truth: 'nsfwtruth', dare: 'nsfwdare', fantasy: 'nsfwfantasy',
+    secret: 'nsfwsecret', confess: 'nsfwconfess', afterdark: 'nsfwafterdark',
+    help: 'nsfwhelp'
+};
+const unifiedNsfwCommand = {
+    name: 'nsfw', aliases: ['mature', '18plus', 'nsfwconfig'],
+    category: 'NSFW',
+    description: 'Starry After Dark: all mature social settings, games and interactions.',
+    usage: ',nsfw <server|dms|consent|flirt|tease|makeout|date|compliment|chemistry|tension|ship|couple|rate|truth|dare|fantasy|secret|confess|afterdark|help>',
+    async execute(ctx) {
+        const slash = ctx.isSlash;
+        const sub = String(slash ? (ctx.interaction.options.getSubcommand(false) || 'help') : (ctx.args[0] || 'help')).toLowerCase();
+        const internalName = nsfwSubcommands[sub];
+        if (!internalName) return ctx.reply('Unknown NSFW option. Use /nsfw help or ,nsfw help.');
+        const handler = internalCommands.get(internalName);
+        if (!handler) return ctx.reply('That NSFW option is temporarily unavailable.');
+        if (slash) {
+            const option = ctx.interaction.options;
+            if (['server', 'dms', 'consent'].includes(sub)) ctx.args = [option.getString('choice') || 'status'];
+            else if (sub === 'confess') ctx.args = [option.getString('message') || ''];
+            else ctx.args = [];
+        } else ctx.args = ctx.args.slice(1);
+        return handler.execute(ctx);
+    }
+};
+module.exports = [unifiedNsfwCommand];
