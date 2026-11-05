@@ -1,7 +1,7 @@
 // Starry After Dark: original, non-graphic social games and interactions.
 // Server: owner activation + Discord age-restricted channel. DMs: individual opt-in.
 // Targeted interactions and pair scores require both users to opt in.
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const ServerSettings = require('../../models/ServerSettings');
 const {
     canManageServerNsfw, isNsfwAllowed, isNsfwDmEnabled,
@@ -60,7 +60,61 @@ async function mutualConsent(ctx, target) {
         return false;
     }
     if (!(await isSocialConsentEnabled(target.id))) {
-        await ctx.reply('<@' + target.id + '> has not opted in. They must enable ' + PREFIX + 'nsfwconsent on themselves first.');
+        if (!ctx.guild) {
+            const requestId = Date.now().toString(36);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('starry_nsfw_consent_accept_' + requestId).setLabel('Accept').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('starry_nsfw_consent_decline_' + requestId).setLabel('Decline').setStyle(ButtonStyle.Secondary)
+            );
+            let invitation;
+            try {
+                invitation = await target.send({
+                    content: '🌙 **Starry social-consent request**\\n' +
+                        '<@' + ctx.user.id + '> wants to include you in a Starry social interaction. ' +
+                        'Accepting opts you in to Starry’s non-graphic social interactions. ' +
+                        'You can opt out at any time with `' + PREFIX + 'nsfwconsent off`. ' +
+                        'Accepting is not agreement to any specific activity.',
+                    components: [row],
+                    allowedMentions: { users: [ctx.user.id] }
+                });
+            } catch (error) {
+                await ctx.reply('I could not DM that member. They may have DMs closed; they can opt in themselves with `' + PREFIX + 'nsfwconsent on`.');
+                return false;
+            }
+            await ctx.reply('📩 I sent <@' + target.id + '> a consent invitation. Nothing will happen unless they accept. Once they accept, run the command again.');
+            const collector = invitation.createMessageComponentCollector({
+                time: 5 * 60 * 1000,
+                filter: interaction => interaction.user.id === target.id && interaction.customId.endsWith(requestId)
+            });
+            collector.on('collect', async interaction => {
+                const accepted = interaction.customId.startsWith('starry_nsfw_consent_accept_');
+                if (accepted) {
+                    await setSocialConsent(target.id, true);
+                    await interaction.update({
+                        content: '✅ You opted in to Starry social interactions. Revoke any time with `' + PREFIX + 'nsfwconsent off`.',
+                        components: []
+                    });
+                    try { await ctx.user.send('✅ <@' + target.id + '> accepted your Starry consent invitation. You can now retry your command.'); } catch (_) {}
+                } else {
+                    await interaction.update({ content: 'You declined the Starry consent invitation. No interaction was started.', components: [] });
+                    try { await ctx.user.send('ℹ️ <@' + target.id + '> declined your Starry consent invitation.'); } catch (_) {}
+                }
+                collector.stop('answered');
+            });
+            collector.on('end', async (_collected, reason) => {
+                if (reason === 'answered') return;
+                try {
+                    await invitation.edit({
+                        content: '⌛ This Starry consent invitation expired. No consent was recorded.',
+                        components: [new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId('starry_nsfw_consent_expired').setLabel('Expired').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                        )]
+                    });
+                } catch (_) {}
+            });
+            return false;
+        }
+        await ctx.reply('<@' + target.id + '> has not opted in. They can use `' + PREFIX + 'nsfwconsent on` or accept an invitation in DMs.');
         return false;
     }
     return true;
