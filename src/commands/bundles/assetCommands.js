@@ -34,7 +34,7 @@ function readZip(buffer) {
         const commentLen = buffer.readUInt16LE(cursor + 32), localOffset = buffer.readUInt32LE(cursor + 42);
         const entryName = buffer.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
         cursor += 46 + nameLen + extraLen + commentLen;
-        const base = path.posix.basename(entryName.replace(/\\\\/g, '/')), ext = path.extname(base).toLowerCase();
+        const base = path.posix.basename(entryName.replace(/\\/g, '/')), ext = path.extname(base).toLowerCase();
         if (!base || entryName.endsWith('/') || !ALLOWED.has(ext)) continue;
         if ((flags & 1) || ![0, 8].includes(method) || size > INPUT_LIMIT || packedSize > ZIP_LIMIT) continue;
         if (buffer.readUInt32LE(localOffset) !== 0x04034b50) continue;
