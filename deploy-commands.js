@@ -147,8 +147,19 @@ if (botavatarModule && botavatarModule.data) {
     masterPayloads.push(botavatarModule.data.toJSON ? botavatarModule.data.toJSON() : botavatarModule.data);
 }
 
+const afterDarkSlashCommands = [
+    { name: 'nsfwserver', description: 'Enable or disable Starry NSFW for this server', default_member_permissions: '32', options: [{ name: 'choice', type: 3, required: true, description: 'Server NSFW setting', choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
+    { name: 'nsfwdm', description: 'Enable or disable your personal NSFW mode in DMs', options: [{ name: 'choice', type: 3, required: true, description: 'Your private setting', choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
+    { name: 'nsfwconsent', description: 'Opt in or out of Starry social interactions', options: [{ name: 'choice', type: 3, required: true, description: 'Your consent preference', choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }, { name: 'Status', value: 'status' }] }] },
+    ...['nsfwflirt','nsfwtease','nsfwmakeout','nsfwdate','nsfwcompliment','nsfwchemistry','nsfwtension','nsfwship','nsfwcouple','nsfwrate'].map(name => ({ name, description: 'Opt-in, non-graphic Starry social interaction', options: [{ name: 'user', type: 6, required: true, description: 'Another member who has opted in' }] })),
+    ...['nsfwtruth','nsfwdare','nsfwfantasy','nsfwsecret','nsfwafterdark'].map(name => ({ name, description: 'A non-graphic Starry After Dark social prompt' })),
+    { name: 'nsfwconfess', description: 'Share a short, non-explicit confession', options: [{ name: 'message', type: 3, required: true, description: 'Keep it non-explicit and respectful' }] },
+    { name: 'nsfwhelp', description: 'Show Starry After Dark social commands' }
+];
+
 const commands = [
     ...masterPayloads,
+    ...afterDarkSlashCommands,
 
     // VOICE HUB
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
