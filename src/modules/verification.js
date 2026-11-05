@@ -3,6 +3,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits
 } = require('discord.js');
 const crypto = require('crypto');
+const { getPublicUrl } = require('../utils/tunnelManager');
 
 async function getConfig(guildId) {
   try {
@@ -51,6 +52,16 @@ module.exports = client => {
   const pending = new Map();
   const key = (guildId, userId) => `${guildId}:${userId}`;
 
+  client.on(Events.GuildMemberAdd, async member => {
+    const cfg = await getConfig(member.guild.id);
+    if (!cfg.enabled || !cfg.unverifiedRoleId) return;
+    const role = member.guild.roles.cache.get(cfg.unverifiedRoleId);
+    const bot = member.guild.members.me;
+    if (role && bot?.permissions.has(PermissionFlagsBits.ManageRoles) && role.position < bot.roles.highest.position) {
+      await member.roles.add(role, 'Starry verification pending').catch(error => console.error('[Verification] Could not assign pending role:', error.message));
+    }
+  });
+
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isButton() && interaction.customId === 'starry_verify_open') {
@@ -69,7 +80,7 @@ module.exports = client => {
         return interaction.reply({ content: 'Choose a verification method. Your account-age requirements apply to every method.', components: rows, ephemeral: true });
       }
 
-      if (interaction.isButton() && interaction.customId.startsWith('starry_verify_') && interaction.customId !== 'starry_verify_open') {
+      if (interaction.isButton() && interaction.customId.startsWith('starry_verify_') && interaction.customId !== 'starry_verify_open' && interaction.customId !== 'starry_verify_accept_rules') {
         const cfg = await getConfig(interaction.guildId);
         if (!cfg.enabled) return interaction.reply({ content: 'Verification is disabled.', ephemeral: true });
         const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
@@ -92,7 +103,7 @@ module.exports = client => {
         if (method === 'captcha' || method === 'dm') {
           const token = crypto.randomBytes(24).toString('hex');
           client.verifyMap.set(token, { userId: interaction.user.id, guildId: interaction.guildId, roleId: role.id, expiresAt: Date.now() + 10 * 60000, minAccountAgeDays: Number(cfg.minAccountAgeDays) || 0, requireAvatar: !!cfg.requireAvatar });
-          const base = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '';
+          const base = process.env.PUBLIC_URL || getPublicUrl() || process.env.RENDER_EXTERNAL_URL || '';
           const url = base ? `${base.replace(/\/$/, '')}/verify?token=${token}` : null;
           if (!url) return interaction.reply({ content: 'The verification website URL is not configured. Use another method or contact an administrator.', ephemeral: true });
           if (method === 'dm') {
@@ -102,9 +113,9 @@ module.exports = client => {
           return interaction.reply({ content: `Your single-use web verification link (expires in 10 minutes): ${url}`, ephemeral: true });
         }
         if (method === 'button' || method === 'rules') {
-          if (method === 'rules' && cfg.rulesText) {
+          if (method === 'rules') {
             const accept = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('starry_verify_accept_rules').setLabel('I have read and accept the rules').setStyle(ButtonStyle.Success));
-            return interaction.reply({ content: `**Server rules**\n${String(cfg.rulesText).slice(0, 1800)}\n\nPress below to confirm acceptance.`, components: [accept], ephemeral: true });
+            return interaction.reply({ content: `**Server rules**\n${String(cfg.rulesText || 'I agree to follow the server rules and community guidelines.').slice(0, 1800)}\n\nPress below to confirm acceptance.`, components: [accept], ephemeral: true });
           }
           await grantVerified(member, role, client, method === 'rules' ? 'rules acceptance' : 'one-click');
           return interaction.reply({ content: '✅ Verification complete. Your verified role has been assigned.', ephemeral: true });
