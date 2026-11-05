@@ -43,6 +43,43 @@ const PROMPTS = {
 };
 
 function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+let animeGifEndpointsCache = null;
+let animeGifEndpointsCheckedAt = 0;
+const ANIME_GIF_CATEGORY_PREFERENCES = {
+ nsfwflirt:['wink','blush','smile'], nsfwtease:['poke','wink','baka'],
+ nsfwmakeout:['kiss','blush','hug'], nsfwdate:['handhold','hug','smile'],
+ nsfwcompliment:['blush','smile','wink'], nsfwchemistry:['heart','blush','smile'],
+ nsfwtension:['blush','wink','stare'], nsfwship:['handhold','hug','kiss'],
+ nsfwcouple:['cuddle','hug','handhold'], nsfwrate:['blush','smile','wink'],
+ nsfwtruth:['think','stare','smile'], nsfwdare:['dance','wink','poke'],
+ nsfwfantasy:['hug','handhold','smile'], nsfwsecret:['blush','wink','smile'],
+ nsfwconfess:['blush','heart','smile'], nsfwafterdark:['wink','smile','blush']
+};
+async function fetchAnimeGif(commandName) {
+ try {
+  const now=Date.now();
+  if(!animeGifEndpointsCache || now-animeGifEndpointsCheckedAt>3600000) {
+   const discovery=await fetch('https://nekos.best/api/v2/endpoints',{headers:{'User-Agent':'StarryDiscordBot/1.0 (anime GIF embeds)'},signal:AbortSignal.timeout(4500)});
+   if(!discovery.ok) throw new Error('GIF endpoint discovery HTTP '+discovery.status);
+   animeGifEndpointsCache=await discovery.json(); animeGifEndpointsCheckedAt=now;
+  }
+  const available=Object.entries(animeGifEndpointsCache).filter(([,v])=>v&&String(v.format).toLowerCase()==='gif').map(([k])=>k);
+  const prefs=ANIME_GIF_CATEGORY_PREFERENCES[commandName]||['smile','wink','hug'];
+  const category=prefs.find(x=>available.includes(x))||['smile','wink','hug','blush'].find(x=>available.includes(x))||available[0];
+  if(!category) return null;
+  const response=await fetch('https://nekos.best/api/v2/'+encodeURIComponent(category),{headers:{'User-Agent':'StarryDiscordBot/1.0 (anime GIF embeds)'},signal:AbortSignal.timeout(4500)});
+  if(!response.ok) throw new Error('GIF request HTTP '+response.status);
+  const gif=(await response.json()).results?.[0];
+  if(!gif?.url||!/^https:\/\/nekos\.best\//i.test(gif.url)||!/\.gif(?:$|\?)/i.test(gif.url)) return null;
+  return gif;
+ } catch(error) { console.warn('[NSFW] Anime GIF unavailable:',error.message); return null; }
+}
+async function addAnimeGif(embed,commandName) {
+ const gif=await fetchAnimeGif(commandName);
+ if(gif) { embed.setImage(gif.url); embed.setFooter({text:'Starry Social • Anime GIF'+(gif.artist_name?' • Art: '+String(gif.artist_name).slice(0,60):'')}); }
+ return embed;
+}
+
 function targetOf(ctx) { return ctx.options?.getUser('user') || ctx.message?.mentions?.users?.first() || null; }
 
 async function allowed(ctx) {
@@ -235,6 +272,7 @@ for (const [name, action] of Object.entries(targeted)) {
             const embed = new EmbedBuilder().setColor(COLOR).setTitle(action[0])
                 .setDescription('✨ <@' + ctx.user.id + '> ' + line)
                 .setFooter({ text: 'Both members have opted in • Starry Social' }).setTimestamp();
+            await addAnimeGif(embed, name);
             return ctx.reply({ embeds: [embed], allowedMentions: { users: [ctx.user.id, target.id] } });
         }
     });
@@ -258,6 +296,7 @@ for (const [name, title] of scored) {
             const embed = new EmbedBuilder().setColor(COLOR).setTitle(title)
                 .setDescription('<@' + ctx.user.id + '> + <@' + target.id + '>\n\n**' + score + '%**\n' + vibe)
                 .setFooter({ text: 'For entertainment only • Both users opted in' }).setTimestamp();
+            await addAnimeGif(embed, name);
             return ctx.reply({ embeds: [embed], allowedMentions: { users: [ctx.user.id, target.id] } });
         }
     });
@@ -271,7 +310,9 @@ for (const [name, title, pool] of [
         name, category: 'NSFW', description: title + ' — a non-graphic social prompt.', usage: ',' + name,
         async execute(ctx) {
             if (!(await allowed(ctx))) return;
-            return ctx.reply({ embeds: [new EmbedBuilder().setColor(COLOR).setTitle(title).setDescription(pick(pool)).setFooter({ text: 'Keep it respectful • Passing is always okay' })] });
+            const embed = new EmbedBuilder().setColor(COLOR).setTitle(title).setDescription(pick(pool)).setFooter({ text: 'Keep it respectful • Passing is always okay' });
+            await addAnimeGif(embed, name);
+            return ctx.reply({ embeds: [embed] });
         }
     });
 }
@@ -285,7 +326,9 @@ commands.push(
             const message = String(ctx.args.join(' ') || '').trim();
             if (!message) return ctx.reply('Add a confession after the command. Keep it non-explicit and respectful.');
             if (message.length > 400) return ctx.reply('Keep the confession under 400 characters.');
-            return ctx.reply({ embeds: [new EmbedBuilder().setColor(COLOR).setTitle('💌 A Starry Confession').setDescription(message).setFooter({ text: 'Shared by request • Keep it respectful' })], allowedMentions: { parse: [] } });
+            const embed = new EmbedBuilder().setColor(COLOR).setTitle('💌 A Starry Confession').setDescription(message).setFooter({ text: 'Shared by request • Keep it respectful' });
+            await addAnimeGif(embed, 'nsfwconfess');
+            return ctx.reply({ embeds: [embed], allowedMentions: { parse: [] } });
         }
     },
     {
@@ -300,7 +343,9 @@ commands.push(
                 'What song belongs on a perfect after-dark playlist?',
                 'What is one green flag people often overlook?'
             ]);
-            return ctx.reply({ embeds: [new EmbedBuilder().setColor(COLOR).setTitle('🌙 After Dark').setDescription(prompt).setFooter({ text: 'A relaxed, non-explicit conversation starter' })] });
+            const embed = new EmbedBuilder().setColor(COLOR).setTitle('🌙 After Dark').setDescription(prompt).setFooter({ text: 'A relaxed, non-explicit conversation starter' });
+            await addAnimeGif(embed, 'nsfwafterdark');
+            return ctx.reply({ embeds: [embed] });
         }
     }
 );
