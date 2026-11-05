@@ -459,9 +459,10 @@ app.get('/verify', async (req, res) => {
                 <img src="${botAvatar}" class="avatar" alt="Bot Avatar">
                 <h2>Human Verification</h2>
                 <p>Complete this quick human check to unlock access in <b>${guildName}</b>.</p>
-                    <label for="answer">What is ${data.webQuestion}?</label><input id="answer" name="answer" inputmode="numeric" pattern="[0-9]*" maxlength="2" required style="box-sizing:border-box;width:100%;padding:13px;margin:0 0 16px;border-radius:8px;border:1px solid #5865f2;background:#1e1f22;color:white;font-size:18px;text-align:center;">
                 <form action="/verify" method="POST">
                     <input type="hidden" name="token" value="${token}">
+                    <label for="answer">What is ${escapeVerificationHtml(data.webQuestion)}?</label>
+                    <input id="answer" name="answer" inputmode="numeric" pattern="[0-9]*" maxlength="2" required style="box-sizing:border-box;width:100%;padding:13px;margin:0 0 16px;border-radius:8px;border:1px solid #5865f2;background:#1e1f22;color:white;font-size:18px;text-align:center;">
                     <button type="submit" id="btn">I am human (Verify Now)</button>
                 </form>
             </div>
@@ -523,7 +524,7 @@ app.post('/verify', async (req, res) => {
                 <body style="background-color:#1e1f22; color:white; font-family:sans-serif; text-align:center; padding-top:15vh;">
                     <h1 style="color:#faa81a;">⚠️ Role Hierarchy Misconfiguration</h1>
                     <p style="color:#b5bac1;">The role <b>${escapeVerificationHtml(targetRole.name)}</b> is above or equal to the bot role in Server Settings.</p>
-                    <p style="color:#949ba4;">Ask an administrator to drag the bot role above <b>${targetRole.name}</b>.</p>
+                    <p style="color:#949ba4;">Ask an administrator to drag the bot role above <b>${escapeVerificationHtml(targetRole.name)}</b>.</p>
                 </body>
             `);
         }
