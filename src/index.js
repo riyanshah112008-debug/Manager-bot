@@ -429,6 +429,7 @@ app.get('/verify', async (req, res) => {
 
     const data = client.verifyMap.get(token);
     if (data?.expiresAt && data.expiresAt < Date.now()) { client.verifyMap.delete(token); return res.status(410).send('Verification link expired. Return to Discord and request a new one.'); }
+    if (!data.webAnswer) { const a = Math.floor(Math.random() * 8) + 2, b = Math.floor(Math.random() * 8) + 2; data.webQuestion = a + ' + ' + b; data.webAnswer = String(a + b); data.webAttempts = 0; }
     const guild = data?.guildId ? (client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null)) : null;
     const guildName = guild ? guild.name : 'Discord Server';
     const botAvatar = client.user ? client.user.displayAvatarURL({ extension: 'png' }) : 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -453,7 +454,8 @@ app.get('/verify', async (req, res) => {
             <div class="card">
                 <img src="${botAvatar}" class="avatar" alt="Bot Avatar">
                 <h2>Human Verification</h2>
-                <p>Confirm you are human to unlock full channel access in <b>${guildName}</b>.</p>
+                <p>Complete this quick human check to unlock access in <b>${guildName}</b>.</p>
+                    <label for="answer">What is ${data.webQuestion}?</label><input id="answer" name="answer" inputmode="numeric" pattern="[0-9]*" maxlength="2" required style="box-sizing:border-box;width:100%;padding:13px;margin:0 0 16px;border-radius:8px;border:1px solid #5865f2;background:#1e1f22;color:white;font-size:18px;text-align:center;">
                 <form action="/verify" method="POST">
                     <input type="hidden" name="token" value="${token}">
                     <button type="submit" id="btn">I am human (Verify Now)</button>
@@ -483,6 +485,11 @@ app.post('/verify', async (req, res) => {
 
     const data = client.verifyMap.get(token);
     if (data?.expiresAt && data.expiresAt < Date.now()) { client.verifyMap.delete(token); return res.status(410).send('Verification link expired. Return to Discord and request a new one.'); }
+    if (!data.webAnswer || String(req.body?.answer || '').trim() !== data.webAnswer) {
+        data.webAttempts = (data.webAttempts || 0) + 1;
+        if (data.webAttempts >= 3) client.verifyMap.delete(token);
+        return res.status(400).send(data.webAttempts >= 3 ? 'Too many incorrect answers. Return to Discord and request a new link.' : 'Incorrect answer. Return to Discord and open a fresh verification link.');
+    }
     try {
         const guild = client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null);
         if (!guild) {
