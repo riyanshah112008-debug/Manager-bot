@@ -7,12 +7,12 @@ const zlib = require('node:zlib');
 const { promisify } = require('node:util');
 const { execFile } = require('node:child_process');
 const execFileAsync = promisify(execFile);
-const INPUT_LIMIT = 25 * 1024 * 1024, ZIP_LIMIT = 8 * 1024 * 1024;
+const INPUT_LIMIT = 200 * 1024 * 1024, ZIP_LIMIT = 200 * 1024 * 1024;
 const EMOJI_LIMIT = 256 * 1024, STICKER_LIMIT = 512 * 1024, MAX_BATCH = 10;
 const ALLOWED = new Set(['.gif', '.png', '.apng', '.jpg', '.jpeg', '.webp']);
 
 function safeName(value, fallback = 'starry_asset') {
-    const name = String(value || fallback).normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    const name = String(value || fallback).normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')
         .replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32);
     return name.length >= 2 ? name : fallback;
 }
@@ -34,7 +34,7 @@ function readZip(buffer) {
         const commentLen = buffer.readUInt16LE(cursor + 32), localOffset = buffer.readUInt32LE(cursor + 42);
         const entryName = buffer.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
         cursor += 46 + nameLen + extraLen + commentLen;
-        const base = path.posix.basename(entryName.replace(/\\/g, '/')), ext = path.extname(base).toLowerCase();
+        const base = path.posix.basename(entryName.replace(/\\\\/g, '/')), ext = path.extname(base).toLowerCase();
         if (!base || entryName.endsWith('/') || !ALLOWED.has(ext)) continue;
         if ((flags & 1) || ![0, 8].includes(method) || size > INPUT_LIMIT || packedSize > ZIP_LIMIT) continue;
         if (buffer.readUInt32LE(localOffset) !== 0x04034b50) continue;
@@ -50,11 +50,11 @@ function readZip(buffer) {
     return files;
 }
 async function download(url) {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
     if (!response.ok) throw new Error('Could not download the Discord attachment.');
-    if (Number(response.headers.get('content-length') || 0) > INPUT_LIMIT) throw new Error('Input exceeds the 25 MB limit.');
+    if (Number(response.headers.get('content-length') || 0) > INPUT_LIMIT) throw new Error('Input exceeds the 200 MB limit.');
     const buffer = Buffer.from(await response.arrayBuffer());
-    if (!buffer.length || buffer.length > INPUT_LIMIT) throw new Error('Input is empty or exceeds 25 MB.');
+    if (!buffer.length || buffer.length > INPUT_LIMIT) throw new Error('Input is empty or exceeds 200 MB.');
     return buffer;
 }
 async function ffmpeg(args) {
@@ -133,7 +133,7 @@ module.exports = [{
             const sources = await resolveInput(ctx, attachment);
             let items = sources;
             if (sources.length === 1 && path.extname(sources[0].name).toLowerCase() === '.zip') {
-                if (sources[0].buffer.length > ZIP_LIMIT) throw new Error('ZIP files must be 8 MB or smaller.');
+                if (sources[0].buffer.length > ZIP_LIMIT) throw new Error('ZIP files must be 200 MB or smaller.');
                 items = readZip(sources[0].buffer);
                 if (!items.length) throw new Error('No supported image/GIF files found in the ZIP.');
             }
@@ -148,8 +148,8 @@ module.exports = [{
                     report.push('✅ ' + created + ' — ' + items[i].name.slice(0, 70));
                 } catch (error) { report.push('⚠️ ' + items[i].name.slice(0, 70) + ': ' + String(error.message || error).slice(0, 130)); }
             }
-            return ctx.editReply('**' + (kind === 'emoji' ? 'Emoji' : 'Sticker') + ' import results**\n' + report.join('\n') +
-                '\n\nUpload only non-explicit media that you own or have permission to use.');
+            return ctx.editReply('**' + (kind === 'emoji' ? 'Emoji' : 'Sticker') + ' import results**\\n' + report.join('\\n') +
+                '\\n\\nUpload only non-explicit media that you own or have permission to use.');
         } catch (error) {
             return ctx.editReply('❌ ' + String(error.message || error).slice(0, 900));
         } finally {
