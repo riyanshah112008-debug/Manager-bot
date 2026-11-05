@@ -502,7 +502,7 @@ app.post('/verify', async (req, res) => {
         }
 
         const accountAgeDays = Number(data.minAccountAgeDays) || 0;
-        if (accountAgeDays && Date.now() - member.user.createdTimestamp < accountAgeDays * 86400000) return res.status(403).send('Your Discord account does not meet this server’s minimum account age.');
+        if (accountAgeDays && Date.now() - member.user.createdTimestamp < accountAgeDays * 86400000 && data.ageAction !== 'warn') return res.status(403).send(data.ageAction === 'quarantine' ? 'Your account is too new. You will remain in the restricted role until it meets the minimum age.' : 'Your Discord account does not meet this server’s minimum account age.');
         if (data.requireAvatar && !member.user.avatar) return res.status(403).send('A Discord profile picture is required by this server.');
 
         const { resolveTargetRole } = require('./modules/verification');
