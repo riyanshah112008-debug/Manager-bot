@@ -56,14 +56,17 @@ module.exports = client => {
       if (interaction.isButton() && interaction.customId === 'starry_verify_open') {
         const cfg = await getConfig(interaction.guildId);
         if (!cfg.enabled) return interaction.reply({ content: 'Verification is currently disabled by the server administrators.', ephemeral: true });
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('starry_verify_button').setLabel('One-click').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('starry_verify_math').setLabel('Math challenge').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('starry_verify_captcha').setLabel('Web CAPTCHA').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('starry_verify_dm').setLabel('DM link').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('starry_verify_rules').setLabel('Accept rules').setStyle(ButtonStyle.Secondary)
-        );
-        return interaction.reply({ content: 'Choose a verification method. Your account-age requirements apply to every method.', components: [row], ephemeral: true });
+        const methods = cfg.methods || {};
+        const buttons = [];
+        if (methods.button !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_button').setLabel('One-click').setStyle(ButtonStyle.Success));
+        if (methods.math !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_math').setLabel('Math challenge').setStyle(ButtonStyle.Primary));
+        if (methods.captcha !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_captcha').setLabel('Web CAPTCHA').setStyle(ButtonStyle.Secondary));
+        if (methods.dm !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_dm').setLabel('DM link').setStyle(ButtonStyle.Secondary));
+        if (methods.rules !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_rules').setLabel('Accept rules').setStyle(ButtonStyle.Secondary));
+        if (!buttons.length) return interaction.reply({ content: 'No verification methods are enabled. Contact a server administrator.', ephemeral: true });
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        return interaction.reply({ content: 'Choose a verification method. Your account-age requirements apply to every method.', components: rows, ephemeral: true });
       }
 
       if (interaction.isButton() && interaction.customId.startsWith('starry_verify_') && interaction.customId !== 'starry_verify_open') {
@@ -147,3 +150,4 @@ module.exports = client => {
 
 module.exports.resolveTargetRole = resolveTargetRole;
 module.exports.getConfig = getConfig;
+module.exports.ageFailure = ageFailure;
