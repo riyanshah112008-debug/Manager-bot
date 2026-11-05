@@ -428,6 +428,7 @@ app.get('/verify', async (req, res) => {
     }
 
     const data = client.verifyMap.get(token);
+    if (data?.expiresAt && data.expiresAt < Date.now()) { client.verifyMap.delete(token); return res.status(410).send('Verification link expired. Return to Discord and request a new one.'); }
     const guild = data?.guildId ? (client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null)) : null;
     const guildName = guild ? guild.name : 'Discord Server';
     const botAvatar = client.user ? client.user.displayAvatarURL({ extension: 'png' }) : 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -481,6 +482,7 @@ app.post('/verify', async (req, res) => {
     }
 
     const data = client.verifyMap.get(token);
+    if (data?.expiresAt && data.expiresAt < Date.now()) { client.verifyMap.delete(token); return res.status(410).send('Verification link expired. Return to Discord and request a new one.'); }
     try {
         const guild = client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null);
         if (!guild) {
@@ -491,6 +493,10 @@ app.post('/verify', async (req, res) => {
         if (!member) {
             return res.send('<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Member not found in Discord server.</h1>');
         }
+
+        const accountAgeDays = Number(data.minAccountAgeDays) || 0;
+        if (accountAgeDays && Date.now() - member.user.createdTimestamp < accountAgeDays * 86400000) return res.status(403).send('Your Discord account does not meet this server’s minimum account age.');
+        if (data.requireAvatar && !member.user.avatar) return res.status(403).send('A Discord profile picture is required by this server.');
 
         const { resolveTargetRole } = require('./modules/verification');
         const targetRole = await resolveTargetRole(guild, data.roleId);
