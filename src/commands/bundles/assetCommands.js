@@ -148,8 +148,8 @@ module.exports = [{
                     report.push('✅ ' + created + ' — ' + items[i].name.slice(0, 70));
                 } catch (error) { report.push('⚠️ ' + items[i].name.slice(0, 70) + ': ' + String(error.message || error).slice(0, 130)); }
             }
-            return ctx.editReply('**' + (kind === 'emoji' ? 'Emoji' : 'Sticker') + ' import results**\\n' + report.join('\\n') +
-                '\\n\\nUpload only non-explicit media that you own or have permission to use.');
+            return ctx.editReply('**' + (kind === 'emoji' ? 'Emoji' : 'Sticker') + ' import results**\n' + report.join('\n') +
+                '\n\nUpload only non-explicit media that you own or have permission to use.');
         } catch (error) {
             return ctx.editReply('❌ ' + String(error.message || error).slice(0, 900));
         } finally {
