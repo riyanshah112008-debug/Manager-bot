@@ -31,6 +31,9 @@ const LevelUserSchema = new mongoose.Schema({
 LevelUserSchema.index({ userId: 1, guildId: 1 }, { unique: true });
 const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', LevelUserSchema);
 
+const DEFAULT_LEVEL_UP_MESSAGE = '🎉 <@{user}> reached Level {level}!';
+const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
+
 const LevelSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     enabled: { type: Boolean, default: true },
@@ -41,7 +44,7 @@ const LevelSettingsSchema = new mongoose.Schema({
     image: { type: String, default: '' },
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '{server} • Leveling System' },
-    pingContent: { type: String, default: '**Level Up:** <@{user}>' },
+    pingContent: { type: String, default: DEFAULT_LEVEL_UP_MESSAGE },
     authorName: { type: String, default: 'LEVEL UP UNLOCKED' }
 });
 const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', LevelSettingsSchema);
@@ -80,6 +83,18 @@ function isValidUrl(str) {
 function isValidHex(color) {
     if (!color || typeof color !== 'string' || color === 'undefined') return false;
     return /^#([0-9A-F]{3}){1,2}$/i.test(color.trim());
+}
+
+function hasCustomLevelUpCard(settings = {}) {
+    return Boolean(
+        (settings.authorName && settings.authorName !== 'LEVEL UP UNLOCKED') ||
+        (settings.title && settings.title !== 'Congratulations {user}!') ||
+        (settings.description && settings.description !== 'Your active participation in **{server}** has paid off! You reached **Level {level}**!') ||
+        (settings.color && settings.color.toUpperCase() !== '#5865F2') ||
+        (settings.footer && settings.footer !== '{server} • Leveling System') ||
+        (settings.image && settings.image.trim()) ||
+        (settings.thumbnail && settings.thumbnail !== 'avatar')
+    );
 }
 
 function replaceLvlPlaceholders(text, user, level, xp, guild) {
@@ -209,7 +224,7 @@ async function getLevelControlPanel(guildId, client) {
                 image: '',
                 thumbnail: 'avatar',
                 footer: '{server} • Leveling System',
-                pingContent: '**Level Up:** <@{user}>',
+                pingContent: DEFAULT_LEVEL_UP_MESSAGE,
                 authorName: 'LEVEL UP UNLOCKED'
             }).catch(() => null);
         }
@@ -231,7 +246,7 @@ async function getLevelControlPanel(guildId, client) {
 
     const isEnabled = settings.enabled !== false;
     const channelDisplay = settings.logChannelId ? `<#${settings.logChannelId}>` : '*Current Channel (Where user levels up)*';
-    const pingDisplay = (settings.pingContent || '**Level Up:** <@{user}>').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+    const pingDisplay = (settings.pingContent || DEFAULT_LEVEL_UP_MESSAGE).replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
     const authorDisplay = (settings.authorName || 'LEVEL UP UNLOCKED').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
     const titleDisplay = (settings.title || 'Congratulations {user}!').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
     const descDisplay = settings.description || 'Your active participation in **{server}** has paid off! You reached **Level {level}**!';
@@ -657,19 +672,19 @@ const levelingModule = (client) => {
                 }
             }
 
-            const levelUpEmbed = buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings);
-            const pingMsg = guildSettings.pingContent 
-                ? replaceLvlPlaceholders(guildSettings.pingContent, message.author, newLevel, userDoc.xp, message.guild)
-                : `<@${userId}>`;
+            const configuredPing = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
+            const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
+            const pingMsg = replaceLvlPlaceholders(pingTemplate, message.author, newLevel, userDoc.xp, message.guild);
+            const useCustomCard = hasCustomLevelUpCard(guildSettings);
 
             if (logChannel && typeof logChannel.send === 'function') {
-                logChannel.send({ 
-                    content: pingMsg, 
-                    embeds: [levelUpEmbed],
-                    allowedMentions: { users: [userId] }
-                }).catch(() => {});
+                const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
+                if (useCustomCard) payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
+                logChannel.send(payload).catch(() => {});
             } else {
-                message.reply({ content: pingMsg, embeds: [levelUpEmbed] }).catch(() => {
+                const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
+                if (useCustomCard) payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
+                message.reply(payload).catch(() => {
                     message.react('⭐').catch(() => {});
                 });
             }
@@ -835,7 +850,7 @@ const levelingModule = (client) => {
                     image: '',
                     thumbnail: 'avatar',
                     footer: '{server} • Leveling System',
-                    pingContent: '🎉 **Level Up!** <@{user}>',
+                    pingContent: DEFAULT_LEVEL_UP_MESSAGE,
                     authorName: '🎉 LEVEL UP UNLOCKED!'
                 };
                 await LevelSettings.findOneAndUpdate({ guildId: interaction.guildId }, defaults, { upsert: true });
