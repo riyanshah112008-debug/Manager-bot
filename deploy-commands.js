@@ -147,22 +147,8 @@ if (botavatarModule && botavatarModule.data) {
     masterPayloads.push(botavatarModule.data.toJSON ? botavatarModule.data.toJSON() : botavatarModule.data);
 }
 
-const afterDarkSlashCommands = [{
-    name: 'nsfw',
-    description: '🌙 Starry After Dark — all social features in one command',
-    options: [
-        { type: 1, name: 'server', description: 'Enable or disable the suite for this server', options: [{ type: 3, name: 'choice', description: 'Server setting', required: true, choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
-        { type: 1, name: 'dms', description: 'Set your personal private NSFW mode', options: [{ type: 3, name: 'choice', description: 'Your DM setting', required: true, choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }] }] },
-        { type: 1, name: 'consent', description: 'Opt in or out of social interactions', options: [{ type: 3, name: 'choice', description: 'Your consent preference', required: true, choices: [{ name: 'Enable', value: 'on' }, { name: 'Disable', value: 'off' }, { name: 'Status', value: 'status' }] }] },
-        ...['flirt','tease','makeout','date','compliment','chemistry','tension','ship','couple','rate'].map(name => ({ type: 1, name, description: 'Opt-in, non-graphic social interaction', options: [{ type: 6, name: 'user', description: 'Another member who has opted in', required: true }] })),
-        ...['truth','dare','fantasy','secret','afterdark','help'].map(name => ({ type: 1, name, description: 'A non-graphic Starry After Dark prompt or help' })),
-        { type: 1, name: 'confess', description: 'Share a short, non-explicit confession', options: [{ type: 3, name: 'message', description: 'Keep it non-explicit and respectful', required: true }] }
-    ]
-}];
-
 const commands = [
     ...masterPayloads,
-    ...afterDarkSlashCommands,
 
     // VOICE HUB
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },

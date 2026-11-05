@@ -197,12 +197,8 @@ const commands = [
         async execute(ctx) {
             const prefix = config.DEFAULT_PREFIX || ',';
             const { buildCategoryEmbed, createHelpComponents } = require('../../utils/helpHelper');
-            const { isNsfwAllowed } = require('../../modules/nsfwModule');
-            const nsfwStatus = await isNsfwAllowed(ctx);
-            const isNsfw = nsfwStatus === true;
-
-            const components = createHelpComponents(isNsfw);
-            const replyMsg = await ctx.reply({ embeds: [buildCategoryEmbed('home', prefix, isNsfw)], components });
+const components = createHelpComponents();
+            const replyMsg = await ctx.reply({ embeds: [buildCategoryEmbed('home', prefix)], components });
 
             if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
                 const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
@@ -214,8 +210,8 @@ const commands = [
                         targetCat = i.customId.replace('help_btn_', '');
                     }
                     await i.update({ 
-                        embeds: [buildCategoryEmbed(targetCat, prefix, isNsfw)], 
-                        components: createHelpComponents(isNsfw) 
+                        embeds: [buildCategoryEmbed(targetCat, prefix)], 
+                        components: createHelpComponents() 
                     }).catch(() => {});
                 });
             }

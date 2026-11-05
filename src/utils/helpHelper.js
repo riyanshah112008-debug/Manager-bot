@@ -12,21 +12,9 @@ const BASE_HELP_CATEGORIES = [
     { id: 'sys', label: 'Multi-Bot & Systems (26)', desc: 'Multi-bot cluster, treasure chests, giveaways & tickets', emoji: '🤖' }
 ];
 
-const NSFW_CATEGORY_INFO = {
-    id: 'nsfw',
-    label: 'Mature & Anime NSFW (21)',
-    desc: 'Anime waifus, nekos, ecchi art & mature social actions',
-    emoji: '🔞'
-};
+function getHelpCategories() { return BASE_HELP_CATEGORIES; }
 
-function getHelpCategories(isNsfw = false) {
-    if (isNsfw) {
-        return [...BASE_HELP_CATEGORIES, NSFW_CATEGORY_INFO];
-    }
-    return BASE_HELP_CATEGORIES;
-}
-
-function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
+function buildCategoryEmbed(catId, customPrefix) {
     const prefix = customPrefix || config.DEFAULT_PREFIX || ',';
     const embed = new EmbedBuilder()
         .setColor(config.EMBED_COLORS.PRIMARY)
@@ -159,39 +147,14 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 `**Backups & Visual Branding:**\n` +
                 `\`${prefix}backup\`, \`${prefix}restore\`, \`${prefix}embedtheme\`, \`${prefix}customizewelcome\`, \`${prefix}customizegoodbye\`, \`${prefix}customizelevels\``
             );
-    } else if (catId === 'nsfw') {
-        if (!isNsfw) {
-            embed.setColor('#ED4245')
-                .setTitle('🔒 Mature Commands are Hidden')
-                .setDescription(
-                    `The Mature & NSFW module is **disabled** in this server or channel.\n\n` +
-                    `**How to Enable & View:**\n` +
-                    `1. **In Servers:** An Administrator must run \`${prefix}nsfw on\` inside a channel marked as **Age-Restricted (NSFW)** in Discord settings.\n` +
-                    `2. **In DMs:** Run \`${prefix}nsfw dms on\` in Direct Messages.\n` +
-                    `3. **Ask AI:** Run \`${prefix}nsfw info\` for an AI breakdown of features.`
-                );
-            return embed;
-        }
-
-        embed.setColor('#FF1493')
-            .setTitle('🔞 Mature & Anime NSFW Commands (21 Commands)')
-            .setDescription(
-                `**⚙️ Configuration & AI:**\n` +
-                `\`${prefix}nsfw on/off\`, \`${prefix}nsfw info\`, \`${prefix}nsfw dms on/off\`, \`${prefix}nsfwhelp\`\n\n` +
-                `**🌸 Anime & Waifu Art Galleries:**\n` +
-                `\`${prefix}waifu\`, \`${prefix}neko\`, \`${prefix}kitsune\`, \`${prefix}husbando\`, \`${prefix}trap\`, \`${prefix}ecchi\`, \`${prefix}hentai\`, \`${prefix}blowkiss\`\n\n` +
-                `**💋 Mature Anime Social Interactions:**\n` +
-                `\`${prefix}nsfwkiss\`, \`${prefix}nsfwhug\`, \`${prefix}spank\`, \`${prefix}nsfwlick\`, \`${prefix}nsfwtouch\`, \`${prefix}nsfwcuddle\`, \`${prefix}nsfwsuck\`, \`${prefix}nsfwpinch\`, \`${prefix}nsfwsmack\`\n\n` +
-                `*Strict Discord Age-Restricted channel verification active!*`
-            );
     } else {
-        const totalCommands = isNsfw ? '270+' : '250+';
+        const totalCommands = '250+';
         embed.setTitle('🌟 Manager Bot & Starry Supreme Command Hub')
             .setDescription(
                 `Welcome to the ultimate Discord multi-feature bot!\n` +
                 `• **Primary Interface:** **Slash Commands (\`/\`)** *(Type \`/\` to view autocomplete list)*\n` +
                 `• **Prefix Commands (\`${prefix}\`):** Reserved exclusively for **Bot Owners**\n` +
-                `• **Total Commands:** \`${totalCommands}\` across ${isNsfw ? '9' : '8'} specialized categories\n` +
+                `• **Total Commands:** \`${totalCommands}\` across 8 specialized categories\n` +
                 `• **Multi-Bot Clustering:** Active and synchronized\n` +
                 `• **Embed Buttons Lifetime:** High persistence up to **1 Year**\n\n` +
                 `Select a category from the dropdown menu below or click the quick action buttons.`
@@ -207,15 +170,12 @@ function buildCategoryEmbed(catId, customPrefix, isNsfw = false) {
                 { name: '🤖 Systems (26)', value: `\`${prefix}multibot\`, \`${prefix}chest\`, \`${prefix}backup\``, inline: true }
             );
 
-        if (isNsfw) {
-            embed.addFields({ name: '🔞 Mature & Anime (21)', value: `\`${prefix}nsfwkiss\`, \`${prefix}waifu\`, \`${prefix}nsfwhelp\``, inline: true });
-        }
     }
     return embed;
 }
 
-function createHelpComponents(isNsfw = false) {
-    const categories = getHelpCategories(isNsfw);
+function createHelpComponents() {
+    const categories = getHelpCategories();
 
     const selectMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -234,11 +194,7 @@ function createHelpComponents(isNsfw = false) {
         new ButtonBuilder().setCustomId('help_btn_util').setLabel('Utility').setEmoji('🛠️').setStyle(ButtonStyle.Secondary)
     ];
 
-    if (isNsfw) {
-        buttons.push(new ButtonBuilder().setCustomId('help_btn_nsfw').setLabel('NSFW').setEmoji('🔞').setStyle(ButtonStyle.Danger));
-    } else {
-        buttons.push(new ButtonBuilder().setCustomId('help_btn_eco').setLabel('Economy').setEmoji('💰').setStyle(ButtonStyle.Secondary));
-    }
+    buttons.push(new ButtonBuilder().setCustomId('help_btn_eco').setLabel('Economy').setEmoji('💰').setStyle(ButtonStyle.Secondary));
 
     const buttonsRow = new ActionRowBuilder().addComponents(buttons);
 
