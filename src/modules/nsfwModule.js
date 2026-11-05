@@ -23,6 +23,8 @@ async function readUserSettings(userId) {
 
 async function isNsfwDmEnabled(userId) {
     if (!userId) return false;
+    // The verified Starry bot owner may use the bot's own DM features without a personal opt-in toggle.
+    if (typeof config.isBotOwner === 'function' && config.isBotOwner(userId)) return true;
     if (dmNsfwCache.has(userId)) return dmNsfwCache.get(userId);
     const settings = await readUserSettings(userId);
     const enabled = Boolean(settings?.nsfwDmEnabled);
@@ -41,6 +43,9 @@ async function setNsfwDmEnabled(userId, enabled) {
 }
 
 async function isSocialConsentEnabled(userId) {
+    if (!userId) return false;
+    // Owner privilege applies only to the owner's own account; every other participant must opt in.
+    if (typeof config.isBotOwner === 'function' && config.isBotOwner(userId)) return true;
     const settings = await readUserSettings(userId);
     return Boolean(settings?.nsfwSocialConsent);
 }
