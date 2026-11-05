@@ -121,7 +121,6 @@ const socialCommands = require('../commands/bundles/socialCommands');
 const economyCommands = require('../commands/bundles/economyCommands');
 const gameCommands = require('../commands/bundles/gameCommands');
 const systemCommands = require('../commands/bundles/systemCommands');
-const nsfwCommands = require('../commands/bundles/nsfwCommands');
 const boosterCommands = require('../commands/bundles/boosterCommands');
 const colorCommands = require('../commands/bundles/colorCommands');
 const mediaCommands = require('../commands/bundles/mediaCommands');
@@ -135,7 +134,6 @@ const allBundles = [
     ...economyCommands,
     ...gameCommands,
     ...systemCommands,
-    ...nsfwCommands,
     ...boosterCommands,
     ...colorCommands,
     ...mediaCommands,
@@ -1505,50 +1503,6 @@ class CommandRegistry {
                         console.error('AI Image Regenerate Error:', err);
                     }
                     return;
-                }
-
-                // E. NSFW & Mature Anime Interactive Buttons (1-Year Global Handler)
-                if (customId === 'nsfw_ai_explain') {
-                    const { explainNsfwWithAI } = require('./nsfwModule');
-                    const embed = await explainNsfwWithAI({ user: interaction.user, guild: interaction.guild });
-                    return interaction.reply({ embeds: [embed], flags: [EPHEMERAL_FLAG] });
-                }
-
-                if (customId === 'nsfw_toggle_server') {
-                    if (!interaction.guild) {
-                        return interaction.reply({ content: '❌ Server toggles cannot be used in Direct Messages. Use "Toggle My DM NSFW" instead.', flags: [EPHEMERAL_FLAG] });
-                    }
-                    const { canManageServerNsfw } = require('./nsfwModule');
-                    if (!canManageServerNsfw(interaction.user.id, interaction.guild)) {
-                        return interaction.reply({ 
-                            content: `❌ **Permission Denied:** Only the **Server Owner** (<@${interaction.guild.ownerId}>) or **Bot Owners** have authority to toggle the NSFW module for this server.`, 
-                            flags: [EPHEMERAL_FLAG] 
-                        });
-                    }
-                    const ServerSettings = require('../models/ServerSettings');
-                    let settings = await ServerSettings.findOne({ guildId: interaction.guild.id });
-                    if (!settings) settings = await ServerSettings.create({ guildId: interaction.guild.id });
-                    if (!settings.nsfw) settings.nsfw = {};
-                    settings.nsfw.enabled = !settings.nsfw.enabled;
-                    await settings.save();
-
-                    return interaction.reply({
-                        content: settings.nsfw.enabled 
-                            ? `🔞 **NSFW Module has been ENABLED for ${interaction.guild.name}!**\n*Commands will execute strictly in Age-Restricted (NSFW) channels.*` 
-                            : `🔒 **NSFW Module has been DISABLED for ${interaction.guild.name}.**`,
-                        flags: [EPHEMERAL_FLAG]
-                    });
-                }
-
-                if (customId === 'nsfw_toggle_dm') {
-                    const { toggleNsfwDm } = require('./nsfwModule');
-                    const newState = await toggleNsfwDm(interaction.user.id);
-                    return interaction.reply({
-                        content: newState
-                            ? '🔞 **Mature Anime Mode ENABLED in your DMs!**\n*You can now use mature anime commands and waifu/neko art in Direct Messages with Starry.*'
-                            : '🔒 **Mature Anime Mode DISABLED in your DMs.**',
-                        flags: [EPHEMERAL_FLAG]
-                    });
                 }
 
                 // F. Starry Mascot Interactive Lore & Voice Buttons
