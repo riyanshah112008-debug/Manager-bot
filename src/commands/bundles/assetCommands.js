@@ -50,7 +50,7 @@ function readZip(buffer) {
     return files;
 }
 async function download(url) {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(180000) });
     if (!response.ok) throw new Error('Could not download the Discord attachment.');
     if (Number(response.headers.get('content-length') || 0) > INPUT_LIMIT) throw new Error('Input exceeds the 200 MB limit.');
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -58,7 +58,7 @@ async function download(url) {
     return buffer;
 }
 async function ffmpeg(args) {
-    await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
+    await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { timeout: 180000, maxBuffer: 2 * 1024 * 1024 });
 }
 async function convert(source, kind, dir, index) {
     const ext = path.extname(source.name).toLowerCase(), input = path.join(dir, 'input_' + index + (ext || '.bin'));
