@@ -45,6 +45,7 @@ const LevelSettingsSchema = new mongoose.Schema({
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: '{server} • Leveling System' },
     pingContent: { type: String, default: DEFAULT_LEVEL_UP_MESSAGE },
+    roleRewards: { type: [{ level: { type: Number, min: 1, max: 10000 }, roleId: { type: String } }], default: [] },
     authorName: { type: String, default: 'LEVEL UP UNLOCKED' }
 });
 const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', LevelSettingsSchema);
@@ -658,6 +659,25 @@ const levelingModule = (client) => {
         const newLevel = calculateLevel(userDoc.xp);
         if (newLevel > userDoc.level) {
             await LevelUser.updateOne({ userId, guildId }, { level: newLevel }).catch(() => {});
+
+            // Apply the highest configured level-role reward the member has reached.
+            const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
+            const eligibleReward = rewards.filter(reward => Number(reward.level) <= newLevel)
+                .sort((a, b) => Number(b.level) - Number(a.level))[0];
+            if (eligibleReward && message.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                try {
+                    const member = await message.guild.members.fetch(userId);
+                    const rewardRole = message.guild.roles.cache.get(eligibleReward.roleId);
+                    const botTop = message.guild.members.me.roles.highest;
+                    if (rewardRole && !rewardRole.managed && rewardRole.position < botTop.position) {
+                        if (!member.roles.cache.has(rewardRole.id)) await member.roles.add(rewardRole, `Reached level ${newLevel} (level reward)`);
+                        const otherRewardRoleIds = rewards.map(reward => reward.roleId).filter(roleId => roleId && roleId !== rewardRole.id && member.roles.cache.has(roleId));
+                        if (otherRewardRoleIds.length) await member.roles.remove(otherRewardRoleIds, `Replaced by level ${newLevel} reward`);
+                    }
+                } catch (roleError) {
+                    console.error(`[Leveling] Could not apply level role reward for ${userId} in ${guildId}:`, roleError.message);
+                }
+            }
 
             let logChannel = null;
             if (guildSettings.logChannelId) {
