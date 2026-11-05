@@ -1010,6 +1010,32 @@ function setupDashboardRoutes(app, client) {
                     payload.logging[key] = channelId;
                 }
             }
+            if (payload.verification !== undefined) {
+                const v = payload.verification;
+                const allowed = new Set(['enabled','roleId','unverifiedRoleId','channelId','logChannelId','minAccountAgeDays','ageAction','requireAvatar','requireRules','rulesText','methods']);
+                if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).some(k => !allowed.has(k))) return res.status(400).json({ success: false, error: 'Invalid verification settings.' });
+                for (const key of ['enabled','requireAvatar','requireRules']) if (v[key] !== undefined && typeof v[key] !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+                if (v.minAccountAgeDays !== undefined && (!Number.isInteger(Number(v.minAccountAgeDays)) || Number(v.minAccountAgeDays) < 0 || Number(v.minAccountAgeDays) > 3650)) return res.status(400).json({ success: false, error: 'Minimum account age must be 0–3650 days.' });
+                if (v.minAccountAgeDays !== undefined) v.minAccountAgeDays = Number(v.minAccountAgeDays);
+                if (v.ageAction !== undefined && !['warn','quarantine','reject'].includes(v.ageAction)) return res.status(400).json({ success: false, error: 'Choose warn, quarantine or reject for young accounts.' });
+                for (const key of ['roleId','unverifiedRoleId']) if (v[key] !== undefined) {
+                    if (typeof v[key] !== 'string') return res.status(400).json({ success: false, error: key + ' must be a role ID.' });
+                    v[key] = v[key].trim();
+                    if (v[key] && (!guild.roles.cache.has(v[key]) || guild.roles.cache.get(v[key]).managed || v[key] === guild.id)) return res.status(400).json({ success: false, error: 'Choose a normal role from this server.' });
+                }
+                for (const key of ['channelId','logChannelId']) if (v[key] !== undefined) {
+                    if (typeof v[key] !== 'string') return res.status(400).json({ success: false, error: key + ' must be a channel ID.' });
+                    v[key] = v[key].trim();
+                    if (v[key]) { const ch = guild.channels.cache.get(v[key]); if (!ch || !ch.isTextBased() || typeof ch.send !== 'function') return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' }); }
+                }
+                if (v.rulesText !== undefined && (typeof v.rulesText !== 'string' || v.rulesText.length > 1800)) return res.status(400).json({ success: false, error: 'Rules text must be 1800 characters or fewer.' });
+                if (v.methods !== undefined) {
+                    const methods = v.methods, keys = ['button','captcha','math','dm','rules'];
+                    if (!methods || typeof methods !== 'object' || Array.isArray(methods) || Object.keys(methods).some(k => !keys.includes(k)) || keys.some(k => methods[k] !== undefined && typeof methods[k] !== 'boolean')) return res.status(400).json({ success: false, error: 'Invalid verification method settings.' });
+                    if (!keys.some(k => methods[k] === true)) return res.status(400).json({ success: false, error: 'Enable at least one verification method.' });
+                }
+                if (v.enabled && v.roleId && guild.roles.cache.get(v.roleId).position >= (guild.members.me || {}).roles?.highest?.position) return res.status(400).json({ success: false, error: 'Move Starry above the verified role before enabling verification.' });
+            }
             if (payload.antinuke !== undefined) {
                 const policy = payload.antinuke;
                 const boolKeys = ['enabled', 'blockUnapprovedBots', 'blockWebhookCreation', 'panicLockdown'];

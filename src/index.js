@@ -411,9 +411,13 @@ client.on('messageCreate', async (message) => {
 });
 
 // Verification Web Routes
+const escapeVerificationHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char]));
 app.get('/verify', async (req, res) => {
-    const token = req.query.token;
-    if (!token || !client.verifyMap || !client.verifyMap.has(token)) {
+    res.set('Cache-Control', 'no-store');
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    if (!/^[a-f0-9]{48}$/i.test(token) || !client.verifyMap || !client.verifyMap.has(token)) {
         return res.status(400).send(`
             <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Starry Verification</title></head>
             <body style="background-color:#1e1f22; color:#dbdee1; font-family:system-ui, -apple-system, sans-serif; text-align:center; padding:15vh 20px 0;">
@@ -428,8 +432,10 @@ app.get('/verify', async (req, res) => {
     }
 
     const data = client.verifyMap.get(token);
+    if (data?.expiresAt && data.expiresAt < Date.now()) { client.verifyMap.delete(token); return res.status(410).send('Verification link expired. Return to Discord and request a new one.'); }
+    if (!data.webAnswer) { const a = Math.floor(Math.random() * 8) + 2, b = Math.floor(Math.random() * 8) + 2; data.webQuestion = a + ' + ' + b; data.webAnswer = String(a + b); data.webAttempts = 0; }
     const guild = data?.guildId ? (client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null)) : null;
-    const guildName = guild ? guild.name : 'Discord Server';
+    const guildName = escapeVerificationHtml(guild ? guild.name : 'Discord Server');
     const botAvatar = client.user ? client.user.displayAvatarURL({ extension: 'png' }) : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
     res.send(`
@@ -452,9 +458,11 @@ app.get('/verify', async (req, res) => {
             <div class="card">
                 <img src="${botAvatar}" class="avatar" alt="Bot Avatar">
                 <h2>Human Verification</h2>
-                <p>Confirm you are human to unlock full channel access in <b>${guildName}</b>.</p>
+                <p>Complete this quick human check to unlock access in <b>${guildName}</b>.</p>
                 <form action="/verify" method="POST">
                     <input type="hidden" name="token" value="${token}">
+                    <label for="answer">What is ${escapeVerificationHtml(data.webQuestion)}?</label>
+                    <input id="answer" name="answer" inputmode="numeric" pattern="[0-9]*" maxlength="2" required style="box-sizing:border-box;width:100%;padding:13px;margin:0 0 16px;border-radius:8px;border:1px solid #5865f2;background:#1e1f22;color:white;font-size:18px;text-align:center;">
                     <button type="submit" id="btn">I am human (Verify Now)</button>
                 </form>
             </div>
@@ -470,8 +478,9 @@ app.get('/verify', async (req, res) => {
 });
 
 app.post('/verify', async (req, res) => {
-    const token = req.body?.token;
-    if (!token || !client.verifyMap || !client.verifyMap.has(token)) {
+    res.set('Cache-Control', 'no-store');
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    if (!/^[a-f0-9]{48}$/i.test(token) || !client.verifyMap || !client.verifyMap.has(token)) {
         return res.status(400).send(`
             <html><body style="background-color:#1e1f22; color:#dbdee1; font-family:sans-serif; text-align:center; padding-top:15vh;">
                 <h1 style="color:#f23f43;">❌ Token Expired or Invalid</h1>
@@ -481,6 +490,12 @@ app.post('/verify', async (req, res) => {
     }
 
     const data = client.verifyMap.get(token);
+    if (data?.expiresAt && data.expiresAt < Date.now()) { client.verifyMap.delete(token); return res.status(410).send('Verification link expired. Return to Discord and request a new one.'); }
+    if (!data.webAnswer || String(req.body?.answer || '').trim() !== data.webAnswer) {
+        data.webAttempts = (data.webAttempts || 0) + 1;
+        if (data.webAttempts >= 3) client.verifyMap.delete(token);
+        return res.status(400).send(data.webAttempts >= 3 ? 'Too many incorrect answers. Return to Discord and request a new link.' : 'Incorrect answer. Return to Discord and open a fresh verification link.');
+    }
     try {
         const guild = client.guilds.cache.get(data.guildId) || await client.guilds.fetch(data.guildId).catch(() => null);
         if (!guild) {
@@ -491,6 +506,10 @@ app.post('/verify', async (req, res) => {
         if (!member) {
             return res.send('<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Member not found in Discord server.</h1>');
         }
+
+        const accountAgeDays = Number(data.minAccountAgeDays) || 0;
+        if (accountAgeDays && Date.now() - member.user.createdTimestamp < accountAgeDays * 86400000 && data.ageAction !== 'warn') return res.status(403).send(data.ageAction === 'quarantine' ? 'Your account is too new. You will remain in the restricted role until it meets the minimum age.' : 'Your Discord account does not meet this server’s minimum account age.');
+        if (data.requireAvatar && !member.user.avatar) return res.status(403).send('A Discord profile picture is required by this server.');
 
         const { resolveTargetRole } = require('./modules/verification');
         const targetRole = await resolveTargetRole(guild, data.roleId);
@@ -504,14 +523,15 @@ app.post('/verify', async (req, res) => {
             return res.send(`
                 <body style="background-color:#1e1f22; color:white; font-family:sans-serif; text-align:center; padding-top:15vh;">
                     <h1 style="color:#faa81a;">⚠️ Role Hierarchy Misconfiguration</h1>
-                    <p style="color:#b5bac1;">The role <b>${targetRole.name}</b> is above or equal to the bot role in Server Settings.</p>
-                    <p style="color:#949ba4;">Ask an administrator to drag the bot role above <b>${targetRole.name}</b>.</p>
+                    <p style="color:#b5bac1;">The configured verification role is above or equal to the bot role in Server Settings.</p>
+                    <p style="color:#949ba4;">Ask an administrator to move the bot role above the configured verification role.</p>
                 </body>
             `);
         }
 
-        await member.roles.add(targetRole, 'Starry Web Human Verification');
+        // Consume the capability before the asynchronous role mutation to prevent concurrent replay.
         client.verifyMap.delete(token);
+        await member.roles.add(targetRole, 'Starry Web Human Verification');
 
         // Telemetry audit notification
         try {
@@ -532,14 +552,14 @@ app.post('/verify', async (req, res) => {
             <body style="background-color:#1e1f22; color:white; font-family:system-ui, -apple-system, sans-serif; text-align:center; padding-top:18vh;">
                 <div style="max-width:440px; margin:0 auto; background:#2b2d31; padding:35px 25px; border-radius:12px; border:1px solid #3f4147;">
                     <h1 style="color:#23a559; font-size:42px; margin:0 0 10px;">✅ Success!</h1>
-                    <h3 style="color:#ffffff; margin:0 0 15px;">You are now verified in ${guild.name}</h3>
-                    <p style="color:#949ba4; font-size:15px; margin:0 0 25px;">You have received the <b>${targetRole.name}</b> role. You may close this tab and return to Discord.</p>
+                    <h3 style="color:#ffffff; margin:0 0 15px;">Your Discord verification was successful.</h3>
+                    <p style="color:#949ba4; font-size:15px; margin:0 0 25px;">Your verified role has been assigned. You may close this tab and return to Discord.</p>
                 </div>
             </body></html>
         `);
     } catch (error) {
         console.error('Web Verification Execution Error:', error);
-        res.send(`<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Verification Error: ${error.message || 'Unknown error'}. Ensure the bot role is positioned higher than the verification role.</h1>`);
+        res.send(`<h1 style="color:#f23f43; text-align:center; font-family:sans-serif; padding-top:15vh;">❌ Verification Error: ${escapeVerificationHtml(error.message || 'Unknown error')}. Ensure the bot role is positioned higher than the verification role.</h1>`);
     }
 });
 

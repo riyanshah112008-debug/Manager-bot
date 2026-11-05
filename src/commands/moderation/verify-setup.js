@@ -1,85 +1,58 @@
-const { 
-    SlashCommandBuilder, 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    PermissionFlagsBits,
-    ChannelType,
-    MessageFlags
+const {
+  SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder,
+  ButtonStyle, PermissionFlagsBits, ChannelType, MessageFlags
 } = require('discord.js');
-
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('verify-setup')
-        .setDescription('Set up the server verification panel (Admins Only)')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addChannelOption(option => 
-            option.setName('channel')
-                .setDescription('The channel to send the verification panel')
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(true)
-        )
-        .addRoleOption(option => 
-            option.setName('role')
-                .setDescription('The role to give users when they verify')
-                .setRequired(true)
-        ),
+  data: new SlashCommandBuilder()
+    .setName('verify-setup')
+    .setDescription('Configure and publish Starry multi-method verification')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption(o => o.setName('channel').setDescription('Where to publish the verification panel').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addRoleOption(o => o.setName('role').setDescription('Role granted after successful verification').setRequired(true))
+    .addIntegerOption(o => o.setName('minimum-account-age').setDescription('Minimum Discord account age in days (0 disables)').setMinValue(0).setMaxValue(3650).setRequired(false)),
 
-    async execute(interaction, client) {
-        try {
-            await interaction.deferReply({ flags: [EPHEMERAL_FLAG] }).catch(() => {});
+  async execute(interaction) {
+    try {
+      await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+      const channel = interaction.options.getChannel('channel');
+      const role = interaction.options.getRole('role');
+      const minAge = interaction.options.getInteger('minimum-account-age') ?? 3;
+      const bot = interaction.guild.members.me || await interaction.guild.members.fetch(interaction.client.user.id).catch(() => null);
+      const perms = channel.permissionsFor(bot);
+      if (!perms?.has(PermissionFlagsBits.SendMessages) || !perms?.has(PermissionFlagsBits.EmbedLinks)) {
+        return interaction.editReply({ content: 'Starry needs Send Messages and Embed Links in the selected channel.' });
+      }
+      if (!bot?.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.editReply({ content: 'Starry needs the Manage Roles permission.' });
+      if (role.managed || role.id === interaction.guild.id || role.position >= bot.roles.highest.position) {
+        return interaction.editReply({ content: 'Move Starry’s highest role above the selected verified role, then run setup again.' });
+      }
 
-            const { isServerOrUserPremium, createPremiumLockPayload } = require('../../utils/premiumHelper');
-            const isPrem = await isServerOrUserPremium(interaction.guildId, interaction.user.id, client);
-            if (!isPrem) {
-                const payload = createPremiumLockPayload('Web Captcha Anti-Bot Verification Gateway', '/');
-                return interaction.editReply(payload);
-            }
+      const mongoose = require('mongoose');
+      if (mongoose.connection?.readyState !== 1) return interaction.editReply({ content: 'Database is not connected. Verification settings cannot be saved right now.' });
+      const ServerSettings = require('../../models/ServerSettings');
+      const settings = await ServerSettings.findOneAndUpdate(
+        { guildId: String(interaction.guildId) },
+        { $set: { 'verification.enabled': true, 'verification.roleId': role.id, 'verification.channelId': channel.id, 'verification.minAccountAgeDays': minAge } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
 
-            const channel = interaction.options.getChannel('channel');
-            const role = interaction.options.getRole('role');
-
-            const botMember = interaction.guild.members.me;
-
-            // Permission Check
-            const permissions = channel.permissionsFor(botMember);
-            if (!permissions?.has(PermissionFlagsBits.SendMessages) || !permissions?.has(PermissionFlagsBits.EmbedLinks)) {
-                return interaction.editReply({ content: `❌ I do not have permission to send messages and embeds in ${channel}!` });
-            }
-
-            // Role Hierarchy Check
-            if (role.position >= botMember.roles.highest.position) {
-                return interaction.editReply({ content: `⚠️ The role ${role} is higher than or equal to my highest role! Please move my bot role higher so I can assign it.` });
-            }
-
-            const embed = new EmbedBuilder()
-                .setColor('#2b2d31')
-                .setTitle('✅ Server Verification')
-                .setDescription('Welcome! To protect this server from automated accounts, we require web verification.\n\nClick the button below to generate your secure verification link.')
-                .setFooter({ text: 'Starry Security Protocol', iconURL: client.user.displayAvatarURL() });
-
-            const button = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`verify_role_${role.id}`) 
-                    .setLabel('Get Verification Link')
-                    .setEmoji('🛡️')
-                    .setStyle(ButtonStyle.Primary)
-            );
-
-            await channel.send({ embeds: [embed], components: [button] });
-            return interaction.editReply({ content: `✅ Verification panel successfully set up in ${channel} for role ${role}!` });
-
-        } catch (error) {
-            console.error('🔴 verify-setup Error:', error);
-            const content = `❌ **Verification Setup Error:** \`${error.message || 'Unknown error'}\``;
-            if (interaction.deferred) {
-                await interaction.editReply({ content }).catch(() => {});
-            } else {
-                await interaction.reply({ content, flags: [EPHEMERAL_FLAG] }).catch(() => {});
-            }
-        }
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('🛡️ Verify to access the server')
+        .setDescription('Welcome! Complete one of the available verification methods below. Starry checks account age and assigns your member role only after a successful check.\n\n**Available methods**\n• One-click confirmation\n• Math challenge\n• Web verification link\n• Verification link by DM\n• Server rules acceptance')
+        .setFooter({ text: 'Starry Security • Your verification session is private' });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('starry_verify_open').setLabel('Start verification').setEmoji('🛡️').setStyle(ButtonStyle.Primary)
+      );
+      const message = await channel.send({ embeds: [embed], components: [row] });
+      return interaction.editReply({ content: '✅ Multi-method verification is enabled and the panel is live in ' + channel + '. Minimum account age: ' + minAge + ' day(s). Configure methods, rules and logging in the dashboard’s Verification module.' });
+    } catch (error) {
+      console.error('[verify-setup]', error);
+      const payload = { content: 'Verification setup failed: ' + (error.message || 'Unknown error') };
+      if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(() => {});
+      return interaction.reply({ ...payload, flags: [EPHEMERAL_FLAG] }).catch(() => {});
     }
+  }
 };

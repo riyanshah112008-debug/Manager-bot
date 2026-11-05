@@ -1,226 +1,173 @@
-const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+  Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
+  ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits
+} = require('discord.js');
 const crypto = require('crypto');
 const { getPublicUrl } = require('../utils/tunnelManager');
 
-/**
- * Resolves the target role to grant on successful verification.
- * Checks roleId, ServerSettings database configuration, or role named 'Verified'/'Member'.
- */
-async function resolveTargetRole(guild, roleId) {
-    if (!guild) return null;
-
-    // 1. Direct role lookup if valid snowflake
-    if (roleId && roleId !== 'active' && /^\d{17,20}$/.test(roleId)) {
-        const directRole = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
-        if (directRole) return directRole;
-    }
-
-    // 2. Check ServerSettings database configuration (only if MongoDB connection is open)
-    try {
-        const mongoose = require('mongoose');
-        if (mongoose.connection && mongoose.connection.readyState === 1) {
-            const ServerSettings = require('../models/ServerSettings');
-            const settings = await ServerSettings.findOne({ guildId: String(guild.id) }).lean();
-            const configuredId = settings?.verification?.roleId || settings?.verifiedRoleId;
-            if (configuredId && /^\d{17,20}$/.test(configuredId)) {
-                const role = guild.roles.cache.get(configuredId) || await guild.roles.fetch(configuredId).catch(() => null);
-                if (role) return role;
-            }
-        }
-    } catch (e) {}
-
-    // 3. Guild role named 'Verified' or 'Member'
-    const namedRole = guild.roles.cache.find(r => {
-        const name = r.name.toLowerCase();
-        return name === 'verified' || name === 'member' || name === 'members' || name === 'human';
-    });
-    if (namedRole) return namedRole;
-
-    return null;
+async function getConfig(guildId) {
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection?.readyState !== 1) return {};
+    const Model = require('../models/ServerSettings');
+    const doc = await Model.findOne({ guildId: String(guildId) }).lean();
+    return doc?.verification || {};
+  } catch (_) { return {}; }
 }
 
-module.exports = (client) => {
-    if (!client.verifyMap) {
-        client.verifyMap = new Map();
+async function resolveTargetRole(guild, roleId) {
+  if (!guild) return null;
+  const id = roleId || (await getConfig(guild.id)).roleId;
+  if (id && /^\d{17,20}$/.test(id)) return guild.roles.cache.get(id) || await guild.roles.fetch(id).catch(() => null);
+  return guild.roles.cache.find(r => ['verified','member','members','human'].includes(r.name.toLowerCase())) || null;
+}
+
+function ageFailure(member, config) {
+  const days = Math.max(0, Number(config.minAccountAgeDays) || 0);
+  if (days && Date.now() - member.user.createdTimestamp < days * 86400000 && config.ageAction !== 'warn') {
+    const remaining = Math.ceil((days * 86400000 - (Date.now() - member.user.createdTimestamp)) / 86400000);
+    return `Your Discord account must be at least ${days} days old. Please try again in about ${remaining} day(s).`;
+  }
+  if (config.requireAvatar && !member.user.avatar) return 'Please set a Discord profile picture before verifying.';
+  return null;
+}
+
+async function grantVerified(member, role, client, method) {
+  const bot = member.guild.members.me || await member.guild.members.fetch(client.user.id).catch(() => null);
+  if (!bot?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Starry needs Manage Roles permission.');
+  if (!role || role.managed || role.id === member.guild.id || role.position >= bot.roles.highest.position) throw new Error('The verified role is invalid or is above Starry in the role hierarchy.');
+  if (!member.roles.cache.has(role.id)) await member.roles.add(role, `Starry verification: ${method}`);
+  const cfg = await getConfig(member.guild.id);
+  if (cfg.unverifiedRoleId && cfg.unverifiedRoleId !== role.id) {
+    const pending = member.guild.roles.cache.get(cfg.unverifiedRoleId);
+    if (pending && pending.position < bot.roles.highest.position) await member.roles.remove(pending, 'Starry verification completed').catch(() => {});
+  }
+  const logId = cfg.logChannelId;
+  const log = logId ? member.guild.channels.cache.get(logId) : null;
+  if (log?.isTextBased()) log.send({ embeds: [new EmbedBuilder().setColor(0x22c55e).setTitle('Member verified').setDescription(`<@${member.id}> completed verification using **${method}**.`).setTimestamp()] }).catch(() => {});
+}
+
+module.exports = client => {
+  client.verifyMap ||= new Map();
+  const pending = new Map();
+  client.verifyAcceptedRules ||= new Set();
+  const key = (guildId, userId) => `${guildId}:${userId}`;
+
+  client.on(Events.GuildMemberAdd, async member => {
+    const cfg = await getConfig(member.guild.id);
+    if (!cfg.enabled || !cfg.unverifiedRoleId) return;
+    const role = member.guild.roles.cache.get(cfg.unverifiedRoleId);
+    const bot = member.guild.members.me;
+    if (role && bot?.permissions.has(PermissionFlagsBits.ManageRoles) && role.position < bot.roles.highest.position) {
+      await member.roles.add(role, 'Starry verification pending').catch(error => console.error('[Verification] Could not assign pending role:', error.message));
     }
+  });
 
-    client.on(Events.InteractionCreate, async interaction => {
-        if (!interaction.isButton()) return;
+  client.on(Events.InteractionCreate, async interaction => {
+    try {
+      if (interaction.isButton() && interaction.customId === 'starry_verify_open') {
+        const cfg = await getConfig(interaction.guildId);
+        if (!cfg.enabled) return interaction.reply({ content: 'Verification is currently disabled by the server administrators.', ephemeral: true });
+        const methods = cfg.methods || {};
+        const buttons = [];
+        if (methods.button !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_button').setLabel('One-click').setStyle(ButtonStyle.Success));
+        if (methods.math !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_math').setLabel('Math challenge').setStyle(ButtonStyle.Primary));
+        if (methods.captcha !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_captcha').setLabel('Web CAPTCHA').setStyle(ButtonStyle.Secondary));
+        if (methods.dm !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_dm').setLabel('DM link').setStyle(ButtonStyle.Secondary));
+        if (methods.rules !== false) buttons.push(new ButtonBuilder().setCustomId('starry_verify_rules').setLabel('Accept rules').setStyle(ButtonStyle.Secondary));
+        if (!buttons.length) return interaction.reply({ content: 'No verification methods are enabled. Contact a server administrator.', ephemeral: true });
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        return interaction.reply({ content: 'Choose a verification method. Your account-age requirements apply to every method.', components: rows, ephemeral: true });
+      }
 
-        // ----------------------------------------------------
-        // 1. INITIAL VERIFICATION PANEL CLICK
-        // Handles: `verify_role_<roleId>` and `verify_human_btn`
-        // ----------------------------------------------------
-        if (interaction.customId.startsWith('verify_role_') || interaction.customId === 'verify_human_btn') {
-            try {
-                let requestedRoleId = 'active';
-                if (interaction.customId.startsWith('verify_role_')) {
-                    requestedRoleId = interaction.customId.replace('verify_role_', '').trim();
-                }
+      if (interaction.isButton() && interaction.customId.startsWith('starry_verify_') && interaction.customId !== 'starry_verify_open' && interaction.customId !== 'starry_verify_accept_rules') {
+        const cfg = await getConfig(interaction.guildId);
+        if (!cfg.enabled) return interaction.reply({ content: 'Verification is disabled.', ephemeral: true });
+        const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) return interaction.reply({ content: 'Could not find your server membership. Please rejoin and try again.', ephemeral: true });
+        const ageError = ageFailure(member, cfg);
+        if (ageError) return interaction.reply({ content: '🛡️ ' + ageError, ephemeral: true });
+        const role = await resolveTargetRole(interaction.guild, cfg.roleId);
+        if (!role) return interaction.reply({ content: 'The verified role is not configured. Ask a server administrator.', ephemeral: true });
+        if (member.roles.cache.has(role.id)) return interaction.reply({ content: 'You are already verified.', ephemeral: true });
 
-                const targetRole = await resolveTargetRole(interaction.guild, requestedRoleId);
-
-                if (targetRole && interaction.member.roles.cache.has(targetRole.id)) {
-                    return interaction.reply({
-                        content: `✅ You already have the **${targetRole.name}** role and are fully verified!`,
-                        ephemeral: true
-                    });
-                }
-
-                // Generate a secure, unique 32-character hex token
-                const token = crypto.randomBytes(16).toString('hex');
-                const effectiveRoleId = targetRole ? targetRole.id : requestedRoleId;
-
-                // Save to bot verifyMap
-                client.verifyMap.set(token, {
-                    userId: interaction.user.id,
-                    guildId: interaction.guild.id,
-                    roleId: effectiveRoleId
-                });
-
-                // Auto-expire after 15 minutes
-                setTimeout(() => {
-                    if (client.verifyMap.has(token)) {
-                        client.verifyMap.delete(token);
-                    }
-                }, 15 * 60 * 1000);
-
-                // Build public verification URL
-                const baseUrl = getPublicUrl();
-                const verifyUrl = `${baseUrl}/verify?token=${token}`;
-
-                // Row with Dual-Path: Instant Discord Verification + Public Web Portal
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`verify_direct_${effectiveRoleId}_${token}`)
-                        .setLabel('⚡ Verify in Discord (Instant)')
-                        .setStyle(ButtonStyle.Success)
-                        .setEmoji('✅'),
-                    new ButtonBuilder()
-                        .setLabel('🌐 Verify on Website')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(verifyUrl)
-                );
-
-                const embed = new EmbedBuilder()
-                    .setColor('#2ecc71')
-                    .setTitle('🛡️ Server Human Verification Portal')
-                    .setDescription(
-                        `Welcome to **${interaction.guild.name}**!\n\n` +
-                        `To protect the server from automated raid bots, please choose your verification method:\n\n` +
-                        `• **⚡ Option 1 (Recommended — 100% Guaranteed Public Access):**\n` +
-                        `Click **"⚡ Verify in Discord (Instant)"** below to verify immediately right inside Discord. **No browser, no VPN, and no website connection required!**\n\n` +
-                        `• **🌐 Option 2 (Web Portal):**\n` +
-                        `Click **"🌐 Verify on Website"** to verify via our secure browser portal.\n\n` +
-                        `*(Note: If your ISP or mobile network blocks Render or gives \`ERR_CONNECTION_REFUSED\`, use Option 1 above!)*`
-                    )
-                    .setFooter({
-                        text: 'Starry Security Shield • Link expires in 15 mins',
-                        iconURL: client.user ? client.user.displayAvatarURL() : undefined
-                    });
-
-                return interaction.reply({
-                    embeds: [embed],
-                    components: [row],
-                    ephemeral: true
-                });
-            } catch (err) {
-                console.error('Verification Initialization Error:', err);
-                if (!interaction.replied && !interaction.deferred) {
-                    return interaction.reply({
-                        content: `❌ Verification error: ${err.message || 'Unknown error'}. Please alert an admin.`,
-                        ephemeral: true
-                    }).catch(() => {});
-                }
-            }
+        const method = interaction.customId.replace('starry_verify_', '');
+        if (cfg.requireRules && method !== 'rules' && !client.verifyAcceptedRules.has(key(interaction.guildId, interaction.user.id))) return interaction.reply({ content: 'Please read and accept the server rules first.', ephemeral: true });
+        if (method === 'math') {
+          const a = crypto.randomInt(2, 10), b = crypto.randomInt(2, 10);
+          pending.set(key(interaction.guildId, interaction.user.id), { answer: String(a + b), expires: Date.now() + 5 * 60000, attempts: 0 });
+          const modal = new ModalBuilder().setCustomId('starry_verify_math_submit').setTitle('Human verification');
+          const answer = new TextInputBuilder().setCustomId('answer').setLabel(`What is ${a} + ${b}?`).setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(3);
+          modal.addComponents(new ActionRowBuilder().addComponents(answer));
+          return interaction.showModal(modal);
         }
-
-        // ----------------------------------------------------
-        // 2. INSTANT DIRECT IN-DISCORD VERIFICATION
-        // Handles: `verify_direct_<roleId>_<token>`
-        // ----------------------------------------------------
-        if (interaction.customId.startsWith('verify_direct_')) {
-            try {
-                const parts = interaction.customId.split('_');
-                const roleId = parts[2];
-                const token = parts[3];
-
-                const targetRole = await resolveTargetRole(interaction.guild, roleId);
-                if (!targetRole) {
-                    return interaction.reply({
-                        content: '⚠️ The verification role is not configured or could not be found. Please contact a server administrator.',
-                        ephemeral: true
-                    });
-                }
-
-                if (interaction.member.roles.cache.has(targetRole.id)) {
-                    return interaction.reply({
-                        content: `✅ You are already verified with the **${targetRole.name}** role!`,
-                        ephemeral: true
-                    });
-                }
-
-                const botMember = interaction.guild.members.me || await interaction.guild.members.fetch(client.user.id).catch(() => null);
-                if (!botMember) {
-                    return interaction.reply({
-                        content: '❌ Internal error resolving bot server membership.',
-                        ephemeral: true
-                    });
-                }
-
-                if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                    return interaction.reply({
-                        content: '❌ **Bot Permission Error:** I need the `Manage Roles` permission to assign roles. Please ask a server admin to grant it.',
-                        ephemeral: true
-                    });
-                }
-
-                if (targetRole.position >= botMember.roles.highest.position) {
-                    return interaction.reply({
-                        content: `⚠️ **Role Hierarchy Error:** The role **${targetRole.name}** is higher than or equal to my highest role. A server admin must drag my bot role above **${targetRole.name}** in Server Settings → Roles.`,
-                        ephemeral: true
-                    });
-                }
-
-                // Assign the verified role
-                await interaction.member.roles.add(targetRole, 'Starry Instant Human Verification');
-
-                // Cleanup token from verifyMap
-                if (token && client.verifyMap) {
-                    client.verifyMap.delete(token);
-                }
-
-                await interaction.reply({
-                    content: `🎉 **Verification Complete!** You have been granted the **${targetRole.name}** role and unlocked full access to **${interaction.guild.name}**. Welcome!`,
-                    ephemeral: true
-                });
-
-                // Telemetry audit notification
-                try {
-                    const chamberCh = interaction.guild.channels.cache.find(c => 
-                        c.name === 'verification-chamber' || c.name === 'audit-log' || c.name === 'mod-logs'
-                    );
-                    if (chamberCh && chamberCh.isTextBased()) {
-                        const logEmbed = new EmbedBuilder()
-                            .setColor('#2ecc71')
-                            .setTitle('🟢 Member Human Verification Complete')
-                            .setDescription(`**User Verified:** <@${interaction.user.id}> (\`${interaction.user.tag}\`) passed human verification via Instant Discord Gateway.`)
-                            .setTimestamp();
-                        chamberCh.send({ embeds: [logEmbed] }).catch(() => {});
-                    }
-                } catch (logErr) {}
-
-            } catch (err) {
-                console.error('Direct In-Discord Verification Error:', err);
-                if (!interaction.replied && !interaction.deferred) {
-                    return interaction.reply({
-                        content: `❌ **Failed to assign role:** \`${err.message || 'Unknown error'}\`. Ensure the bot role is above the verification role in Server Settings.`,
-                        ephemeral: true
-                    }).catch(() => {});
-                }
-            }
+        if (method === 'captcha' || method === 'dm') {
+          // Expire stale capabilities before issuing a new one and cap memory use under request floods.
+          for (const [existingToken, session] of client.verifyMap) {
+            if (!session?.expiresAt || session.expiresAt <= Date.now()) client.verifyMap.delete(existingToken);
+          }
+          if (client.verifyMap.size >= 10000) return interaction.reply({ content: 'Verification is temporarily busy. Please try again in a few minutes.', ephemeral: true });
+          const token = crypto.randomBytes(24).toString('hex');
+          client.verifyMap.set(token, { userId: interaction.user.id, guildId: interaction.guildId, roleId: role.id, expiresAt: Date.now() + 10 * 60000, minAccountAgeDays: Number(cfg.minAccountAgeDays) || 0, ageAction: cfg.ageAction || 'reject', requireAvatar: !!cfg.requireAvatar });
+          const base = process.env.PUBLIC_URL || getPublicUrl() || process.env.RENDER_EXTERNAL_URL || '';
+          const url = base ? `${base.replace(/\/$/, '')}/verify?token=${token}` : null;
+          if (!url) return interaction.reply({ content: 'The verification website URL is not configured. Use another method or contact an administrator.', ephemeral: true });
+          if (method === 'dm') {
+            await interaction.user.send({ content: `Complete verification for **${interaction.guild.name}** within 10 minutes: ${url}` }).catch(() => null);
+            return interaction.reply({ content: 'I sent your single-use verification link by DM. If DMs are closed, enable them or use another method.', ephemeral: true });
+          }
+          return interaction.reply({ content: `Your single-use web verification link (expires in 10 minutes): ${url}`, ephemeral: true });
         }
-    });
+        if (method === 'button' || method === 'rules') {
+          if (method === 'rules') {
+            const accept = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('starry_verify_accept_rules').setLabel('I have read and accept the rules').setStyle(ButtonStyle.Success));
+            return interaction.reply({ content: `**Server rules**\n${String(cfg.rulesText || 'I agree to follow the server rules and community guidelines.').slice(0, 1800)}\n\nPress below to confirm acceptance.`, components: [accept], ephemeral: true });
+          }
+          await grantVerified(member, role, client, method === 'rules' ? 'rules acceptance' : 'one-click');
+          return interaction.reply({ content: '✅ Verification complete. Your verified role has been assigned.', ephemeral: true });
+        }
+      }
+
+      if (interaction.isButton() && interaction.customId === 'starry_verify_accept_rules') {
+        const cfg = await getConfig(interaction.guildId);
+        const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) return interaction.reply({ content: 'Member not found.', ephemeral: true });
+        const ageError = ageFailure(member, cfg);
+        if (ageError) return interaction.reply({ content: ageError, ephemeral: true });
+        client.verifyAcceptedRules.add(key(interaction.guildId, interaction.user.id));
+        const role = await resolveTargetRole(interaction.guild, cfg.roleId);
+        if (cfg.requireRules) return interaction.reply({ content: '✅ Rules accepted. Now choose another verification method to complete the checks.', ephemeral: true });
+        await grantVerified(member, role, client, 'rules acceptance');
+        return interaction.reply({ content: '✅ Rules accepted. You are verified.', ephemeral: true });
+      }
+
+      if (interaction.isModalSubmit() && interaction.customId === 'starry_verify_math_submit') {
+        const id = key(interaction.guildId, interaction.user.id), challenge = pending.get(id);
+        if (!challenge || challenge.expires < Date.now()) { pending.delete(id); return interaction.reply({ content: 'Challenge expired. Start verification again.', ephemeral: true }); }
+        if (interaction.fields.getTextInputValue('answer').trim() !== challenge.answer) {
+          challenge.attempts++;
+          if (challenge.attempts >= 3) pending.delete(id);
+          return interaction.reply({ content: challenge.attempts >= 3 ? 'Too many incorrect attempts. Start again.' : 'Incorrect answer. Please try again.', ephemeral: true });
+        }
+        pending.delete(id);
+        const cfg = await getConfig(interaction.guildId), member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) return interaction.reply({ content: 'Member not found.', ephemeral: true });
+        const ageError = ageFailure(member, cfg);
+        if (ageError) return interaction.reply({ content: ageError, ephemeral: true });
+        const role = await resolveTargetRole(interaction.guild, cfg.roleId);
+        await grantVerified(member, role, client, 'math challenge');
+        return interaction.reply({ content: '✅ Correct. You are verified.', ephemeral: true });
+      }
+    } catch (error) {
+      console.error('[Verification]', error);
+      const payload = { content: `Verification could not be completed: ${error.message || 'Unknown error'}`, ephemeral: true };
+      if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
+      else await interaction.reply(payload).catch(() => {});
+    }
+  });
 };
 
 module.exports.resolveTargetRole = resolveTargetRole;
+module.exports.getConfig = getConfig;
+module.exports.ageFailure = ageFailure;

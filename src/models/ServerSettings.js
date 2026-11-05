@@ -48,11 +48,15 @@ const serverSettingsSchema = new mongoose.Schema({
         enabled: { type: Boolean, default: false },
         roleId: { type: String, default: '' },
         unverifiedRoleId: { type: String, default: '' },
-        captchaType: { type: String, default: 'web' }, // 'web' | 'button' | 'math'
         channelId: { type: String, default: '' },
+        logChannelId: { type: String, default: '' },
         minAccountAgeDays: { type: Number, default: 3 },
+        ageAction: { type: String, enum: ['warn', 'quarantine', 'reject'], default: 'reject' },
         requireAvatar: { type: Boolean, default: false },
-        autoKickUnverifiedMinutes: { type: Number, default: 0 } // 0 = disabled
+        requireRules: { type: Boolean, default: false },
+        rulesText: { type: String, default: '' },
+        methods: { button: { type: Boolean, default: true }, captcha: { type: Boolean, default: true }, math: { type: Boolean, default: true }, dm: { type: Boolean, default: true }, rules: { type: Boolean, default: true } },
+        autoKickUnverifiedMinutes: { type: Number, default: 0 }
     },
 
     // 🏷️ Starry AutoRoles & Sticky Roles
