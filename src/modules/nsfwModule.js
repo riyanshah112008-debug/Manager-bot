@@ -1,18 +1,17 @@
 // Starry NSFW access and consent service.
-// All social interactions are fictional, non-graphic, and opt-in.
 const mongoose = require('mongoose');
 const ServerSettings = require('../models/ServerSettings');
 const UserSettings = require('../models/UserSettings');
 const config = require('../config');
 const dmNsfwCache = new Map();
 
+function isStarryOwner(userId) {
+    return Boolean(userId && typeof config.isBotOwner === 'function' && config.isBotOwner(String(userId)));
+}
+
 function canManageServerNsfw(userId, guild) {
     if (!guild || !userId) return false;
-    const owner = guild.ownerId === userId;
-    const botOwner = typeof config.isBotOwner === 'function'
-        ? config.isBotOwner(userId)
-        : (Array.isArray(config.BOT_OWNERS) && config.BOT_OWNERS.includes(userId));
-    return owner || botOwner;
+    return guild.ownerId === userId || isStarryOwner(userId);
 }
 
 async function readUserSettings(userId) {
@@ -60,6 +59,10 @@ async function toggleNsfwDm(userId) {
 
 async function isNsfwAllowed(ctx) {
     const userId = ctx.user?.id || ctx.author?.id;
+    // The configured Starry owner can operate the suite without personal DM
+    // opt-in or per-server enablement/channel configuration. Target consent remains mandatory.
+    if (isStarryOwner(userId)) return true;
+
     const isDM = Boolean(ctx.isDM) || !ctx.guild ||
         Boolean(ctx.channel && typeof ctx.channel.isDMBased === 'function' && ctx.channel.isDMBased());
     if (isDM) return userId ? isNsfwDmEnabled(userId) : false;
@@ -72,5 +75,5 @@ async function isNsfwAllowed(ctx) {
 
 module.exports = {
     canManageServerNsfw, isNsfwDmEnabled, setNsfwDmEnabled, toggleNsfwDm,
-    isSocialConsentEnabled, setSocialConsent, isNsfwAllowed
+    isSocialConsentEnabled, setSocialConsent, isNsfwAllowed, isStarryOwner
 };

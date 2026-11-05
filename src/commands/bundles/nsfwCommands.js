@@ -5,7 +5,7 @@ const { EmbedBuilder } = require('discord.js');
 const ServerSettings = require('../../models/ServerSettings');
 const {
     canManageServerNsfw, isNsfwAllowed, isNsfwDmEnabled,
-    setNsfwDmEnabled, isSocialConsentEnabled, setSocialConsent
+    setNsfwDmEnabled, isSocialConsentEnabled, setSocialConsent, isStarryOwner
 } = require('../../modules/nsfwModule');
 const config = require('../../config');
 const PREFIX = config.DEFAULT_PREFIX || ',';
@@ -55,7 +55,8 @@ async function allowed(ctx) {
 }
 
 async function mutualConsent(ctx, target) {
-    if (!(await isSocialConsentEnabled(ctx.user.id))) {
+    // The configured Starry owner is exempt from personal opt-in; target opt-in remains mandatory.
+    if (!isStarryOwner(ctx.user.id) && !(await isSocialConsentEnabled(ctx.user.id))) {
         await ctx.reply('🔐 Enable your own social consent first with ' + PREFIX + 'nsfwconsent on. You can turn it off at any time.');
         return false;
     }
@@ -152,7 +153,7 @@ const commands = [
         async execute(ctx) {
             return ctx.reply('**🌙 Starry After Dark — One Command, Full Suite**\n' +
                 '`/nsfw` or `,nsfw` → choose a sub-option: server, dms, consent, flirt, tease, makeout, date, compliment, chemistry, tension, ship, couple, rate, truth, dare, fantasy, secret, confess, afterdark, help.\n\n' +
-                '**Safety:** Server owner activation and age-restricted channel required. DMs are individually opt-in. Targeted commands require both members to opt in. All content is non-graphic.');
+                '**Safety:** Server owner activation and age-restricted channel required. DMs are individually opt-in. Targeted commands require the target member to opt in; the configured Starry owner is exempt from personal opt-in. All content is non-graphic.');
         }
     }
 ];
