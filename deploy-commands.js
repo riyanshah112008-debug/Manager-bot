@@ -379,36 +379,8 @@ if (socialModule && socialModule.socialCommandPayload) {
     commands.push(socialModule.socialCommandPayload);
 }
 
-// Direct Social Action Slash Commands (Top 20 most popular actions directly accessible; all others accessible via /social and chat prefix)
-const TOP_DIRECT_SOCIAL_ACTIONS = new Set([
-    'hug', 'kiss', 'pat', 'slap', 'cuddle', 'highfive', 'bonk', 'yeet', 
-    'poke', 'bite', 'feed', 'handhold', 'wink', 'dance', 'cry', 'blush', 
-    'smile', 'wave', 'laugh', 'cheer'
-]);
-
-if (socialModule && socialModule.ACTION_CONFIG) {
-    for (const [act, conf] of Object.entries(socialModule.ACTION_CONFIG)) {
-        if (!TOP_DIRECT_SOCIAL_ACTIONS.has(act)) continue;
-        const isTargeted = conf.requiresTarget !== false;
-        const desc = isTargeted
-            ? `${conf.verb.charAt(0).toUpperCase() + conf.verb.slice(1)} a member with an animated anime GIF!`
-            : `${conf.verb.charAt(0).toUpperCase() + conf.verb.slice(1)} (Anime Reaction)`;
-        
-        commands.push(
-            new SlashCommandBuilder()
-                .setName(act)
-                .setDescription(desc.slice(0, 100))
-                .setContexts([0, 1, 2])
-                .setIntegrationTypes([0, 1])
-                .addUserOption(opt => 
-                    opt.setName('target')
-                       .setDescription(isTargeted ? 'Target member' : 'Optional target member')
-                       .setRequired(isTargeted)
-                )
-                .toJSON()
-        );
-    }
-}
+// Social actions are intentionally exposed only through the grouped /social command.
+// This avoids spending one global application-command slot per individual action.
 
 // ✨ AI, VISION, SUMMARIZE, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
 commands.push(
