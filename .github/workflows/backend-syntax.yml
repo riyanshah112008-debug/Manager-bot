@@ -20,6 +20,8 @@ jobs:
       - name: Validate backend and dashboard scripts
         run: |
           node --check src/index.js
+          node --check src/commands/bundles/assetCommands.js
+          node --check src/modules/commandHandler.js
           node --check src/modules/dashboardServer.js
           node --check public/firebase-bridge.js
           node --check public/landing.js
