@@ -31,7 +31,7 @@ const LevelUserSchema = new mongoose.Schema({
 LevelUserSchema.index({ userId: 1, guildId: 1 }, { unique: true });
 const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', LevelUserSchema);
 
-const DEFAULT_LEVEL_UP_MESSAGE = '🎉 <@{user}> reached Level {level}!';
+const DEFAULT_LEVEL_UP_MESSAGE = '✨ <@{user}> just hit **Level {level}**!';
 const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
 
 const LevelSettingsSchema = new mongoose.Schema({
@@ -814,7 +814,7 @@ const levelingModule = (client) => {
                     .setCustomId('in_lvl_ping')
                     .setLabel('Content Above Embed')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.pingContent || '🎉 **Level Up!** <@{user}>')
+                    .setValue(settings.pingContent || '✨ <@{user}> just hit **Level {level}**!')
                     .setRequired(true);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(pingInput));
@@ -826,7 +826,7 @@ const levelingModule = (client) => {
                 try {
                     const latest = await LevelSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
-                    const pingText = replaceLvlPlaceholders(latest.pingContent || '🎉 **Level Up!** <@{user}>', interaction.user, 5, 2500, interaction.guild);
+                    const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
 
                     return await interaction.reply({ 
                         content: `${pingText} *(Setup Preview)*`, 
