@@ -1012,11 +1012,12 @@ function setupDashboardRoutes(app, client) {
             }
             if (payload.verification !== undefined) {
                 const v = payload.verification;
-                const allowed = new Set(['enabled','roleId','unverifiedRoleId','channelId','logChannelId','minAccountAgeDays','requireAvatar','requireRules','rulesText','methods']);
+                const allowed = new Set(['enabled','roleId','unverifiedRoleId','channelId','logChannelId','minAccountAgeDays','ageAction','requireAvatar','requireRules','rulesText','methods']);
                 if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).some(k => !allowed.has(k))) return res.status(400).json({ success: false, error: 'Invalid verification settings.' });
                 for (const key of ['enabled','requireAvatar','requireRules']) if (v[key] !== undefined && typeof v[key] !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be true or false.' });
                 if (v.minAccountAgeDays !== undefined && (!Number.isInteger(Number(v.minAccountAgeDays)) || Number(v.minAccountAgeDays) < 0 || Number(v.minAccountAgeDays) > 3650)) return res.status(400).json({ success: false, error: 'Minimum account age must be 0–3650 days.' });
                 if (v.minAccountAgeDays !== undefined) v.minAccountAgeDays = Number(v.minAccountAgeDays);
+                if (v.ageAction !== undefined && !['warn','quarantine','reject'].includes(v.ageAction)) return res.status(400).json({ success: false, error: 'Choose warn, quarantine or reject for young accounts.' });
                 for (const key of ['roleId','unverifiedRoleId']) if (v[key] !== undefined) {
                     if (typeof v[key] !== 'string') return res.status(400).json({ success: false, error: key + ' must be a role ID.' });
                     v[key] = v[key].trim();
