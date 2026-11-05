@@ -106,6 +106,29 @@ const commands = [
         }
     },
     {
+        name: 'nsfwserver', category: 'NSFW', description: 'Enable or disable Starry NSFW for this server.',
+        async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('This setting is available only in a server.');
+            if (!canManageServerNsfw(ctx.user.id, ctx.guild)) return ctx.reply('Only the server owner or a Starry bot owner can change this setting.');
+            const choice = String(ctx.args[0] || '').toLowerCase();
+            if (!['on', 'off'].includes(choice)) return ctx.reply('Choose on or off.');
+            let settings = await ServerSettings.findOne({ guildId: ctx.guild.id });
+            if (!settings) settings = await ServerSettings.create({ guildId: ctx.guild.id });
+            settings.nsfw.enabled = choice === 'on';
+            await settings.save();
+            return ctx.reply(choice === 'on' ? '🔞 Starry social suite enabled. Commands remain restricted to age-restricted channels.' : '🔒 Starry social suite disabled.');
+        }
+    },
+    {
+        name: 'nsfwdm', category: 'NSFW', description: 'Enable or disable your personal NSFW commands in DMs.',
+        async execute(ctx) {
+            const choice = String(ctx.args[0] || '').toLowerCase();
+            if (!['on', 'off'].includes(choice)) return ctx.reply('Choose on or off.');
+            await setNsfwDmEnabled(ctx.user.id, choice === 'on');
+            return ctx.reply(choice === 'on' ? '🔞 Your private NSFW mode is enabled.' : '🔒 Your private NSFW mode is disabled.');
+        }
+    },
+    {
         name: 'nsfwconsent', aliases: ['socialconsent'], category: 'NSFW',
         description: 'Opt in or out of being included in Starry social interactions.',
         usage: ',nsfwconsent on|off|status',
