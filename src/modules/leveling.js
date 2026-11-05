@@ -239,7 +239,7 @@ async function getLevelControlPanel(guildId, client) {
             image: '',
             thumbnail: 'avatar',
             footer: '{server} • Leveling System',
-            pingContent: '**Level Up:** <@{user}>',
+            pingContent: DEFAULT_LEVEL_UP_MESSAGE,
             authorName: 'LEVEL UP UNLOCKED'
         };
     }
