@@ -272,7 +272,7 @@ for (const [name, action] of Object.entries(targeted)) {
             const embed = new EmbedBuilder().setColor(COLOR).setTitle(action[0])
                 .setDescription('✨ <@' + ctx.user.id + '> ' + line)
                 .setFooter({ text: 'Both members have opted in • Starry Social' }).setTimestamp();
-            await addAnimeGif(embed, name);\n            await addAnimeGif(embed, name);
+            await addAnimeGif(embed, name);
             return ctx.reply({ embeds: [embed], allowedMentions: { users: [ctx.user.id, target.id] } });
         }
     });
@@ -311,7 +311,8 @@ for (const [name, title, pool] of [
         async execute(ctx) {
             if (!(await allowed(ctx))) return;
             const embed = new EmbedBuilder().setColor(COLOR).setTitle(title).setDescription(pick(pool)).setFooter({ text: 'Keep it respectful • Passing is always okay' });
-            await addAnimeGif(embed, name);\n            return ctx.reply({ embeds: [embed] });
+            await addAnimeGif(embed, name);
+            return ctx.reply({ embeds: [embed] });
         }
     });
 }
@@ -326,7 +327,8 @@ commands.push(
             if (!message) return ctx.reply('Add a confession after the command. Keep it non-explicit and respectful.');
             if (message.length > 400) return ctx.reply('Keep the confession under 400 characters.');
             const embed = new EmbedBuilder().setColor(COLOR).setTitle('💌 A Starry Confession').setDescription(message).setFooter({ text: 'Shared by request • Keep it respectful' });
-            await addAnimeGif(embed, 'nsfwconfess');\n            return ctx.reply({ embeds: [embed], allowedMentions: { parse: [] } });
+            await addAnimeGif(embed, 'nsfwconfess');
+            return ctx.reply({ embeds: [embed], allowedMentions: { parse: [] } });
         }
     },
     {
@@ -342,7 +344,8 @@ commands.push(
                 'What is one green flag people often overlook?'
             ]);
             const embed = new EmbedBuilder().setColor(COLOR).setTitle('🌙 After Dark').setDescription(prompt).setFooter({ text: 'A relaxed, non-explicit conversation starter' });
-            await addAnimeGif(embed, 'nsfwafterdark');\n            return ctx.reply({ embeds: [embed] });
+            await addAnimeGif(embed, 'nsfwafterdark');
+            return ctx.reply({ embeds: [embed] });
         }
     }
 );
