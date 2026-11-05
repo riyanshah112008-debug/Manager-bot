@@ -24,7 +24,7 @@ async function resolveTargetRole(guild, roleId) {
 
 function ageFailure(member, config) {
   const days = Math.max(0, Number(config.minAccountAgeDays) || 0);
-  if (days && Date.now() - member.user.createdTimestamp < days * 86400000) {
+  if (days && Date.now() - member.user.createdTimestamp < days * 86400000 && config.ageAction !== 'warn') {
     const remaining = Math.ceil((days * 86400000 - (Date.now() - member.user.createdTimestamp)) / 86400000);
     return `Your Discord account must be at least ${days} days old. Please try again in about ${remaining} day(s).`;
   }
@@ -104,7 +104,7 @@ module.exports = client => {
         }
         if (method === 'captcha' || method === 'dm') {
           const token = crypto.randomBytes(24).toString('hex');
-          client.verifyMap.set(token, { userId: interaction.user.id, guildId: interaction.guildId, roleId: role.id, expiresAt: Date.now() + 10 * 60000, minAccountAgeDays: Number(cfg.minAccountAgeDays) || 0, requireAvatar: !!cfg.requireAvatar });
+          client.verifyMap.set(token, { userId: interaction.user.id, guildId: interaction.guildId, roleId: role.id, expiresAt: Date.now() + 10 * 60000, minAccountAgeDays: Number(cfg.minAccountAgeDays) || 0, ageAction: cfg.ageAction || 'reject', requireAvatar: !!cfg.requireAvatar });
           const base = process.env.PUBLIC_URL || getPublicUrl() || process.env.RENDER_EXTERNAL_URL || '';
           const url = base ? `${base.replace(/\/$/, '')}/verify?token=${token}` : null;
           if (!url) return interaction.reply({ content: 'The verification website URL is not configured. Use another method or contact an administrator.', ephemeral: true });
