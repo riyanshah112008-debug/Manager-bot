@@ -45,7 +45,7 @@ class DB:
             "tags": [],
             "language": "en",
             "is_public": True,
-            "is_nsfw": False,
+            "": False,
             "last_bump_time": 0,
             "next_bump_time": 0
         })
@@ -263,7 +263,6 @@ def get_all_servers():
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 12))
         sort_by = request.args.get('sort', 'bumped')
-        allow_nsfw = request.args.get('nsfw', '0') == '1'
         query = request.args.get('q', '').strip().lower()
 
         # 1. 从 DB 读取公开服务器
@@ -272,7 +271,7 @@ def get_all_servers():
 
         # 2. NSFW 过滤
         if not allow_nsfw:
-            filtered = [g for g in filtered if not g.get('is_nsfw', False)]
+            filtered = [g for g in filtered if not g.get('', False)]
 
         # 3. 搜索关键词匹配 (匹配名称或标签)
         if query:
