@@ -9,7 +9,8 @@ const models = {
     WelcomeSettings: require('../src/models/WelcomeSettings'),
     GoodbyeSettings: require('../src/models/GoodbyeSettings'),
     MasterSecurity: require('../src/models/MasterSecurity'),
-    PolicyVote: require('../src/models/PolicyVote')
+    PolicyVote: require('../src/models/PolicyVote'),
+    BotRecord: require('../src/models/BotRecord')
 };
 
 test('canonical models register once with their expected names', () => {
@@ -48,4 +49,15 @@ test('policy vote model retains its vote fields', () => {
     for (const field of ['guildId', 'messageId', 'title', 'description', 'yesVotes', 'noVotes', 'createdAt']) {
         assert.ok(schema.path(field), 'PolicyVote must define ' + field);
     }
+});
+
+test('generic bot records have a unique namespace and record key', () => {
+    const schema = models.BotRecord.schema;
+    for (const field of ['namespace', 'recordId', 'schemaVersion', 'revision', 'data']) {
+        assert.ok(schema.path(field), 'BotRecord must define ' + field);
+    }
+    const hasCompoundUniqueIndex = schema.indexes().some(([keys, options]) =>
+        keys.namespace === 1 && keys.recordId === 1 && options.unique === true
+    );
+    assert.equal(hasCompoundUniqueIndex, true);
 });
