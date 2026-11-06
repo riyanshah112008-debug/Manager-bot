@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const BotRecord = require('../src/models/BotRecord');
 const store = require('../src/utils/mongoStore');
+const { createPhoneSyncPublisher } = require('../src/utils/phoneSyncPublisher');
 
 const uri = process.env.MONGO_TEST_URI;
 const namespace = 'integration_' + process.pid + '_' + Date.now();
@@ -36,6 +37,18 @@ test('Mongo repository supports durable reads, CAS, patch, list and delete', { s
     const rows = await store.list(namespace, { limit: 10 });
     assert.deepEqual(rows.map((row) => row.recordId), ['guild-a', 'guild-b']);
 
+    const sent = [];
+    const publisher = createPhoneSyncPublisher({
+        env: { PHONE_DB_DEVICE_UID: 'test-device' },
+        relay: { enqueue: async (operation) => sent.push(operation) }
+    });
+    assert.equal(await publisher.publishOnce(), 2);
+    assert.equal(sent.length, 2);
+    assert.ok(sent.every((operation) => operation.operation === 'put'));
+
     assert.equal(await store.remove(namespace, 'guild-a', { expectedRevision: patched.revision }), true);
     assert.equal(await store.get(namespace, 'guild-a'), null);
+    assert.equal(await publisher.publishOnce(), 1);
+    assert.equal(sent[2].operation, 'delete');
+    assert.equal(sent[2].recordId, 'guild-a');
 });
