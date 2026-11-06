@@ -455,6 +455,8 @@ class MultiBotManager {
         const clean = cleanToken(token);
         if (!clean) throw new Error('A Discord bot token is required.');
         if (clean === this.primaryToken) throw new Error('The primary Starry bot cannot be added as a worker.');
+        // Validate encryption configuration before connecting a worker or writing credentials.
+        getWorkerTokenKey();
         const validRole = ROLE_PRESETS[role] ? role : 'all';
         const verification = await verifyDiscordToken(clean);
         if (!verification.valid || !verification.bot?.id) {
