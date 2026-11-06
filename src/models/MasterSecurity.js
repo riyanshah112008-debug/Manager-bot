@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const masterSecuritySchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true, index: true },
+    guildId: { type: String, required: true, unique: true },
     autoKick: { type: Boolean, default: false },
     autoBan: { type: Boolean, default: false },
     ownerBypass: { type: Boolean, default: true },
@@ -12,6 +12,6 @@ const masterSecuritySchema = new mongoose.Schema({
         automod: { type: Boolean, default: true }
     },
     userInfractions: { type: Map, of: Number, default: {} }
-}, { timestamps: true });
+});
 
 module.exports = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
