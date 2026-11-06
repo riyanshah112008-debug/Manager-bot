@@ -116,28 +116,11 @@ function buildDevPanelComponents() {
             .setStyle(ButtonStyle.Danger)
     );
 
-    // Row 2: Advanced Developer Modals & Diagnostics
+    // Row 2: Safe administrative actions only
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('dev_eval_btn')
-            .setLabel('💻 Run JavaScript (Eval)')
-            .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-            .setCustomId('dev_shell_btn')
-            .setLabel('🖥️ Terminal Bash')
-            .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-            .setCustomId('dev_broadcast_btn')
-            .setLabel('📢 Global Broadcast')
-            .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-            .setCustomId('dev_flush')
-            .setLabel('🧹 Flush Memory Cache')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId('dev_leave_btn')
-            .setLabel('👋 Leave Server')
-            .setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('dev_broadcast_btn').setLabel('📢 Global Broadcast').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('dev_flush').setLabel('🧹 Flush Memory Cache').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('dev_leave_btn').setLabel('👋 Leave Server').setStyle(ButtonStyle.Danger)
     );
 
     // Row 3: Quick Status / Presence Selector Menu
@@ -277,40 +260,12 @@ module.exports = (client) => {
                 return;
             }
 
-            // G. Show JavaScript Eval Modal
-            if (id === 'dev_eval_btn') {
-                const modal = new ModalBuilder()
-                    .setCustomId('dev_eval_modal_submit')
-                    .setTitle('💻 Run JavaScript (Eval Console)');
-
-                const codeInput = new TextInputBuilder()
-                    .setCustomId('eval_code_input')
-                    .setLabel('JavaScript Code to Execute')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('client.guilds.cache.size\nor\nawait GuildTelemetry.find({})')
-                    .setRequired(true);
-
-                modal.addComponents(new ActionRowBuilder().addComponents(codeInput));
-                await interaction.showModal(modal).catch(() => {});
-                return;
-            }
-
-            // H. Show Terminal Shell Modal
-            if (id === 'dev_shell_btn') {
-                const modal = new ModalBuilder()
-                    .setCustomId('dev_shell_modal_submit')
-                    .setTitle('🖥️ Terminal Bash Shell Command');
-
-                const cmdInput = new TextInputBuilder()
-                    .setCustomId('shell_cmd_input')
-                    .setLabel('Bash Shell Command')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('git status\nor\npm2 status\nor\nfree -m')
-                    .setRequired(true);
-
-                modal.addComponents(new ActionRowBuilder().addComponents(cmdInput));
-                await interaction.showModal(modal).catch(() => {});
-                return;
+            // Legacy arbitrary-code controls are intentionally disabled.
+            if (id === 'dev_eval_btn' || id === 'dev_shell_btn') {
+                return interaction.reply({
+                    content: 'This developer action has been disabled for security. Use the read-only diagnostics in this panel instead.',
+                    flags: [64]
+                }).catch(() => {});
             }
 
             // I. Show Global Broadcast Modal
@@ -398,69 +353,12 @@ module.exports = (client) => {
         if (interaction.isModalSubmit()) {
             const id = interaction.customId;
 
-            // A. JavaScript Eval Modal
-            if (id === 'dev_eval_modal_submit') {
-                await interaction.deferReply({ flags: [64] });
-                const code = interaction.fields.getTextInputValue('eval_code_input');
-
-                const start = process.hrtime.bigint();
-                let result;
-                let isError = false;
-
-                try {
-                    result = await eval(code);
-                    if (typeof result !== 'string') {
-                        result = require('util').inspect(result, { depth: 1 });
-                    }
-                } catch (err) {
-                    isError = true;
-                    result = err.stack || err.toString();
-                }
-
-                const end = process.hrtime.bigint();
-                const timeTaken = `${(Number(end - start) / 1e6).toFixed(2)}ms`;
-
-                if (process.env.DISCORD_TOKEN) result = result.replace(new RegExp(process.env.DISCORD_TOKEN, 'g'), '[SECRET_TOKEN]');
-                if (process.env.MONGO_URI) result = result.replace(new RegExp(process.env.MONGO_URI, 'g'), '[SECRET_MONGO]');
-                if (result.length > 1900) result = result.substring(0, 1900) + '... (truncated)';
-
-                const embed = new EmbedBuilder()
-                    .setColor(isError ? '#ED4245' : '#2ECC71')
-                    .setTitle(isError ? '❌ Evaluation Error' : '✅ Evaluation Output')
-                    .addFields(
-                        { name: '📥 Input Code', value: `\`\`\`js\n${code.substring(0, 500)}\n\`\`\`` },
-                        { name: '📤 Result', value: `\`\`\`js\n${result}\n\`\`\`` },
-                        { name: '⏱️ Execution Time', value: `\`${timeTaken}\``, inline: true }
-                    )
-                    .setFooter({ text: 'Starry Developer Engine' })
-                    .setTimestamp();
-
-                return interaction.editReply({ embeds: [embed] });
-            }
-
-            // B. Terminal Shell Modal
-            if (id === 'dev_shell_modal_submit') {
-                await interaction.deferReply({ flags: [64] });
-                const command = interaction.fields.getTextInputValue('shell_cmd_input');
-
-                exec(command, { timeout: 15000 }, (error, stdout, stderr) => {
-                    const output = stdout || stderr || (error ? error.message : 'Executed with no output.');
-                    let cleaned = output.trim();
-                    if (cleaned.length > 1900) cleaned = cleaned.substring(0, 1900) + '... (truncated)';
-
-                    const embed = new EmbedBuilder()
-                        .setColor(error ? '#ED4245' : '#5865F2')
-                        .setTitle('🖥️ Terminal Bash Output')
-                        .addFields(
-                            { name: '💻 Command', value: `\`\`\`bash\n${command}\n\`\`\`` },
-                            { name: '📄 Output', value: `\`\`\`bash\n${cleaned || 'Success (empty output)'}\n\`\`\`` }
-                        )
-                        .setFooter({ text: 'Starry Developer Engine' })
-                        .setTimestamp();
-
-                    return interaction.editReply({ embeds: [embed] });
-                });
-                return;
+            // Legacy eval/shell modals may still be submitted from old messages.
+            if (id === 'dev_eval_modal_submit' || id === 'dev_shell_modal_submit') {
+                return interaction.reply({
+                    content: 'This developer action has been disabled for security.',
+                    flags: [64]
+                }).catch(() => {});
             }
 
             // C. Global Broadcast Modal
