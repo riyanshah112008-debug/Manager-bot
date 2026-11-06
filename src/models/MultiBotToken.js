@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const multiBotTokenSchema = new mongoose.Schema({
     token: { type: String, required: true, unique: true },
+    tokenHash: { type: String, unique: true, sparse: true, index: true },
     name: { type: String, default: 'Secondary Worker Bot' },
     role: { type: String, default: 'all', enum: ['all', 'moderation', 'music', 'utility', 'economy', 'social'] },
     addedBy: { type: String, default: 'System' },
