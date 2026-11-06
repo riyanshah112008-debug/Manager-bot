@@ -72,9 +72,9 @@ const commands = [
             if (sub === 'invite' || sub === 'invites' || sub === 'clones') {
                 const row = new ActionRowBuilder();
                 const primaryId = ctx.client.user?.id || 'primary';
-                const primaryInvite = `https://discord.com/oauth2/authorize?client_id=${primaryId}&permissions=8&scope=bot%20applications.commands`;
-                const starry2Invite = `https://discord.com/oauth2/authorize?client_id=1543515940069572628&permissions=8&integration_type=0&scope=bot+applications.commands`;
-                const starry3Invite = `https://discord.com/oauth2/authorize?client_id=1543519236586999928&permissions=8&integration_type=0&scope=bot+applications.commands`;
+                const primaryInvite = `https://discord.com/oauth2/authorize?client_id=${primaryId}&permissions=0&scope=bot%20applications.commands`;
+                const starry2Invite = `https://discord.com/oauth2/authorize?client_id=1543515940069572628&permissions=0&integration_type=0&scope=bot+applications.commands`;
+                const starry3Invite = `https://discord.com/oauth2/authorize?client_id=1543519236586999928&permissions=0&integration_type=0&scope=bot+applications.commands`;
 
                 row.addComponents(
                     new ButtonBuilder()
