@@ -123,6 +123,7 @@ async function handleSecurityEvent(guild, {
     channelId,
     limitKey,
     limitOverride,
+    enabledKey,
     reason
 }, client) {
     if (!guild) return;
@@ -134,6 +135,7 @@ async function handleSecurityEvent(guild, {
         return;
     }
     if (!settings) return;
+    if (enabledKey && settings[enabledKey] !== true) return;
 
     const executor = await findExecutor(guild, auditType, targetId, channelId);
     if (!executor || executor.id === client.user?.id) return;
@@ -205,9 +207,31 @@ module.exports = client => {
             channelId: channel.id,
             limitKey: 'maxWebhookCreations',
             limitOverride: 1,
+            enabledKey: 'blockWebhookCreation',
             reason: 'Anti-Nuke: unapproved webhook creation.'
-        }, client).then(async () => {
-            // Respect the dedicated webhook-creation toggle.
-        }).catch(error => console.error('[Anti-Nuke] Webhook handler failed:', error));
+        }, client).catch(error => console.error('[Anti-Nuke] Webhook handler failed:', error));
+    });
+
+    client.on('guildMemberAdd', async member => {
+        if (!member.user?.bot) return;
+        try {
+            const settings = await getAntiNukeSettings(member.guild);
+            if (!settings || settings.blockUnapprovedBots !== true) return;
+            const executor = await findExecutor(member.guild, AuditLogEvent.BotAdd, member.id);
+            if (!executor || executor.id === client.user?.id) return;
+            if (await isWhitelisted(member.guild, executor, settings)) return;
+
+            const reason = 'Anti-Nuke: bot added by a non-whitelisted administrator.';
+            if (member.kickable) {
+                await member.kick(reason).catch(error => {
+                    console.warn('[Anti-Nuke] Could not remove unapproved bot', member.id, error.message);
+                });
+            } else {
+                console.warn('[Anti-Nuke] Unapproved bot could not be removed due to role hierarchy:', member.id);
+            }
+            await punishExecutor(member.guild, executor, settings, reason);
+        } catch (error) {
+            console.error('[Anti-Nuke] Bot-add handler failed:', error.message);
+        }
     });
 };
