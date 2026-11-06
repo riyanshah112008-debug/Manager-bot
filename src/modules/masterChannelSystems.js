@@ -30,13 +30,7 @@ const PolicyVoteSchema = new mongoose.Schema({
 });
 const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
 
-const masterSecuritySchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
-    modules: { antinuke: { type: Boolean, default: true }, antiraid: { type: Boolean, default: true }, altshield: { type: Boolean, default: false }, automod: { type: Boolean, default: true } },
-    userInfractions: { type: Map, of: Number, default: {} }
-});
-const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+const MasterSecurity = require('../models/MasterSecurity');
 
 const securityCache = new Map();
 
