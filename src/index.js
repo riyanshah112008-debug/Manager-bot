@@ -104,7 +104,19 @@ try {
 const app = express();
 const port = process.env.PORT || 10000;
 
-app.use(cors({ origin: '*' }));
+const allowedOrigins = new Set(
+    (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || '')
+        .split(',').map(value => value.trim()).filter(Boolean).map(value => value.replace(/\/$/, ''))
+);
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) return callback(null, true);
+        return callback(new Error('Origin not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Setup-Secret']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
 
@@ -128,7 +140,7 @@ app.get('/api/multibot/stats', (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, '../public')));
-app.use(express.static(path.join(__dirname, '../')));
+// Repository-root static serving removed to prevent source/configuration disclosure.
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
@@ -210,8 +222,8 @@ app.get('/setup', (req, res) => {
                 <label for="discordToken">Discord Bot Token (Required)</label>
                 <input type="password" id="discordToken" name="token" placeholder="Paste your bot token here" required autocomplete="off" />
                 
-                <label for="mongoUri">MongoDB URI (Optional)</label>
-                <input type="password" id="mongoUri" name="mongoUri" placeholder="mongodb+srv://..." autocomplete="off" />
+                <label for="setupSecret">Deployment setup secret</label>
+                <input type="password" id="setupSecret" name="setupSecret" placeholder="Enter the SETUP_SECRET configured by the owner" required autocomplete="off" />
                 
                 <button type="submit" id="submitBtn">⚡ Connect Starry to Discord</button>
                 <div id="resultMsg" class="alert"></div>
@@ -232,11 +244,8 @@ app.get('/setup', (req, res) => {
                     try {
                         const res = await fetch('/api/activate', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: document.getElementById('discordToken').value.trim(),
-                                mongoUri: document.getElementById('mongoUri').value.trim()
-                            })
+                            headers: { 'Content-Type': 'application/json', 'X-Setup-Secret': document.getElementById('setupSecret').value },
+                            body: JSON.stringify({ token: document.getElementById('discordToken').value.trim() })
                         });
                         const data = await res.json();
                         if (data.success) {
@@ -264,11 +273,17 @@ app.get('/setup', (req, res) => {
 });
 
 app.post('/api/activate', async (req, res) => {
+    const configuredSecret = process.env.SETUP_SECRET;
+    const suppliedSecret = req.get('X-Setup-Secret') || '';
+    if (!configuredSecret || !suppliedSecret || suppliedSecret.length !== configuredSecret.length ||
+        !require('crypto').timingSafeEqual(Buffer.from(suppliedSecret), Buffer.from(configuredSecret))) {
+        return res.status(403).json({ success: false, error: 'Remote activation is disabled or the setup secret is invalid. Configure SETUP_SECRET in the hosting environment.' });
+    }
     if (client && client.isReady()) {
         return res.json({ success: true, message: `Bot is already online as ${client.user.tag}` });
     }
 
-    const { token, mongoUri } = req.body || {};
+    const { token } = req.body || {};
     const sanitizedToken = cleanToken(token);
     if (!sanitizedToken) {
         return res.status(400).json({ success: false, error: 'A valid Discord Bot Token is required.' });
@@ -283,20 +298,10 @@ app.post('/api/activate', async (req, res) => {
         });
     }
 
-    // Persist to local .env in container
-    try {
-        let envContent = `DISCORD_TOKEN=${sanitizedToken}\nTOKEN=${sanitizedToken}\n`;
-        if (mongoUri && mongoUri.trim()) envContent += `MONGO_URI=${mongoUri.trim()}\n`;
-        if (process.env.CLIENT_ID) envContent += `CLIENT_ID=${process.env.CLIENT_ID}\n`;
-        fs.writeFileSync(path.join(process.cwd(), '.env'), envContent, 'utf8');
-    } catch (e) {}
-
     process.env.DISCORD_TOKEN = sanitizedToken;
     process.env.TOKEN = sanitizedToken;
-    if (mongoUri && mongoUri.trim()) process.env.MONGO_URI = mongoUri.trim();
-
-    // Trigger boot
-    startBot(sanitizedToken, mongoUri).catch(err => {
+    // Trigger boot; credentials remain in process memory and are never written to disk.
+    startBot(sanitizedToken).catch(err => {
         console.error('Activation boot error:', err);
     });
 

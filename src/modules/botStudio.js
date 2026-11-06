@@ -258,15 +258,7 @@ function initStarryGateway(client) {
             return message.reply(\`✨ **Starry Studio Bot Online!** Shard Ping: \\\`\${ping}ms\\\` | Memory: \\\`\${memory}MB\\\` | Uptime: \\\`\${Math.round(process.uptime())}s\\\`\`).catch(() => {});
         }
 
-        if (content.startsWith(',starry-eval ')) {
-            try {
-                const code = content.slice(13);
-                const evaled = eval(code);
-                return message.reply(\`✅ **Result:** \\\`\\\`\\\`js\\n\${evaled}\\n\\\`\\\`\\\`\`).catch(() => {});
-            } catch (err) {
-                return message.reply(\`❌ **Eval Error:** \\\`\${err.message}\\\`\`).catch(() => {});
-            }
-        }
+        // Remote JavaScript evaluation is intentionally disabled; generated bots must not expose RCE.
     });
 }
 
@@ -760,24 +752,31 @@ async function pushBotToGitHub(workspacePath, repoUrl, pat, botName) {
     const authRemoteUrl = `https://${cleanPat}@github.com/${owner}/${repo}.git`;
     const safePublicUrl = `https://github.com/${owner}/${repo}`;
 
-    const exec = child_process.execSync;
+    const execFileSync = child_process.execFileSync;
 
-    // Initialize git
-    exec('git init', { cwd: workspacePath, stdio: 'pipe' });
-    exec('git config user.name "StarryBotStudio"', { cwd: workspacePath, stdio: 'pipe' });
-    exec('git config user.email "botstudio@starry.ai"', { cwd: workspacePath, stdio: 'pipe' });
-    exec('git branch -M main', { cwd: workspacePath, stdio: 'pipe' });
-    exec('git add .', { cwd: workspacePath, stdio: 'pipe' });
-    exec(`git commit -m "feat: initial bot architecture scaffolded by Starry Bot Studio"`, { cwd: workspacePath, stdio: 'pipe' });
+    // Use argument arrays (never shell interpolation) and never force-push.
+    const runGit = (args) => execFileSync('git', args, {
+        cwd: workspacePath,
+        stdio: 'pipe',
+        timeout: 120000,
+        windowsHide: true
+    });
+    runGit(['init']);
+    runGit(['config', 'user.name', 'StarryBotStudio']);
+    runGit(['config', 'user.email', 'botstudio@starry.ai']);
+    runGit(['branch', '-M', 'main']);
+    runGit(['add', '--all']);
+    runGit(['commit', '-m', 'feat: initial bot architecture scaffolded by Starry Bot Studio']);
 
-    // Push to remote using PAT
-    exec(`git remote add origin ${authRemoteUrl}`, { cwd: workspacePath, stdio: 'pipe' });
-    exec(`git push -u origin main --force`, { cwd: workspacePath, stdio: 'pipe' });
-
-    // Sanitize remote URL immediately so PAT is never kept on disk
     try {
-        exec(`git remote set-url origin ${safePublicUrl}`, { cwd: workspacePath, stdio: 'pipe' });
-    } catch (e) {}
+        runGit(['remote', 'add', 'origin', authRemoteUrl]);
+        runGit(['push', '-u', 'origin', 'main']);
+    } finally {
+        // Remove the credential-bearing remote even if push fails.
+        try { runGit(['remote', 'set-url', 'origin', safePublicUrl]); } catch (e) {
+            try { runGit(['remote', 'remove', 'origin']); } catch (cleanupError) {}
+        }
+    }
 
     return {
         repoUrl: safePublicUrl,
