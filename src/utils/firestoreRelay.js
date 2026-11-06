@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { isDeepStrictEqual } = require('util');
 const API_ROOT = 'https://firestore.googleapis.com/v1';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const MAX_DOCUMENT_BYTES = 700 * 1024;
@@ -124,7 +125,8 @@ function createFirestoreRelay({ serviceAccount, projectId, fetchImpl = globalThi
                 const same = previous.deviceUid === document.deviceUid &&
                     previous.collection === document.collection &&
                     previous.recordId === document.recordId &&
-                    previous.operation === document.operation;
+                    previous.operation === document.operation &&
+                    isDeepStrictEqual(previous.payload, document.payload);
                 if (!same) throw new Error('operationId collision; refusing to overwrite relay data');
                 return { operationId: document.operationId, created: false, status: previous.status };
             }
@@ -139,7 +141,8 @@ function createFirestoreRelay({ serviceAccount, projectId, fetchImpl = globalThi
                 if (raced.response.ok) {
                     const previous = fromFirestoreFields(raced.body.fields);
                     if (previous.deviceUid === document.deviceUid && previous.collection === document.collection &&
-                        previous.recordId === document.recordId && previous.operation === document.operation) {
+                        previous.recordId === document.recordId && previous.operation === document.operation &&
+                        isDeepStrictEqual(previous.payload, document.payload)) {
                         return { operationId: document.operationId, created: false, status: previous.status };
                     }
                 }
