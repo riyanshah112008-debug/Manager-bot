@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -35,6 +36,17 @@ class SQLiteDocumentStore:
         self.connection.execute("PRAGMA synchronous = FULL")
         self.connection.execute("PRAGMA busy_timeout = 15000")
         self._create_schema()
+
+    @contextmanager
+    def _transaction(self):
+        self.connection.execute('BEGIN IMMEDIATE')
+        try:
+            yield
+        except Exception:
+            self.connection.rollback()
+            raise
+        else:
+            self.connection.commit()
 
     def _create_schema(self) -> None:
         self.connection.executescript("""
@@ -97,7 +109,7 @@ class SQLiteDocumentStore:
         operation_id = str(uuid.uuid4())
         now = _now()
         encoded = _json(payload)
-        with self.connection:
+        with self._transaction():
             self.connection.execute("""
                 INSERT INTO records(collection, record_id, payload, version, updated_at, deleted)
                 VALUES(?, ?, ?, 1, ?, 0)
@@ -117,7 +129,7 @@ class SQLiteDocumentStore:
         self._validate_key(collection, record_id)
         operation_id = str(uuid.uuid4())
         now = _now()
-        with self.connection:
+        with self._transaction():
             self.connection.execute("""
                 INSERT INTO records(collection, record_id, payload, version, updated_at, deleted)
                 VALUES(?, ?, '{}', 1, ?, 1)
@@ -150,7 +162,7 @@ class SQLiteDocumentStore:
             return 0
         if len(ids) > 1000 or any(not isinstance(item, str) for item in ids):
             raise ValueError("operation_ids must contain at most 1000 strings")
-        with self.connection:
+        with self._transaction():
             cursor = self.connection.executemany(
                 "DELETE FROM outbox WHERE operation_id=?", ((item,) for item in ids)
             )
@@ -178,7 +190,7 @@ class SQLiteDocumentStore:
         if kind == "put" and not isinstance(payload, dict):
             raise ValueError("put operation requires an object payload")
         now = _now()
-        with self.connection:
+        with self._transaction():
             exists = self.connection.execute(
                 "SELECT 1 FROM applied_operations WHERE operation_id=?", (op_id,)
             ).fetchone()
