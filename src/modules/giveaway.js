@@ -55,7 +55,10 @@ module.exports = (client) => {
     // ⏰ BACKGROUND CHECKER ENGINE
     // ==========================================
     client.once(Events.ClientReady || 'clientReady', () => {
-        setInterval(checkGiveaways, 8000);
+        const giveawayTimer = setInterval(() => {
+            checkGiveaways().catch(error => console.error('[Giveaway] Scheduled check failed:', error.message));
+        }, 8000);
+        if (typeof giveawayTimer.unref === 'function') giveawayTimer.unref();
         console.log('✅ Supreme Starry Giveaway Engine Active');
     });
 
