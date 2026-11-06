@@ -1,0 +1,22 @@
+name: Firestore relay tests
+
+on:
+  pull_request:
+    paths:
+      - "src/utils/firestoreRelay.js"
+      - "test/firestoreRelay.test.js"
+      - ".github/workflows/firestore-relay-tests.yml"
+  push:
+    branches:
+      - "database/firestore-relay-protocol"
+
+jobs:
+  relay-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run Firestore relay unit tests
+        run: node --test test/firestoreRelay.test.js
