@@ -28,8 +28,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run test:db-models
-      - run: node --test test/mongoStore.integration.test.js
+      - run: npm run test:firestore-relay
+      - run: npm run test:db
         env:
           MONGO_TEST_URI: mongodb://127.0.0.1:27017/manager_bot_test
 
