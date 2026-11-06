@@ -7,27 +7,22 @@ const sessionKey="starry_dashboard_session";
 function safeGet(storageName,key){try{return window[storageName].getItem(key)}catch(_){return null}}
 function safeSet(storageName,key,value){try{window[storageName].setItem(key,value);return true}catch(_){return false}}
 function safeRemove(storageName,key){try{window[storageName].removeItem(key)}catch(_){}}
-function getStoredSession(){return safeGet("localStorage",sessionKey)||safeGet("sessionStorage",sessionKey)}
+function getStoredSession(){return safeGet("sessionStorage",sessionKey)}
 function storeSession(token){
- const tabSaved=safeSet("sessionStorage",sessionKey,token);
- const durableSaved=safeSet("localStorage",sessionKey,token);
- if(!durableSaved)safeRemove("localStorage",sessionKey);
- return durableSaved||tabSaved
+ safeRemove("localStorage",sessionKey);
+ return safeSet("sessionStorage",sessionKey,token)
 }
 function clearStoredSession(){safeRemove("localStorage",sessionKey);safeRemove("sessionStorage",sessionKey)}
 (function captureSessionFromUrl(){
- let params;try{params=new URLSearchParams(window.location.search)}catch(_){return}
- if(!params.has("session"))return;
+ let params;try{params=new URLSearchParams(window.location.hash.slice(1))}catch(_){return}
  const token=params.get("session");
  if(token)storeSession(token);
- params.delete("session");const cleanQuery=params.toString();
- // OAuth currently returns to dashboard.html. Store the token, then return to
- // the homepage so its Discord profile controls can render immediately.
- if(window.location.pathname.endsWith("/dashboard.html")){
-  try{window.location.replace("/"+(cleanQuery?"?"+cleanQuery:"")+window.location.hash);return}catch(_){}
+ if(params.has("session")){
+  params.delete("session");
+  const cleanHash=params.toString();
+  try{window.history.replaceState(window.history.state,document.title,window.location.pathname+window.location.search+(cleanHash?"#"+cleanHash:""))}catch(_){}
  }
- try{window.history.replaceState(window.history.state,document.title,window.location.pathname+(cleanQuery?"?"+cleanQuery:"")+window.location.hash)}catch(_){}
-})();
+})();;
 function isBackendPath(pathname){return pathname.startsWith("/api/")||pathname.startsWith("/auth/")||pathname==="/setup"||pathname.startsWith("/verify")||pathname==="/vote"||pathname==="/health"||pathname==="/ping"}
 const nativeFetch=window.fetch.bind(window);
 window.fetch=function(input,init){
