@@ -27,11 +27,21 @@ The requested target is a fresh application database. Do not import old applicat
 ## Implementation sequence
 
 ### Stage 1 — Shared persistence foundation
-- Inventory every JSON/file-backed store and every inline Mongoose model.
-- Define canonical model files and eliminate duplicate schema definitions without changing feature behavior.
-- Introduce a single storage/service boundary using the existing Mongoose connection.
+
+**Implemented on this isolated branch (not yet runtime-tested):**
+- Added canonical model files for ChestGuild, WelcomeSettings, GoodbyeSettings, MasterSecurity, and PolicyVote.
+- Updated the related commands/modules to import the canonical models instead of defining duplicate schemas.
+- Removed the reduced WelcomeSettings/GoodbyeSettings definitions and the ServerSettings fallback schema from starry.js.
+- Added a generic BotRecord model with a unique namespace/record key, schema version, and revision counter.
+- Added an asynchronous Mongo repository with get, put, patch, remove, and list operations. Revision-checked writes reject stale updates; disconnected MongoDB produces an explicit error rather than silently writing elsewhere.
+- Added model-registry and disconnected-storage safety tests.
+
+**Still required:**
+- Run the tests in a disposable project environment with dependencies installed.
+- Add integration tests against a disposable MongoDB instance.
+- Migrate every consumer of the synchronous JSON store to the async repository.
+- Add startup readiness gating before making MongoDB authoritative.
 - Keep compatibility adapters while features are migrated; do not delete old files yet.
-- Add tests for model registration, shared-client access, and data operations.
 
 ### Stage 2 — Fresh database provisioning
 - Document required collections, indexes, uniqueness constraints, and retention rules.
