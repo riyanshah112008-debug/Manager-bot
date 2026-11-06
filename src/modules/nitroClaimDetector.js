@@ -4,7 +4,7 @@
 // Real-Time Discord Nitro Link Sniffing • Instant Claim Detection • Speed Metrics & Persistence
 // ==========================================
 const { EmbedBuilder, Events, PermissionFlagsBits, MessageFlags } = require('discord.js');
-const fetch = require('node-fetch');
+const fetch = globalThis.fetch;
 const NitroClaim = require('../models/NitroClaim');
 const config = require('../config');
 
