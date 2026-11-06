@@ -19,7 +19,7 @@ Fields:
 - `createdAt`: ISO timestamp
 - `acknowledgedAt`: Firestore timestamp, set by the phone only after SQLite commit
 
-The server adapter uses Firebase Admin SDK and a service account held only in the runtime secret `FIREBASE_SERVICE_ACCOUNT_JSON`. Admin SDK writes bypass Firestore client rules. Duplicate operation IDs are idempotent; conflicting reuse is rejected.
+The server adapter uses the Firestore REST API with a short-lived Google OAuth access token signed from a service account held only in the runtime secret `FIREBASE_SERVICE_ACCOUNT_JSON`. Service-account IAM access bypasses Firestore client rules. Duplicate operation IDs are idempotent; conflicting reuse (including a changed payload) is rejected.
 
 ## Client authorization
 
@@ -41,7 +41,7 @@ The phone must:
 2. Validate schema version and all fields.
 3. Apply the operation in a single SQLite transaction, recording `operationId` in the applied-operation table.
 4. Commit SQLite.
-5. Update only `status='acknowledged'` and `acknowledgedAt=server timestamp` in Firestore.
+5. Update only `status='acknowledged'` and `acknowledgedAt` (UTC timestamp) in Firestore.
 6. Treat duplicate delivery as success only when the operation ID is already recorded locally.
 
 If the process crashes before the local commit, the operation remains pending. If it crashes after commit but before acknowledgement, it will be delivered again and SQLite idempotency prevents duplicate application. Never acknowledge before commit.
