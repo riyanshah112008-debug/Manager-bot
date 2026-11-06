@@ -40,16 +40,11 @@ export default {
 
         const response = await fetch(proxyRequest);
 
-        // Add CORS and public accessibility headers
-        const responseHeaders = new Headers(response.headers);
-        responseHeaders.set('Access-Control-Allow-Origin', '*');
-        responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        responseHeaders.set('Access-Control-Allow-Headers', '*');
-
+        // Preserve upstream security headers; never inject wildcard CORS.
         return new Response(response.body, {
             status: response.status,
             statusText: response.statusText,
-            headers: responseHeaders
+            headers: response.headers
         });
     }
 };

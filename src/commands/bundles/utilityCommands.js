@@ -574,7 +574,7 @@ const components = createHelpComponents();
         usage: ',invite',
         async execute(ctx) {
             const clientId = ctx.client.user.id;
-            const link = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`;
+            const link = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=0&scope=bot%20applications.commands`;
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
@@ -1022,7 +1022,7 @@ const components = createHelpComponents();
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setLabel('🌐 Open Dashboard').setStyle(ButtonStyle.Link).setURL(webUrl),
-                new ButtonBuilder().setLabel('➕ Add Starry').setStyle(ButtonStyle.Link).setURL(`https://discord.com/oauth2/authorize?client_id=${ctx.client.user.id}&permissions=8&scope=bot%20applications.commands`)
+                new ButtonBuilder().setLabel('➕ Add Starry').setStyle(ButtonStyle.Link).setURL(`https://discord.com/oauth2/authorize?client_id=${ctx.client.user.id}&permissions=0&scope=bot%20applications.commands`)
             );
 
             return ctx.reply({ embeds: [embed], components: [row] });
