@@ -1,0 +1,29 @@
+name: Phone SQLite tests
+
+on:
+  pull_request:
+    paths:
+      - "phone-db/**"
+      - ".github/workflows/phone-db-tests.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "phone-db/**"
+      - ".github/workflows/phone-db-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-store:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run SQLite store tests
+        run: python -m unittest discover -s phone-db -p "test_*.py" -v
