@@ -983,58 +983,7 @@ const commands = [
         }
     },
 
-    // 16. EVAL (Bot Owner Only)
-    {
-        name: 'eval',
-        aliases: ['e'],
-        category: 'Systems',
-        description: 'Execute arbitrary JavaScript code on the bot runtime (Bot Owners Only).',
-        usage: ',eval <code>',
-        async execute(ctx) {
-            if (!config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ **Access Denied**: Developer-only command.');
-            }
-
-            const code = ctx.args.join(' ');
-            if (!code) return ctx.reply('❌ Please provide JavaScript code to evaluate.');
-
-            const start = process.hrtime.bigint();
-            let result;
-            let isError = false;
-
-            try {
-                result = await eval(code);
-                if (typeof result !== 'string') {
-                    result = require('util').inspect(result, { depth: 1 });
-                }
-            } catch (err) {
-                isError = true;
-                result = err.stack || err.toString();
-            }
-
-            const end = process.hrtime.bigint();
-            const timeTaken = `${(Number(end - start) / 1e6).toFixed(2)}ms`;
-
-            // Clean sensitive secrets from output
-            if (process.env.DISCORD_TOKEN) result = result.replace(new RegExp(process.env.DISCORD_TOKEN, 'g'), '[SECRET_DISCORD_TOKEN]');
-            if (process.env.MONGO_URI) result = result.replace(new RegExp(process.env.MONGO_URI, 'g'), '[SECRET_MONGO_URI]');
-
-            if (result.length > 1900) result = result.substring(0, 1900) + '... (truncated)';
-
-            const embed = new EmbedBuilder()
-                .setColor(isError ? config.EMBED_COLORS.DANGER : config.EMBED_COLORS.SUCCESS)
-                .setTitle(isError ? '❌ Evaluation Error' : '✅ Evaluation Output')
-                .addFields(
-                    { name: '📥 Input', value: `\`\`\`js\n${code.substring(0, 500)}\n\`\`\`` },
-                    { name: '📤 Output', value: `\`\`\`js\n${result}\n\`\`\`` },
-                    { name: '⏱️ Execution Time', value: `\`${timeTaken}\``, inline: true }
-                )
-                .setFooter({ text: 'Starry Developer Engine' })
-                .setTimestamp();
-
-            return ctx.reply({ embeds: [embed] });
-        }
-    },
+    // Arbitrary JavaScript evaluation was removed for runtime safety.
 
     // 17. BOTSERVERS (Bot Owner Only)
     {
