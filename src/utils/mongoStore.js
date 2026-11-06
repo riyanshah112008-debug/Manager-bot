@@ -63,6 +63,7 @@ async function get(namespace, recordId) {
     assertKey(namespace, recordId);
     assertConnected();
     const document = await BotRecord.findOne({ namespace, recordId }).lean();
+    if (document?.data?._deleted === true) return null;
     return toResult(document);
 }
 
@@ -132,22 +133,15 @@ async function patch(namespace, recordId, changes, options = {}) {
 
 async function remove(namespace, recordId, options = {}) {
     assertKey(namespace, recordId);
-    assertConnected();
-    const filter = { namespace, recordId };
-
-    if (options.expectedRevision !== undefined) {
-        if (!Number.isInteger(options.expectedRevision) || options.expectedRevision < 0) {
-            throw new TypeError('expectedRevision must be a non-negative integer');
-        }
-        filter.revision = options.expectedRevision;
+    const current = await get(namespace, recordId);
+    if (!current) return false;
+    const expectedRevision = options.expectedRevision === undefined ? current.revision : options.expectedRevision;
+    if (current.revision !== expectedRevision) {
+        throw new StorageError('Record revision changed; reload before deleting.', 'REVISION_CONFLICT');
     }
-
-    const result = await BotRecord.deleteOne(filter);
-    if (options.expectedRevision !== undefined && result.deletedCount === 0) {
-        const exists = await BotRecord.exists({ namespace, recordId });
-        if (exists) throw new StorageError('Record revision changed; reload before deleting.', 'REVISION_CONFLICT');
-    }
-    return result.deletedCount === 1;
+    // Keep a tombstone so offline replicas receive deletions after reconnecting.
+    await put(namespace, recordId, { _deleted: true }, { expectedRevision });
+    return true;
 }
 
 async function list(namespace, options = {}) {
@@ -160,7 +154,7 @@ async function list(namespace, options = {}) {
         throw new RangeError('limit must be an integer between 1 and 5000');
     }
 
-    const query = BotRecord.find({ namespace }).sort({ recordId: 1 }).limit(limit);
+    const query = BotRecord.find({ namespace, 'data._deleted': { $ne: true } }).sort({ recordId: 1 }).limit(limit);
     if (options.afterRecordId) query.where('recordId').gt(String(options.afterRecordId));
     const documents = await query.lean();
     return documents.map(toResult);
