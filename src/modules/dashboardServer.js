@@ -67,7 +67,7 @@ function setupDashboardRoutes(app, client) {
         process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app',
         'https://manager-bot-96c07.web.app',
         'https://manager-bot-96c07.firebaseapp.com'
-    ].map(origin => origin.trim().replace(/\\/$/, '')).filter(Boolean));
+    ].map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean));
 
     app.use((req, res, next) => {
         const origin = req.headers.origin;
