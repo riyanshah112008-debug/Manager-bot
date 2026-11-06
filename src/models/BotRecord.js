@@ -7,6 +7,7 @@ const botRecordSchema = new mongoose.Schema({
     recordId: { type: String, required: true, trim: true },
     schemaVersion: { type: Number, required: true, default: 1 },
     revision: { type: Number, required: true, default: 0 },
+    relayPublishedRevision: { type: Number, required: true, default: 0 },
     data: { type: mongoose.Schema.Types.Mixed, required: true, default: {} }
 }, {
     timestamps: true,
