@@ -117,7 +117,6 @@ async function executeServerFullBackup(guild) {
             id: c.id,
             parentId: c.parentId,
             rawType: c.type,
-            nsfw: c.nsfw || false,
             rateLimitPerUser: c.rateLimitPerUser || 0,
             userLimit: c.userLimit || 0,
             overwrites: getOverwrites(c)

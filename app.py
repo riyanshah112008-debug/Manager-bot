@@ -1,10 +1,20 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import hmac
+import os
 import requests
 import time
 
 app = Flask(__name__)
-CORS(app)
+allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "https://manager-bot-96c07.web.app,https://manager-bot-96c07.firebaseapp.com"
+    ).split(",")
+    if origin.strip()
+]
+CORS(app, origins=allowed_origins)
 
 DISCORD_CLIENT_ID = ''
 DISCORD_CLIENT_SECRET = ''
@@ -21,7 +31,7 @@ MANAGE_GUILD_PERMISSION = 0x20
 class DB:
     # 临时内存数据库 (模拟数据库表结构)
     _users = {}  # { user_id: { id, username, avatar, last_login } }
-    _guilds = {}  # { guild_id: { id, name, icon, description, tags, language, is_public, is_nsfw, last_bump_time, next_bump_time } }
+    _guilds = {}  # { guild_id: { id, name, icon, description, tags, language, is_public, last_bump_time, next_bump_time } }
 
     @classmethod
     def save_user(cls, user_data):
@@ -45,7 +55,6 @@ class DB:
             "tags": [],
             "language": "en",
             "is_public": True,
-            "is_nsfw": False,
             "last_bump_time": 0,
             "next_bump_time": 0
         })
@@ -222,10 +231,19 @@ def get_user_guilds():
 @app.route('/api/server/bump', methods=['POST'])
 def trigger_bump():
     """触发 Bump 动作并更新 last_bump_time 与 next_bump_time 到数据库"""
-    data = request.get_json()
+    expected_secret = os.getenv('BUMP_API_SECRET', '')
+    if len(expected_secret) < 32:
+        app.logger.error('Bump API disabled: BUMP_API_SECRET is not configured securely.')
+        return jsonify({'error': 'Bump API is temporarily unavailable.'}), 503
+
+    supplied_secret = request.headers.get('X-Bump-Secret', '')
+    if not hmac.compare_digest(supplied_secret, expected_secret):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json(silent=True) or {}
     guild_id = data.get('guild_id')
-    if not guild_id:
-        return jsonify({'error': 'Guild ID is required'}), 400
+    if not isinstance(guild_id, str) or not guild_id.isdigit() or not (17 <= len(guild_id) <= 20):
+        return jsonify({'error': 'A valid Discord guild ID is required'}), 400
 
     now_ms = int(time.time() * 1000)
     cooldown_ms = 2 * 60 * 60 * 1000  # 2小时冷却
@@ -258,21 +276,16 @@ def get_recently_bumped():
 
 @app.route('/api/servers', methods=['GET'])
 def get_all_servers():
-    """全站服务器查询接口：支持分页、排序、搜索与 NSFW 过滤"""
+    """全站服务器查询接口：支持分页、排序与搜索"""
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 12))
         sort_by = request.args.get('sort', 'bumped')
-        allow_nsfw = request.args.get('nsfw', '0') == '1'
         query = request.args.get('q', '').strip().lower()
 
         # 1. 从 DB 读取公开服务器
         all_guilds = list(DB._guilds.values())
         filtered = [g for g in all_guilds if g.get('is_public', True)]
-
-        # 2. NSFW 过滤
-        if not allow_nsfw:
-            filtered = [g for g in filtered if not g.get('is_nsfw', False)]
 
         # 3. 搜索关键词匹配 (匹配名称或标签)
         if query:

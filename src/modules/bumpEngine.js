@@ -27,7 +27,6 @@ const serverListingSchema = new mongoose.Schema({
     tags: { type: [String], default: ['community', 'discord'] },
     bumps: { type: Number, default: 0 },
     lastBump: { type: Date, default: null },
-    isNsfw: { type: Boolean, default: false },
     isListed: { type: Boolean, default: true }
 });
 
@@ -133,10 +132,8 @@ function setupWebDirectoryAPI(app) {
 
     app.get('/api/v1/servers', async (req, res) => {
         try {
-            const { q, sort = 'bumped', page = 1, limit = 12, nsfw = 0 } = req.query;
+            const { q, sort = 'bumped', page = 1, limit = 12 } = req.query;
             const query = { isListed: true };
-
-            if (nsfw === '0') query.isNsfw = false;
             if (q) {
                 query.$or = [
                     { name: { $regex: q, $options: 'i' } },

@@ -10,14 +10,13 @@ const state = {
     totalItems: 0,      // 总服务器数量
     totalPages: 0,      // 动态计算出的总页数
     sortBy: 'bumped',   // 默认排序方式: bumped | newest | members
-    allowNsfw: false,   // 默认关闭 NSFW
     searchQuery: ''     // 搜索关键词
 };
 
 // DOM 元素引用
 let searchInput, searchHighlight, clearSearchBtn, recommendContainer;
 let serverGrid, paginationContainer, totalServerCount;
-let sortSelect, nsfwToggle;
+let sortSelect;
 
 // 防抖定时器
 let searchDebounceTimer = null;
@@ -37,7 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
     totalServerCount = document.getElementById('totalServerCount');
 
     sortSelect = document.getElementById('sortSelect');
-    nsfwToggle = document.getElementById('nsfwToggle');
 
     // --- 初始化搜索框与 URL 参数 ---
     if (searchInput) {
@@ -151,13 +149,6 @@ function initFilterEvents() {
             loadServerData(1);
         });
     }
-
-    if (nsfwToggle) {
-        nsfwToggle.addEventListener('change', (e) => {
-            state.allowNsfw = e.target.checked;
-            loadServerData(1);
-        });
-    }
 }
 
 // =========================================================================
@@ -179,7 +170,6 @@ async function loadServerData(page = 1) {
             page: page,
             limit: state.pageSize,
             sort: state.sortBy,
-            nsfw: state.allowNsfw ? 1 : 0,
             q: state.searchQuery
         });
 
@@ -192,7 +182,7 @@ async function loadServerData(page = 1) {
             serversList = Array.isArray(result.list) ? result.list : [];
         } else {
             console.warn(`API 请求未成功 [Status: ${response.status}]，尝试使用本地回退方案`);
-            const mockData = generateMockServers(45, page, state.pageSize, state.sortBy, state.allowNsfw, state.searchQuery);
+            const mockData = generateMockServers(45, page, state.pageSize, state.sortBy, state.searchQuery);
             totalItems = mockData.total;
             serversList = mockData.list;
         }
@@ -209,7 +199,7 @@ async function loadServerData(page = 1) {
         console.error("加载服务器数据出错，降级显示保底数据:", error);
 
         // 网络请求失败时的保底模拟
-        const mockData = generateMockServers(45, page, state.pageSize, state.sortBy, state.allowNsfw, state.searchQuery);
+        const mockData = generateMockServers(45, page, state.pageSize, state.sortBy, state.searchQuery);
         if (totalServerCount) totalServerCount.textContent = mockData.total.toLocaleString();
         renderPagination(mockData.total, page, state.pageSize);
         renderServerCards(mockData.list);
