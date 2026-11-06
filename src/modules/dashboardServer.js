@@ -478,18 +478,52 @@ function setupDashboardRoutes(app, client) {
             if (typeof userId !== 'string' || !/^\\d{17,20}$/.test(userId)) {
                 return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
             }
+            if (type === 'test') {
+                return res.status(200).json({ success: true, test: true, message: 'Top.gg test webhook received; no reward issued.' });
+            }
+            if (type !== 'upvote') {
+                return res.status(400).json({ success: false, error: 'Unsupported vote event type.' });
+            }
 
-            const rewardCred = isWeekend ? 1000 : 500;
-            const rewardXp = isWeekend ? 1000 : 500;
+            const weekendVote = isWeekend === true;
+            const rewardCred = weekendVote ? 1000 : 500;
+            const rewardXp = weekendVote ? 1000 : 500;
+            const now = new Date();
+            const eligibleBefore = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
-            let userDoc = await User.findOne({ userId });
-            if (!userDoc) userDoc = new User({ userId, guildId: 'global' });
+            // Ensure a dedicated global reward record exists.
+            await User.findOneAndUpdate(
+                { userId, guildId: 'global' },
+                { $setOnInsert: { userId, guildId: 'global' } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
 
-            userDoc.credits = (userDoc.credits || 0) + rewardCred;
-            userDoc.xp = (userDoc.xp || 0) + rewardXp;
-            await userDoc.save();
+            // Atomic 12-hour claim gate prevents replayed/duplicate webhook rewards.
+            const userDoc = await User.findOneAndUpdate(
+                {
+                    userId,
+                    guildId: 'global',
+                    $or: [
+                        { lastTopggVoteAt: null },
+                        { lastTopggVoteAt: { $lte: eligibleBefore } }
+                    ]
+                },
+                {
+                    $inc: { credits: rewardCred, xp: rewardXp },
+                    $set: { lastTopggVoteAt: now }
+                },
+                { new: true }
+            );
 
-            console.log(`⭐ [Top.gg Upvote] User ${userId} voted! Awarded +${rewardCred} Credits & +${rewardXp} XP (${isWeekend ? 'Weekend 2x' : 'Standard'}).`);
+            if (!userDoc) {
+                return res.status(200).json({
+                    success: true,
+                    duplicate: true,
+                    message: 'This user has already received vote rewards within the last 12 hours.'
+                });
+            }
+
+            console.log(`⭐ [Top.gg Upvote] User ${userId} voted! Awarded +${rewardCred} Credits & +${rewardXp} XP (${weekendVote ? 'Weekend 2x' : 'Standard'}).`);
 
             // Attempt to DM user if accessible
             try {
