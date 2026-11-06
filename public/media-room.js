@@ -115,6 +115,12 @@ window.onYouTubeIframeAPIReady = () => {
   });
 };
 
+// Register the callback before loading the YouTube IFrame API.
+const youtubeApiScript = document.createElement('script');
+youtubeApiScript.src = 'https://www.youtube.com/iframe_api';
+youtubeApiScript.async = true;
+document.head.appendChild(youtubeApiScript);
+
 async function start() {
   try {
     const config = await fetch('/api/media/config').then(r => r.json());
