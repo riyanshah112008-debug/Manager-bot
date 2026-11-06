@@ -61,13 +61,25 @@ function setupDashboardRoutes(app, client) {
 
     app.use('/api/', apiLimiter);
 
-    // CORS & Bypass Tunnel Reminder header support
+    // Restrict cross-origin dashboard access to explicitly configured frontends.
+    const dashboardOrigins = new Set([
+        'https://manager-bot-96c07.web.app',
+        'https://manager-bot-96c07.firebaseapp.com',
+        ...(process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '').split(',').map(value => value.trim()).filter(Boolean)
+    ].map(value => value.replace(/\/$/, '')));
     app.use((req, res, next) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        const origin = req.get('Origin');
+        if (origin && dashboardOrigins.has(origin.replace(/\/$/, ''))) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Vary', 'Origin');
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, bypass-tunnel-reminder');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('bypass-tunnel-reminder', 'true');
-        if (req.method === 'OPTIONS') return res.sendStatus(200);
+        if (req.method === 'OPTIONS') return res.sendStatus(origin && !dashboardOrigins.has(origin.replace(/\/$/, '')) ? 403 : 204);
         next();
     });
 
@@ -459,10 +471,17 @@ function setupDashboardRoutes(app, client) {
 
     app.post(['/api/topgg/webhook', '/api/vote/webhook'], async (req, res) => {
         try {
-            const authHeader = req.headers.authorization;
+            const authHeader = req.headers.authorization || '';
             const expectedAuth = process.env.TOPGG_WEBHOOK_AUTH || process.env.TOPGG_TOKEN;
 
-            if (expectedAuth && authHeader !== expectedAuth) {
+            // Fail closed: never issue vote rewards until a webhook secret is configured.
+            if (!expectedAuth) {
+                console.error('Top.gg webhook rejected: TOPGG_WEBHOOK_AUTH is not configured.');
+                return res.status(503).json({ success: false, error: 'Vote rewards are temporarily unavailable.' });
+            }
+            const supplied = Buffer.from(authHeader);
+            const expected = Buffer.from(expectedAuth);
+            if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
                 return res.status(401).json({ success: false, error: 'Unauthorized webhook request.' });
             }
 
