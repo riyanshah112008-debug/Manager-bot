@@ -17,7 +17,7 @@ const state = {
 // DOM 元素引用
 let searchInput, searchHighlight, clearSearchBtn, recommendContainer;
 let serverGrid, paginationContainer, totalServerCount;
-let sortSelect, nsfwToggle;
+let sortSelect;
 
 // 防抖定时器
 let searchDebounceTimer = null;
@@ -192,7 +192,7 @@ async function loadServerData(page = 1) {
             serversList = Array.isArray(result.list) ? result.list : [];
         } else {
             console.warn(`API 请求未成功 [Status: ${response.status}]，尝试使用本地回退方案`);
-            const mockData = generateMockServers(45, page, state.pageSize, state.sortBy, state.allowNsfw, state.searchQuery);
+            const mockData = generateMockServers(45, page, state.pageSize, state.sortBy, state.searchQuery);
             totalItems = mockData.total;
             serversList = mockData.list;
         }
