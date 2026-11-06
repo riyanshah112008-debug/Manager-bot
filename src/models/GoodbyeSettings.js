@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const goodbyeSettingsSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true, index: true },
+    guildId: { type: String, required: true, unique: true },
     channelId: { type: String, required: true },
     enabled: { type: Boolean, default: true },
     title: { type: String, default: '🥀 FAREWELL FROM {server} 🥀' },
@@ -11,6 +11,6 @@ const goodbyeSettingsSchema = new mongoose.Schema({
     thumbnail: { type: String, default: 'avatar' },
     footer: { type: String, default: 'We are now down to {count} members.' },
     pingContent: { type: String, default: '👋 Farewell, **{username}**.' }
-}, { timestamps: true });
+});
 
 module.exports = mongoose.models.GoodbyeSettings || mongoose.model('GoodbyeSettings', goodbyeSettingsSchema);
