@@ -21,6 +21,8 @@ The Media Room is a Discord Embedded Activity launched with `/media-room`. It pr
 5. Enable the Activity on the platforms you intend to support.
 6. Keep the existing bot token private. Set the application OAuth client secret only as the backend environment variable `DISCORD_CLIENT_SECRET` (or `CLIENT_SECRET`); never put it in frontend files or GitHub.
 
+If the Activity is served from Firebase Hosting and the API is served by a separate Node backend, add a second URL Mapping with prefix \`/api\` targeting the backend host (hostname only, no scheme or path). The more-specific \`/api\` mapping routes OAuth and room requests to the backend; the \`/\` mapping serves the static Activity.
+
 The application ID is read from `CLIENT_ID` / `APPLICATION_ID`, with the current Manager-bot application ID as fallback.
 
 ## Backend environment
