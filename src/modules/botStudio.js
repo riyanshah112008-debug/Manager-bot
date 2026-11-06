@@ -236,7 +236,7 @@ module.exports = {
 function initStarryGateway(client) {
     console.log('🌌 [Starry Studio Link] Read-only diagnostics gateway active.');
 
-    client.on(Events.MessageCreate, async (message) => {
+    client.on('messageCreate', async (message) => {
         if (!message || message.author?.bot || !process.env.OWNER_ID) return;
         if (message.author.id !== process.env.OWNER_ID) return;
 
