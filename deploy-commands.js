@@ -154,6 +154,7 @@ const commands = [
     { name: 'djpanel', description: '🎛️ Post the ultimate interactive Starry DJ & Voice Control Hub', default_member_permissions: '16' },
 
     // MUSIC COMMANDS
+    { name: 'media-room', description: '🎬 Launch the shared Manager Media Room Activity in your voice channel' },
     { 
         name: 'play', 
         description: '🎵 Play high-fidelity audio from SoundCloud, Spotify, or YouTube', 
