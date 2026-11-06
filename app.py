@@ -6,12 +6,14 @@ import os
 import hmac
 
 app = Flask(__name__)
-CORS(app)
+allowed_origins = [origin.strip() for origin in os.getenv('FRONTEND_ORIGINS', '').split(',') if origin.strip()]
+CORS(app, origins=allowed_origins)
 
-DISCORD_CLIENT_ID = ''
-DISCORD_CLIENT_SECRET = ''
-DISCORD_BOT_TOKEN = ''
-REDIRECT_URI = ''
+DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID', '')
+DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET', '')
+DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN', '')
+REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', '')
+BUMP_API_SECRET = os.getenv('BUMP_API_SECRET', '')
 
 ADMINISTRATOR_PERMISSION = 0x8
 MANAGE_GUILD_PERMISSION = 0x20
@@ -23,7 +25,7 @@ MANAGE_GUILD_PERMISSION = 0x20
 class DB:
     # 临时内存数据库 (模拟数据库表结构)
     _users = {}  # { user_id: { id, username, avatar, last_login } }
-    _guilds = {}  # { guild_id: { id, name, icon, description, tags, language, is_public, is_nsfw, last_bump_time, next_bump_time } }
+    _guilds = {}  # { guild_id: { id, name, icon, description, tags, language, is_public, last_bump_time, next_bump_time } }
 
     @classmethod
     def save_user(cls, user_data):
@@ -47,8 +49,7 @@ class DB:
             "tags": [],
             "language": "en",
             "is_public": True,
-            "is_nsfw": False,
-            "last_bump_time": 0,
+                        "last_bump_time": 0,
             "next_bump_time": 0
         })
 
@@ -223,8 +224,16 @@ def get_user_guilds():
 
 @app.route('/api/server/bump', methods=['POST'])
 def trigger_bump():
-    """触发 Bump 动作并更新 last_bump_time 与 next_bump_time 到数据库"""
-    data = request.get_json()
+    """Update bump metadata only for trusted callers."""
+    if not BUMP_API_SECRET:
+        return jsonify({'error': 'Bump endpoint is not configured'}), 503
+    supplied = request.headers.get('Authorization', '')
+    expected = f'Bearer {BUMP_API_SECRET}'
+    if not hmac.compare_digest(supplied, expected):
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
     guild_id = data.get('guild_id')
     if not guild_id:
         return jsonify({'error': 'Guild ID is required'}), 400
@@ -265,16 +274,11 @@ def get_all_servers():
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 12))
         sort_by = request.args.get('sort', 'bumped')
-        allow_nsfw = request.args.get('nsfw', '0') == '1'
         query = request.args.get('q', '').strip().lower()
 
         # 1. 从 DB 读取公开服务器
         all_guilds = list(DB._guilds.values())
         filtered = [g for g in all_guilds if g.get('is_public', True)]
-
-        # 2. NSFW 过滤
-        if not allow_nsfw:
-            filtered = [g for g in filtered if not g.get('is_nsfw', False)]
 
         # 3. 搜索关键词匹配 (匹配名称或标签)
         if query:
