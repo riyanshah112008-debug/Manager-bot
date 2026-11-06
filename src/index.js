@@ -949,51 +949,53 @@ async function startBot(overrideToken, overrideMongo) {
             console.log(`✨ Discord Token Verified! Bot identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'} (ID: ${preflight.bot.id})`);
         }
 
-    if (process.env.MONGO_URI) {
-        try {
-            await mongoose.connect(process.env.MONGO_URI, {
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                maxPoolSize: 10,
-                heartbeatFrequencyMS: 10000
-            });
-            console.log('🍃 Successfully connected to MongoDB Cloud!');
-
-            const { initLanguageCache } = require('./utils/i18n');
-            await initLanguageCache(client).catch(() => {});
-        } catch (mongoInitErr) {
-            console.warn(`⚠️ [MongoDB Boot] Initial connect failed (${mongoInitErr.message}). Continuing bot startup with local fallbacks; reconnecting in background...`);
-            if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
-            if (!mongoReconnectInterval) {
-                mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
-            }
-        }
-
-        mongoose.connection.on('disconnected', () => {
-            console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
-            if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
-            if (!mongoReconnectInterval) {
-                mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
-            }
-            attemptMongoReconnect();
-        });
-        mongoose.connection.on('reconnected', () => {
-            console.log('🍃 MongoDB reconnected successfully.');
-            mongoDisconnectedSince = null;
-            if (mongoReconnectInterval) {
-                clearInterval(mongoReconnectInterval);
-                mongoReconnectInterval = null;
-            }
-            // Refresh language cache after reconnection
-            const { initLanguageCache } = require('./utils/i18n');
-            initLanguageCache(client).catch(() => {});
-        });
-        mongoose.connection.on('error', (err) => {
-            console.error('❌ MongoDB Connection Error:', err.message);
-        });
-    } else {
-        console.warn('⚠️ [MongoDB Boot] MONGO_URI is not set. Bot will operate in high-resilience mode with local/in-memory state.');
+    if (!process.env.MONGO_URI) {
+        throw new Error('MONGO_URI is required. Bot login is blocked until the authoritative MongoDB database is configured.');
     }
+
+    try {
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 10000,
+            socketTimeoutMS: 45000,
+            maxPoolSize: 20,
+            heartbeatFrequencyMS: 10000,
+            autoIndex: true
+        });
+        // Explicitly provision the generic record key index before any feature can write.
+        await require('./models/BotRecord').createIndexes();
+        console.log('🍃 Connected to authoritative MongoDB and verified BotRecord indexes.');
+
+        const { initLanguageCache } = require('./utils/i18n');
+        await initLanguageCache(client).catch(() => {});
+    } catch (mongoInitErr) {
+        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+        if (!mongoReconnectInterval) {
+            mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+        }
+        throw new Error('MongoDB startup gate failed; Discord clients were not started: ' + mongoInitErr.message);
+    }
+
+    mongoose.connection.on('disconnected', () => {
+        console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
+        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+        if (!mongoReconnectInterval) {
+            mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+        }
+        attemptMongoReconnect();
+    });
+    mongoose.connection.on('reconnected', () => {
+        console.log('🍃 MongoDB reconnected successfully.');
+        mongoDisconnectedSince = null;
+        if (mongoReconnectInterval) {
+            clearInterval(mongoReconnectInterval);
+            mongoReconnectInterval = null;
+        }
+        const { initLanguageCache } = require('./utils/i18n');
+        initLanguageCache(client).catch(() => {});
+    });
+    mongoose.connection.on('error', (err) => {
+        console.error('❌ MongoDB Connection Error:', err.message);
+    });
 
     try {
         const bumpModule = require('./modules/bumpEngine.js');
