@@ -104,7 +104,21 @@ try {
 const app = express();
 const port = process.env.PORT || 10000;
 
-app.use(cors({ origin: '*' }));
+const allowedFrontendOrigins = new Set([
+    ...(process.env.CORS_ALLOWED_ORIGINS || '').split(','),
+    process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app',
+    'https://manager-bot-96c07.web.app',
+    'https://manager-bot-96c07.firebaseapp.com'
+].map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean));
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedFrontendOrigins.has(origin)) return callback(null, true);
+        return callback(null, false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'bypass-tunnel-reminder'],
+    optionsSuccessStatus: 204
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
 

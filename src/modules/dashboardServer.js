@@ -61,13 +61,24 @@ function setupDashboardRoutes(app, client) {
 
     app.use('/api/', apiLimiter);
 
-    // CORS & Bypass Tunnel Reminder header support
+    // Restrict cross-origin dashboard access to explicitly configured frontend origins.
+    const allowedOrigins = new Set([
+        ...(process.env.CORS_ALLOWED_ORIGINS || '').split(','),
+        process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app',
+        'https://manager-bot-96c07.web.app',
+        'https://manager-bot-96c07.firebaseapp.com'
+    ].map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean));
+
     app.use((req, res, next) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        const origin = req.headers.origin;
+        if (origin && allowedOrigins.has(origin)) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Vary', 'Origin');
+        }
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, bypass-tunnel-reminder');
         res.setHeader('bypass-tunnel-reminder', 'true');
-        if (req.method === 'OPTIONS') return res.sendStatus(200);
+        if (req.method === 'OPTIONS') return res.sendStatus(origin && !allowedOrigins.has(origin) ? 403 : 204);
         next();
     });
 
@@ -76,7 +87,7 @@ function setupDashboardRoutes(app, client) {
         const authHeader = req.headers.authorization;
         let token = null;
         if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
-        else if (req.query.session) token = String(req.query.session);
+        // Session credentials are accepted only in the Authorization header; URL tokens leak into history and logs.
         if (!token || token.length > 4096) return null;
         const now = Date.now();
         const tokenHash = hashSessionToken(token);
@@ -379,7 +390,7 @@ function setupDashboardRoutes(app, client) {
             });
             userSessions.set(sessionToken, sessionData);
             res.set('Cache-Control', 'no-store');
-            return res.redirect(`${frontendBase}/dashboard.html?session=${encodeURIComponent(sessionToken)}`);
+            return res.redirect(`${frontendBase}/dashboard.html#session=${encodeURIComponent(sessionToken)}`);
         } catch (error) {
             console.error('Discord OAuth callback failed:', error);
             const storageUnavailable = mongoose.connection.readyState !== 1;
