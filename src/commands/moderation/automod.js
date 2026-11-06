@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
-const db = require("../../utils/database");
 const config = require("../../config");
 const automodHelper = require("../../utils/automodHelper");
+const ServerSettings = require("../../models/ServerSettings");
+const mongoose = require("mongoose");
 
 module.exports = {
   name: "automod",
@@ -51,8 +52,14 @@ module.exports = {
   async execute(context, args, client) {
     const isSlash = typeof context.isChatInputCommand === "function" && context.isChatInputCommand();
     const guild = context.guild;
-    const settings = db.getGuildSettings(guild.id);
-    const automod = settings.automod || {};
+    if (mongoose.connection.readyState !== 1) {
+      return context.reply({ content: "❌ Database is unavailable. AutoMod settings were not changed." });
+    }
+    const settings = await ServerSettings.findOne({ guildId: guild.id }).select("automod").lean();
+    const automod = {
+      enabled: true, antiInvite: true, antiLink: false, antiSpam: true,
+      antiMassMention: true, mentionLimit: 5, ...(settings?.automod || {})
+    };
 
     let subcmd, enabledVal, mentionLimit;
 
@@ -80,7 +87,7 @@ module.exports = {
       }
       await automodHelper.setGuildStatus(guild.id, shouldEnable);
       automod.enabled = shouldEnable;
-      db.updateGuildSettings(guild.id, { automod });
+      await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { $set: { automod } }, { upsert: true, new: true, runValidators: true });
       const overrides = await automodHelper.listGuildOverrides(guild.id);
       const embed = automodHelper.buildServerAutomodEmbed(guild, shouldEnable, overrides);
       const buttons = automodHelper.createServerAutomodButtons(context.channel?.id || "", shouldEnable);
@@ -110,19 +117,19 @@ module.exports = {
 
     if (subcmd === "invites" || subcmd === "invite") {
       automod.antiInvite = enabledVal !== undefined ? enabledVal : !automod.antiInvite;
-      db.updateGuildSettings(guild.id, { automod });
+      await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { $set: { automod } }, { upsert: true, new: true, runValidators: true });
       return context.reply({ content: `✅ Anti-Invite filter is now **${automod.antiInvite ? "ENABLED" : "DISABLED"}**.` });
     }
 
     if (subcmd === "links" || subcmd === "link") {
       automod.antiLink = enabledVal !== undefined ? enabledVal : !automod.antiLink;
-      db.updateGuildSettings(guild.id, { automod });
+      await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { $set: { automod } }, { upsert: true, new: true, runValidators: true });
       return context.reply({ content: `✅ Anti-Link filter is now **${automod.antiLink ? "ENABLED" : "DISABLED"}**.` });
     }
 
     if (subcmd === "spam") {
       automod.antiSpam = enabledVal !== undefined ? enabledVal : !automod.antiSpam;
-      db.updateGuildSettings(guild.id, { automod });
+      await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { $set: { automod } }, { upsert: true, new: true, runValidators: true });
       return context.reply({ content: `✅ Anti-Spam rate limiting is now **${automod.antiSpam ? "ENABLED" : "DISABLED"}**.` });
     }
 
@@ -131,7 +138,7 @@ module.exports = {
       if (mentionLimit && mentionLimit >= 3 && mentionLimit <= 15) {
         automod.mentionLimit = mentionLimit;
       }
-      db.updateGuildSettings(guild.id, { automod });
+      await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { $set: { automod } }, { upsert: true, new: true, runValidators: true });
       return context.reply({
         content: `✅ Anti-Mass-Mention is now **${automod.antiMassMention ? "ENABLED" : "DISABLED"}** (Limit: ${automod.mentionLimit || 5} mentions).`,
       });
