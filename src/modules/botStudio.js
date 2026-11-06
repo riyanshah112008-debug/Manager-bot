@@ -754,7 +754,7 @@ async function pushBotToGitHub(workspacePath, repoUrl, pat, botName) {
         throw new Error('A valid GitHub Personal Access Token is required.');
     }
 
-    const safePublicUrl = \`https://github.com/\${owner}/\${repo}.git\`;
+    const safePublicUrl = `https://github.com/${owner}/${repo}.git`;
     const runGit = (args, options = {}) => child_process.execFileSync('git', args, {
         cwd: workspacePath,
         stdio: 'pipe',
@@ -771,18 +771,18 @@ async function pushBotToGitHub(workspacePath, repoUrl, pat, botName) {
 
     // Supply the PAT through a child-process-only Git config environment value.
     // It is never interpolated into a shell command or written into the remote URL.
-    const authorization = Buffer.from(\`x-access-token:\${cleanPat}\`).toString('base64');
+    const authorization = Buffer.from(`x-access-token:${cleanPat}`).toString('base64');
     const gitEnv = {
         ...process.env,
         GIT_TERMINAL_PROMPT: '0',
         GIT_CONFIG_COUNT: '1',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_0: \`AUTHORIZATION: basic \${authorization}\`
+        GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${authorization}`
     };
     runGit(['push', '-u', 'origin', 'main'], { env: gitEnv });
 
     return {
-        repoUrl: \`https://github.com/\${owner}/\${repo}\`,
+        repoUrl: `https://github.com/${owner}/${repo}`,
         owner,
         repo
     };
