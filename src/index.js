@@ -109,7 +109,7 @@ const allowedFrontendOrigins = new Set([
     process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app',
     'https://manager-bot-96c07.web.app',
     'https://manager-bot-96c07.firebaseapp.com'
-].map(origin => origin.trim().replace(/\\/$/, '')).filter(Boolean));
+].map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean));
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin || allowedFrontendOrigins.has(origin)) return callback(null, true);
