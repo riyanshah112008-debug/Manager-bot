@@ -812,6 +812,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Giveaway', fn: () => require('./modules/giveaway.js')(client, app) },
     { name: 'Counting Game', fn: () => require('./modules/count.js')(client, app) },
     { name: 'Advanced Mod & Security', fn: () => require('./modules/advancedMod.js')(client, app) },
+    { name: 'Anti-Nuke Enforcement', fn: () => require('./modules/antiNuke.js')(client, app) },
     { name: 'Interactive Mod Panel', fn: () => require('./modules/modPanel.js')(client, app) },
     { name: 'Reputation System', fn: () => require('./modules/rep.js')(client, app) },
     { name: 'Voice Channel Manager', fn: () => require('./modules/voiceManager.js')(client, app) },
