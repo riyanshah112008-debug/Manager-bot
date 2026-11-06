@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
     credits: { type: Number, default: 0 },
+    lastTopggVoteAt: { type: Date, default: null },
     prestige: { type: Number, default: 0 },
     // NEW INVENTORY & PET SYSTEM
     inventory: { type: Array, default: [] },
