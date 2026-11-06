@@ -133,10 +133,15 @@ router.post('/rooms/:roomId', express.json(), verifyDiscordToken, (req, res) => 
         const title = String(req.body?.title || 'YouTube video').trim().slice(0, 120) || 'YouTube video';
         if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return res.status(400).json({ error: 'Please use a valid YouTube video URL.' });
         if (room.queue.length >= MAX_QUEUE) return res.status(400).json({ error: 'The shared queue is full (50 items).' });
+        const wasEmpty = room.queue.length === 0;
         room.queue.push({ videoId, title, addedBy: req.mediaUser.username });
-        if (room.index < 0) room.index = 0;
-        room.position = 0;
-        room.playing = false;
+        if (room.index < 0) {
+            room.index = 0;
+            room.position = 0;
+            room.playing = false;
+        } else if (wasEmpty) {
+            room.index = 0;
+        }
     } else if (action === 'play') {
         if (room.index < 0 || !room.queue[room.index]) return res.status(409).json({ error: 'Add a video before pressing play.' });
         room.playing = true;
