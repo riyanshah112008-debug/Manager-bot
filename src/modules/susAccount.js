@@ -1,28 +1,22 @@
 const { EmbedBuilder, PermissionsBitField, AuditLogEvent } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-const storageFile = path.join(__dirname, 'sus_accounts.json');
+const mongoStore = require('../utils/mongoStore');
 const susSettingsCache = new Map();
 
-function loadSusSettings() {
-    try {
-        if (fs.existsSync(storageFile)) {
-            const data = JSON.parse(fs.readFileSync(storageFile, 'utf8'));
-            for (const [k, v] of Object.entries(data)) {
-                susSettingsCache.set(k, v);
-            }
-        }
-    } catch (e) {}
+async function getSusSetting(guildId) {
+    if (susSettingsCache.has(guildId)) return susSettingsCache.get(guildId);
+    const record = await mongoStore.get('suspicious_account_settings', String(guildId));
+    if (!record) return null;
+    susSettingsCache.set(guildId, record.data);
+    return record.data;
 }
-loadSusSettings();
 
-function saveSusSetting(guildId, setting) {
-    susSettingsCache.set(guildId, setting);
-    try {
-        const obj = Object.fromEntries(susSettingsCache);
-        fs.writeFileSync(storageFile, JSON.stringify(obj, null, 2), 'utf8');
-    } catch (e) {}
+async function saveSusSetting(guildId, setting) {
+    const current = await mongoStore.get('suspicious_account_settings', String(guildId));
+    const saved = await mongoStore.put('suspicious_account_settings', String(guildId), setting, {
+        expectedRevision: current ? current.revision : 0
+    });
+    susSettingsCache.set(guildId, saved.data);
+    return saved.data;
 }
 
 module.exports = (client) => {
@@ -40,7 +34,7 @@ module.exports = (client) => {
         const days = interaction.options.getInteger('threshold');
         const action = interaction.options.getString('action');
 
-        saveSusSetting(interaction.guildId, {
+        await saveSusSetting(interaction.guildId, {
             guild_id: interaction.guildId,
             enabled: enabled ? 1 : 0,
             threshold_days: days || 7,
@@ -54,7 +48,7 @@ module.exports = (client) => {
     // 2. THE DETECTION ENGINE
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
-        const settings = susSettingsCache.get(member.guild.id);
+        const settings = await getSusSetting(member.guild.id);
         if (!settings || !settings.enabled) return;
 
         // Calculate Age
