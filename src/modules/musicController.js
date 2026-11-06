@@ -17,7 +17,6 @@ const {
 const path = require('path');
 const fs = require('fs');
 const mongoose = require('mongoose');
-const db = require('../utils/database');
 const MusicController = require('../models/MusicController');
 const { StarryAudioEngine, formatTime } = require('../utils/nativeAudioEngine');
 const { getGuildLanguageSync, t } = require('../utils/i18n');
@@ -36,20 +35,6 @@ class MusicControllerEngine {
     async init(client) {
         if (this.initialized) return;
 
-        // 1. Immediately populate from local persistent store (zero network wait)
-        try {
-            const localConfigs = db.getAllMusicRequestChannels ? db.getAllMusicRequestChannels() : {};
-            for (const [gid, cfg] of Object.entries(localConfigs)) {
-                if (cfg && cfg.channelId) {
-                    this.cache.set(gid, {
-                        channelId: cfg.channelId,
-                        messageId: cfg.messageId,
-                        bannerUrl: cfg.bannerUrl || ''
-                    });
-                }
-            }
-        } catch (_) {}
-
         // 2. Synchronize from MongoDB if connected, or when connection opens
         const syncFromMongo = async () => {
             if (!isDbConnected()) return;
@@ -62,7 +47,6 @@ class MusicControllerEngine {
                         bannerUrl: cfg.bannerUrl || ''
                     };
                     this.cache.set(cfg.guildId, entry);
-                    if (db.setMusicRequestChannel) db.setMusicRequestChannel(cfg.guildId, entry);
                 }
                 console.log(`🎵 [Music Controller] Synchronized ${this.cache.size} dedicated request channels.`);
             } catch (_) {}
@@ -373,7 +357,6 @@ class MusicControllerEngine {
                     if (newMsg) {
                         config.messageId = newMsg.id;
                         this.cache.set(guildId, config);
-                        if (db.setMusicRequestChannel) db.setMusicRequestChannel(guildId, config);
                         if (isDbConnected()) await MusicController.updateOne({ guildId }, { messageId: newMsg.id }).catch(() => {});
                     }
                 });
@@ -397,7 +380,6 @@ class MusicControllerEngine {
                 if (newMsg) {
                     config.messageId = newMsg.id;
                     this.cache.set(guildId, config);
-                    if (db.setMusicRequestChannel) db.setMusicRequestChannel(guildId, config);
                     if (isDbConnected()) await MusicController.updateOne({ guildId }, { messageId: newMsg.id }).catch(() => {});
                 }
             }
@@ -492,7 +474,6 @@ class MusicControllerEngine {
         };
 
         this.cache.set(guild.id, newConfig);
-        if (db.setMusicRequestChannel) db.setMusicRequestChannel(guild.id, newConfig);
 
         if (isDbConnected()) {
             await MusicController.findOneAndUpdate(
