@@ -78,16 +78,18 @@ test('rejects invalid credentials and conflicting existing operation IDs', async
     const fetchImpl = async (url) => {
         if (url === serviceAccount.token_uri) return response(200, { access_token: 'token', expires_in: 3600 });
         return response(200, { fields: {
-            deviceUid: { stringValue: 'someone-else' },
+            deviceUid: { stringValue: 'phone-uid' },
             collection: { stringValue: 'warnings' },
             recordId: { stringValue: 'w1' },
-            operation: { stringValue: 'delete' },
+            operation: { stringValue: 'put' },
+            payload: { mapValue: { fields: { reason: { stringValue: 'different' } } } },
             status: { stringValue: 'pending' }
         }});
     };
     const relay = createFirestoreRelay({ serviceAccount, projectId: 'test-project', fetchImpl });
     await assert.rejects(() => relay.enqueue({
         operationId: 'collision', deviceUid: 'phone-uid',
-        collection: 'warnings', recordId: 'w1', operation: 'delete'
+        collection: 'warnings', recordId: 'w1', operation: 'put',
+        payload: { reason: 'original' }
     }), /collision/);
 });
