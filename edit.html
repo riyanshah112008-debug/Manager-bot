@@ -228,12 +228,6 @@
                     <span><i class="fa-solid fa-globe" style="color: #10b981;"></i> Public Server</span>
                 </label>
                 <div class="hint-text" style="margin-top: -6px; margin-left: 28px;">Display this server on the public home & search pages.</div>
-
-                <label class="checkbox-label" style="margin-top: 8px;">
-                    <input type="checkbox" id="isNsfw">
-                    <span><i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> NSFW Server</span>
-                </label>
-                <div class="hint-text" style="margin-top: -6px; margin-left: 28px;">Check this if your server contains 18+ adult content.</div>
             </div>
         </div>
 
@@ -264,7 +258,6 @@
                 if (meta.tags && Array.isArray(meta.tags)) document.getElementById('tags').value = meta.tags.join(', ');
                 if (meta.description) document.getElementById('description').value = meta.description;
                 if (meta.isPublic !== undefined) document.getElementById('isPublic').checked = meta.isPublic;
-                if (meta.isNsfw !== undefined) document.getElementById('isNsfw').checked = meta.isNsfw;
             } catch (e) {
                 console.error("加载旧数据失败:", e);
             }
@@ -287,7 +280,6 @@
                 tags: tagsArray,
                 description: document.getElementById('description').value.trim(),
                 isPublic: document.getElementById('isPublic').checked,
-                isNsfw: document.getElementById('isNsfw').checked,
                 updatedAt: Date.now()
             };
 
