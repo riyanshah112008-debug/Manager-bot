@@ -389,6 +389,9 @@ class MusicControllerEngine {
     }
 
     async setupChannel(guild, user, client) {
+        if (!isDbConnected()) {
+            throw new Error('MongoDB is unavailable; the music controller was not created.');
+        }
         // 1. Check if controller already exists
         let config = this.cache.get(guild.id);
         let channel = null;
@@ -475,13 +478,11 @@ class MusicControllerEngine {
 
         this.cache.set(guild.id, newConfig);
 
-        if (isDbConnected()) {
-            await MusicController.findOneAndUpdate(
-                { guildId: guild.id },
-                newConfig,
-                { upsert: true, new: true }
-            ).catch(() => {});
-        }
+        await MusicController.findOneAndUpdate(
+            { guildId: guild.id },
+            newConfig,
+            { upsert: true, new: true, runValidators: true }
+        );
 
         return { channel, message: controllerMessage };
     }
