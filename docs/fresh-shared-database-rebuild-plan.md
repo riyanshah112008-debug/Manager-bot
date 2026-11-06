@@ -63,6 +63,19 @@ The phone receiver separately needs the Firebase project ID, Firebase Web API ke
 
 The workflow has been committed but its run result must be checked on GitHub before treating the tests as passing. No local runtime or live MongoDB test has been claimed.
 
+## Scope status — read before cutover
+
+This branch is a substantial migration foundation, **not yet a complete replacement of every JSON-backed feature**.
+
+- The five direct consumers listed in `docs/json-store-consumer-audit.md` have been addressed in their respective feature paths: media permissions, command prefix resolution, AutoMod configuration, and music-controller configuration.
+- Giveaway, temporary voice-channel, and suspicious-account settings have been moved from their standalone JSON files to MongoDB.
+- `src/utils/database.js` and `src/data/starry-store.json` are intentionally still present. Other feature domains in that store (including warnings, tickets, verification, moderation logs, AFK, welcome/goodbye, autorole, reminders, sticky messages, social stats, counting, and server listings) have **not** all been migrated. Do not delete or disable the JSON store yet.
+- Firestore delivery currently supports **MongoDB-to-phone download and phone acknowledgements only**. The SQLite outbox can record local edits, but there is no trusted phone-to-server upload/validation path. Do not assume offline phone edits reach MongoDB.
+- The three Discord clients share the process Mongoose connection, but background initializers must remain primary-client-only to avoid duplicate timers and scheduled jobs.
+- CI definitions and tests have been added. Until GitHub Actions reports green, test status is pending. No production MongoDB connection, phone device sync, or end-to-end restart/offline test has been performed from this environment.
+
+This is intentionally conservative: incomplete features are left visible and the old JSON data remains recoverable. A fresh database can be provisioned separately, but this branch must not be merged or deployed until the remaining migrations and bidirectional sync are completed and CI is green.
+
 ## Important remaining boundary
 
 The current phone transport is **server-to-phone download**. The SQLite schema already records local pending operations, but a secure phone-to-server uploader and conflict-validation endpoint are not yet wired. Do not treat local SQLite edits as synchronized to MongoDB until that second direction is implemented and tested.
