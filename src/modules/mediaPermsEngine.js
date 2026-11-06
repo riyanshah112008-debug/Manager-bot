@@ -105,16 +105,12 @@ class MediaPermsEngine {
         if (!guildId) return { enabled: false };
         if (this.cache.has(guildId)) return this.cache.get(guildId);
 
-        let settings = null;
-        try {
-            const mongoose = require('mongoose');
-            if (mongoose.connection && mongoose.connection.readyState === 1) {
-                const doc = await ServerSettings.findOne({ guildId }).select('mediaPerms').lean();
-                if (doc && doc.mediaPerms) {
-                    settings = doc.mediaPerms;
-                }
-            }
-        } catch (e) {}
+        const mongoose = require('mongoose');
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            throw new Error('MongoDB is unavailable; media-permissions settings cannot be loaded.');
+        }
+        const doc = await ServerSettings.findOne({ guildId }).select('mediaPerms').lean();
+        const settings = doc?.mediaPerms || null;
 
         const resolved = {
             enabled: settings?.enabled !== false,
