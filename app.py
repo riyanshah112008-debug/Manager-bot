@@ -21,7 +21,7 @@ MANAGE_GUILD_PERMISSION = 0x20
 class DB:
     # 临时内存数据库 (模拟数据库表结构)
     _users = {}  # { user_id: { id, username, avatar, last_login } }
-    _guilds = {}  # { guild_id: { id, name, icon, description, tags, language, is_public, is_nsfw, last_bump_time, next_bump_time } }
+    _guilds = {}  # { guild_id: { id, name, icon, description, tags, language, is_public, last_bump_time, next_bump_time } }
 
     @classmethod
     def save_user(cls, user_data):
@@ -258,7 +258,7 @@ def get_recently_bumped():
 
 @app.route('/api/servers', methods=['GET'])
 def get_all_servers():
-    """全站服务器查询接口：支持分页、排序、搜索与 NSFW 过滤"""
+    """全站服务器查询接口：支持分页、排序与搜索。"""
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 12))
