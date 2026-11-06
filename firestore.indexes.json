@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "relayOperations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "deviceUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

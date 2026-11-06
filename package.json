@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "deploy": "node deploy-commands.js"
+    "deploy": "node deploy-commands.js",
+    "test:firestore-relay": "node --test test/firestoreRelay.test.js"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -1,0 +1,30 @@
+name: Firestore relay tests
+
+on:
+  pull_request:
+    paths:
+      - "src/utils/firestoreRelay.js"
+      - "test/firestoreRelay.test.js"
+      - "phone-db/firestore_sync.py"
+      - "phone-db/test_firestore_sync.py"
+      - ".github/workflows/firestore-relay-tests.yml"
+  push:
+    branches:
+      - "database/firestore-relay-protocol"
+
+jobs:
+  relay-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run Firestore relay unit tests
+        run: node --test test/firestoreRelay.test.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run phone sync unit tests
+        working-directory: phone-db
+        run: python -m unittest -v test_firestore_sync.py test_sqlite_store.py
