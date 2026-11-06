@@ -1,4 +1,4 @@
-"""Termux-side Firestore -> SQLite sync agent (Python standard library only).
+"""Phone-side Firestore -> SQLite download agent (Python standard library only).
 
 This is an opt-in client. It requires Firebase Anonymous Auth to be enabled,
 the repository Firestore rules to be published, and project/API-key settings.
