@@ -23,15 +23,23 @@ This inventory identifies the runtime call sites that must be migrated before re
 
 Other feature modules may still use their own JSON files or Mongoose models. They are separate migration units and must not be assumed covered by this list.
 
-## Safe migration order
+## Migration status
 
-1. Introduce a Mongo-backed generic record model with a unique compound key and explicit schema version.
-2. Implement an asynchronous repository API with get, put, patch, delete, and list operations.
-3. Add tests for concurrent updates, missing records, serialization, and database-unavailable behavior.
-4. Migrate the five confirmed consumers one at a time, updating every caller to await the new API.
-5. Keep the old JSON store available as a disabled/unused compatibility artifact until cutover is approved; do not auto-import its contents into the fresh database.
-6. Add an explicit startup readiness gate so commands do not read the repository before MongoDB is connected.
-7. Only after all consumers are migrated should the old synchronous JSON store be retired.
+The isolated development branch now contains:
+
+- A generic BotRecord model with a unique compound key, schema version, and monotonically increasing revision.
+- An asynchronous Mongo repository with get, put, patch, remove, and list operations.
+- Revision-checked writes for compare-and-set updates, including bounded retries for patches.
+- Explicit failure when MongoDB is disconnected; the repository does not silently fall back to local JSON.
+- Basic model and disconnected-database safety tests. These tests have been authored but have not yet been executed in a live project environment.
+
+## Remaining safe migration order
+
+1. Add integration tests against a disposable MongoDB database for concurrent writes, revision conflicts, missing records, serialization, and reconnect behavior.
+2. Migrate the five confirmed consumers one at a time, updating every caller to await the new API.
+3. Keep the old JSON store available as a disabled/unused compatibility artifact until cutover is approved; do not auto-import its contents into the fresh database.
+4. Add an explicit startup readiness gate so commands do not read the repository before MongoDB is connected.
+5. Only after all consumers are migrated should the old synchronous JSON store be retired.
 
 ## Multi-bot requirements
 
