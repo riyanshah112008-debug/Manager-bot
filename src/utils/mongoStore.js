@@ -69,8 +69,8 @@ async function get(namespace, recordId) {
 
 async function put(namespace, recordId, data, options = {}) {
     assertKey(namespace, recordId);
-    assertConnected();
     const normalized = normalizeData(data);
+    assertConnected();
     const filter = { namespace, recordId };
     const hasExpectedRevision = Object.prototype.hasOwnProperty.call(options, 'expectedRevision');
 
