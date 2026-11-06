@@ -43,7 +43,7 @@ async function generateServerPulse(guild, client) {
             const msgs = await ch.messages.fetch({ limit: 10 }).catch(() => null);
             if (msgs) {
                 msgs.forEach(m => {
-                    if (!m.author.bot && m.content) sampleMessageCount++;
+                    if (!m.author.bot) sampleMessageCount++;
                 });
             }
         } catch (e) {}
@@ -76,7 +76,7 @@ Server Overview:
 - Recent human message volume: ${sampleMessageCount} sampled messages. No message text, usernames, or attachments are included.
 
 In 3 concise bullet points formatted with markdown:
-1. Assess the community vibe & conversational mood.
+1. Describe the engagement level from activity counts only; do not infer sentiment or private conversation content.
 2. Give 1 high-impact engagement recommendation (e.g. host an event, drop a spark, game night).
 3. Deliver an encouraging, sparkling mascot closing quote with stars ✨!`;
 
