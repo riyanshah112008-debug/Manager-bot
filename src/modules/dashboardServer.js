@@ -462,12 +462,22 @@ function setupDashboardRoutes(app, client) {
             const authHeader = req.headers.authorization;
             const expectedAuth = process.env.TOPGG_WEBHOOK_AUTH || process.env.TOPGG_TOKEN;
 
-            if (expectedAuth && authHeader !== expectedAuth) {
+            // Fail closed: never issue vote rewards when the webhook secret is absent.
+            if (typeof expectedAuth !== 'string' || expectedAuth.length < 16) {
+                console.error('Top.gg webhook disabled: TOPGG_WEBHOOK_AUTH is not configured with a sufficiently long secret.');
+                return res.status(503).json({ success: false, error: 'Vote rewards are temporarily unavailable.' });
+            }
+
+            const supplied = typeof authHeader === 'string' ? Buffer.from(authHeader) : Buffer.alloc(0);
+            const expected = Buffer.from(expectedAuth);
+            if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
                 return res.status(401).json({ success: false, error: 'Unauthorized webhook request.' });
             }
 
-            const { user: userId, type, isWeekend } = req.body;
-            if (!userId) return res.status(400).json({ success: false, error: 'User ID missing in payload.' });
+            const { user: userId, type, isWeekend } = req.body || {};
+            if (typeof userId !== 'string' || !/^\\d{17,20}$/.test(userId)) {
+                return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
+            }
 
             const rewardCred = isWeekend ? 1000 : 500;
             const rewardXp = isWeekend ? 1000 : 500;
