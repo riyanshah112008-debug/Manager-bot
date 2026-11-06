@@ -229,7 +229,7 @@ module.exports = {
     fs.writeFileSync(path.join(workspacePath, 'src/config.js'), configJs);
 
     // E. src/modules/starryLink.js (Starry Universal Access & Telemetry Gateway)
-    const starryLinkJs = \`/**
+    const starryLinkJs = `/**
  * Starry Maintenance & Read-only Diagnostics Gateway
  * Only the configured bot owner can request status information.
  */
@@ -243,13 +243,14 @@ function initStarryGateway(client) {
         if (message.content.trim() === ',starry-status') {
             const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
             const ping = client.ws?.ping ?? 0;
-            return message.reply(\`✨ **Bot Online** | Ping: \\\`\${ping}ms\\\` | Memory: \\\`\${memory}MB\\\` | Uptime: \\\`\${Math.round(process.uptime())}s\\\`\`).catch(() => {});
+            const uptime = Math.round(process.uptime());
+            return message.reply('✨ **Bot Online** | Ping: ' + ping + 'ms | Memory: ' + memory + 'MB | Uptime: ' + uptime + 's').catch(() => {});
         }
     });
 }
 
 module.exports = { initStarryGateway };
-\`;    fs.writeFileSync(path.join(workspacePath, 'src/modules/starryLink.js'), starryLinkJs);
+`;    fs.writeFileSync(path.join(workspacePath, 'src/modules/starryLink.js'), starryLinkJs);
 
     // F. src/index.js (Main Client & Unified Dispatcher)
     const indexJs = `${STARRY_WATERMARK_HEADER}require('dotenv').config();
