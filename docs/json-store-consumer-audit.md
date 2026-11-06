@@ -1,49 +1,41 @@
 # JSON store consumer audit
 
-## Purpose
+## Original persistence boundary
 
-This inventory identifies the runtime call sites that must be migrated before replacing the synchronous JSON store in src/utils/database.js. It is documentation-only and does not change persistence behavior.
+`src/utils/database.js` is a synchronous JSON-file store backed by `src/data/starry-store.json`. Its API cannot be swapped for asynchronous MongoDB calls without migrating callers and awaiting every read/write.
 
-## Current persistence boundary
+## Confirmed consumers and branch migration status
 
-- src/utils/database.js loads and writes src/data/starry-store.json.
-- Its exported API is synchronous and returns in-memory objects immediately.
-- Mongoose-backed models are already used elsewhere in the bot.
-- A direct replacement with asynchronous MongoDB calls would break callers unless each call site is migrated and awaited.
-
-## Confirmed direct consumers
-
-| Consumer | Current API usage | Migration concern |
+| Consumer | Original use | Branch status |
 | --- | --- | --- |
-| src/modules/mediaPermsEngine.js | getGuildSettings, updateGuildSettings | Convert reads/writes to awaited repository operations; preserve media-permissions merge behavior. |
-| src/modules/commandHandler.js | getGuildSettings, updateGuildSettings | Prefix/config resolution must become async end-to-end or use a deliberate cache backed by MongoDB. |
-| src/utils/automodHelper.js | getGuildSettings, updateGuildSettings | Automod settings reads and writes must be awaited and shared across all bot clients. |
-| src/commands/moderation/automod.js | getGuildSettings, updateGuildSettings | Command handlers are async-capable; preserve existing configuration merge semantics. |
-| src/modules/musicController.js | getAllMusicRequestChannels, setMusicRequestChannel | Startup cache hydration currently expects a synchronous object; convert initialization to an async readiness step before dependent operations. |
+| `src/modules/mediaPermsEngine.js` | Guild media-permission settings | Migrated to MongoDB `ServerSettings.mediaPerms`; local JSON fallback removed |
+| `src/modules/commandHandler.js` | Guild prefix lookup/update | Migrated to MongoDB-backed prefix lookup; setter now updates the shared in-process cache only |
+| `src/utils/automodHelper.js` | Server AutoMod status | Migrated to MongoDB `AutomodGuild`; JSON fallback removed |
+| `src/commands/moderation/automod.js` | Guild AutoMod configuration | Migrated to MongoDB `ServerSettings.automod` |
+| `src/modules/musicController.js` | Music request-channel configuration | MongoDB `MusicController` is now the persistent source; local JSON hydration/writes removed |
 
-Other feature modules may still use their own JSON files or Mongoose models. They are separate migration units and must not be assumed covered by this list.
+## Additional JSON-file modules migrated
 
-## Migration status
+- `src/modules/giveaway.js`: individual giveaway records are stored in the shared Mongo repository.
+- `src/modules/voiceManager.js`: per-guild hub channel and active temporary-channel IDs are stored in MongoDB.
+- `src/modules/susAccount.js`: suspicious-account settings are stored in MongoDB and cached in process memory.
 
-The isolated development branch now contains:
+## Shared storage behavior
 
-- A generic BotRecord model with a unique compound key, schema version, and monotonically increasing revision.
-- An asynchronous Mongo repository with get, put, patch, remove, and list operations.
-- Revision-checked writes for compare-and-set updates, including bounded retries for patches.
-- Explicit failure when MongoDB is disconnected; the repository does not silently fall back to local JSON.
-- Basic model and disconnected-database safety tests. These tests have been authored but have not yet been executed in a live project environment.
+- `src/models/BotRecord.js` provides a unique `namespace + recordId` key, schema version, record revision, and relay publication revision.
+- `src/utils/mongoStore.js` provides asynchronous get, put, patch, remove, and list operations.
+- Compare-and-set writes reject stale revisions.
+- Remove creates a tombstone instead of deleting the record, so the offline phone can receive deletions.
+- The generic record index is created before the primary Discord client logs in.
+- Startup now requires a reachable `MONGO_URI`; these Mongo-only features do not silently fall back to JSON.
 
-## Remaining safe migration order
+## Phone synchronization boundary
 
-1. Add integration tests against a disposable MongoDB database for concurrent writes, revision conflicts, missing records, serialization, and reconnect behavior.
-2. Migrate the five confirmed consumers one at a time, updating every caller to await the new API.
-3. Keep the old JSON store available as a disabled/unused compatibility artifact until cutover is approved; do not auto-import its contents into the fresh database.
-4. Add an explicit startup readiness gate so commands do not read the repository before MongoDB is connected.
-5. Only after all consumers are migrated should the old synchronous JSON store be retired.
+- `src/utils/phoneSyncPublisher.js` publishes unrelayed MongoDB revisions to Firestore using deterministic operation IDs.
+- The existing phone receiver commits each operation to SQLite and records its operation ID before acknowledging Firestore.
+- This branch currently implements server-to-phone download only. A secure phone-to-server uploader and conflict-validation endpoint are still required before local phone edits can be considered synchronized.
+- Do not place service-account private keys, Discord tokens, payment secrets, or premium/security authority in SQLite or Firestore.
 
-## Multi-bot requirements
+## Remaining retirement work
 
-- All Discord clients in the process must share the same repository instance and Mongoose connection.
-- Cache invalidation must be process-wide for the shared process; do not create per-client divergent settings caches.
-- Background jobs and scheduled tasks must still start once, not once per worker client.
-- MongoDB remains authoritative. Firestore relay and phone SQLite are separate synchronization layers and must not be used as a substitute for the primary write path.
+The legacy JSON module and old JSON files are intentionally retained as a recovery artifact. No old records are imported. Before removing the module, search the working branch for any additional imports and verify the GitHub Actions checks. Production cutover and deletion of old data require separate explicit approval.
