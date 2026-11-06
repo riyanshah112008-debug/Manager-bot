@@ -969,9 +969,14 @@ async function startBot(overrideToken, overrideMongo) {
         // Optional durable MongoDB -> Firestore -> phone publisher.
         // The phone remains an offline replica; missing relay credentials do not affect bot storage.
         if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON && process.env.PHONE_DB_DEVICE_UID && !phoneSyncPublisher) {
-            const { createPhoneSyncPublisher } = require('./utils/phoneSyncPublisher');
-            phoneSyncPublisher = createPhoneSyncPublisher();
-            phoneSyncPublisher.start();
+            try {
+                const { createPhoneSyncPublisher } = require('./utils/phoneSyncPublisher');
+                phoneSyncPublisher = createPhoneSyncPublisher();
+                phoneSyncPublisher.start();
+            } catch (syncError) {
+                phoneSyncPublisher = null;
+                console.error('[Phone Sync] Publisher disabled; bot database remains available:', syncError.message);
+            }
         } else if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON || !process.env.PHONE_DB_DEVICE_UID) {
             console.warn('[Phone Sync] Publisher disabled: configure FIREBASE_SERVICE_ACCOUNT_JSON and PHONE_DB_DEVICE_UID on the trusted server to enable phone downloads.');
         }
