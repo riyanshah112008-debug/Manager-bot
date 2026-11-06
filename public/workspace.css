@@ -87,3 +87,21 @@
 
 /* Dashboard home module directory */
 .module-directory{display:grid;gap:17px}.module-category{min-width:0}.module-category h3{margin:0 0 9px;color:#b6c2df;font:800 .68rem Manrope,sans-serif;letter-spacing:.11em;text-transform:uppercase}.module-category .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.module-category .tile{min-height:65px;padding:11px 12px}.module-category .tile-icon{width:34px;height:34px;flex-basis:34px;border-radius:10px}@media(max-width:560px){.module-category .tiles{grid-template-columns:1fr}}
+
+
+/* Paperclip-inspired control-plane shell: operational hierarchy over decorative chrome. */
+:root{--bg:#0b1017;--panel:#131c27;--panel2:#192432;--line:rgba(183,197,218,.13);--text:#edf1f6;--muted:#a0adbd;--blue:#9aa9ff;--violet:#a9a0e8;--green:#8ad8b7;--red:#ef9aa7}
+html,body{background:#0b1017;color:var(--text)}
+body{background:radial-gradient(ellipse at 82% 0%,rgba(83,110,156,.1),transparent 34%),#0b1017}
+.sidebar{background:#0e151e;border-right-color:var(--line);backdrop-filter:none}
+.server-box,.user-card{background:#141e2a;border-color:var(--line);border-radius:10px}
+.server-box select,.nav-search input,.field input,.field select,.field textarea{background:#0e151e;border-color:var(--line);border-radius:8px}
+.nav-link{border-radius:7px;color:#b0bbca}.nav-link:hover,.nav-link.active{background:#1a2634;border-color:transparent}.nav-link.active{box-shadow:inset 2px 0 #9aa9ff}
+.main{padding-inline:30px}.topbar{border-bottom-color:var(--line)}
+.btn{border-radius:8px;background:#192432;border-color:var(--line);box-shadow:none}.btn:hover{transform:none;background:#202d3c;border-color:#8999b866}.btn.primary{background:#6878db;border-color:#6878db;box-shadow:none}
+.hero{padding-top:31px}.page-title{letter-spacing:-.055em}.card{background:#131c27;border-color:var(--line);border-radius:11px;box-shadow:none;backdrop-filter:none}
+.tile{background:#172230;border-color:var(--line);border-radius:9px}.tile:hover{transform:translateY(-1px);border-color:#8999b866}
+.tile-icon{background:#8798ed18;color:#c1cbff;border-radius:8px}
+.status{border-radius:8px}.pill{border-radius:5px;letter-spacing:.06em}
+.nav-label,.eyebrow{color:#91a0b3}.page-footer{border-top-color:var(--line)}
+@media(max-width:700px){.sidebar{background:#0e151e}.main{padding-inline:15px}}
