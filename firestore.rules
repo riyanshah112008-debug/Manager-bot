@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /relayOperations/{operationId} {
+      // The phone can only read operations addressed to its authenticated UID.
+      // Queries must include deviceUid == request.auth.uid.
+      allow get, list: if request.auth != null
+        && resource.data.deviceUid == request.auth.uid;
+
+      // The phone may only change acknowledgement fields after applying an
+      // operation locally. It cannot create, delete, or alter the payload.
+      allow update: if request.auth != null
+        && resource.data.deviceUid == request.auth.uid
+        && request.resource.data.deviceUid == resource.data.deviceUid
+        && request.resource.data.operationId == resource.data.operationId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'acknowledgedAt'])
+        && request.resource.data.status == 'acknowledged'
+        && request.resource.data.acknowledgedAt is timestamp;
+
+      // Only trusted server-side Admin SDK code creates relay operations.
+      allow create, delete: if false;
+    }
+  }
+}
