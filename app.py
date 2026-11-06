@@ -55,7 +55,6 @@ class DB:
             "tags": [],
             "language": "en",
             "is_public": True,
-            "": False,
             "last_bump_time": 0,
             "next_bump_time": 0
         })
@@ -277,7 +276,7 @@ def get_recently_bumped():
 
 @app.route('/api/servers', methods=['GET'])
 def get_all_servers():
-    """全站服务器查询接口：支持分页、排序与搜索。"""
+    """全站服务器查询接口：支持分页、排序与搜索"""
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 12))
