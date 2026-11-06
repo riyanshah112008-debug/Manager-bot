@@ -475,7 +475,7 @@ function setupDashboardRoutes(app, client) {
             }
 
             const { user: userId, type, isWeekend } = req.body || {};
-            if (typeof userId !== 'string' || !/^\\d{17,20}$/.test(userId)) {
+            if (typeof userId !== 'string' || !/^\d{17,20}$/.test(userId)) {
                 return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
             }
             if (type === 'test') {
