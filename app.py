@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import time
+import os
+import hmac
 
 app = Flask(__name__)
 CORS(app)
@@ -258,7 +260,7 @@ def get_recently_bumped():
 
 @app.route('/api/servers', methods=['GET'])
 def get_all_servers():
-    """全站服务器查询接口：支持分页、排序、搜索与 NSFW 过滤"""
+    """Public server directory with pagination, sorting and search."""
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 12))
@@ -308,4 +310,4 @@ def get_all_servers():
 
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(port=int(os.getenv('PORT', '5000')), debug=False)
