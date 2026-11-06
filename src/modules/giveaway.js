@@ -1,7 +1,5 @@
 const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-const dbPath = path.join(__dirname, 'giveaways.json');
+const mongoStore = require('../utils/mongoStore');
 
 // 🎬 DIRECT GIPHY CDN ASSETS (DISCORD PROXY GUARANTEED)
 const ASSETS = {
@@ -16,20 +14,28 @@ module.exports = (client) => {
     const config = require('../config');
     const PREFIX = config.DEFAULT_PREFIX || ',';
 
-    // ==========================================
-    // 📁 JSON DATABASE HELPERS
-    // ==========================================
-    function getGiveaways() {
-        try {
-            if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
-            return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-        } catch {
-            return [];
-        }
+    // MongoDB is authoritative; each giveaway is stored as its own durable record.
+    async function getGiveaways() {
+        const records = await mongoStore.list('giveaways', { limit: 5000 });
+        return records.map(record => record.data);
     }
 
-    function saveGiveaways(data) {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    async function saveGiveaways(data) {
+        if (!Array.isArray(data)) throw new TypeError('giveaways must be an array');
+        const existing = await mongoStore.list('giveaways', { limit: 5000 });
+        const nextIds = new Set(data.map(item => String(item.messageId)));
+        for (const record of existing) {
+            if (!nextIds.has(record.recordId)) {
+                await mongoStore.remove('giveaways', record.recordId, { expectedRevision: record.revision });
+            }
+        }
+        for (const item of data) {
+            if (!item?.messageId) throw new TypeError('giveaway messageId is required');
+            const current = await mongoStore.get('giveaways', String(item.messageId));
+            await mongoStore.put('giveaways', String(item.messageId), item, {
+                expectedRevision: current ? current.revision : 0
+            });
+        }
     }
 
     function parseTime(timeStr) {
@@ -92,7 +98,7 @@ module.exports = (client) => {
 
         await message.react('🎉').catch(() => {});
 
-        const giveaways = getGiveaways();
+        const giveaways = await getGiveaways();
         giveaways.push({
             messageId: message.id,
             channelId: channel.id,
@@ -102,7 +108,7 @@ module.exports = (client) => {
             endsAt: endsAt,
             hostId: author.id
         });
-        saveGiveaways(giveaways);
+        await saveGiveaways(giveaways);
 
         return '✅ Supreme Giveaway launched successfully!';
     }
@@ -259,14 +265,14 @@ module.exports = (client) => {
     // 🏁 3. CONCLUDED GIVEAWAY AUTOMATION ENGINE
     // ==========================================
     async function checkGiveaways() {
-        let giveaways = getGiveaways();
+        let giveaways = await getGiveaways();
         if (!giveaways.length) return;
 
         const now = Date.now();
         const ended = giveaways.filter(g => g.endsAt <= now);
         const active = giveaways.filter(g => g.endsAt > now);
 
-        if (ended.length > 0) saveGiveaways(active);
+        if (ended.length > 0) await saveGiveaways(active);
 
         for (const giveaway of ended) {
             try {
