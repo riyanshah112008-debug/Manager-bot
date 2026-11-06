@@ -33,7 +33,8 @@ const {
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const config = require('../config');
 
-const MUSIC_DASHBOARD_URL = `${(process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || 'https://manager-bot-1-6167.onrender.com').replace(/\/+$/, '')}/music.html`;
+const MUSIC_BASE_URL = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`).replace(/\\/+$/, '');
+const MUSIC_DASHBOARD_URL = `${MUSIC_BASE_URL}/music.html`;
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
