@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim
+FROM node:22.12.0-bookworm-slim
 
 # Install system dependencies (Python for stream resolver & build tools)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     && rm -rf /var/lib/apt/lists/*
+
+# Install the resolver during the image build, not at bot startup.
+RUN python3 -m pip install --no-cache-dir --break-system-packages yt-dlp
 
 WORKDIR /app
 
