@@ -38,7 +38,7 @@ test('welcome and goodbye models expose the full configurable fields', () => {
 
 test('master security model retains its security configuration fields', () => {
     const schema = models.MasterSecurity.schema;
-    for (const field of ['autoKick', 'autoBan', 'ownerBypass', 'modules', 'userInfractions']) {
+    for (const field of ['autoKick', 'autoBan', 'ownerBypass', 'modules.antinuke', 'modules.antiraid', 'modules.altshield', 'modules.automod', 'userInfractions']) {
         assert.ok(schema.path(field), 'MasterSecurity must define ' + field);
     }
 });
