@@ -860,6 +860,7 @@ let tokenCheckInterval = null;
 let lastBootstrapError = null;
 let lastPreflight = null;
 let bootRetryTimer = null;
+let phoneSyncPublisher = null;
 
 async function startBot(overrideToken, overrideMongo) {
     if ((client && client.isReady()) || isBootingBot) return;
@@ -965,6 +966,16 @@ async function startBot(overrideToken, overrideMongo) {
         await require('./models/BotRecord').createIndexes();
         console.log('🍃 Connected to authoritative MongoDB and verified BotRecord indexes.');
 
+        // Optional durable MongoDB -> Firestore -> phone publisher.
+        // The phone remains an offline replica; missing relay credentials do not affect bot storage.
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON && process.env.PHONE_DB_DEVICE_UID && !phoneSyncPublisher) {
+            const { createPhoneSyncPublisher } = require('./utils/phoneSyncPublisher');
+            phoneSyncPublisher = createPhoneSyncPublisher();
+            phoneSyncPublisher.start();
+        } else if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON || !process.env.PHONE_DB_DEVICE_UID) {
+            console.warn('[Phone Sync] Publisher disabled: configure FIREBASE_SERVICE_ACCOUNT_JSON and PHONE_DB_DEVICE_UID on the trusted server to enable phone downloads.');
+        }
+
         const { initLanguageCache } = require('./utils/i18n');
         await initLanguageCache(client).catch(() => {});
     } catch (mongoInitErr) {
@@ -1046,6 +1057,7 @@ const shutdownHandler = async (signal) => {
     console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry Bot...`);
     try {
         releaseWakeLock();
+        if (phoneSyncPublisher) phoneSyncPublisher.stop();
         if (mongoose.connection.readyState === 1) await mongoose.connection.close();
         if (client) client.destroy();
         for (const [id, info] of multiBot.instances.entries()) {
