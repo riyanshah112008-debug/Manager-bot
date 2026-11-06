@@ -1460,7 +1460,7 @@ class CommandRegistry {
                     const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&seed=${newSeed}&model=flux&enhance=true`;
 
                     try {
-                        const fetch = require('node-fetch');
+                        const fetch = globalThis.fetch;
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 25000);
                         const res = await fetch(imgUrl, { signal: controller.signal });

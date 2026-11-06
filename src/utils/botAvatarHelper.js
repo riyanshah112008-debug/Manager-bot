@@ -50,7 +50,7 @@ async function resolveImageToDataUri(urlOrBuffer, contentTypeHint = null) {
             throw new Error('Invalid image URL. The URL must start with http:// or https://');
         }
 
-        const fetchFn = globalThis.fetch || require('node-fetch');
+        const fetchFn = globalThis.fetch;
         const res = await fetchFn(trimmed, {
             headers: { 'User-Agent': 'ManagerBot-ServerProfile/2.0' },
             timeout: 10000

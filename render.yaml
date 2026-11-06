@@ -29,8 +29,6 @@ services:
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      - key: RENDER_EXTERNAL_URL
-        sync: false
       - key: VERIFY_URL
         sync: false
       - key: PUBLIC_URL

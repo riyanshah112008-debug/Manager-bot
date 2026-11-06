@@ -220,7 +220,7 @@ function setupDashboardRoutes(app, client) {
             const query = String(req.query.q || '').trim();
             if (!query || query.length > 160) return res.status(400).json({ success: false, error: 'Enter a search query up to 160 characters.' });
             const manager = client.manager;
-            if (!manager || typeof manager.search !== 'function') return res.status(503).json({ success: false, error: 'The music search provider is not ready. Try again when Lavalink is connected.' });
+            const hasReadyLavalink = Boolean(manager?.shoukaku?.nodes && Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1));
             let searchQuery = query;
             let matchQuery = query;
             const spotifyLink = parseSpotifyUrl(query);
@@ -231,9 +231,23 @@ function setupDashboardRoutes(app, client) {
                 matchQuery = first.query;
                 searchQuery = 'ytmsearch:' + first.query;
             }
-            let result = await manager.search(searchQuery, { requester: req.session.user });
-            if ((!result?.tracks?.length) && spotifyLink) {
-                result = await manager.search('ytsearch:' + matchQuery, { requester: req.session.user });
+            let result;
+            if (hasReadyLavalink) {
+                result = await manager.search(searchQuery, { requester: req.session.user });
+                if ((!result?.tracks?.length) && spotifyLink) {
+                    result = await manager.search('ytsearch:' + matchQuery, { requester: req.session.user });
+                }
+            } else {
+                const nativeResult = await StarryAudioEngine.search(matchQuery, req.session.user);
+                result = {
+                    tracks: (nativeResult?.tracks || []).map(track => ({
+                        ...track,
+                        length: Number(track.length || track.duration) || 0,
+                        uri: track.uri || track.url || null,
+                        identifier: track.identifier || track.url || null,
+                        sourceName: track.sourceName || track.source || 'Native audio'
+                    }))
+                };
             }
             const rankedTracks = rankAndFilterCanonicalTracks(result?.tracks || [], matchQuery);
             const tracks = rankedTracks.slice(0, 8).map(track => ({
@@ -1290,17 +1304,37 @@ function setupDashboardRoutes(app, client) {
             const musicText = musicGuild.channels.cache.get(tChannel.id) || musicGuild.channels.cache.find(channel => channel.isTextBased());
             if (!musicVoice?.isVoiceBased()) return res.status(400).json({ success: false, error: 'The selected worker cannot access that voice channel.' });
 
-            let player = StarryAudioEngine.getPlayer(guild.id, musicClient) || (musicClient.manager ? musicClient.manager.getPlayer(guild.id) : null);
-            if (!player && musicClient.manager) {
-                player = await musicClient.manager.createPlayer({
+            const manager = musicClient.manager;
+            const hasReadyLavalink = Boolean(manager?.shoukaku?.nodes && Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1));
+
+            // Render workers without a reachable Lavalink node use the native FFmpeg/Discord voice player.
+            if (!hasReadyLavalink) {
+                const nativePlayer = StarryAudioEngine.getOrCreatePlayer(musicClient, guild.id, musicVoice, musicText);
+                await nativePlayer.connect();
+                const nativeResult = await StarryAudioEngine.search(String(query).trim(), req.session.user);
+                const nativeTracks = nativeResult?.tracks || [];
+                if (!nativeTracks.length) {
+                    return res.status(404).json({ success: false, error: 'No playable matches found. Try a song title, SoundCloud link or supported music URL.' });
+                }
+                nativePlayer.queue.push(...nativeTracks);
+                if (!nativePlayer.currentTrack) await nativePlayer.playNext();
+                const firstNativeTrack = nativeTracks[0];
+                return res.json({
+                    success: true,
+                    message: 'Queued ' + nativeTracks.length + ' track(s), starting with "' + String(firstNativeTrack.title || query).slice(0, 160) + '" via native Starry audio.',
+                    track: { title: firstNativeTrack.title, author: firstNativeTrack.author, duration: firstNativeTrack.duration || firstNativeTrack.length },
+                    queued: nativeTracks.length
+                });
+            }
+
+            let player = manager.getPlayer(guild.id);
+            if (!player) {
+                player = await manager.createPlayer({
                     guildId: guild.id,
                     textId: musicText?.id || vChannel.id,
                     voiceId: musicVoice.id,
                     deaf: true
                 });
-            }
-            if (!player || typeof player.search !== 'function' || !player.queue?.add) {
-                return res.status(503).json({ success: false, error: 'The assigned worker has no ready music search engine. Check its Lavalink connection.' });
             }
 
             let tracksToQueue = [];

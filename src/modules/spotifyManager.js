@@ -3,13 +3,13 @@
 // File Path: src/modules/spotifyManager.js
 // Access Personal Spotify Accounts, Saved Playlists, OAuth2 Sync & Instant Voice Enqueue
 // ==========================================
-const fetch = require('node-fetch');
+const fetch = globalThis.fetch;
 const spotifyUrlInfo = require('spotify-url-info')(fetch);
 const UserSpotify = require('../models/UserSpotify');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 
-const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '4bb67b7dfc094233a07c29e8f6b4751f';
-const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || 'a746a92237184c3abf71db9241334d01';
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
 
 class SpotifyManager {
     constructor() {
