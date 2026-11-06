@@ -52,18 +52,6 @@ async function getGuildPrefix(guildId) {
         }
     } catch (e) {}
 
-    // 2. Fallback to local JSON store (mina-store.json)
-    if (!resolvedPrefix) {
-        try {
-            const db = require('../utils/database');
-            if (db && typeof db.getGuildSettings === 'function') {
-                const local = db.getGuildSettings(guildId);
-                if (local?.prefix && local.prefix !== '?') {
-                    resolvedPrefix = local.prefix;
-                }
-            }
-        } catch (e) {}
-    }
 
     const finalPrefix = resolvedPrefix || config.DEFAULT_PREFIX || ',';
     guildPrefixCache.set(guildId, finalPrefix);
@@ -74,28 +62,8 @@ function setCachedPrefix(guildId, prefix) {
     if (!guildId) return;
     const finalPrefix = prefix || config.DEFAULT_PREFIX || ',';
     guildPrefixCache.set(guildId, finalPrefix);
-
-    // Sync to local JSON database
-    try {
-        const db = require('../utils/database');
-        if (db && typeof db.updateGuildSettings === 'function') {
-            db.updateGuildSettings(guildId, { prefix: finalPrefix });
-        }
-    } catch (e) {}
-
-    // Sync to MongoDB ServerSettings
-    try {
-        const mongoose = require('mongoose');
-        if (mongoose.connection && mongoose.connection.readyState === 1) {
-            const ServerSettings = require('../models/ServerSettings');
-            ServerSettings.findOneAndUpdate(
-                { guildId },
-                { $set: { prefix: finalPrefix } },
-                { upsert: true }
-            ).catch(() => {});
-        }
-    } catch (e) {}
 }
+
 
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();

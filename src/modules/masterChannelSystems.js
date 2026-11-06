@@ -24,19 +24,8 @@ const path = require('path');
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
 
-const PolicyVoteSchema = new mongoose.Schema({
-    guildId: String, messageId: String, title: String, description: String,
-    yesVotes: { type: Array, default: [] }, noVotes: { type: Array, default: [] }, createdAt: { type: Date, default: Date.now }
-});
-const PolicyVote = mongoose.models.PolicyVote || mongoose.model('PolicyVote', PolicyVoteSchema);
-
-const masterSecuritySchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    autoKick: { type: Boolean, default: false }, autoBan: { type: Boolean, default: false }, ownerBypass: { type: Boolean, default: true },
-    modules: { antinuke: { type: Boolean, default: true }, antiraid: { type: Boolean, default: true }, altshield: { type: Boolean, default: false }, automod: { type: Boolean, default: true } },
-    userInfractions: { type: Map, of: Number, default: {} }
-});
-const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
+const PolicyVote = require('../models/PolicyVote');
+const MasterSecurity = require('../models/MasterSecurity');
 
 const securityCache = new Map();
 

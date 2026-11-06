@@ -2,10 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('disc
 const mongoose = require('mongoose');
 
 // Shared Mongoose Schema for Chest Settings
-const ChestGuild = mongoose.models.ChestGuild || mongoose.model('ChestGuild', new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true }
-}));
+const ChestGuild = require('../../models/ChestGuild');
 
 const OWNER_ID = '1465049039153135639';
 

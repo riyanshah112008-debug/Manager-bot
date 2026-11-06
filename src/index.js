@@ -54,34 +54,8 @@ const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
-const child_process = require('child_process');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
-
-// ==========================================
-// 🔋 TERMUX WAKE LOCK HELPERS
-// ==========================================
-let lastWakeLockTime = 0;
-function acquireWakeLock(forceLog = false) {
-    try {
-        child_process.exec('termux-wake-lock', (err) => {
-            if (!err) {
-                const now = Date.now();
-                if (forceLog || now - lastWakeLockTime > 300000) {
-                    console.log('🔋 [Termux] Wake lock active & refreshed (termux-wake-lock)');
-                    lastWakeLockTime = now;
-                }
-            }
-        });
-    } catch (e) {}
-}
-
-function releaseWakeLock() {
-    try {
-        child_process.execSync('termux-wake-unlock', { stdio: 'ignore' });
-        console.log('🔌 [Termux] Wake lock released (termux-wake-unlock)');
-    } catch (e) {}
-}
 
 const config = require('./config');
 const multiBot = require('./modules/multiBot');
@@ -383,7 +357,6 @@ const { startTunnel } = require('./utils/tunnelManager');
 startTunnel(port).catch(() => {});
 
 // Automatically acquire Termux Wake Lock on client initialization
-acquireWakeLock();
 
 // Global Mass Ping AutoMod
 client.on('messageCreate', async (message) => {
@@ -580,7 +553,6 @@ client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
 client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
 client.on(Events.ShardDisconnect, (event, id) => {
     console.warn(`⚠️ Gateway Shard #${id} Disconnected (Code: ${event?.code || 'N/A'}). Attempting automatic reconnection...`);
-    acquireWakeLock();
 });
 client.on(Events.ShardReconnecting, (id) => console.log(`🔄 Gateway Shard #${id} Reconnecting to Discord...`));
 client.on(Events.ShardResume, (id, replayedEvents) => console.log(`✅ Gateway Shard #${id} Resumed connection successfully (${replayedEvents} events synced).`));
@@ -633,7 +605,6 @@ setInterval(() => {
 
     // 1. Maintain Termux Wake Lock Continuously (Every ~60s)
     if (watchdogCycle % 4 === 0) {
-        acquireWakeLock();
     }
 
     // 2. Check MongoDB Connection Health
@@ -720,7 +691,6 @@ client.once(Events.ClientReady, async () => {
         bootRetryTimer = null;
     }
     console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
-    acquireWakeLock();
 
     try {
         if (client.manager && typeof client.manager.init === 'function') {
@@ -860,6 +830,7 @@ let tokenCheckInterval = null;
 let lastBootstrapError = null;
 let lastPreflight = null;
 let bootRetryTimer = null;
+let phoneSyncPublisher = null;
 
 async function startBot(overrideToken, overrideMongo) {
     if ((client && client.isReady()) || isBootingBot) return;
@@ -949,51 +920,68 @@ async function startBot(overrideToken, overrideMongo) {
             console.log(`✨ Discord Token Verified! Bot identity: ${preflight.bot.username}#${preflight.bot.discriminator || '0'} (ID: ${preflight.bot.id})`);
         }
 
-    if (process.env.MONGO_URI) {
-        try {
-            await mongoose.connect(process.env.MONGO_URI, {
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                maxPoolSize: 10,
-                heartbeatFrequencyMS: 10000
-            });
-            console.log('🍃 Successfully connected to MongoDB Cloud!');
+    if (!process.env.MONGO_URI) {
+        throw new Error('MONGO_URI is required. Bot login is blocked until the authoritative MongoDB database is configured.');
+    }
 
-            const { initLanguageCache } = require('./utils/i18n');
-            await initLanguageCache(client).catch(() => {});
-        } catch (mongoInitErr) {
-            console.warn(`⚠️ [MongoDB Boot] Initial connect failed (${mongoInitErr.message}). Continuing bot startup with local fallbacks; reconnecting in background...`);
-            if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
-            if (!mongoReconnectInterval) {
-                mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+    try {
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 10000,
+            socketTimeoutMS: 45000,
+            maxPoolSize: 20,
+            heartbeatFrequencyMS: 10000,
+            autoIndex: true
+        });
+        // Explicitly provision the generic record key index before any feature can write.
+        await require('./models/BotRecord').createIndexes();
+        console.log('🍃 Connected to authoritative MongoDB and verified BotRecord indexes.');
+
+        // Optional durable MongoDB -> Firestore -> phone publisher.
+        // The phone remains an offline replica; missing relay credentials do not affect bot storage.
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON && process.env.PHONE_DB_DEVICE_UID && !phoneSyncPublisher) {
+            try {
+                const { createPhoneSyncPublisher } = require('./utils/phoneSyncPublisher');
+                phoneSyncPublisher = createPhoneSyncPublisher();
+                phoneSyncPublisher.start();
+            } catch (syncError) {
+                phoneSyncPublisher = null;
+                console.error('[Phone Sync] Publisher disabled; bot database remains available:', syncError.message);
             }
+        } else if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON || !process.env.PHONE_DB_DEVICE_UID) {
+            console.warn('[Phone Sync] Publisher disabled: configure FIREBASE_SERVICE_ACCOUNT_JSON and PHONE_DB_DEVICE_UID on the trusted server to enable phone downloads.');
         }
 
-        mongoose.connection.on('disconnected', () => {
-            console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
-            if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
-            if (!mongoReconnectInterval) {
-                mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
-            }
-            attemptMongoReconnect();
-        });
-        mongoose.connection.on('reconnected', () => {
-            console.log('🍃 MongoDB reconnected successfully.');
-            mongoDisconnectedSince = null;
-            if (mongoReconnectInterval) {
-                clearInterval(mongoReconnectInterval);
-                mongoReconnectInterval = null;
-            }
-            // Refresh language cache after reconnection
-            const { initLanguageCache } = require('./utils/i18n');
-            initLanguageCache(client).catch(() => {});
-        });
-        mongoose.connection.on('error', (err) => {
-            console.error('❌ MongoDB Connection Error:', err.message);
-        });
-    } else {
-        console.warn('⚠️ [MongoDB Boot] MONGO_URI is not set. Bot will operate in high-resilience mode with local/in-memory state.');
+        const { initLanguageCache } = require('./utils/i18n');
+        await initLanguageCache(client).catch(() => {});
+    } catch (mongoInitErr) {
+        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+        if (!mongoReconnectInterval) {
+            mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+        }
+        throw new Error('MongoDB startup gate failed; Discord clients were not started: ' + mongoInitErr.message);
     }
+
+    mongoose.connection.on('disconnected', () => {
+        console.warn('⚠️ MongoDB connection lost. Triggering active auto-reconnect engine...');
+        if (!mongoDisconnectedSince) mongoDisconnectedSince = Date.now();
+        if (!mongoReconnectInterval) {
+            mongoReconnectInterval = setInterval(attemptMongoReconnect, 5000);
+        }
+        attemptMongoReconnect();
+    });
+    mongoose.connection.on('reconnected', () => {
+        console.log('🍃 MongoDB reconnected successfully.');
+        mongoDisconnectedSince = null;
+        if (mongoReconnectInterval) {
+            clearInterval(mongoReconnectInterval);
+            mongoReconnectInterval = null;
+        }
+        const { initLanguageCache } = require('./utils/i18n');
+        initLanguageCache(client).catch(() => {});
+    });
+    mongoose.connection.on('error', (err) => {
+        console.error('❌ MongoDB Connection Error:', err.message);
+    });
 
     try {
         const bumpModule = require('./modules/bumpEngine.js');
@@ -1043,7 +1031,7 @@ async function startBot(overrideToken, overrideMongo) {
 const shutdownHandler = async (signal) => {
     console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry Bot...`);
     try {
-        releaseWakeLock();
+        if (phoneSyncPublisher) phoneSyncPublisher.stop();
         if (mongoose.connection.readyState === 1) await mongoose.connection.close();
         if (client) client.destroy();
         for (const [id, info] of multiBot.instances.entries()) {
@@ -1055,13 +1043,11 @@ const shutdownHandler = async (signal) => {
         process.exit(0);
     } catch (err) {
         console.error("Error during graceful shutdown:", err);
-        releaseWakeLock();
         process.exit(1);
     }
 };
 
 process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
-process.on('exit', () => releaseWakeLock());
 
 startBot();

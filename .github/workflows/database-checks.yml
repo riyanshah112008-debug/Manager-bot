@@ -1,0 +1,48 @@
+name: Database checks
+
+on:
+  push:
+    branches:
+      - database/fresh-shared-storage
+  pull_request:
+    branches:
+      - database/firestore-relay-protocol
+
+jobs:
+  node-mongodb:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - name: Check changed JavaScript syntax
+        run: |
+          for file in src/index.js src/modules/mediaPermsEngine.js src/modules/commandHandler.js src/utils/automodHelper.js src/commands/moderation/automod.js src/modules/musicController.js src/modules/giveaway.js src/modules/voiceManager.js src/modules/susAccount.js src/utils/mongoStore.js src/utils/phoneSyncPublisher.js; do
+            node --check "$file"
+          done
+      - run: npm run test:firestore-relay
+      - run: npm run test:db
+        env:
+          MONGO_TEST_URI: mongodb://127.0.0.1:27017/manager_bot_test
+
+  phone-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s phone-db -p "test_*.py" -v

@@ -14,7 +14,6 @@ const {
     ButtonStyle 
 } = require('discord.js');
 const ServerSettings = require('../models/ServerSettings');
-const db = require('../utils/database');
 const config = require('../config');
 
 // In-Memory Debouncing & Invite Cache
@@ -106,23 +105,12 @@ class MediaPermsEngine {
         if (!guildId) return { enabled: false };
         if (this.cache.has(guildId)) return this.cache.get(guildId);
 
-        let settings = null;
-        try {
-            const mongoose = require('mongoose');
-            if (mongoose.connection && mongoose.connection.readyState === 1) {
-                const doc = await ServerSettings.findOne({ guildId }).select('mediaPerms').lean();
-                if (doc && doc.mediaPerms) {
-                    settings = doc.mediaPerms;
-                }
-            }
-        } catch (e) {}
-
-        if (!settings) {
-            const local = db.getGuildSettings(guildId);
-            if (local && local.media_perms) {
-                settings = local.media_perms;
-            }
+        const mongoose = require('mongoose');
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            throw new Error('MongoDB is unavailable; media-permissions settings cannot be loaded.');
         }
+        const doc = await ServerSettings.findOne({ guildId }).select('mediaPerms').lean();
+        const settings = doc?.mediaPerms || null;
 
         const resolved = {
             enabled: settings?.enabled !== false,
@@ -144,30 +132,19 @@ class MediaPermsEngine {
      * @param {Object} update 
      */
     async updateGuildSettings(guildId, update) {
-        if (!guildId) return;
+        if (!guildId) throw new TypeError('guildId is required');
         const current = await this.getGuildSettings(guildId);
         const merged = { ...current, ...update };
+        const mongoose = require('mongoose');
+        if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+            throw new Error('MongoDB is unavailable; media-permissions settings were not saved.');
+        }
+        await ServerSettings.findOneAndUpdate(
+            { guildId },
+            { $set: { mediaPerms: merged } },
+            { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
+        );
         this.cache.set(guildId, merged);
-
-        // Sync local store
-        try {
-            if (db && typeof db.updateGuildSettings === 'function') {
-                db.updateGuildSettings(guildId, { media_perms: merged });
-            }
-        } catch (e) {}
-
-        // Sync MongoDB
-        try {
-            const mongoose = require('mongoose');
-            if (mongoose.connection && mongoose.connection.readyState === 1) {
-                await ServerSettings.findOneAndUpdate(
-                    { guildId },
-                    { $set: { mediaPerms: merged } },
-                    { upsert: true }
-                ).catch(() => {});
-            }
-        } catch (e) {}
-
         return merged;
     }
 

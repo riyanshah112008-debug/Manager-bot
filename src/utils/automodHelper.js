@@ -14,7 +14,6 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 const config = require('../config');
-const db = require('./database');
 const { AutomodGuild, AutomodChannel } = require('../models/AutomodSchema');
 
 const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
@@ -50,13 +49,6 @@ async function initAutomodCaches() {
 function getGuildStatus(guildId) {
     if (!guildId) return true;
     if (guildCache.has(guildId)) return guildCache.get(guildId);
-    try {
-        const localSettings = db.getGuildSettings ? db.getGuildSettings(guildId) : null;
-        if (localSettings && localSettings.automod && localSettings.automod.enabled !== undefined) {
-            guildCache.set(guildId, localSettings.automod.enabled);
-            return localSettings.automod.enabled;
-        }
-    } catch (_) {}
     return true;
 }
 
@@ -67,30 +59,15 @@ function getGuildStatus(guildId) {
  */
 async function setGuildStatus(guildId, enabled) {
     if (!guildId) return false;
-    guildCache.set(guildId, enabled);
-
-    // Save to local JSON database for persistent offline resilience
-    try {
-        if (db.updateGuildSettings && db.getGuildSettings) {
-            const current = db.getGuildSettings(guildId) || {};
-            const automod = current.automod || {};
-            automod.enabled = enabled;
-            db.updateGuildSettings(guildId, { automod });
-        }
-    } catch (_) {}
-
-    // Save to MongoDB if online
-    if (isDbConnected()) {
-        try {
-            await AutomodGuild.findOneAndUpdate(
-                { guildId },
-                { enabled },
-                { upsert: true, new: true }
-            );
-        } catch (err) {
-            console.error('❌ [AutoMod] Error saving guild status:', err.message);
-        }
+    if (!isDbConnected()) {
+        throw new Error('MongoDB is unavailable; AutoMod settings were not saved.');
     }
+    await AutomodGuild.findOneAndUpdate(
+        { guildId },
+        { enabled },
+        { upsert: true, new: true, runValidators: true }
+    );
+    guildCache.set(guildId, enabled);
     return enabled;
 }
 
@@ -154,26 +131,20 @@ async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
         newEmojis = !shouldEnable;
     }
 
-    // Update in-memory cache immediately
+    if (!isDbConnected()) throw new Error('MongoDB is unavailable; AutoMod channel settings were not saved.');
+    const updateData = {
+        links: newLinks,
+        emojis: newEmojis,
+        updatedAt: new Date()
+    };
+    if (guildId) updateData.guildId = guildId;
+
+    await AutomodChannel.findOneAndUpdate(
+        { channelId },
+        { $set: updateData },
+        { upsert: true, new: true, runValidators: true }
+    );
     channelCache.set(channelId, { links: newLinks, emojis: newEmojis });
-
-    // Write atomically to MongoDB
-    try {
-        const updateData = {
-            links: newLinks,
-            emojis: newEmojis,
-            updatedAt: new Date()
-        };
-        if (guildId) updateData.guildId = guildId;
-
-        await AutomodChannel.findOneAndUpdate(
-            { channelId },
-            { $set: updateData },
-            { upsert: true, new: true }
-        );
-    } catch (err) {
-        console.error('❌ [AutoMod] Failed to persist channel filter:', err.message);
-    }
 
     return {
         channelId,
@@ -192,12 +163,9 @@ async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
  */
 async function resetChannelSettings(channelId, guildId = null) {
     if (!channelId) return null;
+    if (!isDbConnected()) throw new Error('MongoDB is unavailable; AutoMod channel settings were not reset.');
+    await AutomodChannel.findOneAndDelete({ channelId });
     channelCache.set(channelId, { links: false, emojis: false });
-    try {
-        await AutomodChannel.findOneAndDelete({ channelId });
-    } catch (err) {
-        console.error('❌ [AutoMod] Failed to reset channel settings:', err.message);
-    }
     return {
         channelId,
         guildId,

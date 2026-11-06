@@ -1,8 +1,8 @@
-"""Phone-side SQLite document store and durable synchronization outbox.
+"""Phone-side SQLite replica and durable local outbox.
 
-Uses only Python's standard library so it can run in Termux without a native
-Node SQLite addon. This module is a local foundation; it does not expose a
-network listener or connect to a cloud relay.
+Uses only Python's standard library. Current relay integration downloads
+server-authoritative changes only. Local outbox entries are not uploaded to
+MongoDB; they remain pending until a trusted upload path is implemented.
 """
 from __future__ import annotations
 

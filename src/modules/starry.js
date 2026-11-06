@@ -45,45 +45,10 @@ const badWordSchema = new mongoose.Schema({
 });
 const BadWordSettings = mongoose.models.BadWordSettings || mongoose.model('BadWordSettings', badWordSchema);
 
-const welcomeSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    channelId: { type: String, required: true }
-});
-const WelcomeSettings = mongoose.models.WelcomeSettings || mongoose.model('WelcomeSettings', welcomeSchema);
-
-const goodbyeSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    channelId: { type: String, required: true }
-});
-const GoodbyeSettings = mongoose.models.GoodbyeSettings || mongoose.model('GoodbyeSettings', goodbyeSchema);
-
-const masterSecuritySchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    autoKick: { type: Boolean, default: false }, 
-    autoBan: { type: Boolean, default: false }, 
-    ownerBypass: { type: Boolean, default: true },
-    modules: { 
-        antinuke: { type: Boolean, default: true }, 
-        antiraid: { type: Boolean, default: true }, 
-        altshield: { type: Boolean, default: false }, 
-        automod: { type: Boolean, default: true } 
-    },
-    userInfractions: { type: Map, of: Number, default: {} }
-});
-const MasterSecurity = mongoose.models.MasterSecurity || mongoose.model('MasterSecurity', masterSecuritySchema);
-
-let ServerSettings;
-try {
-    ServerSettings = mongoose.models.ServerSettings || require('../models/ServerSettings');
-} catch (e) {
-    const serverSettingsSchema = new mongoose.Schema({
-        guildId: { type: String, required: true, unique: true },
-        setupCompleted: { type: Boolean, default: false },
-        verifiedRoleId: { type: String, default: null },
-        triggerWord: { type: String, default: 'starry' }
-    });
-    ServerSettings = mongoose.models.ServerSettings || mongoose.model('ServerSettings', serverSettingsSchema);
-}
+const WelcomeSettings = require('../models/WelcomeSettings');
+const GoodbyeSettings = require('../models/GoodbyeSettings');
+const MasterSecurity = require('../models/MasterSecurity');
+const ServerSettings = require('../models/ServerSettings');
 
 const rawKeys = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
 const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
