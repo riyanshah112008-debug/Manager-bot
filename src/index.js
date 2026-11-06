@@ -54,34 +54,8 @@ const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
-const child_process = require('child_process');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
-
-// ==========================================
-// 🔋 TERMUX WAKE LOCK HELPERS
-// ==========================================
-let lastWakeLockTime = 0;
-function acquireWakeLock(forceLog = false) {
-    try {
-        child_process.exec('termux-wake-lock', (err) => {
-            if (!err) {
-                const now = Date.now();
-                if (forceLog || now - lastWakeLockTime > 300000) {
-                    console.log('🔋 [Termux] Wake lock active & refreshed (termux-wake-lock)');
-                    lastWakeLockTime = now;
-                }
-            }
-        });
-    } catch (e) {}
-}
-
-function releaseWakeLock() {
-    try {
-        child_process.execSync('termux-wake-unlock', { stdio: 'ignore' });
-        console.log('🔌 [Termux] Wake lock released (termux-wake-unlock)');
-    } catch (e) {}
-}
 
 const config = require('./config');
 const multiBot = require('./modules/multiBot');
@@ -383,7 +357,6 @@ const { startTunnel } = require('./utils/tunnelManager');
 startTunnel(port).catch(() => {});
 
 // Automatically acquire Termux Wake Lock on client initialization
-acquireWakeLock();
 
 // Global Mass Ping AutoMod
 client.on('messageCreate', async (message) => {
@@ -580,7 +553,6 @@ client.on(Events.Warn, warn => console.warn('⚠️ Discord Warning:', warn));
 client.on(Events.ShardError, err => console.error('❌ WebSocket/Network Error:', err));
 client.on(Events.ShardDisconnect, (event, id) => {
     console.warn(`⚠️ Gateway Shard #${id} Disconnected (Code: ${event?.code || 'N/A'}). Attempting automatic reconnection...`);
-    acquireWakeLock();
 });
 client.on(Events.ShardReconnecting, (id) => console.log(`🔄 Gateway Shard #${id} Reconnecting to Discord...`));
 client.on(Events.ShardResume, (id, replayedEvents) => console.log(`✅ Gateway Shard #${id} Resumed connection successfully (${replayedEvents} events synced).`));
@@ -633,7 +605,6 @@ setInterval(() => {
 
     // 1. Maintain Termux Wake Lock Continuously (Every ~60s)
     if (watchdogCycle % 4 === 0) {
-        acquireWakeLock();
     }
 
     // 2. Check MongoDB Connection Health
@@ -720,7 +691,6 @@ client.once(Events.ClientReady, async () => {
         bootRetryTimer = null;
     }
     console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
-    acquireWakeLock();
 
     try {
         if (client.manager && typeof client.manager.init === 'function') {
@@ -1061,7 +1031,6 @@ async function startBot(overrideToken, overrideMongo) {
 const shutdownHandler = async (signal) => {
     console.log(`⚠️ Received ${signal}. Gracefully shutting down Starry Bot...`);
     try {
-        releaseWakeLock();
         if (phoneSyncPublisher) phoneSyncPublisher.stop();
         if (mongoose.connection.readyState === 1) await mongoose.connection.close();
         if (client) client.destroy();
@@ -1074,13 +1043,11 @@ const shutdownHandler = async (signal) => {
         process.exit(0);
     } catch (err) {
         console.error("Error during graceful shutdown:", err);
-        releaseWakeLock();
         process.exit(1);
     }
 };
 
 process.on('SIGINT', () => shutdownHandler('SIGINT'));
 process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
-process.on('exit', () => releaseWakeLock());
 
 startBot();
