@@ -5,6 +5,7 @@
 
 const { PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { AutoroleConfig, StickyRole } = require('../models/AutoroleSchema');
+const ServerSettings = require('../models/ServerSettings');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
@@ -16,8 +17,12 @@ module.exports = (client) => {
         if (!member.guild || member.user.bot) return;
 
         try {
-            const config = await AutoroleConfig.findOne({ guildId: member.guild.id }).lean();
-            if (config && config.stickyRolesEnabled === false) return;
+            const [config, serverSettings] = await Promise.all([
+                AutoroleConfig.findOne({ guildId: member.guild.id }).lean(),
+                ServerSettings.findOne({ guildId: member.guild.id }).select('autorole').lean()
+            ]);
+            const stickyEnabled = serverSettings?.autorole?.stickyRoles ?? config?.stickyRolesEnabled ?? true;
+            if (!stickyEnabled) return;
 
             const roleIds = member.roles.cache
                 .filter(role => role.id !== member.guild.id && !role.managed)
@@ -39,44 +44,46 @@ module.exports = (client) => {
     // 2. AUTOMATIC RESTORE & ASSIGN (ON JOIN)
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
-        if (!member.guild || member.user.bot) return;
+        if (!member.guild) return;
 
         try {
             const botMember = member.guild.members.me || await member.guild.members.fetch(client.user.id).catch(() => null);
             if (!botMember || !botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) return;
 
-            const config = await AutoroleConfig.findOne({ guildId: member.guild.id }).lean();
-            let rolesToApply = [];
+            const [legacyConfig, serverSettings] = await Promise.all([
+                AutoroleConfig.findOne({ guildId: member.guild.id }).lean(),
+                ServerSettings.findOne({ guildId: member.guild.id }).select('autorole').lean()
+            ]);
+            const dashboardConfig = serverSettings?.autorole || {};
+            const isBot = Boolean(member.user.bot);
+            const configuredRoles = isBot
+                ? (dashboardConfig.botRoles || [])
+                : (dashboardConfig.memberRoles || []);
+            const legacyRoles = isBot ? [] : (legacyConfig?.roleIds || []);
+            const rolesToApply = [];
             const botHighestRolePosition = botMember.roles.highest.position;
 
-            // Restore Sticky Roles
-            if (!config || config.stickyRolesEnabled !== false) {
+            // Sticky-role restoration applies only to returning human members.
+            const stickyEnabled = dashboardConfig.stickyRoles ?? legacyConfig?.stickyRolesEnabled ?? true;
+            if (!isBot && stickyEnabled) {
                 const previousData = await StickyRole.findOne({ guildId: member.guild.id, userId: member.user.id }).lean();
-
-                if (previousData && previousData.roles && previousData.roles.length > 0) {
-                    const validStickyRoles = previousData.roles.filter(roleId => {
-                        const role = member.guild.roles.cache.get(roleId);
-                        return role && role.position < botHighestRolePosition && !role.managed;
-                    });
-                    rolesToApply.push(...validStickyRoles);
+                for (const roleId of previousData?.roles || []) {
+                    const role = member.guild.roles.cache.get(roleId);
+                    if (role && role.position < botHighestRolePosition && !role.managed) rolesToApply.push(roleId);
                 }
             }
 
-            // Assign Default Autoroles
-            if (config && config.roleIds && config.roleIds.length > 0) {
-                for (const rId of config.roleIds) {
-                    const autoRole = member.guild.roles.cache.get(rId);
-                    if (autoRole && autoRole.position < botHighestRolePosition && !rolesToApply.includes(rId)) {
-                        rolesToApply.push(rId);
-                    }
+            // Dashboard memberRoles/botRoles are authoritative; preserve legacy /autorole roles for humans.
+            for (const roleId of [...configuredRoles, ...legacyRoles]) {
+                const role = member.guild.roles.cache.get(roleId);
+                if (role && role.position < botHighestRolePosition && !role.managed && !rolesToApply.includes(roleId)) {
+                    rolesToApply.push(roleId);
                 }
             }
 
-            // Execute Role Application
-            if (rolesToApply.length > 0) {
-                await member.roles.add(rolesToApply, "Starry Automod: Restored previous roles & assigned default roles").catch(() => {});
+            if (rolesToApply.length) {
+                await member.roles.add(rolesToApply, "Starry: dashboard autoroles and eligible sticky-role restoration");
             }
-
         } catch (error) {
             console.error(`❌ Role Assign Error (${member.guild.id}):`, error.message);
         }
