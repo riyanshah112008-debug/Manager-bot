@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { CommandContext, ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../utils/contextHelper');
+const { usesNativeInteraction } = require('../utils/commandExecutionContract');
 const { buildCategoryEmbed, createHelpComponents } = require('../utils/helpHelper');
 const User = require('../models/User');
 
@@ -574,18 +575,18 @@ NaN
                         // Bundled commands use Starry's normalized CommandContext. Standalone
                         // SlashCommandBuilder modules use the native Discord interaction API
                         // (interaction.reply/deferReply/options/member) and must receive it intact.
-                        const usesNativeInteraction = Boolean(command.data);
+                        const useNativeInteraction = usesNativeInteraction(command);
 
                         // Context-based bundle commands are deferred centrally. Native
                         // interaction modules own their response lifecycle to avoid double-acks.
-                        if (!usesNativeInteraction && !interaction.deferred && !interaction.replied && command.autoDefer !== false) {
+                        if (!useNativeInteraction && !interaction.deferred && !interaction.replied && command.autoDefer !== false) {
                             const deferOpts = command.ephemeral ? { flags: [MessageFlags.Ephemeral] } : {};
                             await interaction.deferReply(deferOpts).catch(() => {});
                             ctx.deferred = true;
                         }
 
                         if (typeof command.execute === 'function') {
-                            const executionContext = usesNativeInteraction ? interaction : ctx;
+                            const executionContext = useNativeInteraction ? interaction : ctx;
                             await executeSafely(command, executionContext, client, resolvedName);
                         }
                     } catch (err) {

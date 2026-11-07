@@ -9,6 +9,8 @@ const botAvatarHelper = require('../../utils/botAvatarHelper');
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
 module.exports = {
+    // This handler uses Discord's raw interaction API rather than CommandContext.
+    nativeInteraction: true,
     data: new SlashCommandBuilder()
         .setName('botavatar')
         .setDescription('🖼️ Customize or reset the bot\'s profile picture (server avatar) for this server')
