@@ -2,7 +2,7 @@
   "name": "manager-bot-firebase-api-proxy",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
