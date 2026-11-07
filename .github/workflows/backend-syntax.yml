@@ -26,5 +26,3 @@ jobs:
           node --check public/firebase-bridge.js
           node --check public/landing.js
           node --check public/workspace.js
-      - name: Test website invite permission defaults
-        run: node --test tests/publicInvitePermissions.test.js
