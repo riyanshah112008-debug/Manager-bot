@@ -29,7 +29,7 @@ module.exports = {
             .setDescription(
                 `Congratulations <@${userId}>! You have reset your Level back to **1** and advanced to **Prestige ${userData.prestige}**!\n\n` +
                 `✨ **Permanent Perks Earned:**\n` +
-                `• **+15% Boost** to all XP and Credits earned from chests.\n` +
+                `• **+15% Boost** to XP and Credits earned from supported economy activities.\n` +
                 `• Exclusive Prestige Badge displayed on your profile.`
             )
             .setFooter({ text: 'Starry Prestige System', iconURL: client.user.displayAvatarURL() });
