@@ -8,9 +8,8 @@ const { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const { getGuildLanguage, setGuildLanguage, t, createSetupPromptCard, SUPPORTED_LANGUAGES, getWelcomeDefaults } = require('../utils/i18n');
 
 // Safely load databases
-let ServerSettings, ChestChannel, BoostChannel;
+let ServerSettings, BoostChannel;
 try { ServerSettings = require('../models/ServerSettings'); } catch(e) {}
-try { ChestChannel = require('../models/ChestChannel'); } catch(e) {}
 try { BoostChannel = require('../models/BoostChannel'); } catch(e) {}
 
 /**
@@ -96,21 +95,6 @@ async function runServerSync(guild, client, lang = 'en') {
     if (booster && BoostChannel) {
         await BoostChannel.findOneAndUpdate({ guildId: guild.id }, { channelId: booster.id }, { upsert: true });
         report.push(t(lang, 'setup.report.boost', { channel: booster.id }));
-    }
-
-    const chestTargets = channels.filter(c => c.type === ChannelType.GuildText && (c.name.includes('general') || c.name.includes('cafe-chat') || c.name.includes('international') || c.name.includes('spam')));
-    if (ChestChannel) {
-        if (!client.chestChannelsCache) client.chestChannelsCache = new Set();
-        let chestCount = 0;
-        for (const [id, channel] of chestTargets) {
-            const existing = await ChestChannel.findOne({ channelId: id });
-            if (!existing) {
-                await ChestChannel.create({ guildId: guild.id, channelId: id });
-                client.chestChannelsCache.add(id);
-                chestCount++;
-            }
-        }
-        if (chestCount > 0) report.push(t(lang, 'setup.report.loot', { count: chestCount }));
     }
 
     return report;
