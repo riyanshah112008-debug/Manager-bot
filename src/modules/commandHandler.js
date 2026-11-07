@@ -444,9 +444,7 @@ class CommandRegistry {
                 }
             }
 
-            if (!command) return;
-
-            // 🛡️ Guaranteed Single-Execution Message Guard (Process-wide In-Memory Deduplication)
+NaN
             if (executedMessageIds.has(message.id)) return;
             executedMessageIds.add(message.id);
             setTimeout(() => executedMessageIds.delete(message.id), 20000);
@@ -562,16 +560,33 @@ class CommandRegistry {
                 if (command) {
                     try {
                         const ctx = new CommandContext(interaction, client, []);
-                        
-                        // Instant 0ms defer to guarantee Discord never shows "Application did not respond"
-                        if (!interaction.deferred && !interaction.replied && command.autoDefer !== false) {
+
+                        // Keep slash-command behavior consistent with prefix commands:
+                        // server-scoped modules must never dereference ctx.guild in DMs.
+                        if (!ctx.guild?.id && (command.category === 'Moderation' || command.category === 'Economy' || command.guildOnly)) {
+                            await interaction.reply({
+                                content: '❌ This command can only be used inside a Discord server.',
+                                flags: [MessageFlags.Ephemeral]
+                            }).catch(() => {});
+                            return;
+                        }
+
+                        // Bundled commands use Starry's normalized CommandContext. Standalone
+                        // SlashCommandBuilder modules use the native Discord interaction API
+                        // (interaction.reply/deferReply/options/member) and must receive it intact.
+                        const usesNativeInteraction = Boolean(command.data);
+
+                        // Context-based bundle commands are deferred centrally. Native
+                        // interaction modules own their response lifecycle to avoid double-acks.
+                        if (!usesNativeInteraction && !interaction.deferred && !interaction.replied && command.autoDefer !== false) {
                             const deferOpts = command.ephemeral ? { flags: [MessageFlags.Ephemeral] } : {};
                             await interaction.deferReply(deferOpts).catch(() => {});
                             ctx.deferred = true;
                         }
 
                         if (typeof command.execute === 'function') {
-                            await executeSafely(command, ctx, client, resolvedName);
+                            const executionContext = usesNativeInteraction ? interaction : ctx;
+                            await executeSafely(command, executionContext, client, resolvedName);
                         }
                     } catch (err) {
                         console.error(`❌ Slash Command Error (/${commandName}):`, err);
