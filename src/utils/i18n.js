@@ -159,7 +159,7 @@ const TRANSLATIONS = {
         'setup.select_lang_desc': 'Choose the primary language for Starry commands, setup wizards, and automatic responses.',
         'setup.select_lang_placeholder': 'Choose your server language...',
         'setup.sync_title': '🧠 Starry Master Configuration Engine',
-        'setup.sync_desc': '**Initiate Global Server Sync?**\n\nMy brain will scan your channels and automatically configure:\n🛡️ **Security:** Verification & Logs\n👋 **Community:** Welcomes, Starboard & Suggestions\n🎫 **Support:** Tickets, Appeals & Applications\n🎁 **Economy:** Loot Chests & Boosts\n\n*This will wire internal systems directly into your server layout.*',
+        'setup.sync_desc': '**Initiate Global Server Sync?**\n\nMy brain will scan your channels and automatically configure:\n🛡️ **Security:** Verification & Logs\n👋 **Community:** Welcomes, Starboard & Suggestions\n🎫 **Support:** Tickets, Appeals & Applications\n🎁 **Economy:** Rewards & Boosts\n\n*This will wire internal systems directly into your server layout.*',
         'setup.btn_sync': 'SYNC SERVER',
         'setup.btn_cancel': 'CANCEL',
         'setup.btn_lang': 'CHANGE LANGUAGE',
