@@ -19,7 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const child_process = require('child_process');
 
-const BOTS_ROOT_DIR = '/data/data/com.termux/files/home/generated-bots';
+// Use a writable, platform-independent workspace. Deployments may override this path.
+const DEFAULT_BOTS_ROOT_DIR = process.env.BOT_STUDIO_ROOT || path.join(process.cwd(), 'generated-bots');
 
 // Active Session Cache (sessionId -> sessionData)
 const botStudioSessions = new Map();
@@ -150,15 +151,14 @@ function buildBotStudioChoicePayload(session) {
  * 4. Scaffolds the full multi-file bot in an isolated workspace on the host environment
  */
 async function scaffoldCompleteBot(prompt, options = {}) {
-    if (!fs.existsSync(BOTS_ROOT_DIR)) {
-        fs.mkdirSync(BOTS_ROOT_DIR, { recursive: true });
-    }
+    const botsRootDir = path.resolve(options.rootDir || DEFAULT_BOTS_ROOT_DIR);
+    fs.mkdirSync(botsRootDir, { recursive: true });
 
     const rawName = options.botName || extractBotName(prompt) || 'custom-discord-bot';
     const botSlug = rawName.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'starry-custom-bot';
     const timestamp = Date.now().toString(36);
     const workspaceName = `${botSlug}-${timestamp}`;
-    const workspacePath = path.join(BOTS_ROOT_DIR, workspaceName);
+    const workspacePath = path.join(botsRootDir, workspaceName);
 
     // Create folder structure
     fs.mkdirSync(workspacePath, { recursive: true });
@@ -790,7 +790,8 @@ async function pushBotToGitHub(workspacePath, repoUrl, pat, botName) {
  */
 async function packageBotZip(workspacePath, botSlug) {
     const zipFilename = `${botSlug}.zip`;
-    const zipPath = path.join(BOTS_ROOT_DIR, zipFilename);
+    // Keep the archive beside its workspace so custom/test roots remain isolated.
+    const zipPath = path.join(path.dirname(workspacePath), zipFilename);
     if (fs.existsSync(zipPath)) {
         try { fs.unlinkSync(zipPath); } catch (e) {}
     }
