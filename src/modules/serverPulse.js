@@ -128,11 +128,6 @@ In 3 concise bullet points formatted with markdown:
             .setLabel('Spark Discussion')
             .setStyle(ButtonStyle.Success)
             .setEmoji('✨'),
-        new ButtonBuilder()
-            .setCustomId('pulse_drop')
-            .setLabel('Trigger Starlight Drop')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('🎁')
     );
 
     return { embed, row, score: overallScore, grade };

@@ -830,7 +830,6 @@ const MODULE_INITIALIZERS = [
     { name: 'Server Backup Engine', fn: () => require('./modules/backupEngine.js')(client, app) },
     { name: 'Role Manager', fn: () => require('./modules/roleManager.js')(client, app) },
     { name: 'Anti-Abuse', fn: () => require('./modules/antiAbuse.js')(client, app) },
-    { name: 'Random Chest Drops', fn: () => require('./modules/chestDrop.js')(client, app) },
     { name: 'Autorole & Sticky Roles', fn: () => require('./modules/autorole.js')(client, app) },
     { name: 'Verification System', fn: () => require('./modules/verification.js')(client, app) },
     { name: 'Network Telemetry Engine', fn: () => require('./modules/telemetryEngine.js')(client, app) },

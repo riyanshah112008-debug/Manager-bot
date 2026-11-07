@@ -60,7 +60,7 @@ const commands = [
                         `• **🛡️ \`moderation\`**: Dedicated to Moderation, AutoMod, Security & Tickets.\n` +
                         `• **🎵 \`music\`**: Dedicated to Voice Channels, 24/7 radio & High Quality Audio.\n` +
                         `• **🛠️ \`utility\`**: Dedicated to Utility, Whois, Server Info & Steal.\n` +
-                        `• **💰 \`economy\`**: Dedicated to Shop, Chests, Prestige & Pet system.\n` +
+                        `• **💰 \`economy\`**: Dedicated to Shop, economy rewards, Prestige & Pet system.\n` +
                         `• **🎭 \`social\`**: Dedicated to Anime Social Actions, Leveling & Mini-Games.\n\n` +
                         `*Usage:* \`,multibot add <token> <role>\` or \`,multibot setrole <botName/ID> <role>\``
                     )
@@ -215,68 +215,6 @@ const commands = [
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
-        }
-    },
-
-    // 2. CHEST
-    {
-        name: 'chest',
-        aliases: ['loot'],
-        category: 'Systems',
-        description: 'Claim your timed loot chest for free XP and Credits.',
-        usage: ',chest',
-        async execute(ctx) {
-            const xpReward = Math.floor(Math.random() * 50) + 25;
-            const creditsReward = Math.floor(Math.random() * 200) + 100;
-
-            const embed = new EmbedBuilder()
-                .setColor(config.EMBED_COLORS.ECONOMY)
-                .setTitle('🎁 Timed Mystery Loot Chest')
-                .setDescription(
-                    `**${ctx.user.username}**, you unlocked your mystery chest!\n\n` +
-                    `✨ **+${xpReward} XP**\n` +
-                    `💵 **+$${creditsReward} Credits**`
-                )
-                .setFooter({ text: 'Loot Chests reset periodically • Prefix: ,' })
-                .setTimestamp();
-
-            return ctx.reply({ embeds: [embed] });
-        }
-    },
-
-    // 3. CHESTDROP
-    {
-        name: 'chestdrop',
-        aliases: ['spawnchest'],
-        category: 'Systems',
-        description: 'Spawn an interactive loot chest in the channel (Admins Only).',
-        usage: ',chestdrop',
-        permissions: [PermissionFlagsBits.Administrator],
-        async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
-            }
-
-            const embed = new EmbedBuilder()
-                .setColor('#F1C40F')
-                .setTitle('📦 A MYSTERY LOOT CHEST HAS DROPPED!')
-                .setDescription('First member to click the button below claims the rewards!\n*Button features high 1-year response lifetime.*')
-                .setTimestamp();
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('claim_chestdrop').setLabel('Claim Loot Chest!').setStyle(ButtonStyle.Success).setEmoji('🎁')
-            );
-
-            const msg = await ctx.channel.send({ embeds: [embed], components: [row] });
-
-            // 1-Year Component Collector
-            const collector = msg.createMessageComponentCollector({ time: ONE_YEAR_MS });
-            collector.on('collect', async (i) => {
-                row.components[0].setDisabled(true).setLabel(`Claimed by ${i.user.username}`);
-                await i.update({ components: [row] });
-                await i.followUp(`🎉 <@${i.user.id}> was first and claimed **500 Credits & 100 XP**!`);
-                collector.stop();
-            });
         }
     },
 

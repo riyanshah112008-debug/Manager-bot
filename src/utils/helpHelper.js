@@ -9,7 +9,7 @@ const BASE_HELP_CATEGORIES = [
     { id: 'social', label: 'Social & Expressions (44)', desc: 'Hug, kiss, slap, anime GIFs, interactions & counters', emoji: '🎭' },
     { id: 'eco', label: 'Economy & RPG Adventure (32)', desc: 'Passport, beg, scavenge, heists, crates, shop & mining', emoji: '💰' },
     { id: 'game', label: 'Cosmic Arcade & Boss Raids (12)', desc: 'Co-op World Boss Raids, Blackjack, Mines & Wordle', emoji: '🎮' },
-    { id: 'sys', label: 'Multi-Bot & Systems (26)', desc: 'Multi-bot cluster, treasure chests, giveaways & tickets', emoji: '🤖' }
+    { id: 'sys', label: 'Multi-Bot & Systems', desc: 'Multi-bot cluster, giveaways, tickets and backups', emoji: '🤖' }
 ];
 
 function getHelpCategories() { return BASE_HELP_CATEGORIES; }
@@ -132,16 +132,11 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• \`${prefix}coinflip\`, \`${prefix}roll\`, \`${prefix}8ball\``
             );
     } else if (catId === 'sys') {
-        embed.setTitle('🤖 Multi-Bot & Systems Management (26 Commands)')
+        embed.setTitle('🤖 Multi-Bot & Systems Management')
             .setDescription(
                 `**Multi-Bot Architecture & Clustering:**\n` +
                 `• \`${prefix}multibot\` — Inspect active worker bots, voice delegate states, and cluster health\n` +
                 `• \`${prefix}telemetry\` — Real-time performance, cluster latency & sharding analytics\n\n` +
-                `**Treasure Chests & Engagement:**\n` +
-                `• \`${prefix}chest\` — Open and view your cosmic chests\n` +
-                `• \`${prefix}chestdrop\` — Manually trigger a wild drop in the channel\n` +
-                `• \`${prefix}chest-setup\` — Deploy auto-spawning chest drop systems\n` +
-                `• \`${prefix}chest-toggle\` — Enable or disable chest drops per channel\n\n` +
                 `**Automated Giveaways & Tickets:**\n` +
                 `\`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}confessionsetup\`, \`${prefix}setupcount\`\n\n` +
                 `**Backups & Visual Branding:**\n` +
@@ -167,7 +162,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 { name: '🎮 Arcade (12)', value: `\`${prefix}raid\`, \`${prefix}blackjack\`, \`${prefix}mines\``, inline: true },
                 { name: '💰 Economy (32)', value: `\`${prefix}profile\`, \`${prefix}crime\`, \`${prefix}shop\``, inline: true },
                 { name: '🎭 Social (44)', value: `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}bonk\``, inline: true },
-                { name: '🤖 Systems (26)', value: `\`${prefix}multibot\`, \`${prefix}chest\`, \`${prefix}backup\``, inline: true }
+                { name: '🤖 Systems', value: `\`${prefix}multibot\`, \`${prefix}backup\``, inline: true }
             );
 
     }
