@@ -18,9 +18,10 @@ const {
 const fs = require('fs');
 const path = require('path');
 const child_process = require('child_process');
+const crypto = require('crypto');
 
-// Use a writable, platform-independent workspace. Deployments may override this path.
-const DEFAULT_BOTS_ROOT_DIR = process.env.BOT_STUDIO_ROOT || path.join(process.cwd(), 'generated-bots');
+// BOT_STUDIO_ROOT is deployment configuration, never request/user input.
+const BOTS_ROOT_DIR = path.resolve(process.env.BOT_STUDIO_ROOT || path.join(process.cwd(), 'generated-bots'));
 
 // Active Session Cache (sessionId -> sessionData)
 const botStudioSessions = new Map();
@@ -151,14 +152,13 @@ function buildBotStudioChoicePayload(session) {
  * 4. Scaffolds the full multi-file bot in an isolated workspace on the host environment
  */
 async function scaffoldCompleteBot(prompt, options = {}) {
-    const botsRootDir = path.resolve(options.rootDir || DEFAULT_BOTS_ROOT_DIR);
-    fs.mkdirSync(botsRootDir, { recursive: true });
+    fs.mkdirSync(BOTS_ROOT_DIR, { recursive: true });
 
     const rawName = options.botName || extractBotName(prompt) || 'custom-discord-bot';
-    const botSlug = rawName.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'starry-custom-bot';
-    const timestamp = Date.now().toString(36);
-    const workspaceName = `${botSlug}-${timestamp}`;
-    const workspacePath = path.join(botsRootDir, workspaceName);
+    const botSlug = rawName.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 64) || 'starry-custom-bot';
+    // The directory name is generated independently of user-controlled bot names.
+    const workspaceName = `bot-${crypto.randomUUID()}`;
+    const workspacePath = path.join(BOTS_ROOT_DIR, workspaceName);
 
     // Create folder structure
     fs.mkdirSync(workspacePath, { recursive: true });
@@ -789,14 +789,25 @@ async function pushBotToGitHub(workspacePath, repoUrl, pat, botName) {
  * 6. Packages the generated bot into a downloadable .zip archive
  */
 async function packageBotZip(workspacePath, botSlug) {
-    const zipFilename = `${botSlug}.zip`;
-    // Keep the archive beside its workspace so custom/test roots remain isolated.
-    const zipPath = path.join(path.dirname(workspacePath), zipFilename);
-    if (fs.existsSync(zipPath)) {
-        try { fs.unlinkSync(zipPath); } catch (e) {}
+    if (typeof botSlug !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(botSlug)) {
+        throw new Error('Invalid bot archive name.');
     }
 
-    child_process.execSync(`zip -r "${zipPath}" . -x "*.git*"`, { cwd: workspacePath, stdio: 'pipe' });
+    const rootRealPath = fs.realpathSync(BOTS_ROOT_DIR);
+    const workspaceRealPath = fs.realpathSync(workspacePath);
+    if (path.dirname(workspaceRealPath) !== rootRealPath) {
+        throw new Error('Bot workspace must be a direct child of the configured Bot Studio directory.');
+    }
+
+    const zipFilename = `${botSlug}.zip`;
+    const zipPath = path.join(rootRealPath, zipFilename);
+    if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+
+    // Pass arguments directly: never interpolate user-controlled values into a shell command.
+    child_process.execFileSync('zip', ['-r', zipPath, '.', '-x', '*.git*'], {
+        cwd: workspaceRealPath,
+        stdio: 'pipe'
+    });
     return {
         zipPath,
         zipFilename
