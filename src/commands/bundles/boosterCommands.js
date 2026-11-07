@@ -362,7 +362,7 @@ const commands = [
                         value: [
                             '• **Custom Vanity Role**: Pick your own name, hex color, and icon',
                             `• **Shared Role Delegation**: Share your custom role with **${maxShares} friends**`,
-                            '• **2x Economy Multiplier**: Earn double credits and loot chest rewards',
+                            '• **2x Economy Multiplier**: Earn double credits and XP from supported economy actions',
                             '• **3-Day Unboost Grace Shield**: Keep your role safe during billing hiccups'
                         ].join('\n'),
                         inline: false

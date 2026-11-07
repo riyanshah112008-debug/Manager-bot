@@ -88,11 +88,11 @@ const ALL_PREMIUM_FEATURES = [
     },
     {
         id: 'economy_multiplier',
-        name: '2x Economy XP, Drop Rate & Loot Multiplier',
+        name: '2x Economy XP & Credit Multiplier',
         category: 'Economy & Progression',
         tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
-        commands: [',daily', ',fish', ',mine', ',work', 'Random Chest Drops'],
-        description: 'Enjoy double credits, faster leveling XP, elevated rare/legendary loot chest spawn rates, and reduced gathering cooldowns.'
+        commands: [',daily', ',fish', ',mine', ',work', ',shop'],
+        description: 'Enjoy double credits and faster leveling XP from supported economy actions, plus reduced gathering cooldowns.'
     },
     {
         id: 'moderation_appeals',
@@ -236,7 +236,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
                     '• **🚨 Emergency Lockdown Shield** — 1-click server-wide raid isolation\n' +
                     '• **🤖 Multi-Bot Worker Nodes** — Custom bot tokens for multi-room audio\n' +
                     '• **📥 Unlimited Emoji/Sticker Steal** — Direct 1-click upload\n' +
-                    '• **💰 2x Economy XP & Loot** — Double credits, rare drops & faster leveling',
+                    '• **💰 2x Economy Rewards** — Double credits and faster leveling',
                 inline: false
             },
             {

@@ -60,9 +60,9 @@ const VIRTUAL_WORKER_NODES = [
         id: 'node-eco',
         name: 'Starry Economy & RPG Engine',
         emoji: '💰',
-        role: 'Timed Chests, Pets, Shop & Prestige',
+        role: 'Economy, Pets, Shop & Prestige',
         color: '#F1C40F',
-        activity: 'economy & timed chests | ,shop',
+        activity: 'economy & progression | ,shop',
         type: ActivityType.Playing,
         commands: '16 RPG Commands'
     },

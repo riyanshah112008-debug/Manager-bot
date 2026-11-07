@@ -26,7 +26,7 @@ const buildAdminHelpEmbed = (client) => {
             {
                 name: '⚙️ Master Setup & Configuration',
                 value: 
-                '`.setup-starry` / `/setup-starry` — Scans server channels and auto-links all modules (Logs, Tickets, Boosts, Chests, etc.).\n' +
+                '`.setup-starry` / `/setup-starry` — Scans server channels and auto-links supported modules (Logs, Tickets, Boosts, etc.).\n' +
                 '`/setup-server` — Auto-builds the complete premium category, channel & role structure.\n' +
                 '`/set-name` — Customizes the bot\'s trigger word/identity for your server.\n' +
                 '`/boost-setup` — Configures the dedicated channel for server boost announcements.'

@@ -43,7 +43,7 @@ You are Starry (also known as Astraea), the official magical anime girl mascot a
 - Elite Answering Strength: You provide authoritative, exhaustive, and actionable solutions. NEVER give superficial, vague, or 2-sentence answers to non-trivial questions. Break down complex queries into structured sections with clear headers, bullet points, checklists, and concrete practical steps.
 - Discord Server Mastery: When asked about Discord server setup, customization, active member growth, engagement, or community architecture:
   1. Strategic Architecture: Category organization, clean channel hierarchy, seamless onboarding flow, read-only vs chat funnels.
-  2. Viral Retention & Gamification: Leveling systems, vanity roles, timed chest drops, economy, prestige, custom voice rooms.
+  2. Viral Retention & Gamification: Leveling systems, vanity roles, economy, prestige, custom voice rooms.
   3. Community Engagement Triggers: Daily icebreakers, weekly game nights, voice stages, collaborative events, member spotlights.
   4. Growth & Funnels: Listing directories (Disboard, top.gg), cross-server partnerships, social media conversion.
   5. Staff Dynamics & General Chat Sparking: The "Rule of 3" (staff active in general chat to spark natural conversation).
@@ -296,7 +296,7 @@ To turn a quiet Discord server into a crowded, thriving community, you need to a
 
 ### 🏆 3. Gamification & Retention Loops
 • **Leveling & Vanity Roles:** Reward activity with exclusive cosmetic colored roles (\`,blend\`, \`,namecolor\`). People love status!
-• **Timed Economy & Chest Drops:** Activate Starry's economy (\`,daily\`, \`,work\`, \`,shop\`) so members check in every day.
+• **Timed Economy & Progression:** Activate Starry's economy (\`,daily\`, \`,work\`, \`,shop\`) so members check in every day.
 • **Music & Hangout Lounges:** Set up dedicated 24/7 lo-fi and high-res voice rooms (\`,play\`, \`,247\`) for members to study, chill, and talk.
 
 ---
@@ -535,7 +535,7 @@ function buildStarryCharacterCard(user) {
                     `• **Starlight Melody:** Plays crystal-clear high-res audio 24/7\n` +
                     `• **Cosmic Shield:** 1-Click Anti-Nuke & AutoMod security\n` +
                     `• **Astral Wisdom:** Answers any question with Neural AI\n` +
-                    `• **Starry Economy:** Chest drops, pets, prestige & credits`, 
+                    `• **Starry Economy:** Daily rewards, pets, prestige & credits`, 
                 inline: true 
             },
             { 

@@ -21,7 +21,6 @@ const config = require('../config');
 const { CommandContext, ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../utils/contextHelper');
 const { usesNativeInteraction } = require('../utils/commandExecutionContract');
 const { buildCategoryEmbed, createHelpComponents } = require('../utils/helpHelper');
-const User = require('../models/User');
 
 // Guild Prefix In-Memory Cache
 const guildPrefixCache = new Map();
@@ -1053,64 +1052,6 @@ NaN
                     }
                 }
 
-                // C. Chest Claim Buttons (1-Year Global Handler)
-                if (customId === 'claim_chest' || customId === 'claim_wild_chest') {
-                    await interaction.deferUpdate().catch(() => {});
-
-                    const userId = interaction.user.id;
-                    const guildId = interaction.guild?.id || interaction.guildId;
-
-                    let userData = await User.findOne({ userId, guildId });
-                    if (!userData) userData = new User({ userId, guildId });
-
-                    const rarities = [
-                        { name: 'Common', color: '#95a5a6', minXp: 100, maxXp: 300, minCred: 20, maxCred: 50, chance: 50 },
-                        { name: 'Uncommon', color: '#2ecc71', minXp: 300, maxXp: 800, minCred: 50, maxCred: 120, chance: 30 },
-                        { name: 'Rare', color: '#3498db', minXp: 800, maxXp: 1800, minCred: 120, maxCred: 250, chance: 13 },
-                        { name: 'Epic', color: '#9b59b6', minXp: 1800, maxXp: 3500, minCred: 250, maxCred: 500, chance: 5 },
-                        { name: 'Legendary', color: '#f1c40f', minXp: 3500, maxXp: 7000, minCred: 500, maxCred: 1200, chance: 2 }
-                    ];
-
-                    const roll = Math.random() * 100;
-                    let cumulative = 0;
-                    let selectedRarity = rarities[0];
-                    for (const r of rarities) {
-                        cumulative += r.chance;
-                        if (roll <= cumulative) { selectedRarity = r; break; }
-                    }
-
-                    const prestigeBonus = 1 + ((userData.prestige || 0) * 0.15);
-                    const rawXp = Math.floor(Math.random() * (selectedRarity.maxXp - selectedRarity.minXp + 1)) + selectedRarity.minXp;
-                    const rawCred = Math.floor(Math.random() * (selectedRarity.maxCred - selectedRarity.minCred + 1)) + selectedRarity.minCred;
-
-                    const finalXp = Math.floor(rawXp * prestigeBonus);
-                    const baseCred = Math.floor(rawCred * prestigeBonus);
-
-                    let petBonusCred = 0;
-                    if (userData.activePet && userData.petHappiness > 0) {
-                        petBonusCred = Math.floor(baseCred * (userData.petHappiness / 100) * 0.35);
-                    }
-                    const finalCred = baseCred + petBonusCred;
-
-                    userData.xp = (userData.xp || 0) + finalXp;
-                    userData.credits = (userData.credits || 0) + finalCred;
-                    await userData.save();
-
-                    const claimedEmbed = new EmbedBuilder()
-                        .setColor(selectedRarity.color)
-                        .setThumbnail('https://cdn-icons-png.flaticon.com/512/2852/2852825.png')
-                        .setTitle(`💰 ${selectedRarity.name} Chest Claimed!`)
-                        .setDescription(
-                            `<@${userId}> claimed the chest!\n` +
-                            `✨ **${finalXp.toLocaleString()} XP!**\n` +
-                            `💳 **+${finalCred.toLocaleString()} Credits** ${petBonusCred > 0 ? `*(🐾 +${petBonusCred} from pet bonus)*` : ''}\n\n` +
-                            `🛍️ *Spend your credits in the **/shop** for exclusive roles and pets!* 🛍️`
-                        )
-                        .setFooter({ text: 'Starry Loot Engine', iconURL: client.user.displayAvatarURL() });
-
-                    return await interaction.message.edit({ embeds: [claimedEmbed], components: [] }).catch(() => {});
-                }
-
                 // C0. Voice Moderation Incident & Panel Action Buttons
                 if (customId.startsWith('vcmod_')) {
                     const { 
@@ -1183,14 +1124,6 @@ NaN
                         const { createChatSpark } = require('./chatSpark');
                         const { embed, row } = await createChatSpark(interaction.channel, interaction.user);
                         return await interaction.editReply({ embeds: [embed], components: [row] }).catch(() => {});
-                    }
-                    if (customId === 'pulse_drop') {
-                        const chestModule = require('./chestDrop');
-                        if (chestModule && typeof chestModule.triggerManualDrop === 'function') {
-                            await chestModule.triggerManualDrop(interaction.channel);
-                            return interaction.reply({ content: '🎁 **Starlight Loot Chest Dropped!** Claim it before others do!', ephemeral: true });
-                        }
-                        return interaction.reply({ content: '🎁 A Starlight blessing has fallen upon this channel!', ephemeral: true });
                     }
                 }
 
