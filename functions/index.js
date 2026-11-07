@@ -1,5 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { defineString } = require("firebase-functions/params");
+const { buildProxyTarget } = require("./proxyTarget");
 
 const BACKEND_URL = defineString("BOT_BACKEND_URL");
 
@@ -7,13 +8,23 @@ exports.api = onRequest({ region: "us-central1", timeoutSeconds: 60 }, async (re
   let backend;
   try {
     backend = new URL(BACKEND_URL.value());
-    if (!["https:", "http:"].includes(backend.protocol)) throw new Error("Unsupported backend protocol");
+    if (backend.protocol !== "https:" || backend.username || backend.password) {
+      throw new Error("BOT_BACKEND_URL must be an HTTPS URL without embedded credentials");
+    }
   } catch (error) {
     console.error("Invalid BOT_BACKEND_URL:", error.message);
     return res.status(503).json({ error: "Bot backend is not configured." });
   }
 
-  const target = new URL(req.originalUrl, backend.origin);
+  let target;
+  try {
+    // Never allow a request path to replace the configured upstream origin.
+    target = buildProxyTarget(req.originalUrl, backend);
+  } catch (error) {
+    console.warn("Rejected invalid proxy request path:", error.message);
+    return res.status(400).json({ error: "Invalid proxy path." });
+  }
+
   const headers = new Headers();
   for (const name of ["accept", "content-type", "cookie", "authorization", "user-agent", "x-requested-with"]) {
     const value = req.get(name);
