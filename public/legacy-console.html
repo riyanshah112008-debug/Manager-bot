@@ -708,7 +708,7 @@
             <div class="hero-banner">
                 <div class="hero-badge">⚡ STARRY.GG MULTI-BOT CLUSTER ONLINE • 165+ COMMANDS</div>
                 <h2>Next-Generation Discord Infrastructure & Security Suite</h2>
-                <p>Complete Enterprise Server Defense, 3-Room Multi-Bot Music Suite, 24/7 Loot Chests, Visual Embed Studio, and Cross-Platform Mobile & PC Support.</p>
+                <p>Complete Enterprise Server Defense, 3-Room Multi-Bot Music Suite, automated Giveaways, Visual Embed Studio, and Cross-Platform Mobile & PC Support.</p>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="switchNav('setup')">⚙️ Open Server Setup & Command Studio</button>
                     <button class="btn btn-outline" onclick="switchNav('premium')">💎 Explore Premium Perks</button>
@@ -742,7 +742,7 @@
                     <button class="side-link" onclick="switchModule('moderation')">👥 Member Moderation Hub</button>
                     <button class="side-link" onclick="switchModule('channels')">🧹 Channel Controls & Purge</button>
                     <button class="side-link" onclick="switchModule('tickets')">🎫 Support Tickets Desk</button>
-                    <button class="side-link" onclick="switchModule('giveaways')">🎉 Giveaways & Drops</button>
+                    <button class="side-link" onclick="switchModule('giveaways')">🎉 Giveaways Studio</button>
                     <button class="side-link" onclick="switchModule('autorole')">🏷️ AutoRoles & Sticky</button>
                     <button class="side-link" onclick="switchModule('logging')">📜 Audit & Telemetry</button>
                     <button class="side-link" onclick="switchModule('embed')">🎨 Visual Embed Studio</button>
@@ -1034,8 +1034,8 @@
 
                     <!-- MODULE 8: GIVEAWAYS & DROPS -->
                     <div id="mod-giveaways" class="module-pane" style="display: none;">
-                        <h3 class="section-title">🎉 Giveaways & Drops Studio</h3>
-                        <p class="section-desc">Launch Discord giveaways and timed loot chest drops directly from the web.</p>
+                        <h3 class="section-title">🎉 Giveaways Studio</h3>
+                        <p class="section-desc">Create and manage Discord giveaways directly from the web.</p>
                         
                         <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 20px;">
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
@@ -1268,7 +1268,7 @@
             moderation: ['ban', 'unban', 'kick', 'timeout', 'untimeout', 'warn', 'warnings', 'clearwarns', 'purge', 'lock', 'unlock', 'slowmode', 'nickname', 'addrole', 'removerole', 'quarantine', 'emergencylockdown', 'emergencysecure', 'emergencyunban'],
             music: ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'loop', 'shuffle', 'bass', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop', 'filter', 'clearfilters', 'nowplaying', 'autoplay', '247'],
             utility: ['ping', 'help', 'serverinfo', 'userinfo', 'avatar', 'banner', 'roles', 'channels', 'calc', 'poll', 'snipe', 'afk', 'remind', 'uptime', 'stats', 'invite', 'bump'],
-            economy: ['balance', 'daily', 'weekly', 'work', 'crime', 'rob', 'deposit', 'withdraw', 'pay', 'shop', 'buy', 'inventory', 'slots', 'coinflip', 'dice', 'blackjack', 'chest', 'pet', 'prestige'],
+            economy: ['balance', 'daily', 'weekly', 'work', 'crime', 'rob', 'deposit', 'withdraw', 'pay', 'shop', 'buy', 'inventory', 'slots', 'coinflip', 'dice', 'blackjack', 'pet', 'prestige'],
             social: ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'sleep', 'wakeup', 'cry', 'laugh', 'dance', 'blush', 'pout', 'smile', 'bored', 'confess', 'marry'],
             system: ['redeem', 'premium', 'cluster', 'status', 'telemetry', 'backup', 'restore']
         };
