@@ -4,6 +4,7 @@
 // ==========================================
 
 require('dotenv').config();
+const { getDashboardOrigins } = require('./utils/dashboardOrigins');
 
 // 🌐 Modern Dual-Stack Happy Eyeballs (Auto-selects working IPv4/IPv6 on mobile/cellular networks)
 const net = require('net');
@@ -104,13 +105,7 @@ try {
 const app = express();
 const port = process.env.PORT || 10000;
 
-const allowedOrigins = new Set(
-    [process.env.CORS_ORIGINS, process.env.FRONTEND_URL, process.env.PUBLIC_URL, process.env.RENDER_EXTERNAL_URL]
-        .flatMap(value => String(value || '').split(','))
-        .map(value => value.trim())
-        .filter(Boolean)
-        .map(value => value.replace(/\/$/, ''))
-);
+const allowedOrigins = getDashboardOrigins();
 app.use(cors({
     origin(origin, callback) {
         if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) return callback(null, true);
