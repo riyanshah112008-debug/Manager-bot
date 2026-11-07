@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { getPublicUrl } = require('../src/utils/tunnelManager');
+const { getPublicUrl, startTunnel } = require('../src/utils/tunnelManager');
 const { resolveTargetRole } = require('../src/modules/verification');
 
 console.log('🧪 Starting Starry Verification Engine Test Suite...\n');
@@ -10,6 +10,7 @@ const origVerify = process.env.VERIFY_URL;
 const origPublic = process.env.PUBLIC_URL;
 const origCustom = process.env.CUSTOM_DOMAIN;
 const origRender = process.env.RENDER_EXTERNAL_URL;
+const origRenderFlag = process.env.RENDER;
 
 try {
     // 1. RENDER_EXTERNAL_URL default
@@ -80,6 +81,17 @@ console.log('\n▶ Test 2: Testing resolveTargetRole with mock Discord guild');
     assert.strictEqual(role3?.id, '998877665544332211');
     console.log('  ✅ Unmatched ID fallback resolved to "Verified" role');
 
+    // Test 3: Render must use its assigned public URL and must not open localtunnel.
+    console.log('\n▶ Test 3: Ensuring Render does not start a duplicate local tunnel');
+    process.env.RENDER = 'true';
+    process.env.RENDER_EXTERNAL_URL = 'https://starry-test.onrender.com/';
+    const renderUrl = await startTunnel(10000);
+    assert.strictEqual(renderUrl, 'https://starry-test.onrender.com');
+    assert.strictEqual(getPublicUrl(), 'https://starry-test.onrender.com');
+    console.log('  ✅ Render URL is canonical; localtunnel is bypassed');
+
+    if (origRenderFlag) process.env.RENDER = origRenderFlag; else delete process.env.RENDER;
+    if (origRender) process.env.RENDER_EXTERNAL_URL = origRender; else delete process.env.RENDER_EXTERNAL_URL;
     console.log('\n✨ ALL VERIFICATION TESTS PASSED SUCCESSFULLY (100% Pass Rate)!');
     process.exit(0);
 })();
