@@ -5,6 +5,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const child_process = require('child_process');
 const botStudio = require('../src/modules/botStudio');
 
@@ -49,7 +50,13 @@ console.log('  ✅ Session and interactive choice payload verified!');
 // 3. Test Full Multi-File Bot Scaffolding in Isolated Workspace
 console.log('\n▶ Test 3: Multi-File Bot Scaffolding & Watermark Verification');
 (async () => {
-    const scaffoldRes = await botStudio.scaffoldCompleteBot('code a complex discord bot for me', { botName: 'astral-guardian-bot' });
+    // CI and local runs each get a disposable, writable workspace root.
+    const testRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'starry-bot-studio-test-'));
+    const scaffoldRes = await botStudio.scaffoldCompleteBot('code a complex discord bot for me', {
+        botName: 'astral-guardian-bot',
+        rootDir: testRootDir
+    });
+    assert.ok(scaffoldRes.workspacePath.startsWith(testRootDir), 'Workspace must stay inside the isolated test root');
     assert.ok(scaffoldRes.workspacePath, 'Workspace path must be defined');
     assert.ok(fs.existsSync(scaffoldRes.workspacePath), 'Workspace folder must exist');
 
@@ -106,11 +113,8 @@ console.log('\n▶ Test 3: Multi-File Bot Scaffolding & Watermark Verification')
     assert.ok(stat.size > 1000, 'ZIP archive must be non-empty (>1KB)');
     console.log(`  ✅ ZIP packaging verified! Created ${zipRes.zipFilename} (${stat.size} bytes).`);
 
-    // Clean up test workspace
-    try {
-        fs.rmSync(scaffoldRes.workspacePath, { recursive: true, force: true });
-        if (fs.existsSync(zipRes.zipPath)) fs.unlinkSync(zipRes.zipPath);
-    } catch (e) {}
+    // Remove the workspace and generated ZIP without touching production files.
+    fs.rmSync(testRootDir, { recursive: true, force: true });
 
     console.log('\n✨ ALL STARRY BOT STUDIO TESTS PASSED WITH 100% SUCCESS RATE!\n');
     process.exit(0);
