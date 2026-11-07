@@ -105,13 +105,14 @@ function scheduleReconnect(port, delayMs) {
 }
 
 function getPublicUrl() {
-    // Explicit public URLs are useful for custom domains and verification proxies.
-    for (const key of ['VERIFY_URL', 'PUBLIC_VERIFY_URL', 'PUBLIC_URL', 'CUSTOM_DOMAIN', 'GG_DOMAIN']) {
+    // Backend-facing URL overrides. PUBLIC_URL is intentionally excluded because
+    // it identifies the Firebase website, not the Render API/OAuth callback host.
+    for (const key of ['VERIFY_URL', 'PUBLIC_VERIFY_URL', 'CUSTOM_DOMAIN', 'GG_DOMAIN']) {
         const value = process.env[key];
         if (value && value.trim()) return value.trim().replace(/\/+$/, '');
     }
 
-    // Render's assigned service URL must take precedence over any stale tunnel URL.
+    // Render is the canonical public host for Express routes and OAuth callbacks.
     const renderUrl = getRenderUrl();
     if (renderUrl) return renderUrl;
 
