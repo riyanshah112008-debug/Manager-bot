@@ -118,7 +118,10 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Setup-Secret']
 }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); 
+app.use(express.urlencoded({ extended: true }));
+
+// Discord Embedded Media Activity API (OAuth exchange + shared room state)
+app.use('/api/media', require('./modules/mediaActivityApi')); 
 
 app.get('/api/servers', async (req, res) => {
     try {
