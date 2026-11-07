@@ -26,3 +26,7 @@ jobs:
           node --check public/firebase-bridge.js
           node --check public/landing.js
           node --check public/workspace.js
+          node --check functions/index.js
+          node --check functions/proxyTarget.js
+      - name: Test Firebase proxy target validation
+        run: node --test functions/proxyTarget.test.js
