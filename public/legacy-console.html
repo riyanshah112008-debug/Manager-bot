@@ -723,7 +723,7 @@
             </div>
         </section>
 
-        <!-- TAB 2: SERVER SETUP & ALL 150+ FEATURES DASHBOARD -->
+        <!-- TAB 2: SERVER SETUP & FEATURE DASHBOARD -->
         <section id="tab-setup" class="tab-pane">
             <div class="workspace-layout">
                 <!-- SIDEBAR NAVIGATION -->
@@ -1134,12 +1134,12 @@
                                 <div class="form-group">
                                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Select Command Category</label>
                                     <select id="console-category-select" class="select-input" onchange="populateConsoleCommands(this.value)">
-                                        <option value="moderation">🛡️ Moderation (40+ Commands)</option>
-                                        <option value="music">🎵 Music & Audio (25+ Commands)</option>
-                                        <option value="utility">🔧 Utility & Info (25+ Commands)</option>
-                                        <option value="economy">💰 Economy & Games (25+ Commands)</option>
-                                        <option value="social">🌸 Social & Anime (25+ Commands)</option>
-                                        <option value="system">⚙️ System & VIP (15+ Commands)</option>
+                                        <option value="moderation">🛡️ Moderation</option>
+                                        <option value="music">🎵 Music & Audio</option>
+                                        <option value="utility">🔧 Utility & Info</option>
+                                        <option value="economy">💰 Economy & Games</option>
+                                        <option value="social">🌸 Social & Anime</option>
+                                        <option value="system">⚙️ System & VIP</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -1148,20 +1148,7 @@
                                 </div>
                             </div>
 
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Arguments / Input</label>
-                                    <input type="text" id="console-args-input" class="input-text" placeholder="e.g. @user 10m or song title">
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Execute in Channel</label>
-                                    <select id="console-channel-select" class="select-input"></select>
-                                </div>
-                            </div>
-
-                            <button class="btn btn-primary" onclick="runRemoteConsoleCommand()">⚡ Run Command Remotely</button>
-
-                            <div id="console-output-box" style="display: none; margin-top: 20px; background: #000; border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #10B981;"></div>
+                            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 14px;">Select a category to browse the live command registry. Execute the selected command in Discord with <code>/</code> autocomplete.</p>
                         </div>
                     </div>
 
@@ -1345,7 +1332,7 @@
 
                 // Populate channels
                 const textChannels = (data.channels || []).filter(c => c.isText);
-                const chanSelects = ['set-log-mod', 'set-log-msg', 'set-log-voice', 'embed-channel', 'ctrl-channel-select', 'console-channel-select'];
+                const chanSelects = ['set-log-mod', 'set-log-msg', 'set-log-voice', 'embed-channel', 'ctrl-channel-select'];
                 chanSelects.forEach(sId => {
                     const el = document.getElementById(sId);
                     if (el) {
