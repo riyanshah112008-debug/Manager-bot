@@ -12,7 +12,7 @@ const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 // Discord snowflakes are decimal IDs (17–20 digits). Validate IDs before
 // using them in MongoDB filters so request-derived values cannot become
 // MongoDB operators or query objects.
-const DISCORD_SNOWFLAKE_PATTERN = /^\\d{17,20}$/;
+const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 function getSafeDiscordId(value) {
     return typeof value === 'string' && DISCORD_SNOWFLAKE_PATTERN.test(value) ? value : null;
 }
