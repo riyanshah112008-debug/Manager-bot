@@ -36,14 +36,14 @@ async function generateServerPulse(guild, client) {
     if (guild.systemChannelId) securityPoints += 25;
 
     // Sample recent messages across text channels to assess conversation velocity
-    let sampleMessages = [];
-    const textChannels = Array.from(guild.channels.cache.values()).filter(c => c.isTextBased() && c.viewable);
+    let sampleMessageCount = 0;
+    const textChannels = Array.from(guild.channels.cache.values()).filter(c => c.isTextBased() && c.viewable && !c.nsfw);
     for (const ch of textChannels.slice(0, 4)) {
         try {
             const msgs = await ch.messages.fetch({ limit: 10 }).catch(() => null);
             if (msgs) {
                 msgs.forEach(m => {
-                    if (!m.author.bot && m.content) sampleMessages.push(m.content);
+                    if (!m.author.bot) sampleMessageCount++;
                 });
             }
         } catch (e) {}
@@ -51,7 +51,7 @@ async function generateServerPulse(guild, client) {
 
     // Engagement Velocity Score (0-100)
     const voiceRatio = Math.min(1, voiceCount / Math.max(5, humanCount * 0.1));
-    const textRatio = Math.min(1, sampleMessages.length / 30);
+    const textRatio = Math.min(1, sampleMessageCount / 30);
     const overallScore = Math.min(100, Math.round((securityPoints * 0.3) + (voiceRatio * 35) + (textRatio * 35)));
 
     // Assign Grade
@@ -66,17 +66,17 @@ async function generateServerPulse(guild, client) {
     // AI Executive Briefing via Gemini Flash
     let aiBriefing = null;
     const apiKey = getGeminiApiKey();
-    if (apiKey && sampleMessages.length > 0) {
+    if (apiKey && sampleMessageCount > 0) {
         try {
             const prompt = `You are Starry (Astraea), the celestial AI guardian mascot of this Discord server: "${guild.name}".
 Server Overview:
 - Human Members: ${humanCount}
 - Active in Voice: ${voiceCount}
 - Health Score: ${overallScore}/100 (Grade: ${grade})
-- Recent chat samples: ${JSON.stringify(sampleMessages.slice(0, 12))}
+- Recent human message volume: ${sampleMessageCount} sampled messages. No message text, usernames, or attachments are included.
 
 In 3 concise bullet points formatted with markdown:
-1. Assess the community vibe & conversational mood.
+1. Describe the engagement level from activity counts only; do not infer sentiment or private conversation content.
 2. Give 1 high-impact engagement recommendation (e.g. host an event, drop a spark, game night).
 3. Deliver an encouraging, sparkling mascot closing quote with stars ✨!`;
 
