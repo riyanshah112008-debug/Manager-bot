@@ -26,10 +26,10 @@ try {
     assert.strictEqual(getPublicUrl(), 'https://verify.starrybot.com');
     console.log('  ✅ CUSTOM_DOMAIN override resolved correctly (with trailing slash stripped)');
 
-    // 3. PUBLIC_URL overrides CUSTOM_DOMAIN
-    process.env.PUBLIC_URL = 'https://cdn.starry.gg';
-    assert.strictEqual(getPublicUrl(), 'https://cdn.starry.gg');
-    console.log('  ✅ PUBLIC_URL override resolved correctly');
+    // 3. PUBLIC_URL is the Firebase frontend, not the backend API host.
+    process.env.PUBLIC_URL = 'https://starry-frontend.web.app';
+    assert.strictEqual(getPublicUrl(), 'https://verify.starrybot.com');
+    console.log('  ✅ Firebase PUBLIC_URL does not replace the backend callback host');
 
     // 4. VERIFY_URL has highest priority
     process.env.VERIFY_URL = 'https://starry-proxy.workers.dev/';
