@@ -5,7 +5,11 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const child_process = require('child_process');
+// Configure an isolated root before loading Bot Studio (it reads deployment config once).
+const testRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'starry-bot-studio-test-'));
+process.env.BOT_STUDIO_ROOT = testRootDir;
 const botStudio = require('../src/modules/botStudio');
 
 console.log('🧪 Starting Starry Autonomous Bot Studio Test Suite...\n');
@@ -49,7 +53,11 @@ console.log('  ✅ Session and interactive choice payload verified!');
 // 3. Test Full Multi-File Bot Scaffolding in Isolated Workspace
 console.log('\n▶ Test 3: Multi-File Bot Scaffolding & Watermark Verification');
 (async () => {
-    const scaffoldRes = await botStudio.scaffoldCompleteBot('code a complex discord bot for me', { botName: 'astral-guardian-bot' });
+    // CI and local runs each get a disposable, writable workspace root.
+    const scaffoldRes = await botStudio.scaffoldCompleteBot('code a complex discord bot for me', {
+        botName: 'astral-guardian-bot'
+    });
+    assert.strictEqual(path.dirname(scaffoldRes.workspacePath), testRootDir, 'Workspace must stay directly inside the isolated test root');
     assert.ok(scaffoldRes.workspacePath, 'Workspace path must be defined');
     assert.ok(fs.existsSync(scaffoldRes.workspacePath), 'Workspace folder must exist');
 
@@ -98,19 +106,22 @@ console.log('\n▶ Test 3: Multi-File Bot Scaffolding & Watermark Verification')
     });
     console.log('  ✅ All generated JS files are 100% syntactically valid!');
 
-    // 5. Test ZIP Archive Creation
-    console.log('\n▶ Test 5: ZIP Archive Packaging');
+    // 5. Reject traversal and shell-injection archive names before packaging.
+    await assert.rejects(
+        () => botStudio.packageBotZip(scaffoldRes.workspacePath, '../../outside;touch-pwned'),
+        /Invalid bot archive name/
+    );
+
+    // 6. Test ZIP Archive Creation
+    console.log('\n▶ Test 6: ZIP Archive Packaging');
     const zipRes = await botStudio.packageBotZip(scaffoldRes.workspacePath, scaffoldRes.botSlug);
     assert.ok(fs.existsSync(zipRes.zipPath), 'ZIP archive must exist on disk');
     const stat = fs.statSync(zipRes.zipPath);
     assert.ok(stat.size > 1000, 'ZIP archive must be non-empty (>1KB)');
     console.log(`  ✅ ZIP packaging verified! Created ${zipRes.zipFilename} (${stat.size} bytes).`);
 
-    // Clean up test workspace
-    try {
-        fs.rmSync(scaffoldRes.workspacePath, { recursive: true, force: true });
-        if (fs.existsSync(zipRes.zipPath)) fs.unlinkSync(zipRes.zipPath);
-    } catch (e) {}
+    // Remove the workspace and generated ZIP without touching production files.
+    fs.rmSync(testRootDir, { recursive: true, force: true });
 
     console.log('\n✨ ALL STARRY BOT STUDIO TESTS PASSED WITH 100% SUCCESS RATE!\n');
     process.exit(0);
