@@ -1,7 +1,7 @@
 // ==========================================
 // 🚀 MASTER COMMAND REGISTRY & UNIFIED DISPATCHER
 // File Path: src/modules/commandHandler.js
-// 165+ Master Commands • Dual Prefix (, & .) • Mention Support • 1-Year Persistent Interaction Engine
+// Master Command Registry • Slash and Prefix Support • Persistent Interaction Engine
 // Fully compatible with Android/Termux & PC (Windows/Linux/macOS)
 // ==========================================
 const { 
