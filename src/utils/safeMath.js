@@ -11,12 +11,12 @@ function safeEvaluateMath(input, options = {}) {
     const allowPower = options.allowPower === true;
     if (typeof input !== 'string' || input.length === 0 || input.length > MAX_EXPRESSION_LENGTH) return NaN;
 
-    const normalized = input.replace(/\\s+/g, '');
+    const normalized = input.replace(/\s+/g, '');
     if (!normalized) return NaN;
 
     const tokenPattern = allowPower
-        ? /(?:\\d+(?:\\.\\d*)?|\\.\\d+)|[()+\\-*/%^]/g
-        : /(?:\\d+(?:\\.\\d*)?|\\.\\d+)|[()+\\-*/%]/g;
+        ? /(?:\d+(?:\.\d*)?|\.\d+)|[()+\-*/%^]/g
+        : /(?:\d+(?:\.\d*)?|\.\d+)|[()+\-*/%]/g;
     const tokens = normalized.match(tokenPattern);
     if (!tokens || tokens.join('') !== normalized) return NaN;
 
@@ -30,7 +30,7 @@ function safeEvaluateMath(input, options = {}) {
             if (tokens[index++] !== ')') throw new Error('Unbalanced parentheses');
             return value;
         }
-        if (!token || !/^(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(token)) {
+        if (!token || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)) {
             throw new Error('Invalid number');
         }
         return Number(token);
