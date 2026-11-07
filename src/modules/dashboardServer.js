@@ -66,7 +66,10 @@ function setupDashboardRoutes(app, client) {
     const dashboardOrigins = new Set([
         'https://manager-bot-96c07.web.app',
         'https://manager-bot-96c07.firebaseapp.com',
-        ...(process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '').split(',').map(value => value.trim()).filter(Boolean)
+        ...[process.env.CORS_ORIGINS, process.env.FRONTEND_URL, process.env.PUBLIC_URL]
+            .flatMap(value => String(value || '').split(','))
+            .map(value => value.trim())
+            .filter(Boolean)
     ].map(value => value.replace(/\/$/, '')));
     app.use((req, res, next) => {
         const origin = req.get('Origin');
@@ -317,7 +320,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/auth/callback', actionLimiter, async (req, res) => {
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
-        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
         const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
         const cookieState = cookiePart ? cookiePart.slice('starry_oauth_state='.length) : '';
         const secureCookie = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
