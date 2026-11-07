@@ -20,6 +20,7 @@ const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const config = require('../config');
+const { getDashboardOrigins } = require('../utils/dashboardOrigins');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
@@ -63,14 +64,7 @@ function setupDashboardRoutes(app, client) {
     app.use('/api/', apiLimiter);
 
     // Restrict cross-origin dashboard access to explicitly configured frontends.
-    const dashboardOrigins = new Set([
-        'https://manager-bot-96c07.web.app',
-        'https://manager-bot-96c07.firebaseapp.com',
-        ...[process.env.CORS_ORIGINS, process.env.FRONTEND_URL, process.env.PUBLIC_URL]
-            .flatMap(value => String(value || '').split(','))
-            .map(value => value.trim())
-            .filter(Boolean)
-    ].map(value => value.replace(/\/$/, '')));
+    const dashboardOrigins = getDashboardOrigins();
     app.use((req, res, next) => {
         const origin = req.get('Origin');
         if (origin && dashboardOrigins.has(origin.replace(/\/$/, ''))) {
