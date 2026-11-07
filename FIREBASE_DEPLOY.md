@@ -1,23 +1,36 @@
-# Firebase website deployment
+# Starry website and Render backend deployment
 
-The public website is served from `public/`. The Discord bot and its authenticated API remain on the Node.js backend; Firebase Hosting forwards `/api/**` and `/auth/**` to that backend through a small Cloud Function proxy.
+The website is static content in `public/` and is deployed to Firebase Hosting. The Discord bot, OAuth callback, dashboard API, database access and music controls run on the Render Node.js service.
 
-## Deploy
+The browser bridge in `public/firebase-bridge.js` sends backend paths (`/api/`, `/auth/`, `/health`, and related routes) directly to the configured Render service. Firebase Hosting does not need a Cloud Function proxy for this setup.
 
-1. Install the Firebase CLI and sign in: `npm install -g firebase-tools`, then `firebase login`.
-2. Create/select your Firebase project: `firebase use --add`. Do not commit private credentials.
-3. Set the proxy target during deployment when prompted, or set the Functions parameter `BOT_BACKEND_URL` to your existing Render service URL (for example, the HTTPS URL shown in the Render service dashboard).
-4. Deploy: `firebase deploy --only hosting,functions`.
+## Deploy the website
 
-Firebase Functions deployment requires a Firebase project with billing enabled (Blaze plan). Hosting alone can be deployed separately, but dashboard API routes will not work until the proxy is deployed and configured.
+1. Select the correct Firebase project.
+2. Deploy the Hosting target with `firebase deploy --only hosting`.
+3. Confirm the Firebase default domain and any custom domain both load the same Starry website.
 
-## Backend and Discord OAuth settings
+## Render environment
 
-After Firebase assigns your Hosting domain, set these variables in the Render service:
+Set these backend environment variables in Render:
 
-- `PUBLIC_URL`: your Firebase Hosting HTTPS domain.
-- `DISCORD_REDIRECT_URI`: `https://YOUR_FIREBASE_DOMAIN/auth/callback`.
+- `FRONTEND_URL`: the primary public website origin, for example `https://YOUR_SITE.web.app`.
+- `PUBLIC_URL`: the same public website origin (used by links and verification pages).
+- `CORS_ORIGINS`: optional comma-separated list of every allowed website origin, including any custom domain.
+- `DISCORD_REDIRECT_URI`: the Render backend callback URL, for example `https://YOUR_RENDER_SERVICE.onrender.com/auth/callback`.
+- `CLIENT_ID` and `CLIENT_SECRET`: the Discord application's OAuth credentials.
+- `DISCORD_TOKEN` and `MONGO_URI`: keep these only in Render's private environment settings.
 
-Add that exact redirect URI to the Discord Developer Portal OAuth2 redirect list. Keep `DISCORD_TOKEN`, MongoDB credentials, Spotify secrets, and other private values only in the backend environment; never put them in `public/`.
+## Discord Developer Portal
 
-The bot process itself must stay on a persistent Node.js host. Firebase Hosting is for the website, not a long-running Discord Gateway connection.
+Add the exact value of `DISCORD_REDIRECT_URI` to the Discord application's OAuth2 redirect URI list. The callback belongs to the Render backend, not Firebase Hosting, because the backend performs the code exchange and creates the login session.
+
+## Validation
+
+1. Open the public website and confirm its assets load.
+2. Select **Sign in** and complete Discord OAuth.
+3. Confirm the callback returns to `FRONTEND_URL` and the profile appears.
+4. Open the dashboard, select a server, and confirm its data loads.
+5. Test a read-only dashboard API call before trying any server-changing control.
+
+Firebase Hosting serves the website only. Keep the Discord Gateway process running on Render or another persistent Node.js host.
