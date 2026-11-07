@@ -706,9 +706,9 @@
         <!-- TAB 1: OVERVIEW -->
         <section id="tab-overview" class="tab-pane active">
             <div class="hero-banner">
-                <div class="hero-badge">⚡ STARRY.GG MULTI-BOT CLUSTER ONLINE • 165+ COMMANDS</div>
+                <div class="hero-badge">⚡ STARRY.GG MULTI-BOT CLUSTER ONLINE • LIVE COMMAND CATALOGUE</div>
                 <h2>Next-Generation Discord Infrastructure & Security Suite</h2>
-                <p>Complete Enterprise Server Defense, 3-Room Multi-Bot Music Suite, 24/7 Loot Chests, Visual Embed Studio, and Cross-Platform Mobile & PC Support.</p>
+                <p>Complete Enterprise Server Defense, 3-Room Multi-Bot Music Suite, automated Giveaways, Visual Embed Studio, and Cross-Platform Mobile & PC Support.</p>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="switchNav('setup')">⚙️ Open Server Setup & Command Studio</button>
                     <button class="btn btn-outline" onclick="switchNav('premium')">💎 Explore Premium Perks</button>
@@ -716,14 +716,14 @@
             </div>
 
             <div class="stats-grid">
-                <div class="stat-card"><h3>165+</h3><p>Active Base Commands</p></div>
+                <div class="stat-card"><h3>Live</h3><p>Registered Commands</p></div>
                 <div class="stat-card"><h3>3 Nodes</h3><p>Online Multi-Bot Workers</p></div>
                 <div class="stat-card"><h3>320 kbps</h3><p>Studio Audio Streams</p></div>
                 <div class="stat-card"><h3>1 Year</h3><p>Interactive Button Lifetime</p></div>
             </div>
         </section>
 
-        <!-- TAB 2: SERVER SETUP & ALL 150+ FEATURES DASHBOARD -->
+        <!-- TAB 2: SERVER SETUP & FEATURE DASHBOARD -->
         <section id="tab-setup" class="tab-pane">
             <div class="workspace-layout">
                 <!-- SIDEBAR NAVIGATION -->
@@ -742,12 +742,12 @@
                     <button class="side-link" onclick="switchModule('moderation')">👥 Member Moderation Hub</button>
                     <button class="side-link" onclick="switchModule('channels')">🧹 Channel Controls & Purge</button>
                     <button class="side-link" onclick="switchModule('tickets')">🎫 Support Tickets Desk</button>
-                    <button class="side-link" onclick="switchModule('giveaways')">🎉 Giveaways & Drops</button>
+                    <button class="side-link" onclick="switchModule('giveaways')">🎉 Giveaways Studio</button>
                     <button class="side-link" onclick="switchModule('autorole')">🏷️ AutoRoles & Sticky</button>
                     <button class="side-link" onclick="switchModule('logging')">📜 Audit & Telemetry</button>
                     <button class="side-link" onclick="switchModule('embed')">🎨 Visual Embed Studio</button>
                     <button class="side-link" onclick="switchModule('backups')">💾 Server Snapshots</button>
-                    <button class="side-link" onclick="switchModule('console')" style="color: var(--cyan); font-weight: 800;">⚡ 150+ Command Console</button>
+                    <button class="side-link" onclick="switchModule('console')" style="color: var(--cyan); font-weight: 800;">⚡ Command Catalogue</button>
                 </aside>
 
                 <!-- WORKSPACE CONTENT -->
@@ -1013,52 +1013,20 @@
                     <!-- MODULE 7: SUPPORT TICKETS -->
                     <div id="mod-tickets" class="module-pane" style="display: none;">
                         <h3 class="section-title">🎫 Support Tickets Desk</h3>
-                        <p class="section-desc">Deploy interactive ticket creator panels to any channel.</p>
-                        
-                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 20px;">
-                            <div class="form-group" style="margin-bottom: 14px;">
-                                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Destination Channel</label>
-                                <select id="ticket-channel-select" class="select-input"></select>
-                            </div>
-                            <div class="form-group" style="margin-bottom: 14px;">
-                                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Panel Title</label>
-                                <input type="text" id="ticket-title" class="input-text" value="🎫 Starry Support Desk">
-                            </div>
-                            <div class="form-group" style="margin-bottom: 18px;">
-                                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Description</label>
-                                <textarea id="ticket-desc" class="textarea-input" style="height: 80px;">Click the button below to open a private ticket with our staff team.</textarea>
-                            </div>
-                            <button class="btn btn-primary" onclick="dispatchTicketPanel()">🚀 Deploy Ticket Panel</button>
+                        <p class="section-desc">Configure and deploy the Discord ticket panel using Starry's registered server command.</p>
+                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 14px; padding: 20px;">
+                            <h4 style="margin-bottom: 8px;">Ticket panel setup</h4>
+                            <p style="color: var(--text-muted);">The legacy web dispatch endpoint is not implemented. To avoid a non-working dashboard button, use <code>/ticketsetup</code> in your Discord server to configure the ticket panel.</p>
                         </div>
                     </div>
 
-                    <!-- MODULE 8: GIVEAWAYS & DROPS -->
+                    <!-- MODULE 8: GIVEAWAYS -->
                     <div id="mod-giveaways" class="module-pane" style="display: none;">
-                        <h3 class="section-title">🎉 Giveaways & Drops Studio</h3>
-                        <p class="section-desc">Launch Discord giveaways and timed loot chest drops directly from the web.</p>
-                        
-                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 20px;">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Giveaway Channel</label>
-                                    <select id="giveaway-channel-select" class="select-input"></select>
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Prize</label>
-                                    <input type="text" id="giveaway-prize" class="input-text" value="Discord Nitro Monthly">
-                                </div>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Duration (Minutes)</label>
-                                    <input type="number" id="giveaway-duration" class="input-text" value="60">
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Winners Count</label>
-                                    <input type="number" id="giveaway-winners" class="input-text" value="1" min="1">
-                                </div>
-                            </div>
-                            <button class="btn btn-primary" onclick="launchGiveaway()">🎉 Launch Giveaway in Discord</button>
+                        <h3 class="section-title">🎉 Giveaways Studio</h3>
+                        <p class="section-desc">Manage giveaways with Starry's registered Discord commands.</p>
+                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 14px; padding: 20px;">
+                            <h4 style="margin-bottom: 8px;">Create or reroll a giveaway</h4>
+                            <p style="color: var(--text-muted);">The legacy web launch endpoint is not implemented. Use <code>/giveaway</code> in Discord to create a giveaway and <code>/reroll</code> to select a new winner.</p>
                         </div>
                     </div>
 
@@ -1156,22 +1124,22 @@
                         </div>
                     </div>
 
-                    <!-- MODULE 13: 150+ UNIVERSAL COMMAND CONSOLE -->
+                    <!-- MODULE 13: LIVE COMMAND CATALOGUE -->
                     <div id="mod-console" class="module-pane" style="display: none;">
-                        <h3 class="section-title">⚡ 150+ Universal Command Runner Console</h3>
-                        <p class="section-desc">Execute any of Starry's 165+ commands remotely on your server directly from the web.</p>
+                        <h3 class="section-title">⚡ Live Command Catalogue</h3>
+                        <p class="section-desc">Browse the commands currently registered by the Starry backend. Run commands in Discord using slash-command autocomplete.</p>
                         
                         <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 20px;">
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 14px;">
                                 <div class="form-group">
                                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Select Command Category</label>
                                     <select id="console-category-select" class="select-input" onchange="populateConsoleCommands(this.value)">
-                                        <option value="moderation">🛡️ Moderation (40+ Commands)</option>
-                                        <option value="music">🎵 Music & Audio (25+ Commands)</option>
-                                        <option value="utility">🔧 Utility & Info (25+ Commands)</option>
-                                        <option value="economy">💰 Economy & Games (25+ Commands)</option>
-                                        <option value="social">🌸 Social & Anime (25+ Commands)</option>
-                                        <option value="system">⚙️ System & VIP (15+ Commands)</option>
+                                        <option value="moderation">🛡️ Moderation</option>
+                                        <option value="music">🎵 Music & Audio</option>
+                                        <option value="utility">🔧 Utility & Info</option>
+                                        <option value="economy">💰 Economy & Games</option>
+                                        <option value="social">🌸 Social & Anime</option>
+                                        <option value="system">⚙️ System & VIP</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -1180,20 +1148,7 @@
                                 </div>
                             </div>
 
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px;">
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Arguments / Input</label>
-                                    <input type="text" id="console-args-input" class="input-text" placeholder="e.g. @user 10m or song title">
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Execute in Channel</label>
-                                    <select id="console-channel-select" class="select-input"></select>
-                                </div>
-                            </div>
-
-                            <button class="btn btn-primary" onclick="runRemoteConsoleCommand()">⚡ Run Command Remotely</button>
-
-                            <div id="console-output-box" style="display: none; margin-top: 20px; background: #000; border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #10B981;"></div>
+                            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 14px;">Select a category to browse the live command registry. Execute the selected command in Discord with <code>/</code> autocomplete.</p>
                         </div>
                     </div>
 
@@ -1264,13 +1219,16 @@
         let currentGuildId = '';
         let guildDataCache = {};
 
-        const COMMAND_GROUPS = {
-            moderation: ['ban', 'unban', 'kick', 'timeout', 'untimeout', 'warn', 'warnings', 'clearwarns', 'purge', 'lock', 'unlock', 'slowmode', 'nickname', 'addrole', 'removerole', 'quarantine', 'emergencylockdown', 'emergencysecure', 'emergencyunban'],
-            music: ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'loop', 'shuffle', 'bass', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop', 'filter', 'clearfilters', 'nowplaying', 'autoplay', '247'],
-            utility: ['ping', 'help', 'serverinfo', 'userinfo', 'avatar', 'banner', 'roles', 'channels', 'calc', 'poll', 'snipe', 'afk', 'remind', 'uptime', 'stats', 'invite', 'bump'],
-            economy: ['balance', 'daily', 'weekly', 'work', 'crime', 'rob', 'deposit', 'withdraw', 'pay', 'shop', 'buy', 'inventory', 'slots', 'coinflip', 'dice', 'blackjack', 'chest', 'pet', 'prestige'],
-            social: ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'sleep', 'wakeup', 'cry', 'laugh', 'dance', 'blush', 'pout', 'smile', 'bored', 'confess', 'marry'],
-            system: ['redeem', 'premium', 'cluster', 'status', 'telemetry', 'backup', 'restore']
+        // The backend command registry is the single source of truth for this console.
+        let commandCatalog = [];
+        let commandCatalogGuildId = '';
+        const COMMAND_CATEGORY_FILTERS = {
+            moderation: /moderation|security|automod/i,
+            music: /music|audio/i,
+            utility: /utility|ai|tools/i,
+            economy: /economy|rpg/i,
+            social: /social|expression/i,
+            system: /system|game|booster|color|media|asset/i
         };
 
         function switchNav(tabId) {
@@ -1300,13 +1258,50 @@
             if (targetMod) targetMod.style.display = 'block';
         }
 
-        function populateConsoleCommands(cat) {
-            const list = COMMAND_GROUPS[cat] || [];
+        async function populateConsoleCommands(cat) {
             const sel = document.getElementById('console-command-select');
-            sel.innerHTML = '';
-            list.forEach(c => {
-                sel.innerHTML += `<option value="${c}">,${c}</option>`;
-            });
+            if (!sel) return;
+            sel.innerHTML = '<option value="">Loading commands...</option>';
+
+            if (!currentGuildId) {
+                sel.innerHTML = '<option value="">Select a server first</option>';
+                return;
+            }
+
+            try {
+                if (commandCatalogGuildId !== currentGuildId || !commandCatalog.length) {
+                    const response = await fetch('/api/guild/' + encodeURIComponent(currentGuildId) + '/commands', {
+                        headers: { 'bypass-tunnel-reminder': 'true' }
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success || !Array.isArray(payload.commands)) {
+                        throw new Error(payload.error || 'Could not load the registered command list.');
+                    }
+                    commandCatalog = payload.commands;
+                    commandCatalogGuildId = currentGuildId;
+                }
+
+                const matcher = COMMAND_CATEGORY_FILTERS[cat] || /.*/i;
+                const commands = commandCatalog.filter(command => matcher.test(String(command.category || '')));
+                sel.innerHTML = '';
+
+                if (!commands.length) {
+                    sel.innerHTML = '<option value="">No registered commands in this category</option>';
+                    return;
+                }
+
+                commands.forEach(command => {
+                    const option = document.createElement('option');
+                    option.value = command.name;
+                    option.textContent = ',' + command.name;
+                    sel.appendChild(option);
+                });
+            } catch (error) {
+                commandCatalog = [];
+                commandCatalogGuildId = '';
+                sel.innerHTML = '<option value="">Command list unavailable</option>';
+                console.error('[Dashboard] Command catalogue failed:', error);
+            }
         }
 
         async function loadGuilds() {
@@ -1337,7 +1332,7 @@
 
                 // Populate channels
                 const textChannels = (data.channels || []).filter(c => c.isText);
-                const chanSelects = ['set-log-mod', 'set-log-msg', 'set-log-voice', 'embed-channel', 'ctrl-channel-select', 'ticket-channel-select', 'giveaway-channel-select', 'console-channel-select'];
+                const chanSelects = ['set-log-mod', 'set-log-msg', 'set-log-voice', 'embed-channel', 'ctrl-channel-select'];
                 chanSelects.forEach(sId => {
                     const el = document.getElementById(sId);
                     if (el) {
@@ -1360,6 +1355,10 @@
                         });
                     }
                 });
+
+                // Refresh the command picker from the live backend registry.
+                const activeCategory = document.getElementById('console-category-select')?.value || 'moderation';
+                await populateConsoleCommands(activeCategory);
 
                 // Populate Player status
                 if (data.player && data.player.currentTrack) {
@@ -1564,63 +1563,6 @@
             const d = await res.json();
             if (d.success) showToast(d.message);
             else alert(d.error || 'Failed to change channel permissions');
-        }
-
-        async function dispatchTicketPanel() {
-            const channelId = document.getElementById('ticket-channel-select').value;
-            const title = document.getElementById('ticket-title').value;
-            const description = document.getElementById('ticket-desc').value;
-            if (!channelId) return alert('Please select a channel!');
-
-            const res = await fetch('/api/guild/' + currentGuildId + '/tickets/dispatch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
-                body: JSON.stringify({ channelId, title, description })
-            });
-            const d = await res.json();
-            if (d.success) showToast(d.message);
-            else alert(d.error || 'Failed to deploy ticket panel');
-        }
-
-        async function launchGiveaway() {
-            const channelId = document.getElementById('giveaway-channel-select').value;
-            const prize = document.getElementById('giveaway-prize').value;
-            const durationMinutes = document.getElementById('giveaway-duration').value;
-            const winners = document.getElementById('giveaway-winners').value;
-            if (!channelId) return alert('Please select a channel!');
-
-            const res = await fetch('/api/guild/' + currentGuildId + '/giveaway/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
-                body: JSON.stringify({ channelId, prize, durationMinutes, winners })
-            });
-            const d = await res.json();
-            if (d.success) showToast(d.message);
-            else alert(d.error || 'Failed to launch giveaway');
-        }
-
-        async function runRemoteConsoleCommand() {
-            const commandName = document.getElementById('console-command-select').value;
-            const rawArgs = document.getElementById('console-args-input').value;
-            const channelId = document.getElementById('console-channel-select').value;
-            const outBox = document.getElementById('console-output-box');
-
-            outBox.style.display = 'block';
-            outBox.innerHTML = `⏳ Executing \`,${commandName} ${rawArgs}\` on Discord server...`;
-
-            const args = rawArgs.trim() ? rawArgs.trim().split(/\s+/) : [];
-            const res = await fetch('/api/guild/' + currentGuildId + '/command/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
-                body: JSON.stringify({ commandName, args, channelId })
-            });
-            const d = await res.json();
-            if (d.success) {
-                outBox.innerHTML = `✅ [SUCCESS] ${d.message}`;
-                showToast(`Executed ,${commandName}!`);
-            } else {
-                outBox.innerHTML = `<span style="color:#EF4444;">❌ [ERROR] ${d.error || 'Execution failed'}</span>`;
-            }
         }
 
         function updateEmbedPreview() {
