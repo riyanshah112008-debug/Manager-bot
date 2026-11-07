@@ -1264,13 +1264,16 @@
         let currentGuildId = '';
         let guildDataCache = {};
 
-        const COMMAND_GROUPS = {
-            moderation: ['ban', 'unban', 'kick', 'timeout', 'untimeout', 'warn', 'warnings', 'clearwarns', 'purge', 'lock', 'unlock', 'slowmode', 'nickname', 'addrole', 'removerole', 'quarantine', 'emergencylockdown', 'emergencysecure', 'emergencyunban'],
-            music: ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume', 'loop', 'shuffle', 'bass', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop', 'filter', 'clearfilters', 'nowplaying', 'autoplay', '247'],
-            utility: ['ping', 'help', 'serverinfo', 'userinfo', 'avatar', 'banner', 'roles', 'channels', 'calc', 'poll', 'snipe', 'afk', 'remind', 'uptime', 'stats', 'invite', 'bump'],
-            economy: ['balance', 'daily', 'weekly', 'work', 'crime', 'rob', 'deposit', 'withdraw', 'pay', 'shop', 'buy', 'inventory', 'slots', 'coinflip', 'dice', 'blackjack', 'pet', 'prestige'],
-            social: ['highfive', 'hug', 'kiss', 'pat', 'slap', 'cuddle', 'bite', 'poke', 'punch', 'tickle', 'feed', 'lick', 'wave', 'sleep', 'wakeup', 'cry', 'laugh', 'dance', 'blush', 'pout', 'smile', 'bored', 'confess', 'marry'],
-            system: ['redeem', 'premium', 'cluster', 'status', 'telemetry', 'backup', 'restore']
+        // The backend command registry is the single source of truth for this console.
+        let commandCatalog = [];
+        let commandCatalogGuildId = '';
+        const COMMAND_CATEGORY_FILTERS = {
+            moderation: /moderation|security|automod/i,
+            music: /music|audio/i,
+            utility: /utility|ai|tools/i,
+            economy: /economy|rpg/i,
+            social: /social|expression/i,
+            system: /system|game|booster|color|media|asset/i
         };
 
         function switchNav(tabId) {
@@ -1300,13 +1303,50 @@
             if (targetMod) targetMod.style.display = 'block';
         }
 
-        function populateConsoleCommands(cat) {
-            const list = COMMAND_GROUPS[cat] || [];
+        async function populateConsoleCommands(cat) {
             const sel = document.getElementById('console-command-select');
-            sel.innerHTML = '';
-            list.forEach(c => {
-                sel.innerHTML += `<option value="${c}">,${c}</option>`;
-            });
+            if (!sel) return;
+            sel.innerHTML = '<option value="">Loading commands...</option>';
+
+            if (!currentGuildId) {
+                sel.innerHTML = '<option value="">Select a server first</option>';
+                return;
+            }
+
+            try {
+                if (commandCatalogGuildId !== currentGuildId || !commandCatalog.length) {
+                    const response = await fetch('/api/guild/' + encodeURIComponent(currentGuildId) + '/commands', {
+                        headers: { 'bypass-tunnel-reminder': 'true' }
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success || !Array.isArray(payload.commands)) {
+                        throw new Error(payload.error || 'Could not load the registered command list.');
+                    }
+                    commandCatalog = payload.commands;
+                    commandCatalogGuildId = currentGuildId;
+                }
+
+                const matcher = COMMAND_CATEGORY_FILTERS[cat] || /.*/i;
+                const commands = commandCatalog.filter(command => matcher.test(String(command.category || '')));
+                sel.innerHTML = '';
+
+                if (!commands.length) {
+                    sel.innerHTML = '<option value="">No registered commands in this category</option>';
+                    return;
+                }
+
+                commands.forEach(command => {
+                    const option = document.createElement('option');
+                    option.value = command.name;
+                    option.textContent = ',' + command.name;
+                    sel.appendChild(option);
+                });
+            } catch (error) {
+                commandCatalog = [];
+                commandCatalogGuildId = '';
+                sel.innerHTML = '<option value="">Command list unavailable</option>';
+                console.error('[Dashboard] Command catalogue failed:', error);
+            }
         }
 
         async function loadGuilds() {
@@ -1360,6 +1400,10 @@
                         });
                     }
                 });
+
+                // Refresh the command picker from the live backend registry.
+                const activeCategory = document.getElementById('console-category-select')?.value || 'moderation';
+                await populateConsoleCommands(activeCategory);
 
                 // Populate Player status
                 if (data.player && data.player.currentTrack) {
