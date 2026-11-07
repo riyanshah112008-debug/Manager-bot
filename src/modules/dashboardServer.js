@@ -15,6 +15,7 @@ const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
 const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
+const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
@@ -615,7 +616,7 @@ function setupDashboardRoutes(app, client) {
                 managed: r.managed
             }));
 
-            const player = client.multiBot?.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const player = getActiveMusicPlayer(guild.id, client);
             const currentTrack = player?.currentTrack || player?.queue?.current || null;
             const queueSource = Array.isArray(player?.queue) ? player.queue : (Array.isArray(player?.queue?.tracks) ? player.queue.tracks : []);
             const workerInfo = player && Array.from(client.multiBot?.instances?.values?.() || []).find(info =>
