@@ -18,6 +18,7 @@ const os = require('os');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const { requirePremium } = require('../../utils/premiumHelper');
+const safeEvaluateMath = require('../../utils/safeMath');
 
 // Channel message snipe memory cache
 const snipes = new Map();
@@ -668,15 +669,11 @@ const components = createHelpComponents();
         async execute(ctx) {
             const expr = ctx.args.join(' ');
             if (!expr) return ctx.reply('❌ Provide a mathematical expression: `,calc 100 * 5 + 20`');
-            if (!/^[0-9+\-*/().\s^%]+$/.test(expr)) return ctx.reply('❌ Expression contains invalid characters.');
-
-            try {
-                const sanitized = expr.replace(/\^/g, '**');
-                const result = Function(`'use strict'; return (${sanitized})`)();
-                return ctx.reply(`🔢 **Math Calculation:**\n\`${expr}\` = **\`${result}\`**`);
-            } catch (e) {
-                return ctx.reply('❌ Error evaluating math expression.');
+            const result = safeEvaluateMath(expr, { allowPower: true });
+            if (!Number.isFinite(result)) {
+                return ctx.reply('❌ Invalid or out-of-range math expression.');
             }
+            return ctx.reply(`🔢 **Math Calculation:**\n\`${expr}\` = **\`${result}\`**`);
         }
     },
 

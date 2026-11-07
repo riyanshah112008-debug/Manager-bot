@@ -26,3 +26,8 @@ jobs:
           node --check public/firebase-bridge.js
           node --check public/landing.js
           node --check public/workspace.js
+          node --check src/utils/safeMath.js
+          node --check src/modules/count.js
+          node --check src/commands/bundles/utilityCommands.js
+      - name: Test bounded arithmetic parser
+        run: node --test tests/safeMath.test.js
