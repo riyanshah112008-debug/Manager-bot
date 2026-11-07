@@ -444,9 +444,7 @@ class CommandRegistry {
                 }
             }
 
-            if (!command) return;
-
-            // 🛡️ Guaranteed Single-Execution Message Guard (Process-wide In-Memory Deduplication)
+NaN
             if (executedMessageIds.has(message.id)) return;
             executedMessageIds.add(message.id);
             setTimeout(() => executedMessageIds.delete(message.id), 20000);
