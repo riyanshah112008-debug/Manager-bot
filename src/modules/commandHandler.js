@@ -562,7 +562,17 @@ class CommandRegistry {
                 if (command) {
                     try {
                         const ctx = new CommandContext(interaction, client, []);
-                        
+
+                        // Keep slash-command behavior consistent with prefix commands:
+                        // server-scoped modules must never dereference ctx.guild in DMs.
+                        if (!ctx.guild?.id && (command.category === 'Moderation' || command.category === 'Economy' || command.guildOnly)) {
+                            await interaction.reply({
+                                content: '❌ This command can only be used inside a Discord server.',
+                                flags: [MessageFlags.Ephemeral]
+                            }).catch(() => {});
+                            return;
+                        }
+
                         // Instant 0ms defer to guarantee Discord never shows "Application did not respond"
                         if (!interaction.deferred && !interaction.replied && command.autoDefer !== false) {
                             const deferOpts = command.ephemeral ? { flags: [MessageFlags.Ephemeral] } : {};
