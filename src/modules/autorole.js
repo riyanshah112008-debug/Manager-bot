@@ -9,6 +9,14 @@ const ServerSettings = require('../models/ServerSettings');
 
 const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 
+// Discord snowflakes are decimal IDs (17–20 digits). Validate IDs before
+// using them in MongoDB filters so request-derived values cannot become
+// MongoDB operators or query objects.
+const DISCORD_SNOWFLAKE_PATTERN = /^\\d{17,20}$/;
+function getSafeDiscordId(value) {
+    return typeof value === 'string' && DISCORD_SNOWFLAKE_PATTERN.test(value) ? value : null;
+}
+
 module.exports = (client) => {
     // ==========================================
     // 1. AUTOMATIC BACKGROUND BACKUP (ON LEAVE)
@@ -16,10 +24,14 @@ module.exports = (client) => {
     client.on('guildMemberRemove', async (member) => {
         if (!member.guild || member.user.bot) return;
 
+        const guildId = getSafeDiscordId(member.guild.id);
+        const userId = getSafeDiscordId(member.user.id);
+        if (!guildId || !userId) return;
+
         try {
             const [config, serverSettings] = await Promise.all([
-                AutoroleConfig.findOne({ guildId: member.guild.id }).lean(),
-                ServerSettings.findOne({ guildId: member.guild.id }).select('autorole').lean()
+                AutoroleConfig.findOne({ guildId }).lean(),
+                ServerSettings.findOne({ guildId }).select('autorole').lean()
             ]);
             const stickyEnabled = serverSettings?.autorole?.stickyRoles ?? config?.stickyRolesEnabled ?? true;
             if (!stickyEnabled) return;
@@ -31,7 +43,7 @@ module.exports = (client) => {
             if (roleIds.length === 0) return;
 
             await StickyRole.findOneAndUpdate(
-                { guildId: member.guild.id, userId: member.user.id },
+                { guildId, userId },
                 { roles: roleIds },
                 { upsert: true }
             );
@@ -46,13 +58,17 @@ module.exports = (client) => {
     client.on('guildMemberAdd', async (member) => {
         if (!member.guild) return;
 
+        const guildId = getSafeDiscordId(member.guild.id);
+        const userId = getSafeDiscordId(member.user.id);
+        if (!guildId || !userId) return;
+
         try {
             const botMember = member.guild.members.me || await member.guild.members.fetch(client.user.id).catch(() => null);
             if (!botMember || !botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) return;
 
             const [legacyConfig, serverSettings] = await Promise.all([
-                AutoroleConfig.findOne({ guildId: member.guild.id }).lean(),
-                ServerSettings.findOne({ guildId: member.guild.id }).select('autorole').lean()
+                AutoroleConfig.findOne({ guildId }).lean(),
+                ServerSettings.findOne({ guildId }).select('autorole').lean()
             ]);
             const dashboardConfig = serverSettings?.autorole || {};
             const isBot = Boolean(member.user.bot);
@@ -66,7 +82,7 @@ module.exports = (client) => {
             // Sticky-role restoration applies only to returning human members.
             const stickyEnabled = dashboardConfig.stickyRoles ?? legacyConfig?.stickyRolesEnabled ?? true;
             if (!isBot && stickyEnabled) {
-                const previousData = await StickyRole.findOne({ guildId: member.guild.id, userId: member.user.id }).lean();
+                const previousData = await StickyRole.findOne({ guildId, userId }).lean();
                 for (const roleId of previousData?.roles || []) {
                     const role = member.guild.roles.cache.get(roleId);
                     if (role && role.position < botHighestRolePosition && !role.managed) rolesToApply.push(roleId);
@@ -104,8 +120,11 @@ module.exports = (client) => {
             return interaction.reply({ content: '❌ I need **Manage Roles** permission to configure and assign roles.', flags: [EPHEMERAL_FLAG] });
         }
 
-        let config = await AutoroleConfig.findOne({ guildId: interaction.guild.id });
-        if (!config) config = new AutoroleConfig({ guildId: interaction.guild.id, roleIds: [], stickyRolesEnabled: true });
+        const guildId = getSafeDiscordId(interaction.guild.id);
+        if (!guildId) return interaction.reply({ content: '❌ Invalid server ID.', flags: [EPHEMERAL_FLAG] });
+
+        let config = await AutoroleConfig.findOne({ guildId });
+        if (!config) config = new AutoroleConfig({ guildId, roleIds: [], stickyRolesEnabled: true });
 
         const stickyOption = interaction.options.getBoolean('sticky_roles');
         const clearOption = interaction.options.getBoolean('clear_all');
