@@ -183,10 +183,13 @@ module.exports = {
       // ⚡ Instantly join voice channel in background without blocking search
       player.connect().catch(() => {});
 
+      let searchTimeout;
       const result = await Promise.race([
         StarryAudioEngine.search(query, interaction.user),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 4s')), 4000))
-      ]);
+        new Promise((_, reject) => {
+          searchTimeout = setTimeout(() => reject(new Error('Audio search timed out after 20 seconds')), 20000);
+        })
+      ]).finally(() => clearTimeout(searchTimeout));
 
       if (!result || !result.tracks || result.tracks.length === 0) {
         const replyFunc = interaction.editReply || interaction.reply;

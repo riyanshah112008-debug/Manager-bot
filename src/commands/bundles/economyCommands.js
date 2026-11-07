@@ -768,8 +768,25 @@ const commands = [
         description: 'View your stored fish, minerals, and items in your backpack.',
         usage: ',inventory [@user]',
         async execute(ctx) {
-            const target = ctx.message?.mentions?.users?.first() || ctx.options?.getUser?.('user') || ctx.user;
-            const doc = await getOrCreateEcoUser(target.id, ctx.guild.id);
+            // Resolve the target from either prefix-message mentions or slash-command options.
+            // Fall back through the normalized context and original Discord source so a missing
+            // optional target never becomes an unhandled "reading 'id'" exception.
+            const target =
+                ctx.message?.mentions?.users?.first?.() ||
+                ctx.options?.getUser?.('user') ||
+                ctx.user ||
+                ctx.author ||
+                ctx.interaction?.user ||
+                ctx.source?.user;
+
+            if (!ctx.guild?.id) {
+                return ctx.reply('❌ The profile command can only be used inside a server.');
+            }
+            if (!target?.id) {
+                return ctx.reply('❌ I could not identify the Discord user for this profile. Please try again.');
+            }
+
+            const doc = await getOrCreateEcoUser(String(target.id), String(ctx.guild.id));
             const inv = doc.inventory || [];
 
             if (inv.length === 0) {

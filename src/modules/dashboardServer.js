@@ -15,6 +15,7 @@ const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
 const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
+const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
@@ -65,7 +66,10 @@ function setupDashboardRoutes(app, client) {
     const dashboardOrigins = new Set([
         'https://manager-bot-96c07.web.app',
         'https://manager-bot-96c07.firebaseapp.com',
-        ...(process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '').split(',').map(value => value.trim()).filter(Boolean)
+        ...[process.env.CORS_ORIGINS, process.env.FRONTEND_URL, process.env.PUBLIC_URL]
+            .flatMap(value => String(value || '').split(','))
+            .map(value => value.trim())
+            .filter(Boolean)
     ].map(value => value.replace(/\/$/, '')));
     app.use((req, res, next) => {
         const origin = req.get('Origin');
@@ -316,7 +320,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/auth/callback', actionLimiter, async (req, res) => {
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
-        const frontendBase = (process.env.FRONTEND_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
         const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
         const cookieState = cookiePart ? cookiePart.slice('starry_oauth_state='.length) : '';
         const secureCookie = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
@@ -615,7 +619,7 @@ function setupDashboardRoutes(app, client) {
                 managed: r.managed
             }));
 
-            const player = client.multiBot?.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const player = getActiveMusicPlayer(guild.id, client);
             const currentTrack = player?.currentTrack || player?.queue?.current || null;
             const queueSource = Array.isArray(player?.queue) ? player.queue : (Array.isArray(player?.queue?.tracks) ? player.queue.tracks : []);
             const workerInfo = player && Array.from(client.multiBot?.instances?.values?.() || []).find(info =>

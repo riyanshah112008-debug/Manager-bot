@@ -1,4 +1,4 @@
-name: Backend and dashboard syntax checks
+name: Backend and dashboard checks
 
 on:
   pull_request:
@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  syntax:
-    name: Check Node.js syntax
+  validate:
+    name: Validate bot and website
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -17,12 +17,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
-      - name: Validate backend and dashboard scripts
+          cache: npm
+      - name: Install locked production dependencies
+        run: npm ci --omit=dev --legacy-peer-deps
+      - name: Check backend and website JavaScript syntax
         run: |
-          node --check src/index.js
-          node --check src/commands/bundles/assetCommands.js
-          node --check src/modules/commandHandler.js
-          node --check src/modules/dashboardServer.js
-          node --check public/firebase-bridge.js
-          node --check public/landing.js
-          node --check public/workspace.js
+          find src public -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+          node --check deploy-commands.js
+      - name: Run deterministic verification tests
+        run: npm test

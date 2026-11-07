@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
+const { getActiveMusicPlayer } = require('../../utils/musicPlayerResolver');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
@@ -16,7 +16,7 @@ module.exports = {
         ),
         
     async execute(interaction, client) {
-        const player = StarryAudioEngine.getPlayer(interaction.guild.id, client) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
+        const player = getActiveMusicPlayer(interaction.guild.id, client);
         
         if (!player) {
             return interaction.reply({ content: '❌ No active audio stream in this server.', flags: [EPHEMERAL_FLAG] });

@@ -105,8 +105,11 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 const allowedOrigins = new Set(
-    (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || '')
-        .split(',').map(value => value.trim()).filter(Boolean).map(value => value.replace(/\/$/, ''))
+    [process.env.CORS_ORIGINS, process.env.FRONTEND_URL, process.env.PUBLIC_URL, process.env.RENDER_EXTERNAL_URL]
+        .flatMap(value => String(value || '').split(','))
+        .map(value => value.trim())
+        .filter(Boolean)
+        .map(value => value.replace(/\/$/, ''))
 );
 app.use(cors({
     origin(origin, callback) {

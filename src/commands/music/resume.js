@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
+const { getActiveMusicPlayer } = require('../../utils/musicPlayerResolver');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
@@ -9,7 +9,7 @@ module.exports = {
         .setDescription('▶️ Resumes paused audio playback'),
         
     async execute(interaction, client) {
-        const player = StarryAudioEngine.getPlayer(interaction.guild.id, client) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
+        const player = getActiveMusicPlayer(interaction.guild.id, client);
         
         if (!player || (!player.currentTrack && !player.playing)) {
             return interaction.reply({ content: '❌ Nothing is currently playing in this server.', flags: [EPHEMERAL_FLAG] });

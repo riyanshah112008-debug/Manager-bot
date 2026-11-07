@@ -110,7 +110,7 @@ module.exports = client => {
           if (client.verifyMap.size >= 10000) return interaction.reply({ content: 'Verification is temporarily busy. Please try again in a few minutes.', ephemeral: true });
           const token = crypto.randomBytes(24).toString('hex');
           client.verifyMap.set(token, { userId: interaction.user.id, guildId: interaction.guildId, roleId: role.id, expiresAt: Date.now() + 10 * 60000, minAccountAgeDays: Number(cfg.minAccountAgeDays) || 0, ageAction: cfg.ageAction || 'reject', requireAvatar: !!cfg.requireAvatar });
-          const base = process.env.PUBLIC_URL || getPublicUrl() || process.env.RENDER_EXTERNAL_URL || '';
+          const base = getPublicUrl() || '';
           const url = base ? `${base.replace(/\/$/, '')}/verify?token=${token}` : null;
           if (!url) return interaction.reply({ content: 'The verification website URL is not configured. Use another method or contact an administrator.', ephemeral: true });
           if (method === 'dm') {
