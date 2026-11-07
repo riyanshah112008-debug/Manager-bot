@@ -673,7 +673,7 @@ const components = createHelpComponents();
             if (!Number.isFinite(result)) {
                 return ctx.reply('❌ Invalid or out-of-range math expression.');
             }
-            return ctx.reply(`🔢 **Math Calculation:**\\n\\`${expr}\\` = **\\`${result}\\`**`);
+            return ctx.reply(`🔢 **Math Calculation:**\n\`${expr}\` = **\`${result}\`**`);
         }
     },
 
