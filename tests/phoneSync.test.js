@@ -26,7 +26,7 @@ assert.throws(() => validateOperation({ ...valid, payload: { data: 'x'.repeat(50
 assert.equal(validateOperation({ ...valid, operation: 'delete', payload: null }).payload, null);
 assert.throws(() => validateOperation({ ...valid, baseRevision: -1 }), /Base revision/);
 assert.throws(() => validateOperation({ ...valid, baseRevision: 1.5 }), /Base revision/);
-assert.throws(() => validateOperation({ ...valid, entityId: 'bad\\nrecord' }), /printable/);
+assert.throws(() => validateOperation({ ...valid, entityId: 'bad\nrecord' }), /printable/);
 const circular = {};
 circular.self = circular;
 assert.throws(() => validateOperation({ ...valid, payload: circular }), /valid JSON values/);
