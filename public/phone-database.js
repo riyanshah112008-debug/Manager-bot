@@ -215,7 +215,11 @@
         });
       }
 
-      const pulled = await fetch("/api/phone-sync/pull?deviceId=" + encodeURIComponent(deviceId), { headers: { "Accept": "application/json" } });
+      const pulled = await fetch("/api/phone-sync/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ deviceId })
+      });
       const pulledData = await pulled.json().catch(() => ({}));
       if (!pulled.ok || !pulledData.success) throw new Error(pulledData.error || "Could not download cloud operations.");
       const appliedIds = [];
