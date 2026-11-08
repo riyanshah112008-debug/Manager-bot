@@ -164,8 +164,8 @@
         const statement = db.prepare("INSERT INTO records(entity_type,entity_id,payload_json,revision,updated_at,deleted_at) VALUES(?,?,?,?,?,NULL) ON CONFLICT(entity_type,entity_id) DO UPDATE SET payload_json=excluded.payload_json,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=NULL");
         try { statement.run([operation.entityType, operation.entityId, JSON.stringify(operation.payload), currentRevision + 1, now]); } finally { statement.free(); }
       } else if (operation.operation === "delete") {
-        const statement = db.prepare("UPDATE records SET revision=?,updated_at=?,deleted_at=? WHERE entity_type=? AND entity_id=?");
-        try { statement.run([currentRevision + 1, now, now, operation.entityType, operation.entityId]); } finally { statement.free(); }
+        const statement = db.prepare("INSERT INTO records(entity_type,entity_id,payload_json,revision,updated_at,deleted_at) VALUES(?,?, '{}',?,?,?) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at");
+        try { statement.run([operation.entityType, operation.entityId, currentRevision + 1, now, now]); } finally { statement.free(); }
       } else {
         throw new Error("Unsupported cloud operation.");
       }
@@ -207,6 +207,10 @@
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.success) throw new Error(data.error || "Could not upload local operations.");
+        var uploadedCount = (data.acknowledged || []).length;
+        var conflictCount = (data.conflicts || []).length;
+        var uploadedCount = (data.acknowledged || []).length;
+        var conflictCount = (data.conflicts || []).length;
         await runWrite((db) => {
           const update = db.prepare("UPDATE outbox SET status='acknowledged',attempts=attempts+1 WHERE operation_id=?");
           try { for (const id of data.acknowledged || []) update.run([id]); } finally { update.free(); }
@@ -232,7 +236,7 @@
       }
 
       refresh();
-      setText("sync-result", "Secure relay connected. Accepted " + pending.length + " test operation(s); downloaded " + appliedIds.length + ". Test records only.");
+      setText("sync-result", "Secure relay connected. Uploaded " + (typeof uploadedCount === "number" ? uploadedCount : 0) + " test operation(s)" + ((typeof conflictCount === "number" && conflictCount) ? "; " + conflictCount + " conflict(s) need attention" : "") + "; downloaded " + appliedIds.length + ". Test records only.");
     } catch (error) {
       setText("sync-result", error.message || "Sync failed. Your local database is unchanged.");
     } finally {
@@ -286,7 +290,7 @@
         if (!type || !id) throw new Error("Record type and ID are required.");
         const payload = JSON.parse(byId("record-json").value);
         const saved = await saveRecord(type, id, payload);
-        result.textContent = "Saved locally. Revision " + saved.revision + ". Cloud upload is not enabled.";
+        result.textContent = "Saved locally. Revision " + saved.revision + ". Select Sync now to upload this test record.";
         refresh();
       } catch (error) {
         result.textContent = error.message || "Could not save record.";
