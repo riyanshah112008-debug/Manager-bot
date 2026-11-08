@@ -177,9 +177,12 @@ async function createOperation(userId, operation) {
         const existing = await firestoreRequest(operationPath(userId, operation.operationId));
         const fields = decodeFields(existing.fields);
         if (fields.deviceId === operation.deviceId &&
+            fields.direction === operation.direction &&
             fields.entityId === operation.entityId &&
             fields.entityType === operation.entityType &&
-            fields.operation === operation.operation) return 'duplicate';
+            fields.operation === operation.operation &&
+            JSON.stringify(fields.payload ?? null) === JSON.stringify(operation.payload ?? null) &&
+            Number(fields.baseRevision || 0) === Number(operation.baseRevision || 0)) return 'duplicate';
         return 'conflict';
     }
 }
@@ -187,9 +190,10 @@ async function createOperation(userId, operation) {
 function setupPhoneSyncRoutes(app, { requireAuth }) {
     const authenticated = (req, res, next) => requireAuth(req, res, next);
 
-    app.get('/api/phone-sync/status', authenticated, (req, res) => {
+    app.get('/api/phone-sync/status', authenticated, async (req, res) => {
         try {
-            serviceConfig();
+            const { account } = serviceConfig();
+            await getAccessToken(account);
             res.set('Cache-Control', 'no-store');
             res.json({ success: true, configured: true, schemaVersion: SCHEMA_VERSION, scope: 'phone_test_records' });
         } catch (_) {
@@ -308,7 +312,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
 async function queuePhoneSyncOperation({ ownerId, deviceId, operation }) {
     if (typeof ownerId !== 'string' || !ownerId || !validId(deviceId)) throw new Error('Valid ownerId and deviceId are required.');
     const validated = validateOperation(operation);
-    return createOperation(ownerId, {
+    const result = await createOperation(ownerId, {
         ...validated,
         ownerId,
         deviceId,
@@ -316,6 +320,8 @@ async function queuePhoneSyncOperation({ ownerId, deviceId, operation }) {
         receivedAt: new Date().toISOString(),
         acknowledgedAt: null
     });
+    if (result === 'conflict') throw new Error('Operation ID already exists with different content.');
+    return validated.operationId;
 }
 
 module.exports = { setupPhoneSyncRoutes, queuePhoneSyncOperation, validateOperation };
