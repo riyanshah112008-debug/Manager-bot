@@ -18,6 +18,18 @@ function base64url(value) {
     return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
+function validationError(message) { const error = new Error(message); error.status = 400; return error; }
+
+function validateFirestorePayload(value, depth = 0) {
+    if (depth > 20) throw validationError('Upsert payload nesting is too deep.');
+    if (typeof value === 'number' && Number.isInteger(value) && !Number.isSafeInteger(value)) throw validationError('Upsert payload contains an integer outside the safe range.');
+    if (Array.isArray(value)) { for (const item of value) validateFirestorePayload(item, depth + 1); return; }
+    if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) {
+        if (!key || /^__.*__$/.test(key)) throw validationError('Upsert payload contains an empty or reserved map key.');
+        validateFirestorePayload(item, depth + 1);
+    }
+}
+
 function validId(value) {
     return typeof value === 'string' && UUID_RE.test(value);
 }
@@ -101,11 +113,14 @@ async function firestoreRequest(path, { method = 'GET', body, query = '' } = {})
     if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\') || /[\x00-\x1F]/.test(path) || !path.split('/').slice(1).every(part => part === '' || /^[A-Za-z0-9_:-]+$/.test(part))) {
         throw new Error('Invalid Firestore document path.');
     }
-    if (typeof query !== 'string' || (query && !/^\?[A-Za-z0-9_=&%-]*$/.test(query))) throw new Error('Invalid Firestore query parameters.');
+    if (typeof query !== 'string' || (query && !/^\?[A-Za-z0-9_.=&%-]*$/.test(query))) throw new Error('Invalid Firestore query parameters.');
     const { account, projectId } = serviceConfig();
     const token = await getAccessToken(account);
-    const base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) + '/databases/(default)/documents';
-    const response = await fetch(base + path + query, {
+    const requestUrl = new URL('https://firestore.googleapis.com');
+    requestUrl.pathname = '/v1/projects/' + encodeURIComponent(projectId) + '/databases/(default)/documents' + path;
+    requestUrl.search = query;
+    if (requestUrl.origin !== 'https://firestore.googleapis.com' || !requestUrl.pathname.startsWith('/v1/projects/')) throw new Error('Firestore request target is not allowed.');
+    const response = await fetch(requestUrl.toString(), {
         method,
         headers: {
             Authorization: 'Bearer ' + token,
@@ -125,31 +140,32 @@ async function firestoreRequest(path, { method = 'GET', body, query = '' } = {})
 
 function validateOperation(operation) {
     if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
-        throw new Error('Each operation must be an object.');
+        throw validationError('Each operation must be an object.');
     }
-    if (!validId(operation.operationId)) throw new Error('Operation ID must be a UUID v4.');
+    if (!validId(operation.operationId)) throw validationError('Operation ID must be a UUID v4.');
     if (!ALLOWED_ENTITY_TYPES.has(operation.entityType)) {
-        throw new Error('This sync foundation only accepts phone_test_records.');
+        throw validationError('This sync foundation only accepts phone_test_records.');
     }
     if (typeof operation.entityId !== 'string' || !operation.entityId.trim() || operation.entityId.length > 160 || /[\x00-\x1F]/.test(operation.entityId)) {
-        throw new Error('Entity ID must be 1–160 printable characters.');
+        throw validationError('Entity ID must be 1–160 printable characters.');
     }
-    if (!['upsert', 'delete'].includes(operation.operation)) throw new Error('Unsupported operation type.');
+    if (!['upsert', 'delete'].includes(operation.operation)) throw validationError('Unsupported operation type.');
     const baseRevision = operation.baseRevision === undefined ? 0 : operation.baseRevision;
-    if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) throw new Error('Base revision must be a non-negative safe integer.');
+    if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) throw validationError('Base revision must be a non-negative safe integer.');
     let safePayload = null;
     if (operation.operation === 'upsert') {
         if (!operation.payload || typeof operation.payload !== 'object' || Array.isArray(operation.payload)) {
-            throw new Error('Upsert payload must be a JSON object.');
+            throw validationError('Upsert payload must be a JSON object.');
         }
         let serialized;
         try { serialized = JSON.stringify(operation.payload); } catch (_) {
-            throw new Error('Upsert payload must contain valid JSON values only.');
+            throw validationError('Upsert payload must contain valid JSON values only.');
         }
         if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_PAYLOAD_BYTES) {
-            throw new Error('Each payload must be 4 KB or smaller.');
+            throw validationError('Each payload must be 4 KB or smaller.');
         }
         safePayload = JSON.parse(serialized);
+        validateFirestorePayload(safePayload);
     }
     return {
         operationId: operation.operationId,
@@ -207,7 +223,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
         try {
             serviceConfig();
             // Verify the configured Firestore database is reachable, not merely that OAuth credentials parse.
-            await firestoreRequest('', { query: '?pageSize=1' });
+            await firestoreRequest('/' + COLLECTION, { query: '?pageSize=1' });
             res.set('Cache-Control', 'no-store');
             res.json({ success: true, configured: true, schemaVersion: SCHEMA_VERSION, scope: 'phone_test_records' });
         } catch (_) {
@@ -243,7 +259,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             }
             res.json({ success: true, acknowledged: ack, conflicts, accepted: ack.length });
         } catch (error) {
-            const status = /payload|operation|UUID|device|schema|batch|entity|unsupported|characters|revision|4 KB/i.test(error.message) ? 400 : 503;
+            const status = error.status === 400 ? 400 : 503;
             console.error('[Phone Sync] Push failed:', error.message);
             res.status(status).json({ success: false, error: status === 400 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
