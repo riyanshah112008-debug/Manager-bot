@@ -292,7 +292,8 @@
         result.textContent = error.message || "Could not save record.";
       }
     });
-    byId("refresh-button").addEventListener("click", refresh);\n    byId("sync-button").addEventListener("click", syncNow);
+    byId("refresh-button").addEventListener("click", refresh);
+    byId("sync-button").addEventListener("click", syncNow);
     byId("integrity-button").addEventListener("click", async () => {
       try { setText("health-result", "Integrity: " + await integrityCheck()); }
       catch (error) { setText("health-result", "Integrity check failed: " + error.message); }
