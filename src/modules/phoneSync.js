@@ -201,8 +201,9 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
 
     app.get('/api/phone-sync/status', authenticated, async (req, res) => {
         try {
-            const { account } = serviceConfig();
-            await getAccessToken(account);
+            serviceConfig();
+            // Verify the configured Firestore database is reachable, not merely that OAuth credentials parse.
+            await firestoreRequest('', { query: '?pageSize=1' });
             res.set('Cache-Control', 'no-store');
             res.json({ success: true, configured: true, schemaVersion: SCHEMA_VERSION, scope: 'phone_test_records' });
         } catch (_) {
