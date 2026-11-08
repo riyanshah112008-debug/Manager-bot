@@ -209,8 +209,6 @@
         if (!response.ok || !data.success) throw new Error(data.error || "Could not upload local operations.");
         var uploadedCount = (data.acknowledged || []).length;
         var conflictCount = (data.conflicts || []).length;
-        var uploadedCount = (data.acknowledged || []).length;
-        var conflictCount = (data.conflicts || []).length;
         await runWrite((db) => {
           const update = db.prepare("UPDATE outbox SET status='acknowledged',attempts=attempts+1 WHERE operation_id=?");
           try { for (const id of data.acknowledged || []) update.run([id]); } finally { update.free(); }
