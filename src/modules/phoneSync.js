@@ -242,9 +242,31 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             await firestoreRequest('/' + COLLECTION, { query: '?pageSize=1' });
             res.set('Cache-Control', 'no-store');
             res.json({ success: true, configured: true, schemaVersion: SCHEMA_VERSION, scope: 'phone_test_records' });
-        } catch (_) {
+        } catch (error) {
+            // Keep secrets and raw provider responses out of the browser while making
+            // the failure class actionable for the owner and visible in Render logs.
+            const message = String(error?.message || '');
+            let diagnostic = 'FIRESTORE_CONNECTION_FAILED';
+            let safeError = 'Firestore could not be reached. Check the Firebase project and Firestore database.';
+            if (/not configured/i.test(message)) {
+                diagnostic = 'SERVER_ENV_MISSING';
+                safeError = 'Render is missing FIREBASE_PROJECT_ID or FIREBASE_SERVICE_ACCOUNT_JSON.';
+            } else if (/not valid JSON|required fields/i.test(message)) {
+                diagnostic = 'SERVICE_ACCOUNT_INVALID';
+                safeError = 'The Firebase service-account JSON is invalid or missing required fields.';
+            } else if (/authenticate with the Firebase service account/i.test(message)) {
+                diagnostic = 'GOOGLE_AUTH_FAILED';
+                safeError = 'Google rejected the Firebase service-account credentials. Check the private key and service-account status.';
+            } else if (error?.status === 403 || error?.code === 'PERMISSION_DENIED') {
+                diagnostic = 'FIRESTORE_PERMISSION_DENIED';
+                safeError = 'The service account cannot access Firestore. Check its IAM permissions.';
+            } else if (error?.status === 404) {
+                diagnostic = 'FIRESTORE_DATABASE_NOT_FOUND';
+                safeError = 'The configured Firebase project or default Firestore database was not found.';
+            }
+            console.error('[Phone Sync] Status check failed:', diagnostic, message);
             res.set('Cache-Control', 'no-store');
-            res.status(503).json({ success: false, configured: false, error: 'Phone sync is not configured on the Starry server yet.' });
+            res.status(503).json({ success: false, configured: false, diagnostic, error: safeError });
         }
     });
 
