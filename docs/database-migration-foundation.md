@@ -100,7 +100,7 @@ Conflicts must be explicit. Do not silently use last-write-wins for moderation, 
 ### Phase 2 — authenticated relay and pairing
 
 - Implement a Render API using the existing Discord login/session system.
-- Add one-time pairing challenge and device identity.
+- Register the browser's SQLite device identity under the authenticated Discord owner; require an active registration for every push, pull, and acknowledgement request; support explicit revocation.
 - Implement server-side Firestore adapter, leases, acknowledgements, retries, replay protection, and dead-letter handling.
 - Add browser foreground polling and upload of local outbox operations.
 - Test unauthorized owner/device access, duplicate operations, expired leases, malformed payloads, replay, and interrupted requests.
@@ -124,7 +124,7 @@ Conflicts must be explicit. Do not silently use last-write-wins for moderation, 
 ## Current blockers
 
 1. The authenticated browser-to-Render sync API exists but is restricted to the isolated phone_test_records test entity.
-2. Browser device pairing and revocation endpoints now exist; real-account and real-phone verification remains outstanding.
+2. Browser device pairing and revocation endpoints now exist; no one-time out-of-band pairing challenge is implemented, and real-account/real-phone verification remains outstanding.
 3. No server-only Firestore relay is configured or verified for this design.
 4. The bot runtime still depends on MongoDB models and JSON-file storage.
 5. The local browser page is not yet linked into the authenticated dashboard navigation.
