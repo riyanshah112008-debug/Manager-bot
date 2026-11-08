@@ -123,7 +123,7 @@ Conflicts must be explicit. Do not silently use last-write-wins for moderation, 
 
 ## Current blockers
 
-1. No authenticated browser-to-Render sync API exists.
+1. The authenticated browser-to-Render sync API exists but is restricted to the isolated phone_test_records test entity.
 2. No device pairing or device identity protocol exists.
 3. No server-only Firestore relay is configured or verified for this design.
 4. The bot runtime still depends on MongoDB models and JSON-file storage.
