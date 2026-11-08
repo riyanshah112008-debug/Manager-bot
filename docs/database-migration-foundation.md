@@ -145,13 +145,13 @@ Conflicts must be explicit. Do not silently use last-write-wins for moderation, 
 
 The authenticated API is mounted from `src/modules/dashboardServer.js` and implemented in `src/modules/phoneSync.js`.
 
-Required Render environment variables:
-- `FIREBASE_PROJECT_ID=manager-bot-96c07`
-- `FIREBASE_SERVICE_ACCOUNT_JSON`: the full Firebase service-account JSON, stored only as a private Render environment variable. Never put it in GitHub, browser code, or chat.
+Required Render environment variables (declared in `render.yaml`):
+- `FIREBASE_PROJECT_ID=manager-bot-96c07`.
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: the full Firebase service-account JSON, stored only as a private Render environment variable. The blueprint declares it as a secret input; an owner must supply it in Render. Never put it in GitHub, browser code, or chat.
 
 The Firebase project must have a Firestore Native mode database enabled. The Firestore REST API uses server-side service-account OAuth credentials; do not expose them to the browser or loosen Firestore client security rules to make this work.
 
-The phone page must be opened on the same website origin where the Discord dashboard session was created (for example, the Firebase Hosting domain) so the existing browser session token is available to the bridge. The bridge forwards API calls to Render.
+The phone page may be opened on the same website origin where the Discord dashboard session was created (for example, the Firebase Hosting domain). `public/firebase-bridge.js` forwards `/api/`, `/auth/`, and other backend paths to the Render origin and attaches the stored dashboard session token as a Bearer authorization header. Do not remove this bridge or replace it with a plain Firebase Hosting rewrite without preserving session forwarding.
 
 The API currently supports status, authenticated browser pairing/unpairing, upload, pull, and acknowledgement endpoints. Each push/pull/acknowledgement request requires an active device record scoped beneath the authenticated Discord user. Phone-originated operations are idempotently stored in a per-user Firestore queue. Cloud-originated operations can be queued by trusted server code using `queuePhoneSyncOperation`, but no bot feature currently calls that helper. Acknowledgement happens only after the browser applies the received operation locally.
 
