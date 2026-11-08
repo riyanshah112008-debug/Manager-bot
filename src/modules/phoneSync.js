@@ -98,10 +98,10 @@ async function getAccessToken(account) {
 }
 
 async function firestoreRequest(path, { method = 'GET', body, query = '' } = {}) {
-    if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\') || /[\\u0000-\\u001F]/.test(path) || !path.split('/').slice(1).every(part => part === '' || /^[A-Za-z0-9_:-]+$/.test(part))) {
+    if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\') || /[\x00-\x1F]/.test(path) || !path.split('/').slice(1).every(part => part === '' || /^[A-Za-z0-9_:-]+$/.test(part))) {
         throw new Error('Invalid Firestore document path.');
     }
-    if (typeof query !== 'string' || (query && !/^\\?[A-Za-z0-9_=&%-]*$/.test(query))) throw new Error('Invalid Firestore query parameters.');
+    if (typeof query !== 'string' || (query && !/^\?[A-Za-z0-9_=&%-]*$/.test(query))) throw new Error('Invalid Firestore query parameters.');
     const { account, projectId } = serviceConfig();
     const token = await getAccessToken(account);
     const base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) + '/databases/(default)/documents';
