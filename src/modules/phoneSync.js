@@ -182,6 +182,22 @@ function operationPath(userId, operationId) {
     return '/' + COLLECTION + '/' + encodeURIComponent(userId) + '/operations/' + encodeURIComponent(operationId);
 }
 
+function devicePath(userId, deviceId) {
+    return '/' + COLLECTION + '/' + encodeURIComponent(userId) + '/devices/' + encodeURIComponent(deviceId);
+}
+function deviceCollectionPath(userId) {
+    return '/' + COLLECTION + '/' + encodeURIComponent(userId) + '/devices';
+}
+async function requirePairedDevice(userId, deviceId) {
+    const result = await firestoreRequest(devicePath(userId, deviceId));
+    const fields = decodeFields(result.fields);
+    if (fields.ownerId !== userId || fields.deviceId !== deviceId || fields.active !== true) {
+        const error = new Error('This phone is not paired with your Starry account. Pair it first.');
+        error.status = 403;
+        throw error;
+    }
+    return fields;
+}
 function operationCollectionPath(userId) {
     return '/' + COLLECTION + '/' + encodeURIComponent(userId) + '/operations';
 }
@@ -232,12 +248,68 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
         }
     });
 
+    app.post('/api/phone-sync/pair', authenticated, async (req, res) => {
+        try {
+            const userId = req.session?.user?.id;
+            const { deviceId } = req.body || {};
+            if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
+            if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
+            const path = devicePath(userId, deviceId);
+            try {
+                const existing = await firestoreRequest(path);
+                const fields = decodeFields(existing.fields);
+                if (fields.ownerId !== userId || fields.deviceId !== deviceId) return res.status(409).json({ success: false, error: 'Device identity conflict. Create a new local database identity.' });
+                await firestoreRequest(path, {
+                    method: 'PATCH',
+                    query: '?updateMask.fieldPaths=active&updateMask.fieldPaths=lastSeenAt',
+                    body: documentBody({ active: true, lastSeenAt: new Date().toISOString() })
+                });
+            } catch (error) {
+                if (error.status !== 404) throw error;
+                await firestoreRequest(deviceCollectionPath(userId), {
+                    method: 'POST',
+                    query: '?documentId=' + encodeURIComponent(deviceId),
+                    body: documentBody({ ownerId: userId, deviceId, deviceName: 'Phone browser', active: true, createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), revokedAt: null })
+                });
+            }
+            res.set('Cache-Control', 'no-store');
+            res.json({ success: true, paired: true, deviceId });
+        } catch (error) {
+            console.error('[Phone Sync] Pair failed:', error.message);
+            res.status(error.status === 400 ? 400 : 503).json({ success: false, error: error.status === 400 ? error.message : 'Could not pair this phone right now.' });
+        }
+    });
+
+    app.post('/api/phone-sync/unpair', authenticated, async (req, res) => {
+        try {
+            const userId = req.session?.user?.id;
+            const { deviceId } = req.body || {};
+            if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
+            if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
+            const path = devicePath(userId, deviceId);
+            const existing = await firestoreRequest(path);
+            const fields = decodeFields(existing.fields);
+            if (fields.ownerId !== userId || fields.deviceId !== deviceId) return res.status(404).json({ success: false, error: 'Paired phone not found.' });
+            await firestoreRequest(path, {
+                method: 'PATCH',
+                query: '?updateMask.fieldPaths=active&updateMask.fieldPaths=revokedAt',
+                body: documentBody({ active: false, revokedAt: new Date().toISOString() })
+            });
+            res.set('Cache-Control', 'no-store');
+            res.json({ success: true, paired: false });
+        } catch (error) {
+            console.error('[Phone Sync] Unpair failed:', error.message);
+            res.status(503).json({ success: false, error: 'Could not unpair this phone right now.' });
+        }
+    });
+
     app.post('/api/phone-sync/push', authenticated, async (req, res) => {
         try {
             const userId = req.session?.user?.id;
             const { deviceId, schemaVersion, operations } = req.body || {};
             if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
             if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
+            await requirePairedDevice(userId, deviceId);
             if (schemaVersion !== SCHEMA_VERSION) return res.status(409).json({ success: false, error: 'Phone database schema version is not supported.' });
             if (!Array.isArray(operations) || operations.length < 1 || operations.length > MAX_BATCH) {
                 return res.status(400).json({ success: false, error: 'Send between 1 and 20 operations per batch.' });
@@ -259,7 +331,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             }
             res.json({ success: true, acknowledged: ack, conflicts, accepted: ack.length });
         } catch (error) {
-            const status = error.status === 400 ? 400 : 503;
+            const status = error.status === 400 || error.status === 403 ? error.status : 503;
             console.error('[Phone Sync] Push failed:', error.message);
             res.status(status).json({ success: false, error: status === 400 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
@@ -271,6 +343,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             const deviceId = String(req.body?.deviceId || '');
             if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
             if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
+            await requirePairedDevice(userId, deviceId);
             const query = {
                 structuredQuery: {
                     from: [{ collectionId: 'operations' }],
@@ -304,7 +377,8 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             res.json({ success: true, operations });
         } catch (error) {
             console.error('[Phone Sync] Pull failed:', error.message);
-            res.status(503).json({ success: false, error: 'Phone sync is temporarily unavailable.' });
+            const status = error.status === 400 || error.status === 403 ? error.status : 503;
+            res.status(status).json({ success: false, error: status === 403 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
     });
 
@@ -314,6 +388,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             const { deviceId, operationIds } = req.body || {};
             if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
             if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
+            await requirePairedDevice(userId, deviceId);
             if (!Array.isArray(operationIds) || operationIds.length > 100 || operationIds.some(id => !validId(id))) {
                 return res.status(400).json({ success: false, error: 'Acknowledgement must contain at most 100 valid operation IDs.' });
             }
@@ -334,7 +409,8 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             res.json({ success: true, acknowledged });
         } catch (error) {
             console.error('[Phone Sync] Acknowledgement failed:', error.message);
-            res.status(503).json({ success: false, error: 'Phone sync is temporarily unavailable.' });
+            const status = error.status === 400 || error.status === 403 ? error.status : 503;
+            res.status(status).json({ success: false, error: status === 403 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
     });
 }
@@ -342,6 +418,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
 async function queuePhoneSyncOperation({ ownerId, deviceId, operation }) {
     if (typeof ownerId !== 'string' || !ownerId || !validId(deviceId)) throw new Error('Valid ownerId and deviceId are required.');
     const validated = validateOperation(operation);
+    await requirePairedDevice(ownerId, deviceId);
     const result = await createOperation(ownerId, {
         ...validated,
         ownerId,
@@ -354,4 +431,4 @@ async function queuePhoneSyncOperation({ ownerId, deviceId, operation }) {
     return validated.operationId;
 }
 
-module.exports = { setupPhoneSyncRoutes, queuePhoneSyncOperation, validateOperation };
+module.exports = { setupPhoneSyncRoutes, queuePhoneSyncOperation, validateOperation, devicePath };

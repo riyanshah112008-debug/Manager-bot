@@ -210,6 +210,47 @@
     return { uploaded, conflicts };
   }
 
+  async function pairDevice() {
+    const button = byId("pair-button");
+    button.disabled = true;
+    setText("sync-result", "Pairing this browser with your Discord account…");
+    try {
+      const deviceId = await ensureDeviceId();
+      const response = await fetch("/api/phone-sync/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ deviceId })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Could not pair this phone.");
+      setText("sync-result", "This phone is paired with your Starry account. Sync remains limited to test records.");
+    } catch (error) {
+      setText("sync-result", error.message || "Pairing failed.");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function unpairDevice() {
+    const button = byId("unpair-button");
+    button.disabled = true;
+    try {
+      const deviceId = await ensureDeviceId();
+      const response = await fetch("/api/phone-sync/unpair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ deviceId })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Could not unpair this phone.");
+      setText("sync-result", "This phone has been unpaired. Local SQLite data remains on this device.");
+    } catch (error) {
+      setText("sync-result", error.message || "Unpair failed.");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function syncNow() {
     const button = byId("sync-button");
     button.disabled = true;
@@ -293,7 +334,7 @@
 
     setText("engine-state", "SQLite WASM ready");
     setText("db-status", "Local database ready");
-    for (const id of ["integrity-button","export-button","refresh-button","save-button","sync-button"]) byId(id).disabled = false;
+    for (const id of ["integrity-button","export-button","refresh-button","save-button","sync-button","pair-button","unpair-button"]) byId(id).disabled = false;
     refresh();
   }
 
@@ -315,6 +356,8 @@
     });
     byId("refresh-button").addEventListener("click", refresh);
     byId("sync-button").addEventListener("click", syncNow);
+    byId("pair-button").addEventListener("click", pairDevice);
+    byId("unpair-button").addEventListener("click", unpairDevice);
     byId("integrity-button").addEventListener("click", async () => {
       try { setText("health-result", "Integrity: " + await integrityCheck()); }
       catch (error) { setText("health-result", "Integrity check failed: " + error.message); }

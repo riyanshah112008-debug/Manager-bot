@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { validateOperation } = require('../src/modules/phoneSync');
+const { validateOperation, devicePath } = require('../src/modules/phoneSync');
 
 const valid = {
     operationId: crypto.randomUUID(),
@@ -12,6 +12,8 @@ const valid = {
     payload: { message: 'relay contract test' },
     baseRevision: 0
 };
+
+assert.equal(devicePath('discord-user-1', '12345678-1234-4234-8234-123456789abc'), '/starryPhoneSyncUsers/discord-user-1/devices/12345678-1234-4234-8234-123456789abc');
 
 const normalized = validateOperation(valid);
 assert.equal(normalized.operationId, valid.operationId);
