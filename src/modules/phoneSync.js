@@ -127,7 +127,7 @@ function validateOperation(operation) {
     if (!ALLOWED_ENTITY_TYPES.has(operation.entityType)) {
         throw new Error('This sync foundation only accepts phone_test_records.');
     }
-    if (typeof operation.entityId !== 'string' || !operation.entityId.trim() || operation.entityId.length > 160 || /[\\u0000-\\u001f]/.test(operation.entityId)) {
+    if (typeof operation.entityId !== 'string' || !operation.entityId.trim() || operation.entityId.length > 160 || /[\x00-\x1F]/.test(operation.entityId)) {
         throw new Error('Entity ID must be 1–160 printable characters.');
     }
     if (!['upsert', 'delete'].includes(operation.operation)) throw new Error('Unsupported operation type.');
