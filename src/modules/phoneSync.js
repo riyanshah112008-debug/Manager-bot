@@ -98,6 +98,10 @@ async function getAccessToken(account) {
 }
 
 async function firestoreRequest(path, { method = 'GET', body, query = '' } = {}) {
+    if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\') || /[\\u0000-\\u001F]/.test(path) || !path.split('/').slice(1).every(part => part === '' || /^[A-Za-z0-9_:-]+$/.test(part))) {
+        throw new Error('Invalid Firestore document path.');
+    }
+    if (typeof query !== 'string' || (query && !/^\\?[A-Za-z0-9_=&%-]*$/.test(query))) throw new Error('Invalid Firestore query parameters.');
     const { account, projectId } = serviceConfig();
     const token = await getAccessToken(account);
     const base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) + '/databases/(default)/documents';
@@ -245,10 +249,10 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
         }
     });
 
-    app.get('/api/phone-sync/pull', authenticated, async (req, res) => {
+    app.post('/api/phone-sync/pull', authenticated, async (req, res) => {
         try {
             const userId = req.session?.user?.id;
-            const deviceId = String(req.query.deviceId || '');
+            const deviceId = String(req.body?.deviceId || '');
             if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
             if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
             const query = {
@@ -303,8 +307,8 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
                 const existing = await firestoreRequest(path);
                 const fields = decodeFields(existing.fields);
                 if (fields.direction !== 'cloud_to_phone' || fields.deviceId !== deviceId) continue;
-                const name = existing.name;
-                await firestoreRequest('/' + name.split('/documents/')[1], {
+                // Build the PATCH path from validated identifiers, never from a response-supplied URL/path.
+                await firestoreRequest(path, {
                     method: 'PATCH',
                     query: '?updateMask.fieldPaths=acknowledgedAt',
                     body: documentBody({ acknowledgedAt: new Date().toISOString() })
