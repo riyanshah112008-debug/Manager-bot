@@ -35,3 +35,7 @@ services:
         sync: false
       - key: CUSTOM_DOMAIN
         sync: false
+      - key: FIREBASE_PROJECT_ID
+        value: manager-bot-96c07
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
