@@ -124,7 +124,7 @@ Conflicts must be explicit. Do not silently use last-write-wins for moderation, 
 ## Current blockers
 
 1. The authenticated browser-to-Render sync API exists but is restricted to the isolated phone_test_records test entity.
-2. No device pairing or device identity protocol exists.
+2. Browser device pairing and revocation endpoints now exist; real-account and real-phone verification remains outstanding.
 3. No server-only Firestore relay is configured or verified for this design.
 4. The bot runtime still depends on MongoDB models and JSON-file storage.
 5. The local browser page is not yet linked into the authenticated dashboard navigation.
@@ -153,6 +153,6 @@ The Firebase project must have a Firestore Native mode database enabled. The Fir
 
 The phone page must be opened on the same website origin where the Discord dashboard session was created (for example, the Firebase Hosting domain) so the existing browser session token is available to the bridge. The bridge forwards API calls to Render.
 
-The API currently supports status, upload, pull, and acknowledgement endpoints. Phone-originated operations are idempotently stored in a per-user Firestore queue. Cloud-originated operations can be queued by trusted server code using `queuePhoneSyncOperation`, but no bot feature currently calls that helper. Acknowledgement happens only after the browser applies the received operation locally.
+The API currently supports status, authenticated browser pairing/unpairing, upload, pull, and acknowledgement endpoints. Each push/pull/acknowledgement request requires an active device record scoped beneath the authenticated Discord user. Phone-originated operations are idempotently stored in a per-user Firestore queue. Cloud-originated operations can be queued by trusted server code using `queuePhoneSyncOperation`, but no bot feature currently calls that helper. Acknowledgement happens only after the browser applies the received operation locally.
 
-This stage intentionally does not write to MongoDB models, the legacy JSON store, guild settings, moderation data, payments, or other production domains. The API is not considered production-ready until Firestore is configured, real-device tests pass, pairing/revocation is implemented, and conflict handling is expanded beyond the isolated test entity.
+This stage intentionally does not write to MongoDB models, the legacy JSON store, guild settings, moderation data, payments, or other production domains. The API is not considered production-ready until Firestore is configured, real-device tests pass, pairing/revocation is verified in the live environment, and conflict handling is expanded beyond the isolated test entity.
