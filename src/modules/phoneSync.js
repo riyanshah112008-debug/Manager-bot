@@ -1,82 +1,142 @@
-// Server-only Firestore relay for the phone SQLite workspace.
-// This is a transport foundation, not a production bot-data migration.
+// Server-only Firestore REST relay for the phone SQLite workspace.
+// Uses Node's built-in crypto/fetch; no Firebase credential is sent to the browser.
 'use strict';
 
 const crypto = require('crypto');
-const admin = require('firebase-admin');
 
 const COLLECTION = 'starryPhoneSyncUsers';
 const SCHEMA_VERSION = 1;
 const MAX_BATCH = 20;
 const MAX_PAYLOAD_BYTES = 4096;
-const DEVICE_ID_RE = /^[a-f0-9-]{36}$/i;
-const OPERATION_ID_RE = /^[a-f0-9-]{36}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALLOWED_ENTITY_TYPES = new Set(['phone_test_records']);
 
-let firestore = null;
-let initializationError = null;
+let tokenCache = null;
 
-function getFirestore() {
-    if (firestore) return firestore;
-    if (initializationError) throw initializationError;
-
-    try {
-        const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-        const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT;
-        if (!raw || !projectId) {
-            throw new Error('Firestore relay is not configured on the server.');
-        }
-
-        let serviceAccount;
-        try {
-            serviceAccount = JSON.parse(raw);
-        } catch (_) {
-            throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.');
-        }
-        if (!serviceAccount.client_email || !serviceAccount.private_key) {
-            throw new Error('Firebase service account is missing required fields.');
-        }
-
-        const app = admin.apps.length
-            ? admin.app()
-            : admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
-                projectId
-            });
-        firestore = app.firestore();
-        return firestore;
-    } catch (error) {
-        initializationError = error;
-        throw error;
-    }
+function base64url(value) {
+    return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-function validId(value, pattern = DEVICE_ID_RE) {
-    return typeof value === 'string' && pattern.test(value);
+function validId(value) {
+    return typeof value === 'string' && UUID_RE.test(value);
+}
+
+function encodeValue(value) {
+    if (value === null || value === undefined) return { nullValue: 'NULL_VALUE' };
+    if (typeof value === 'string') return { stringValue: value };
+    if (typeof value === 'boolean') return { booleanValue: value };
+    if (typeof value === 'number') {
+        return Number.isInteger(value)
+            ? { integerValue: String(value) }
+            : { doubleValue: value };
+    }
+    if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeValue) } };
+    if (typeof value === 'object') {
+        const fields = {};
+        for (const [key, item] of Object.entries(value)) fields[key] = encodeValue(item);
+        return { mapValue: { fields } };
+    }
+    throw new Error('Unsupported Firestore value.');
+}
+
+function decodeValue(value) {
+    if (!value || typeof value !== 'object') return null;
+    if ('stringValue' in value) return value.stringValue;
+    if ('booleanValue' in value) return value.booleanValue;
+    if ('integerValue' in value) return Number(value.integerValue);
+    if ('doubleValue' in value) return value.doubleValue;
+    if ('nullValue' in value) return null;
+    if ('timestampValue' in value) return value.timestampValue;
+    if ('arrayValue' in value) return (value.arrayValue.values || []).map(decodeValue);
+    if ('mapValue' in value) return decodeFields(value.mapValue.fields || {});
+    return null;
+}
+
+function decodeFields(fields) {
+    return Object.fromEntries(Object.entries(fields || {}).map(([key, value]) => [key, decodeValue(value)]));
+}
+
+function serviceConfig() {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT;
+    if (!raw || !projectId) throw new Error('Firestore relay is not configured on the server.');
+    let account;
+    try { account = JSON.parse(raw); } catch (_) { throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.'); }
+    if (!account.client_email || !account.private_key) throw new Error('Firebase service account is missing required fields.');
+    return { account, projectId };
+}
+
+async function getAccessToken(account) {
+    if (tokenCache && tokenCache.expiresAt > Date.now() + 60000) return tokenCache.value;
+    const now = Math.floor(Date.now() / 1000);
+    const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+    const claims = base64url(JSON.stringify({
+        iss: account.client_email,
+        scope: 'https://www.googleapis.com/auth/datastore',
+        aud: 'https://oauth2.googleapis.com/token',
+        iat: now,
+        exp: now + 3600
+    }));
+    const unsigned = header + '.' + claims;
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(unsigned);
+    signer.end();
+    const assertion = unsigned + '.' + signer.sign(account.private_key, 'base64url');
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            assertion
+        })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.access_token) throw new Error('Could not authenticate with the Firebase service account.');
+    tokenCache = { value: data.access_token, expiresAt: Date.now() + Number(data.expires_in || 3600) * 1000 };
+    return tokenCache.value;
+}
+
+async function firestoreRequest(path, { method = 'GET', body, query = '' } = {}) {
+    const { account, projectId } = serviceConfig();
+    const token = await getAccessToken(account);
+    const base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(projectId) + '/databases/(default)/documents';
+    const response = await fetch(base + path + query, {
+        method,
+        headers: {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json'
+        },
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const error = new Error(data.error?.message || 'Firestore request failed.');
+        error.status = response.status;
+        error.code = data.error?.status;
+        throw error;
+    }
+    return data;
 }
 
 function validateOperation(operation) {
     if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
         throw new Error('Each operation must be an object.');
     }
-    if (!validId(operation.operationId, OPERATION_ID_RE)) {
-        throw new Error('Operation ID must be a UUID.');
-    }
+    if (!validId(operation.operationId)) throw new Error('Operation ID must be a UUID v4.');
     if (!ALLOWED_ENTITY_TYPES.has(operation.entityType)) {
         throw new Error('This sync foundation only accepts phone_test_records.');
     }
     if (typeof operation.entityId !== 'string' || !operation.entityId.trim() || operation.entityId.length > 160) {
         throw new Error('Entity ID must be 1–160 characters.');
     }
-    if (!['upsert', 'delete'].includes(operation.operation)) {
-        throw new Error('Unsupported operation type.');
-    }
+    if (!['upsert', 'delete'].includes(operation.operation)) throw new Error('Unsupported operation type.');
     if (operation.operation === 'upsert') {
         if (!operation.payload || typeof operation.payload !== 'object' || Array.isArray(operation.payload)) {
             throw new Error('Upsert payload must be a JSON object.');
         }
-        const bytes = Buffer.byteLength(JSON.stringify(operation.payload), 'utf8');
-        if (bytes > MAX_PAYLOAD_BYTES) throw new Error('Each payload must be 4 KB or smaller.');
+        if (Buffer.byteLength(JSON.stringify(operation.payload), 'utf8') > MAX_PAYLOAD_BYTES) {
+            throw new Error('Each payload must be 4 KB or smaller.');
+        }
     }
     return {
         operationId: operation.operationId,
@@ -84,10 +144,44 @@ function validateOperation(operation) {
         entityId: operation.entityId,
         operation: operation.operation,
         payload: operation.operation === 'upsert' ? operation.payload : null,
-        baseRevision: Number.isSafeInteger(operation.baseRevision) && operation.baseRevision >= 0
-            ? operation.baseRevision : 0,
+        baseRevision: Number.isSafeInteger(operation.baseRevision) && operation.baseRevision >= 0 ? operation.baseRevision : 0,
         schemaVersion: SCHEMA_VERSION
     };
+}
+
+function operationPath(userId, operationId) {
+    return '/' + COLLECTION + '/' + encodeURIComponent(userId) + '/operations/' + encodeURIComponent(operationId);
+}
+
+function operationCollectionPath(userId) {
+    return '/' + COLLECTION + '/' + encodeURIComponent(userId) + '/operations';
+}
+
+function documentBody(data) {
+    const fields = {};
+    for (const [key, value] of Object.entries(data)) fields[key] = encodeValue(value);
+    return { fields };
+}
+
+async function createOperation(userId, operation) {
+    const path = operationCollectionPath(userId);
+    try {
+        await firestoreRequest(path, {
+            method: 'POST',
+            query: '?documentId=' + encodeURIComponent(operation.operationId),
+            body: documentBody(operation)
+        });
+        return 'created';
+    } catch (error) {
+        if (error.status !== 409 && error.code !== 'ALREADY_EXISTS') throw error;
+        const existing = await firestoreRequest(operationPath(userId, operation.operationId));
+        const fields = decodeFields(existing.fields);
+        if (fields.deviceId === operation.deviceId &&
+            fields.entityId === operation.entityId &&
+            fields.entityType === operation.entityType &&
+            fields.operation === operation.operation) return 'duplicate';
+        return 'conflict';
+    }
 }
 
 function setupPhoneSyncRoutes(app, { requireAuth }) {
@@ -95,16 +189,12 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
 
     app.get('/api/phone-sync/status', authenticated, (req, res) => {
         try {
-            getFirestore();
+            serviceConfig();
             res.set('Cache-Control', 'no-store');
             res.json({ success: true, configured: true, schemaVersion: SCHEMA_VERSION, scope: 'phone_test_records' });
         } catch (_) {
             res.set('Cache-Control', 'no-store');
-            res.status(503).json({
-                success: false,
-                configured: false,
-                error: 'Phone sync is not configured on the Starry server yet.'
-            });
+            res.status(503).json({ success: false, configured: false, error: 'Phone sync is not configured on the Starry server yet.' });
         }
     });
 
@@ -118,42 +208,22 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             if (!Array.isArray(operations) || operations.length < 1 || operations.length > MAX_BATCH) {
                 return res.status(400).json({ success: false, error: 'Send between 1 and 20 operations per batch.' });
             }
-
             const validated = operations.map(validateOperation);
-            const db = getFirestore();
-            const userRef = db.collection(COLLECTION).doc(userId);
             const ack = [];
             const conflicts = [];
-
             for (const operation of validated) {
-                const operationRef = userRef.collection('operations').doc(operation.operationId);
-                await db.runTransaction(async transaction => {
-                    const existing = await transaction.get(operationRef);
-                    if (existing.exists) {
-                        const saved = existing.data();
-                        if (saved.deviceId !== deviceId || saved.entityId !== operation.entityId ||
-                            saved.entityType !== operation.entityType || saved.operation !== operation.operation) {
-                            throw new Error('IDEMPOTENCY_KEY_REUSE');
-                        }
-                        ack.push(operation.operationId);
-                        return;
-                    }
-                    transaction.create(operationRef, {
-                        ...operation,
-                        ownerId: userId,
-                        deviceId,
-                        direction: 'phone_to_cloud',
-                        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
-                        acknowledgedAt: null
-                    });
-                    ack.push(operation.operationId);
-                }).catch(error => {
-                    if (error.message === 'IDEMPOTENCY_KEY_REUSE') conflicts.push(operation.operationId);
-                    else throw error;
+                const result = await createOperation(userId, {
+                    ...operation,
+                    ownerId: userId,
+                    deviceId,
+                    direction: 'phone_to_cloud',
+                    receivedAt: new Date().toISOString(),
+                    acknowledgedAt: null
                 });
+                if (result === 'conflict') conflicts.push(operation.operationId);
+                else ack.push(operation.operationId);
             }
-
-            res.json({ success: true, acknowledged: ack, conflicts, accepted: ack.length - conflicts.length });
+            res.json({ success: true, acknowledged: ack, conflicts, accepted: ack.length });
         } catch (error) {
             const status = /payload|operation|UUID|device|schema|batch|entity|unsupported|characters|4 KB/i.test(error.message) ? 400 : 503;
             console.error('[Phone Sync] Push failed:', error.message);
@@ -167,25 +237,33 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             const deviceId = String(req.query.deviceId || '');
             if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
             if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
-
-            const db = getFirestore();
-            const snapshot = await db.collection(COLLECTION).doc(userId)
-                .collection('operations')
-                .where('direction', '==', 'cloud_to_phone')
-                .where('deviceId', '==', deviceId)
-                .where('acknowledgedAt', '==', null)
-                .limit(MAX_BATCH)
-                .get();
-            const operations = snapshot.docs.map(doc => {
-                const data = doc.data();
+            const query = {
+                structuredQuery: {
+                    from: [{ collectionId: 'operations' }],
+                    where: {
+                        compositeFilter: {
+                            op: 'AND',
+                            filters: [
+                                { fieldFilter: { field: { fieldPath: 'direction' }, op: 'EQUAL', value: encodeValue('cloud_to_phone') } },
+                                { fieldFilter: { field: { fieldPath: 'deviceId' }, op: 'EQUAL', value: encodeValue(deviceId) } },
+                                { fieldFilter: { field: { fieldPath: 'acknowledgedAt' }, op: 'EQUAL', value: encodeValue(null) } }
+                            ]
+                        }
+                    },
+                    limit: MAX_BATCH
+                }
+            };
+            const result = await firestoreRequest('/' + COLLECTION + '/' + encodeURIComponent(userId) + ':runQuery', { method: 'POST', body: query });
+            const operations = (Array.isArray(result) ? result : []).filter(row => row.document).map(row => {
+                const fields = decodeFields(row.document.fields);
                 return {
-                    operationId: doc.id,
-                    entityType: data.entityType,
-                    entityId: data.entityId,
-                    operation: data.operation,
-                    payload: data.payload || null,
-                    baseRevision: data.baseRevision || 0,
-                    schemaVersion: data.schemaVersion || SCHEMA_VERSION
+                    operationId: row.document.name.split('/').pop(),
+                    entityType: fields.entityType,
+                    entityId: fields.entityId,
+                    operation: fields.operation,
+                    payload: fields.payload || null,
+                    baseRevision: fields.baseRevision || 0,
+                    schemaVersion: fields.schemaVersion || SCHEMA_VERSION
                 };
             });
             res.set('Cache-Control', 'no-store');
@@ -202,26 +280,22 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             const { deviceId, operationIds } = req.body || {};
             if (!userId) return res.status(401).json({ success: false, error: 'Authenticated Discord user required.' });
             if (!validId(deviceId)) return res.status(400).json({ success: false, error: 'A valid device ID is required.' });
-            if (!Array.isArray(operationIds) || operationIds.length > 100 ||
-                operationIds.some(id => !validId(id, OPERATION_ID_RE))) {
+            if (!Array.isArray(operationIds) || operationIds.length > 100 || operationIds.some(id => !validId(id))) {
                 return res.status(400).json({ success: false, error: 'Acknowledgement must contain at most 100 valid operation IDs.' });
             }
-
-            const db = getFirestore();
-            const userRef = db.collection(COLLECTION).doc(userId);
             let acknowledged = 0;
-            for (let i = 0; i < operationIds.length; i += 400) {
-                const batch = db.batch();
-                const ids = operationIds.slice(i, i + 400);
-                const refs = ids.map(id => userRef.collection('operations').doc(id));
-                const docs = await Promise.all(refs.map(ref => ref.get()));
-                docs.forEach((doc, index) => {
-                    if (doc.exists && doc.data().direction === 'cloud_to_phone' && doc.data().deviceId === deviceId) {
-                        batch.update(refs[index], { acknowledgedAt: admin.firestore.FieldValue.serverTimestamp() });
-                        acknowledged++;
-                    }
+            for (const id of operationIds) {
+                const path = operationPath(userId, id);
+                const existing = await firestoreRequest(path);
+                const fields = decodeFields(existing.fields);
+                if (fields.direction !== 'cloud_to_phone' || fields.deviceId !== deviceId) continue;
+                const name = existing.name;
+                await firestoreRequest('/' + name.split('/documents/')[1], {
+                    method: 'PATCH',
+                    query: '?updateMask.fieldPaths=acknowledgedAt',
+                    body: documentBody({ acknowledgedAt: new Date().toISOString() })
                 });
-                await batch.commit();
+                acknowledged++;
             }
             res.json({ success: true, acknowledged });
         } catch (error) {
@@ -231,24 +305,17 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
     });
 }
 
-// Server-side helper for bot modules to queue a change for one paired phone.
-// Pairing and production entity allowlists are deliberately not enabled in this foundation.
 async function queuePhoneSyncOperation({ ownerId, deviceId, operation }) {
-    if (typeof ownerId !== 'string' || !ownerId || !validId(deviceId)) {
-        throw new Error('Valid ownerId and deviceId are required.');
-    }
+    if (typeof ownerId !== 'string' || !ownerId || !validId(deviceId)) throw new Error('Valid ownerId and deviceId are required.');
     const validated = validateOperation(operation);
-    const db = getFirestore();
-    const ref = db.collection(COLLECTION).doc(ownerId).collection('operations').doc(validated.operationId);
-    await ref.create({
+    return createOperation(ownerId, {
         ...validated,
         ownerId,
         deviceId,
         direction: 'cloud_to_phone',
-        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        receivedAt: new Date().toISOString(),
         acknowledgedAt: null
     });
-    return validated.operationId;
 }
 
 module.exports = { setupPhoneSyncRoutes, queuePhoneSyncOperation, validateOperation };
