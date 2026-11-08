@@ -30,7 +30,7 @@
     <span class="status" id="db-status"><i class="dot"></i><span>Starting local database…</span></span>
   </div>
   <section class="panel warning">
-    <strong>Local storage only — cloud sync is not connected yet.</strong>
+    <strong>Local-first workspace — cloud relay is test-only.</strong>
     <p class="muted">This page creates a SQLite database inside this browser profile and saves it in browser storage. Secure foreground sync can relay phone_test_records through the server, but it does not migrate or update live Discord bot data. Keep an exported backup; clearing browser data can erase this local copy.</p>
   </section>
   <section class="panel">
@@ -39,7 +39,7 @@
       <div><div class="muted small">SQLite engine</div><strong id="engine-state">Loading</strong></div>
       <div><div class="muted small">Local records</div><strong id="record-count">—</strong></div>
       <div><div class="muted small">Pending local operations</div><strong id="pending-count">—</strong></div>
-      <div><div class="muted small">Cloud connection</div><strong>Authenticated relay (test scope)</strong></div>
+      <div><div class="muted small">Cloud connection</div><strong>Relay status: check below</strong></div>
     </div>
     <div class="actions" style="margin-top:16px">
       <button class="secondary" id="integrity-button" type="button" disabled>Check integrity</button>
