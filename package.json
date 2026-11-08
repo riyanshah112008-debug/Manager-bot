@@ -39,7 +39,6 @@
     "shoukaku": "^4.0.0",
     "spotify-url-info": "^3.3.3",
     "tweetnacl": "^1.0.3",
-    "undici": "^6.19.8",
-    "firebase-admin": "^13.5.0"
+    "undici": "^6.19.8"
   }
 }
