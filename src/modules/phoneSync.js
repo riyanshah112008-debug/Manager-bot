@@ -238,7 +238,7 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             }
             res.json({ success: true, acknowledged: ack, conflicts, accepted: ack.length });
         } catch (error) {
-            const status = /payload|operation|UUID|device|schema|batch|entity|unsupported|characters|4 KB/i.test(error.message) ? 400 : 503;
+            const status = /payload|operation|UUID|device|schema|batch|entity|unsupported|characters|revision|4 KB/i.test(error.message) ? 400 : 503;
             console.error('[Phone Sync] Push failed:', error.message);
             res.status(status).json({ success: false, error: status === 400 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
