@@ -120,7 +120,11 @@
       throw new Error("Cloud sync is currently limited to phone_test_records test data.");
     }
     const now = new Date().toISOString();
-    const payloadJson = JSON.stringify(payload);
+    if (typeof entityId !== "string" || !entityId.trim() || entityId.length > 160 || /[\x00-\x1F]/.test(entityId)) throw new Error("Record ID must be 1–160 printable characters.");
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Record data must be a JSON object.");
+    let payloadJson;
+    try { payloadJson = JSON.stringify(payload); } catch (_) { throw new Error("Record data must contain valid JSON values only."); }
+    if (typeof payloadJson !== "string" || new TextEncoder().encode(payloadJson).byteLength > 4096) throw new Error("Record data must be 4 KB or smaller.");
     const operationId = crypto.randomUUID();
     return runWrite((db) => {
       const current = queryRows("SELECT revision FROM records WHERE entity_type=? AND entity_id=?", [entityType, entityId])[0];
@@ -175,6 +179,37 @@
     });
   }
 
+  async function updateOutboxStatus(ids, status) {
+    if (!ids.length) return;
+    await runWrite((db) => {
+      const statement = db.prepare("UPDATE outbox SET status=?,attempts=attempts+1 WHERE operation_id=?");
+      try { for (const id of ids) statement.run([status, id]); } finally { statement.free(); }
+    });
+  }
+
+  async function pushOperations(deviceId, operations) {
+    const response = await fetch("/api/phone-sync/push", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify({ deviceId, schemaVersion: 1, operations }) });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.success) {
+      const acknowledged = Array.isArray(data.acknowledged) ? data.acknowledged : [];
+      const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
+      await updateOutboxStatus(acknowledged, "acknowledged");
+      await updateOutboxStatus(conflicts, "failed");
+      return { uploaded: acknowledged.length, conflicts: conflicts.length };
+    }
+    if (response.status !== 400) throw new Error(data.error || "Could not upload local operations.");
+    if (operations.length === 1) {
+      await updateOutboxStatus([operations[0].operationId], "failed");
+      return { uploaded: 0, conflicts: 1 };
+    }
+    let uploaded = 0, conflicts = 0;
+    for (const operation of operations) {
+      const result = await pushOperations(deviceId, [operation]);
+      uploaded += result.uploaded; conflicts += result.conflicts;
+    }
+    return { uploaded, conflicts };
+  }
+
   async function syncNow() {
     const button = byId("sync-button");
     button.disabled = true;
@@ -187,32 +222,12 @@
         throw new Error(healthData.error || "Starry cloud sync is not configured yet.");
       }
 
+      let uploadedCount = 0, conflictCount = 0;
       const pending = queryRows("SELECT operation_id,entity_type,entity_id,operation,payload_json,base_revision FROM outbox WHERE status='pending' AND entity_type='phone_test_records' ORDER BY created_at LIMIT 20");
       if (pending.length) {
-        const response = await fetch("/api/phone-sync/push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({
-            deviceId,
-            schemaVersion: 1,
-            operations: pending.map(row => ({
-              operationId: row.operation_id,
-              entityType: row.entity_type,
-              entityId: row.entity_id,
-              operation: row.operation,
-              payload: row.payload_json ? JSON.parse(row.payload_json) : null,
-              baseRevision: Number(row.base_revision) || 0
-            }))
-          })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data.success) throw new Error(data.error || "Could not upload local operations.");
-        var uploadedCount = (data.acknowledged || []).length;
-        var conflictCount = (data.conflicts || []).length;
-        await runWrite((db) => {
-          const update = db.prepare("UPDATE outbox SET status='acknowledged',attempts=attempts+1 WHERE operation_id=?");
-          try { for (const id of data.acknowledged || []) update.run([id]); } finally { update.free(); }
-        });
+        const operations = pending.map(row => ({ operationId: row.operation_id, entityType: row.entity_type, entityId: row.entity_id, operation: row.operation, payload: row.payload_json ? JSON.parse(row.payload_json) : null, baseRevision: Number(row.base_revision) || 0 }));
+        const result = await pushOperations(deviceId, operations);
+        uploadedCount = result.uploaded; conflictCount = result.conflicts;
       }
 
       const pulled = await fetch("/api/phone-sync/pull", {
@@ -222,10 +237,10 @@
       });
       const pulledData = await pulled.json().catch(() => ({}));
       if (!pulled.ok || !pulledData.success) throw new Error(pulledData.error || "Could not download cloud operations.");
-      const appliedIds = [];
+      const appliedIds = [], remoteConflicts = [];
       for (const operation of pulledData.operations || []) {
-        await applyRemoteOperation(operation);
-        appliedIds.push(operation.operationId);
+        try { await applyRemoteOperation(operation); appliedIds.push(operation.operationId); }
+        catch (error) { remoteConflicts.push(operation && operation.operationId); console.warn("[Starry Phone DB] Cloud operation was not applied:", error.message); }
       }
       if (appliedIds.length) {
         const ack = await fetch("/api/phone-sync/ack", {
@@ -238,7 +253,7 @@
       }
 
       refresh();
-      setText("sync-result", "Secure relay connected. Uploaded " + (typeof uploadedCount === "number" ? uploadedCount : 0) + " test operation(s)" + ((typeof conflictCount === "number" && conflictCount) ? "; " + conflictCount + " conflict(s) need attention" : "") + "; downloaded " + appliedIds.length + ". Test records only.");
+      setText("sync-result", "Secure relay connected. Uploaded " + uploadedCount + " test operation(s)" + (conflictCount ? "; " + conflictCount + " operation(s) failed or conflicted" : "") + "; downloaded " + appliedIds.length + (remoteConflicts.length ? "; " + remoteConflicts.length + " cloud conflict(s) need attention" : "") + ". Test records only.");
     } catch (error) {
       setText("sync-result", error.message || "Sync failed. Your local database is unchanged.");
     } finally {
