@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080c15">
+  <title>Starry Phone Database</title>
+  <link rel="stylesheet" href="/workspace.css">
+  <style>
+    :root{color-scheme:dark}body{margin:0;background:#080c15;color:#edf0ff;font:15px Inter,system-ui,sans-serif}
+    .phone-db{max-width:960px;margin:0 auto;padding:28px 18px 64px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+    h1{font-size:clamp(26px,5vw,38px);margin:8px 0}.muted{color:#9aa4bb;line-height:1.55}.panel{background:#111827;border:1px solid #263149;border-radius:16px;padding:18px;margin-top:18px}
+    .status{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #34415c;border-radius:999px;color:#d8def2;font-size:13px}
+    .dot{width:8px;height:8px;border-radius:50%;background:#e5a83b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    label{display:block;font-size:13px;color:#aab5cc;margin-bottom:7px}input,textarea{width:100%;box-sizing:border-box;background:#0b1220;color:#f5f7ff;border:1px solid #35415c;border-radius:9px;padding:11px;font:inherit}
+    textarea{min-height:90px;resize:vertical}.field{margin-bottom:12px}button,.button{border:0;border-radius:9px;padding:11px 15px;background:#6475ed;color:white;font-weight:650;text-decoration:none;cursor:pointer}
+    button.secondary,.button.secondary{background:#263149;color:#e5eaff}button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;gap:10px;flex-wrap:wrap}
+    .records{display:grid;gap:8px}.record{padding:12px;background:#0b1220;border:1px solid #263149;border-radius:10px;overflow-wrap:anywhere}
+    .record strong{display:block;margin-bottom:5px}.warning{border-color:#765b2a;background:#241d10}.small{font-size:12px}.hidden{display:none!important}
+    @media(max-width:560px){.phone-db{padding:20px 13px 44px}.panel{padding:14px}}
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/sql-wasm.js"></script>
+  <script src="/phone-database.js" defer></script>
+</head>
+<body>
+<main class="phone-db">
+  <div class="top">
+    <div><a class="muted" href="/dashboard.html">← Back to Starry</a><h1>Phone database</h1><p class="muted">A browser-held SQLite workspace for your phone. No APK, Termux or PC setup.</p></div>
+    <span class="status" id="db-status"><i class="dot"></i><span>Starting local database…</span></span>
+  </div>
+  <section class="panel warning">
+    <strong>Local storage only — cloud sync is not connected yet.</strong>
+    <p class="muted">This page creates a SQLite database inside this browser profile and saves it in browser storage. It does not yet synchronize with the live Discord bots or Firestore. Keep an exported backup; clearing browser data can erase this local copy.</p>
+  </section>
+  <section class="panel">
+    <h2>Database health</h2>
+    <div class="grid">
+      <div><div class="muted small">SQLite engine</div><strong id="engine-state">Loading</strong></div>
+      <div><div class="muted small">Local records</div><strong id="record-count">—</strong></div>
+      <div><div class="muted small">Pending local operations</div><strong id="pending-count">—</strong></div>
+      <div><div class="muted small">Cloud connection</div><strong>Not configured</strong></div>
+    </div>
+    <div class="actions" style="margin-top:16px">
+      <button class="secondary" id="integrity-button" type="button" disabled>Check integrity</button>
+      <button class="secondary" id="export-button" type="button" disabled>Export SQLite backup</button>
+    </div>
+    <p class="muted small" id="health-result" role="status" aria-live="polite"></p>
+  </section>
+  <section class="panel">
+    <h2>Add a local record</h2>
+    <p class="muted">Use this only for testing the phone database foundation. It does not change any Discord server settings.</p>
+    <form id="record-form">
+      <div class="grid">
+        <div class="field"><label for="entity-type">Record type</label><input id="entity-type" maxlength="80" required placeholder="e.g. guild_note"></div>
+        <div class="field"><label for="entity-id">Record ID</label><input id="entity-id" maxlength="160" required placeholder="e.g. test-001"></div>
+      </div>
+      <div class="field"><label for="record-json">Record data (JSON)</label><textarea id="record-json" required>{"note":"Local SQLite test"}</textarea></div>
+      <div class="actions"><button id="save-button" type="submit" disabled>Save on this phone</button></div>
+      <p class="muted small" id="form-result" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="top"><h2>Recent local records</h2><button class="secondary" id="refresh-button" type="button" disabled>Refresh</button></div>
+    <div class="records" id="records-list"><p class="muted">Waiting for database…</p></div>
+  </section>
+</main>
+</body>
+</html>
