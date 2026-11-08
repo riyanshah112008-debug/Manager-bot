@@ -377,7 +377,8 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             res.json({ success: true, operations });
         } catch (error) {
             console.error('[Phone Sync] Pull failed:', error.message);
-            res.status(503).json({ success: false, error: 'Phone sync is temporarily unavailable.' });
+            const status = error.status === 400 || error.status === 403 ? error.status : 503;
+            res.status(status).json({ success: false, error: status === 403 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
     });
 
@@ -408,7 +409,8 @@ function setupPhoneSyncRoutes(app, { requireAuth }) {
             res.json({ success: true, acknowledged });
         } catch (error) {
             console.error('[Phone Sync] Acknowledgement failed:', error.message);
-            res.status(503).json({ success: false, error: 'Phone sync is temporarily unavailable.' });
+            const status = error.status === 400 || error.status === 403 ? error.status : 503;
+            res.status(status).json({ success: false, error: status === 403 ? error.message : 'Phone sync is temporarily unavailable.' });
         }
     });
 }
