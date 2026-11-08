@@ -29,7 +29,7 @@ This is a browser-managed SQLite file, not Android's shared/native SQLite databa
 - src/models/ contains 34 model files, with additional inline Mongoose schemas and direct model consumers.
 - Runtime JSON data is ignored by Git; GitHub inspection cannot establish live record counts or contents.
 - Firebase Hosting configuration deploys static hosting only. Hosting success does not prove Firestore is enabled or configured.
-- The old migration branch used a Termux phone agent. That is incompatible with the user's current no-Termux requirement and must not be treated as the target design.
+- The old migration branch used a Termux phone agent. That is incompatible with the current no-Termux requirement and must not be treated as the target design.
 
 ## Target architecture
 
@@ -40,12 +40,12 @@ This is a browser-managed SQLite file, not Android's shared/native SQLite databa
 - Operations have stable UUIDs, entity type and ID, operation type, schema version, base revision, payload, and creation timestamp.
 - Repeated delivery must be safe through idempotency keys.
 - The user can export a .sqlite backup from the browser.
-- This current foundation is local-only. It does not yet pair a device, authenticate sync requests, or exchange data with the bot.
+- The current browser database is local-first. Its authenticated relay exchanges only the isolated `phone_test_records` test entity; it does not exchange production bot data or provide cryptographic device pairing.
 
 ### 2. Render-hosted authenticated API
 
 - The browser must use the existing authenticated Discord dashboard session to pair and synchronize.
-- The API must validate the session, device identity, permissions, CSRF/origin policy, request size, schema version, entity allowlist, and operation payload.
+- The API must validate the session, device identity, permissions, CSRF/origin policy, request size, schema version, entity allowlist, and operation payload. The current test relay uses the existing dashboard session and an entity allowlist; device pairing/revocation remains unfinished.
 - Use short-lived, scoped device credentials or WebCrypto device identity; never put Discord bot tokens, MongoDB URIs, Firebase service-account keys, or relay secrets in browser code or local storage.
 - Enforce replay protection, rate limits, idempotency, and audit logging.
 - A browser must never write directly to the bot's authoritative data store using broad credentials.
@@ -149,7 +149,7 @@ Required Render environment variables:
 - `FIREBASE_PROJECT_ID=manager-bot-96c07`
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: the full Firebase service-account JSON, stored only as a private Render environment variable. Never put it in GitHub, browser code, or chat.
 
-The Firebase project must have a Firestore Native mode database enabled. The Admin SDK uses server credentials; do not loosen Firestore client security rules to make this work.
+The Firebase project must have a Firestore Native mode database enabled. The Firestore REST API uses server-side service-account OAuth credentials; do not expose them to the browser or loosen Firestore client security rules to make this work.
 
 The phone page must be opened on the same website origin where the Discord dashboard session was created (for example, the Firebase Hosting domain) so the existing browser session token is available to the bridge. The bridge forwards API calls to Render.
 
