@@ -10,7 +10,7 @@ const SCHEMA_VERSION = 1;
 const MAX_BATCH = 20;
 const MAX_PAYLOAD_BYTES = 4096;
 const DEVICE_ID_RE = /^[a-f0-9-]{36}$/i;
-const OPERATION_ID_RE = /^[a-f0-9--]{36}$/i;
+const OPERATION_ID_RE = /^[a-f0-9-]{36}$/i;
 const ALLOWED_ENTITY_TYPES = new Set(['phone_test_records']);
 
 let firestore = null;
