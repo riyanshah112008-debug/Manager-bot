@@ -55,7 +55,6 @@ const { Connectors } = require('shoukaku');
 const { Kazagumo } = require('kazagumo');
 const fs = require('fs');
 const path = require('path');
-const child_process = require('child_process');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
 
@@ -600,7 +599,7 @@ let watchdogCycle = 0;
 setInterval(() => {
     watchdogCycle++;
 
-    // 1. Maintain Termux Wake Lock Continuously (Every ~60s)
+    // 1. Check MongoDB connection health
     if (watchdogCycle % 4 === 0) {
     }
 
