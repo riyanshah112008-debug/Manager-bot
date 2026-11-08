@@ -177,7 +177,6 @@
 
   async function syncNow() {
     const button = byId("sync-button");
-    const status = byId("sync-result");
     button.disabled = true;
     setText("sync-result", "Checking secure connection…");
     try {
@@ -188,7 +187,7 @@
         throw new Error(healthData.error || "Starry cloud sync is not configured yet.");
       }
 
-      const pending = queryRows("SELECT operation_id,entity_type,entity_id,operation,payload_json,base_revision FROM outbox WHERE status='pending' ORDER BY created_at LIMIT 20");
+      const pending = queryRows("SELECT operation_id,entity_type,entity_id,operation,payload_json,base_revision FROM outbox WHERE status='pending' AND entity_type='phone_test_records' ORDER BY created_at LIMIT 20");
       if (pending.length) {
         const response = await fetch("/api/phone-sync/push", {
           method: "POST",
@@ -233,7 +232,7 @@
       }
 
       refresh();
-      setText("sync-result", "Secure relay connected. Uploaded " + pending.length + " operation(s); downloaded " + appliedIds.length + ". Test records only.");
+      setText("sync-result", "Secure relay connected. Accepted " + pending.length + " test operation(s); downloaded " + appliedIds.length + ". Test records only.");
     } catch (error) {
       setText("sync-result", error.message || "Sync failed. Your local database is unchanged.");
     } finally {
