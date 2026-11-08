@@ -1,88 +1,141 @@
-# Database migration: phone-hosted SQLite foundation
+# Starry database migration: browser SQLite and secure relay
 
 ## Status
-Planning and inventory only. This document does not change runtime database behavior and does not migrate or delete any records.
 
-## Verified repository baseline (main)
+**Foundation only; no production cutover or live synchronization has occurred.**
 
-- The bot starts from src/index.js and currently imports Mongoose.
-- mongoose is a production dependency; no SQLite driver is currently listed in package.json.
-- src/models/ contains 34 JavaScript model files. Several other modules also define Mongoose schemas inline.
-- The bot checks mongoose.connection.readyState directly in multiple modules. Replacing Mongoose is therefore not a one-file change.
-- src/utils/database.js is a JSON-file store at src/data/starry-store.json, with a legacy JSON migration path. Its save is debounced by 100 ms and written to a temporary file before rename. It is not SQLite and is not a remote database.
-- The JSON store covers a subset of bot data; Mongoose models cover many additional domains.
-- Runtime data under src/data/ is ignored by Git. Repository inspection cannot reveal live MongoDB or runtime JSON records.
-- There is no sqlite or better-sqlite3 dependency in the current package manifest.
+The public/phone-database.html page and public/phone-database.js module provide a browser-held SQLite database using SQLite WASM (sql.js), with its exported database file persisted in IndexedDB. The page can create local records, maintain a local outbox, run SQLite integrity checks, and export a .sqlite backup.
+
+This is a browser-managed SQLite file, not Android's shared/native SQLite database and not OPFS. It belongs to the browser profile on that device. Browser storage can be cleared by the user or reclaimed by the browser. Export backups regularly.
+
+**The page is not connected to Starry's live bot, MongoDB, Firestore, or a cloud synchronization endpoint.** Its outbox currently records local operations only. Do not enter production data or treat the local test page as a migrated database.
+
+## User constraints
+
+- Phone browser only.
+- No APK, Termux, PC setup, or friend-hosted runtime.
+- Keep hosting on the existing remote service.
+- One shared data model for all Starry bot clients.
+- Phone-owned SQLite is the intended data owner.
+- Do not expose database ports or service-account credentials to the browser.
+- Never delete or overwrite legacy data before verified export, counts, checksums, and rollback approval.
+
+## Verified main-branch baseline before this change
+
+- src/index.js imports Mongoose and uses MongoDB connection state.
+- mongoose is a production dependency.
+- src/utils/database.js stores several domains in src/data/starry-store.json.
+- The JSON store includes guild settings, warnings, tickets, verification, moderation logs, AFK, welcome/goodbye, autorole, giveaways, reminders, sticky messages, social stats, music request channels, counting, and server listings.
+- src/models/ contains 34 model files, with additional inline Mongoose schemas and direct model consumers.
+- Runtime JSON data is ignored by Git; GitHub inspection cannot establish live record counts or contents.
+- Firebase Hosting configuration deploys static hosting only. Hosting success does not prove Firestore is enabled or configured.
+- The old migration branch used a Termux phone agent. That is incompatible with the user's current no-Termux requirement and must not be treated as the target design.
 
 ## Target architecture
 
-The Android phone is the authoritative SQLite data owner. The remote Discord bot remains the Gateway/runtime process. The phone must not expose an unauthenticated database port to the public internet.
+### 1. Phone browser database
 
-Recommended transport is an outbound-polling relay:
+- The browser hosts the SQLite WASM database and a durable local outbox.
+- Every local mutation writes the record and an outbox operation in one SQLite transaction.
+- Operations have stable UUIDs, entity type and ID, operation type, schema version, base revision, payload, and creation timestamp.
+- Repeated delivery must be safe through idempotency keys.
+- The user can export a .sqlite backup from the browser.
+- This current foundation is local-only. It does not yet pair a device, authenticate sync requests, or exchange data with the bot.
 
-1. The remote bot writes an operation to a durable cloud outbox (Firestore is a candidate, subject to confirming the existing Firebase project and security rules).
-2. The phone's Termux sync agent makes outbound HTTPS requests to claim pending operations.
-3. The agent validates the operation, applies it transactionally to local SQLite, and records its idempotency key.
-4. The phone acknowledges only after the SQLite transaction commits.
-5. The relay marks the operation complete only after a valid acknowledgement.
-6. On restart or reconnection, the agent resumes pending work. Duplicate delivery is safe because operation IDs are idempotent.
-7. For operations queued while the phone is offline, the remote bot must persist them in the cloud outbox; RAM-only buffering is prohibited for durable writes.
+### 2. Render-hosted authenticated API
 
-This avoids requiring a stable public IP, inbound port forwarding, or a permanently reachable Android device. It also means a phone outage delays authoritative database operations; the bot must report this state rather than pretending a write succeeded.
+- The browser must use the existing authenticated Discord dashboard session to pair and synchronize.
+- The API must validate the session, device identity, permissions, CSRF/origin policy, request size, schema version, entity allowlist, and operation payload.
+- Use short-lived, scoped device credentials or WebCrypto device identity; never put Discord bot tokens, MongoDB URIs, Firebase service-account keys, or relay secrets in browser code or local storage.
+- Enforce replay protection, rate limits, idempotency, and audit logging.
+- A browser must never write directly to the bot's authoritative data store using broad credentials.
 
-## Required reliability properties
+### 3. Durable relay
 
-- At-least-once delivery plus idempotent application; never rely on exactly-once network delivery.
-- Stable UUID operation IDs, creation timestamps, schema version, entity type, operation type, and payload.
-- Explicit states: pending, leased, acknowledged, failed/dead-letter.
-- Lease expiry and retry with bounded exponential backoff.
-- Acknowledge after commit only; never delete an outbox item before acknowledgement.
-- SQLite transactions, foreign-key enforcement, WAL mode, busy timeout, and periodic integrity checks.
-- A durable backup/export path independent of the phone's primary SQLite file.
-- Authenticated device identity, TLS, request signing or scoped credentials, replay protection, and rate limits.
-- No secrets or full database contents in logs.
-- Conflict policy documented per entity before enabling two-way writes.
+- Firestore may be used as a server-only durable transport queue after the Firebase project, Firestore database, service account, retention, and security configuration are verified.
+- Render holds the service-account credential; the browser does not.
+- The phone polls outbound over HTTPS. No inbound phone port, public database listener, or always-on Android process is required.
+- Server-originated operations remain pending until the phone commits them locally and acknowledges them.
+- Phone-originated operations are validated by the Render API before being placed in the relay.
+- Use at-least-once delivery, lease expiry, bounded exponential backoff, dead-letter states, and acknowledgements only after local commit.
+- Do not promise synchronization while the browser is closed. Android may suspend or terminate browser background work; reliable sync is foreground while the page is open, with background sync best-effort.
 
-## Migration phases
+### 4. Shared bot data access
 
-### Phase 0 — inventory (in progress)
-- Enumerate every Mongoose model and inline schema.
-- Find every model import, query, aggregation, transaction, and direct readyState dependency.
-- Map each feature to its source of truth and classify data sensitivity/retention.
-- Identify all JSON-store consumers and fields.
+- All Starry bot clients must use one canonical entity contract and one shared operation/event identity scheme.
+- Do not let each bot maintain an independent copy of guild configuration or counters.
+- During transition, existing MongoDB and JSON stores remain read/write compatible until each domain is migrated and validated.
+- Define per-domain behavior when the phone is offline. Security-sensitive configuration changes must not be reported as durably committed if the phone has not accepted them.
+- Mongoose and legacy JSON are not removed by this foundation.
 
-### Phase 1 — protocol and local database
-- Define versioned entity schemas and a migration registry.
-- Implement the SQLite schema and repository layer on the phone.
-- Implement the Termux sync agent and authenticated relay protocol.
-- Add tests for idempotency, crash recovery, duplicate delivery, stale leases, and offline restart.
-- Keep the existing MongoDB and JSON stores unchanged during this phase.
+## Required sync operation envelope
 
-### Phase 2 — shadow migration
-- Export MongoDB collections from an authorized running environment; do not infer or fabricate data from GitHub.
-- Import into SQLite with deterministic IDs and preserve timestamps.
-- Compare source/destination document counts and checksums per collection.
-- Run read-only shadow comparisons before any feature reads from SQLite.
+Each operation must include:
 
-### Phase 3 — controlled cutover
-- Migrate one low-risk feature at a time behind a feature flag.
-- Verify read/write parity, restart behavior, and phone-offline behavior.
-- Keep rollback snapshots and the original MongoDB backup until sign-off.
-- Do not remove Mongoose or MongoDB until all 34 model files, inline schemas, and call sites have been migrated and verified.
+- operationId: UUID and idempotency key.
+- schemaVersion: explicit integer.
+- deviceId and authenticated owner identity.
+- entityType, entityId, and operation (upsert or delete).
+- baseRevision and monotonic entity revision.
+- payload (validated against the entity schema; omitted for a tombstone).
+- createdAt, delivery attempts, lease metadata, and state.
 
-## Current blockers / facts to confirm before implementation
+Conflicts must be explicit. Do not silently use last-write-wins for moderation, permissions, payments, security settings, or other sensitive domains. Use compare-and-set revisions and a documented per-entity conflict policy.
 
-- Whether the Firebase project has Firestore enabled (Firebase Hosting alone is not a database or durable queue).
-- Which remote runtime will host the Discord Gateway process and whether it has durable storage. If it does not, the relay/outbox must be external and durable.
-- How the phone will run Termux reliably with battery optimization disabled and a wake lock; Android may still terminate background work.
-- How the user can export MongoDB data. GitHub access does not grant access to MongoDB Atlas or hosting environment variables.
-- Whether the user can run a one-time export command from the current runtime, without sharing credentials in chat.
+## Migration sequence
 
-## Safety rules
+### Phase 0 — inventory and contracts
 
-- Never commit MongoDB URIs, Discord tokens, Firebase service-account keys, relay secrets, or encryption keys.
-- Never ask the user to paste secrets into chat.
-- Do not add a public unauthenticated endpoint to the phone.
-- Do not silently drop queued operations when the phone is unavailable.
-- Do not claim a migration is complete until record counts, checksums, and feature tests pass.
-- Do not remove MongoDB collections or dependencies as part of the foundation work.
+- Inventory all 34 Mongoose model files, inline schemas, imports, queries, aggregation pipelines, transactions, and direct mongoose.connection.readyState dependencies.
+- Inventory every JSON store and consumer.
+- Define entity schemas, ownership, access control, retention, and conflict rules.
+- Record baseline counts and checksums from authorized live data sources, not from GitHub.
+
+### Phase 1 — local browser SQLite foundation
+
+- Delivered in this branch: browser page, SQLite WASM initialization, IndexedDB file persistence, records table, local outbox, integrity check, and export.
+- Remaining: browser compatibility testing on the target Android device, quota/error handling validation, and user-facing backup/restore testing.
+- No live data is imported at this phase.
+
+### Phase 2 — authenticated relay and pairing
+
+- Implement a Render API using the existing Discord login/session system.
+- Add one-time pairing challenge and device identity.
+- Implement server-side Firestore adapter, leases, acknowledgements, retries, replay protection, and dead-letter handling.
+- Add browser foreground polling and upload of local outbox operations.
+- Test unauthorized owner/device access, duplicate operations, expired leases, malformed payloads, replay, and interrupted requests.
+
+### Phase 3 — shadow migration
+
+- Export each legacy domain from the actual running data source using authorized hosting access.
+- Import into a staging SQLite database with deterministic IDs and preserved timestamps.
+- Compare per-domain record counts and canonical checksums.
+- Run read-only shadow comparisons; investigate every mismatch.
+- Keep the old stores intact and retain restorable backups.
+
+### Phase 4 — controlled cutover
+
+- Migrate one low-risk domain at a time behind a feature flag.
+- Verify all three bot clients read and write the same canonical records.
+- Verify phone offline behavior, browser restart recovery, duplicate delivery, conflict resolution, and rollback.
+- Only switch the authoritative read/write path after all checks pass.
+- Remove MongoDB/JSON paths only after every model and consumer is migrated and sign-off is recorded.
+
+## Current blockers
+
+1. No authenticated browser-to-Render sync API exists.
+2. No device pairing or device identity protocol exists.
+3. No server-only Firestore relay is configured or verified for this design.
+4. The bot runtime still depends on MongoDB models and JSON-file storage.
+5. The local browser page is not yet linked into the authenticated dashboard navigation.
+6. Android device persistence, browser quota behavior, and real-device backup/restore have not been tested.
+7. No production data export, record-count comparison, checksum comparison, or live phone pairing has been completed.
+
+## Safety and release rules
+
+- Do not merge a MongoDB-authoritative phone-replica design as the final architecture.
+- Do not claim two-way sync until both directions, acknowledgements, retries, and conflict handling pass integration tests.
+- Do not claim production migration until verified source/destination counts and checksums match.
+- Do not remove MongoDB, legacy JSON stores, or old collections during the foundation work.
+- Do not deploy Firestore rules or change Firebase project settings without a separate verified configuration review.
+- Never commit credentials or ask the user to paste secrets into chat.
