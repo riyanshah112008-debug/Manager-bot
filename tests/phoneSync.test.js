@@ -32,4 +32,10 @@ circular.self = circular;
 assert.throws(() => validateOperation({ ...valid, payload: circular }), /valid JSON values/);
 assert.deepEqual(validateOperation({ ...valid, payload: { nested: [1, true, null] } }).payload, { nested: [1, true, null] });
 
-process.stdout.write('Phone sync relay contract tests passed.\n');
+assert.throws(() => validateOperation({ ...valid, payload: { value: Number.MAX_SAFE_INTEGER + 1 } }), /safe range/);
+assert.throws(() => validateOperation({ ...valid, payload: { nested: { '': 'bad' } } }), /reserved map key/);
+assert.throws(() => validateOperation({ ...valid, payload: { '__internal__': 'bad' } }), /reserved map key/);
+assert.throws(() => validateOperation({ ...valid, payload: { nested: [1, { '__name__': 'bad' }] } }), /reserved map key/);
+assert.equal(validateOperation({ ...valid, payload: { safe: Number.MAX_SAFE_INTEGER } }).payload.safe, Number.MAX_SAFE_INTEGER);
+
+process.stdout.write('Phone sync relay contract tests passed.\\n');
