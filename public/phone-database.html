@@ -19,6 +19,7 @@
     .record strong{display:block;margin-bottom:5px}.warning{border-color:#765b2a;background:#241d10}.small{font-size:12px}.hidden{display:none!important}
     @media(max-width:560px){.phone-db{padding:20px 13px 44px}.panel{padding:14px}}
   </style>
+  <script src="/firebase-bridge.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/sql-wasm.js"></script>
   <script src="/phone-database.js" defer></script>
 </head>
@@ -30,7 +31,7 @@
   </div>
   <section class="panel warning">
     <strong>Local storage only — cloud sync is not connected yet.</strong>
-    <p class="muted">This page creates a SQLite database inside this browser profile and saves it in browser storage. It does not yet synchronize with the live Discord bots or Firestore. Keep an exported backup; clearing browser data can erase this local copy.</p>
+    <p class="muted">This page creates a SQLite database inside this browser profile and saves it in browser storage. Secure foreground sync can relay phone_test_records through the server, but it does not migrate or update live Discord bot data. Keep an exported backup; clearing browser data can erase this local copy.</p>
   </section>
   <section class="panel">
     <h2>Database health</h2>
@@ -38,20 +39,22 @@
       <div><div class="muted small">SQLite engine</div><strong id="engine-state">Loading</strong></div>
       <div><div class="muted small">Local records</div><strong id="record-count">—</strong></div>
       <div><div class="muted small">Pending local operations</div><strong id="pending-count">—</strong></div>
-      <div><div class="muted small">Cloud connection</div><strong>Not configured</strong></div>
+      <div><div class="muted small">Cloud connection</div><strong>Authenticated relay (test scope)</strong></div>
     </div>
     <div class="actions" style="margin-top:16px">
       <button class="secondary" id="integrity-button" type="button" disabled>Check integrity</button>
       <button class="secondary" id="export-button" type="button" disabled>Export SQLite backup</button>
+      <button id="sync-button" type="button" disabled>Sync now</button>
     </div>
     <p class="muted small" id="health-result" role="status" aria-live="polite"></p>
+    <p class="muted small" id="sync-result" role="status" aria-live="polite">Cloud sync is available only after server credentials are configured and you are signed in on this same website origin.</p>
   </section>
   <section class="panel">
     <h2>Add a local record</h2>
     <p class="muted">Use this only for testing the phone database foundation. It does not change any Discord server settings.</p>
     <form id="record-form">
       <div class="grid">
-        <div class="field"><label for="entity-type">Record type</label><input id="entity-type" maxlength="80" required placeholder="e.g. guild_note"></div>
+        <div class="field"><label for="entity-type">Record type</label><input id="entity-type" maxlength="80" required placeholder="phone_test_records" value="phone_test_records"></div>
         <div class="field"><label for="entity-id">Record ID</label><input id="entity-id" maxlength="160" required placeholder="e.g. test-001"></div>
       </div>
       <div class="field"><label for="record-json">Record data (JSON)</label><textarea id="record-json" required>{"note":"Local SQLite test"}</textarea></div>
