@@ -3,6 +3,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { isDeepStrictEqual } = require('node:util');
 
 const COLLECTION = 'starryPhoneSyncUsers';
 const SCHEMA_VERSION = 1;
@@ -126,25 +127,33 @@ function validateOperation(operation) {
     if (!ALLOWED_ENTITY_TYPES.has(operation.entityType)) {
         throw new Error('This sync foundation only accepts phone_test_records.');
     }
-    if (typeof operation.entityId !== 'string' || !operation.entityId.trim() || operation.entityId.length > 160) {
-        throw new Error('Entity ID must be 1–160 characters.');
+    if (typeof operation.entityId !== 'string' || !operation.entityId.trim() || operation.entityId.length > 160 || /[\\u0000-\\u001f]/.test(operation.entityId)) {
+        throw new Error('Entity ID must be 1–160 printable characters.');
     }
     if (!['upsert', 'delete'].includes(operation.operation)) throw new Error('Unsupported operation type.');
+    const baseRevision = operation.baseRevision === undefined ? 0 : operation.baseRevision;
+    if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) throw new Error('Base revision must be a non-negative safe integer.');
+    let safePayload = null;
     if (operation.operation === 'upsert') {
         if (!operation.payload || typeof operation.payload !== 'object' || Array.isArray(operation.payload)) {
             throw new Error('Upsert payload must be a JSON object.');
         }
-        if (Buffer.byteLength(JSON.stringify(operation.payload), 'utf8') > MAX_PAYLOAD_BYTES) {
+        let serialized;
+        try { serialized = JSON.stringify(operation.payload); } catch (_) {
+            throw new Error('Upsert payload must contain valid JSON values only.');
+        }
+        if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_PAYLOAD_BYTES) {
             throw new Error('Each payload must be 4 KB or smaller.');
         }
+        safePayload = JSON.parse(serialized);
     }
     return {
         operationId: operation.operationId,
         entityType: operation.entityType,
         entityId: operation.entityId,
         operation: operation.operation,
-        payload: operation.operation === 'upsert' ? operation.payload : null,
-        baseRevision: Number.isSafeInteger(operation.baseRevision) && operation.baseRevision >= 0 ? operation.baseRevision : 0,
+        payload: safePayload,
+        baseRevision,
         schemaVersion: SCHEMA_VERSION
     };
 }
@@ -181,7 +190,7 @@ async function createOperation(userId, operation) {
             fields.entityId === operation.entityId &&
             fields.entityType === operation.entityType &&
             fields.operation === operation.operation &&
-            JSON.stringify(fields.payload ?? null) === JSON.stringify(operation.payload ?? null) &&
+            isDeepStrictEqual(fields.payload ?? null, operation.payload ?? null) &&
             Number(fields.baseRevision || 0) === Number(operation.baseRevision || 0)) return 'duplicate';
         return 'conflict';
     }
