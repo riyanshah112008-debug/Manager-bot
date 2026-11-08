@@ -50,6 +50,7 @@
     db.run("CREATE TABLE IF NOT EXISTS outbox (operation_id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, operation TEXT NOT NULL CHECK(operation IN ('upsert','delete')), payload_json TEXT, base_revision INTEGER, created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','acknowledged','failed')), attempts INTEGER NOT NULL DEFAULT 0);");
     db.run("CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox(status, created_at);");
     db.run("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);");
+    db.run("CREATE TABLE IF NOT EXISTS applied_operations (operation_id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);");
     db.run("INSERT OR IGNORE INTO metadata(key,value) VALUES('schema_version','1');");
   }
 
@@ -115,6 +116,9 @@
   }
 
   async function saveRecord(entityType, entityId, payload) {
+    if (entityType !== "phone_test_records") {
+      throw new Error("Cloud sync is currently limited to phone_test_records test data.");
+    }
     const now = new Date().toISOString();
     const payloadJson = JSON.stringify(payload);
     const operationId = crypto.randomUUID();
@@ -127,6 +131,119 @@
       try { outbox.run([operationId, entityType, entityId, "upsert", payloadJson, current ? Number(current.revision) : 0, now]); } finally { outbox.free(); }
       return { revision, operationId };
     });
+  }
+
+  async function ensureDeviceId() {
+    const row = queryRows("SELECT value FROM metadata WHERE key='device_id'")[0];
+    if (row && row.value) return row.value;
+    const id = crypto.randomUUID();
+    await runWrite((db) => {
+      const statement = db.prepare("INSERT OR IGNORE INTO metadata(key,value) VALUES('device_id',?)");
+      try { statement.run([id]); } finally { statement.free(); }
+    });
+    return queryRows("SELECT value FROM metadata WHERE key='device_id'")[0].value;
+  }
+
+  async function applyRemoteOperation(operation) {
+    if (!operation || operation.schemaVersion !== 1 || operation.entityType !== "phone_test_records") {
+      throw new Error("Received an unsupported cloud operation.");
+    }
+    return runWrite((db) => {
+      const already = queryRows("SELECT operation_id FROM applied_operations WHERE operation_id=?", [operation.operationId])[0];
+      if (already) return false;
+      const current = queryRows("SELECT revision FROM records WHERE entity_type=? AND entity_id=?", [operation.entityType, operation.entityId])[0];
+      const currentRevision = current ? Number(current.revision) : 0;
+      if (currentRevision !== Number(operation.baseRevision || 0)) {
+        throw new Error("Revision conflict for " + operation.entityId + ". Local data was kept unchanged.");
+      }
+      const now = new Date().toISOString();
+      if (operation.operation === "upsert") {
+        if (!operation.payload || typeof operation.payload !== "object" || Array.isArray(operation.payload)) {
+          throw new Error("Cloud upsert payload is invalid.");
+        }
+        const statement = db.prepare("INSERT INTO records(entity_type,entity_id,payload_json,revision,updated_at,deleted_at) VALUES(?,?,?,?,?,NULL) ON CONFLICT(entity_type,entity_id) DO UPDATE SET payload_json=excluded.payload_json,revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=NULL");
+        try { statement.run([operation.entityType, operation.entityId, JSON.stringify(operation.payload), currentRevision + 1, now]); } finally { statement.free(); }
+      } else if (operation.operation === "delete") {
+        const statement = db.prepare("INSERT INTO records(entity_type,entity_id,payload_json,revision,updated_at,deleted_at) VALUES(?,?, '{}',?,?,?) ON CONFLICT(entity_type,entity_id) DO UPDATE SET revision=excluded.revision,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at");
+        try { statement.run([operation.entityType, operation.entityId, currentRevision + 1, now, now]); } finally { statement.free(); }
+      } else {
+        throw new Error("Unsupported cloud operation.");
+      }
+      const applied = db.prepare("INSERT INTO applied_operations(operation_id,applied_at) VALUES(?,?)");
+      try { applied.run([operation.operationId, now]); } finally { applied.free(); }
+      return true;
+    });
+  }
+
+  async function syncNow() {
+    const button = byId("sync-button");
+    button.disabled = true;
+    setText("sync-result", "Checking secure connection…");
+    try {
+      const deviceId = await ensureDeviceId();
+      const health = await fetch("/api/phone-sync/status", { headers: { "Accept": "application/json" } });
+      const healthData = await health.json().catch(() => ({}));
+      if (!health.ok || !healthData.configured) {
+        throw new Error(healthData.error || "Starry cloud sync is not configured yet.");
+      }
+
+      const pending = queryRows("SELECT operation_id,entity_type,entity_id,operation,payload_json,base_revision FROM outbox WHERE status='pending' AND entity_type='phone_test_records' ORDER BY created_at LIMIT 20");
+      if (pending.length) {
+        const response = await fetch("/api/phone-sync/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({
+            deviceId,
+            schemaVersion: 1,
+            operations: pending.map(row => ({
+              operationId: row.operation_id,
+              entityType: row.entity_type,
+              entityId: row.entity_id,
+              operation: row.operation,
+              payload: row.payload_json ? JSON.parse(row.payload_json) : null,
+              baseRevision: Number(row.base_revision) || 0
+            }))
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) throw new Error(data.error || "Could not upload local operations.");
+        var uploadedCount = (data.acknowledged || []).length;
+        var conflictCount = (data.conflicts || []).length;
+        await runWrite((db) => {
+          const update = db.prepare("UPDATE outbox SET status='acknowledged',attempts=attempts+1 WHERE operation_id=?");
+          try { for (const id of data.acknowledged || []) update.run([id]); } finally { update.free(); }
+        });
+      }
+
+      const pulled = await fetch("/api/phone-sync/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ deviceId })
+      });
+      const pulledData = await pulled.json().catch(() => ({}));
+      if (!pulled.ok || !pulledData.success) throw new Error(pulledData.error || "Could not download cloud operations.");
+      const appliedIds = [];
+      for (const operation of pulledData.operations || []) {
+        await applyRemoteOperation(operation);
+        appliedIds.push(operation.operationId);
+      }
+      if (appliedIds.length) {
+        const ack = await fetch("/api/phone-sync/ack", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ deviceId, operationIds: appliedIds })
+        });
+        const ackData = await ack.json().catch(() => ({}));
+        if (!ack.ok || !ackData.success) throw new Error(ackData.error || "Local changes saved, but cloud acknowledgement failed. Retry sync.");
+      }
+
+      refresh();
+      setText("sync-result", "Secure relay connected. Uploaded " + (typeof uploadedCount === "number" ? uploadedCount : 0) + " test operation(s)" + ((typeof conflictCount === "number" && conflictCount) ? "; " + conflictCount + " conflict(s) need attention" : "") + "; downloaded " + appliedIds.length + ". Test records only.");
+    } catch (error) {
+      setText("sync-result", error.message || "Sync failed. Your local database is unchanged.");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function integrityCheck() {
@@ -161,7 +278,7 @@
 
     setText("engine-state", "SQLite WASM ready");
     setText("db-status", "Local database ready");
-    for (const id of ["integrity-button","export-button","refresh-button","save-button"]) byId(id).disabled = false;
+    for (const id of ["integrity-button","export-button","refresh-button","save-button","sync-button"]) byId(id).disabled = false;
     refresh();
   }
 
@@ -175,13 +292,14 @@
         if (!type || !id) throw new Error("Record type and ID are required.");
         const payload = JSON.parse(byId("record-json").value);
         const saved = await saveRecord(type, id, payload);
-        result.textContent = "Saved locally. Revision " + saved.revision + ". Cloud upload is not enabled.";
+        result.textContent = "Saved locally. Revision " + saved.revision + ". Select Sync now to upload this test record.";
         refresh();
       } catch (error) {
         result.textContent = error.message || "Could not save record.";
       }
     });
     byId("refresh-button").addEventListener("click", refresh);
+    byId("sync-button").addEventListener("click", syncNow);
     byId("integrity-button").addEventListener("click", async () => {
       try { setText("health-result", "Integrity: " + await integrityCheck()); }
       catch (error) { setText("health-result", "Integrity check failed: " + error.message); }

@@ -25,6 +25,7 @@ const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
 const { setupSupportDeskRoutes } = require('./supportDesk');
+const { setupPhoneSyncRoutes } = require('./phoneSync');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -211,6 +212,7 @@ function setupDashboardRoutes(app, client) {
     // ==========================================
     // Website support inbox and AI-to-human escalation workflow.
     setupSupportDeskRoutes(app, { requireAuth, client, config });
+    setupPhoneSyncRoutes(app, { requireAuth });
 
     // Multi-platform discovery via Starry's configured Lavalink provider. No Spotify API credentials required.
     app.get('/api/guild/:id/music/search', requireGuildMember, async (req, res) => {
