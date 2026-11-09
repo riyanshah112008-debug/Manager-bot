@@ -6,7 +6,7 @@ const path = require('node:path');
 const escapeHtml = require('../src/utils/htmlEscape');
 
 assert.equal(
-    escapeHtml('<script>alert("x")</script>&\\''),
+    escapeHtml("<script>alert(\"x\")</script>&'"),
     '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;&#39;'
 );
 assert.equal(escapeHtml(null), '');
@@ -23,6 +23,6 @@ assert.ok(dashboardSource.includes('Connected as ${escapeHtml(profile.display_na
 assert.ok(dashboardSource.includes('<p>${escapeHtml(err.message)}</p>'));
 assert.ok(dashboardSource.includes("const guildName = escapeHtml(guild ? guild.name : 'Discord Server');"));
 assert.ok(dashboardSource.includes('<img src="${escapeHtml(guildIcon)}" class="icon"'));
-assert.equal((dashboardSource.match(/\\$\\{guildName\\}/g) || []).length, 2);
+assert.equal((dashboardSource.match(/\$\{guildName\}/g) || []).length, 2);
 
-process.stdout.write('Dashboard HTML escaping tests passed.\\n');
+process.stdout.write('Dashboard HTML escaping tests passed.\n');
