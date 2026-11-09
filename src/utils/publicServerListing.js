@@ -10,7 +10,7 @@ function safeDiscordInvite(value) {
     if (typeof value !== 'string' || !value.trim()) return null;
     try {
         const url = new URL(value);
-        if (url.protocol !== 'https:') return null;
+        if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
         if (url.hostname === 'discord.gg' && /^\/[A-Za-z0-9-]+\/?$/.test(url.pathname)) return url.href;
         if ((url.hostname === 'discord.com' || url.hostname === 'www.discord.com') &&
             /^\/invite\/[A-Za-z0-9-]+\/?$/.test(url.pathname)) return url.href;
@@ -22,7 +22,7 @@ function safeDiscordIcon(value) {
     if (typeof value !== 'string' || !value.trim()) return null;
     try {
         const url = new URL(value);
-        if (url.protocol === 'https:' &&
+        if (url.protocol === 'https:' && !url.username && !url.password && !url.port &&
             (url.hostname === 'cdn.discordapp.com' || url.hostname === 'media.discordapp.net')) {
             return url.href;
         }
