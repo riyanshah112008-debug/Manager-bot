@@ -1,6 +1,6 @@
 'use strict';
 
-const PUBLIC_SERVER_PROJECTION = 'guildId name description iconUrl inviteLink memberCount tags bumps lastBump -_id -__v';
+const PUBLIC_SERVER_PROJECTION = 'guildId name description iconUrl inviteLink memberCount tags bumps lastBump -_id';
 
 function buildPublicServerFilter() {
     return { isListed: true, isNsfw: false };
