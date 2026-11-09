@@ -47,7 +47,8 @@ const {
     Status
 } = require('discord.js');
 const express = require('express');
-const cors = require('cors'); 
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const http = require('http');
 const https = require('https'); 
 const mongoose = require('mongoose'); 
@@ -57,6 +58,7 @@ const fs = require('fs');
 const path = require('path');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
+const { buildPublicServerFilter, toPublicServerListing, PUBLIC_SERVER_PROJECTION } = require('./utils/publicServerListing');
 
 const config = require('./config');
 const multiBot = require('./modules/multiBot');
@@ -79,6 +81,15 @@ try {
 const app = express();
 const port = process.env.PORT || 10000;
 
+// These public endpoints are registered before dashboard middleware, so they
+// need their own bounded request budget.
+const publicApiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 const allowedOrigins = getDashboardOrigins();
 app.use(cors({
     origin(origin, callback) {
@@ -92,17 +103,23 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
 
-app.get('/api/servers', async (req, res) => {
+app.get('/api/servers', publicApiLimiter, async (req, res) => {
     try {
         if (!ServerListing) return res.json([]);
-        const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
-        res.json(servers);
+        // Fail closed: legacy records without an explicit SFW classification stay hidden.
+        const servers = await ServerListing.find(buildPublicServerFilter())
+            .select(PUBLIC_SERVER_PROJECTION)
+            .sort({ lastBump: -1 })
+            .limit(50)
+            .lean();
+        res.set('Cache-Control', 'public, max-age=30');
+        res.json(servers.map(toPublicServerListing));
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch servers' });
     }
 });
 
-app.get('/api/multibot/stats', (req, res) => {
+app.get('/api/multibot/stats', publicApiLimiter, (req, res) => {
     try {
         const stats = multiBot.getClusterStats();
         res.json(stats);
