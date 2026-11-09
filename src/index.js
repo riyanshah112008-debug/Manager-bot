@@ -81,6 +81,9 @@ try {
 const app = express();
 const port = process.env.PORT || 10000;
 
+// Render terminates TLS and forwards one trusted proxy hop to the service.
+if (process.env.RENDER_EXTERNAL_HOSTNAME) app.set('trust proxy', 1);
+
 // These public endpoints are registered before dashboard middleware, so they
 // need their own bounded request budget.
 const publicApiLimiter = rateLimit({
