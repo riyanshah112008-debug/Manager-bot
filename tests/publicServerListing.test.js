@@ -46,11 +46,15 @@ assert.equal(result.inviteLink, 'https://discord.gg/example');
 assert.equal(result.iconUrl, 'https://cdn.discordapp.com/icons/123456789012345678/abc.png');
 assert.equal(safeDiscordInvite('javascript:alert(1)'), null);
 assert.equal(safeDiscordInvite('https://example.com/invite/abc'), null);
+assert.equal(safeDiscordInvite('https://attacker@discord.gg/example'), null);
+assert.equal(safeDiscordInvite('https://discord.gg:444/example'), null);
 assert.equal(safeDiscordIcon('https://example.com/avatar.png'), null);
+assert.equal(safeDiscordIcon('https://attacker@cdn.discordapp.com/icons/123/abc.png'), null);
 
 const source = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
 assert.ok(source.includes("app.get('/api/servers', publicApiLimiter"));
 assert.ok(source.includes('ServerListing.find(buildPublicServerFilter())'));
 assert.ok(source.includes("app.get('/api/multibot/stats', publicApiLimiter"));
+assert.ok(source.includes("if (process.env.RENDER_EXTERNAL_HOSTNAME) app.set('trust proxy', 1);"));
 
 process.stdout.write('Public server listing security tests passed.\n');
