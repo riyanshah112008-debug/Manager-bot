@@ -21,6 +21,7 @@ const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const config = require('../config');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
+const escapeHtml = require('../utils/htmlEscape');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
@@ -1653,7 +1654,7 @@ function setupDashboardRoutes(app, client) {
             <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
             </head><body>
             <h2>❌ Spotify Authorization Denied</h2>
-            <p>${error}</p><p>You can close this tab and return to Discord.</p>
+            <p>${escapeHtml(error)}</p><p>You can close this tab and return to Discord.</p>
             </body></html>`);
         }
 
@@ -1688,7 +1689,7 @@ function setupDashboardRoutes(app, client) {
             <body>
                 <div class="card">
                     <img src="https://cdn-icons-png.flaticon.com/512/174/174872.png" class="sp-icon" alt="Spotify">
-                    <div class="user-badge">🟢 Connected as ${profile.display_name || profile.id}</div>
+                    <div class="user-badge">🟢 Connected as ${escapeHtml(profile.display_name || profile.id)}</div>
                     <h2>Spotify Connected!</h2>
                     <p>Starry has successfully authorized your Spotify account. You can now use <strong>,spotify myplaylists</strong> or <strong>,spotify play</strong> in Discord!</p>
                     <p style="color:#6B7280; font-size:0.85rem;">You may now safely close this window and return to Discord.</p>
@@ -1702,7 +1703,7 @@ function setupDashboardRoutes(app, client) {
             <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
             </head><body>
             <h2>❌ Connection Error</h2>
-            <p>${err.message}</p>
+            <p>${escapeHtml(err.message)}</p>
             </body></html>`);
         }
     });
@@ -1710,7 +1711,7 @@ function setupDashboardRoutes(app, client) {
     // GET /verify/:guildId - External Web Captcha Verification Portal
     app.get('/verify/:guildId', async (req, res) => {
         const guild = client.guilds.cache.get(req.params.guildId);
-        const guildName = guild ? guild.name : 'Discord Server';
+        const guildName = escapeHtml(guild ? guild.name : 'Discord Server');
         const guildIcon = guild?.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png';
 
         res.send(`
@@ -1735,7 +1736,7 @@ function setupDashboardRoutes(app, client) {
         </head>
         <body>
             <div class="card">
-                <img src="${guildIcon}" class="icon" alt="Icon">
+                <img src="${escapeHtml(guildIcon)}" class="icon" alt="Icon">
                 <div class="badge">🛡️ STARRY GATEKEEPER</div>
                 <h2>Verify for ${guildName}</h2>
                 <p>To access the community and protect the server against automated bot raids, please verify your identity.</p>
