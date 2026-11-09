@@ -17,7 +17,7 @@ function normalizeSearchTerm(value) {
 }
 
 function escapeRegexLiteral(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return value.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
 }
 
 function buildPublicServerFilter(searchValue) {
@@ -36,7 +36,7 @@ function buildPublicServerFilter(searchValue) {
 
 function normalizeDirectoryInteger(value, fallback, maximum, label) {
     if (value === undefined || value === null || value === '') return fallback;
-    if (typeof value !== 'string' || !/^\\d{1,6}$/.test(value)) {
+    if (typeof value !== 'string' || !/^\d{1,6}$/.test(value)) {
         throw directoryInputError(label + ' must be a positive integer.');
     }
     const parsed = Number(value);
@@ -68,9 +68,9 @@ function safeDiscordInvite(value) {
     try {
         const url = new URL(value);
         if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
-        if (url.hostname === 'discord.gg' && /^\\/[A-Za-z0-9-]+\\/?$/.test(url.pathname)) return url.href;
+        if (url.hostname === 'discord.gg' && /^\/[A-Za-z0-9-]+\/?$/.test(url.pathname)) return url.href;
         if ((url.hostname === 'discord.com' || url.hostname === 'www.discord.com') &&
-            /^\\/invite\\/[A-Za-z0-9-]+\\/?$/.test(url.pathname)) return url.href;
+            /^\/invite\/[A-Za-z0-9-]+\/?$/.test(url.pathname)) return url.href;
     } catch (_) {}
     return null;
 }
@@ -100,7 +100,7 @@ function toPublicServerListing(record) {
     const lastBumpDate = item.lastBump ? new Date(item.lastBump) : null;
 
     return {
-        guildId: typeof item.guildId === 'string' && /^\\d{17,20}$/.test(item.guildId) ? item.guildId : '',
+        guildId: typeof item.guildId === 'string' && /^\d{17,20}$/.test(item.guildId) ? item.guildId : '',
         name: typeof item.name === 'string' ? item.name.slice(0, 100) : '',
         description: typeof item.description === 'string' ? item.description.slice(0, 500) : '',
         iconUrl: safeDiscordIcon(item.iconUrl),
