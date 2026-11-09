@@ -12,6 +12,23 @@ const {
     Events
 } = require('discord.js');
 const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
+const {
+    PUBLIC_SERVER_PROJECTION,
+    buildPublicServerFilter,
+    normalizeSearchTerm,
+    normalizeDirectoryPagination,
+    normalizeRecentlyBumpedLimit,
+    normalizeDirectorySort,
+    toPublicServerListing
+} = require('../utils/publicServerListing');
+
+const directoryLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false
+});
 
 const STARRY_WEB_URL = 'https://stately-fox-454bb4.netlify.app';
 
@@ -102,86 +119,91 @@ const bumpSlashCommands = [setListingPayload, bumpSetupPayload, bumpPayload, aut
 // ==========================================
 // 🌐 3. REST API ENDPOINTS FOR WEBSITE FRONTEND
 // ==========================================
+function directoryCard(record, fallbackOnlineCount) {
+    const server = toPublicServerListing(record);
+    return {
+        id: server.guildId,
+        name: server.name,
+        icon: server.iconUrl || 'https://cdn.discordapp.com/embed/avatars/0.png',
+        onlineCount: Math.floor(server.memberCount * 0.35) || fallbackOnlineCount,
+        bumpedTime: server.lastBump ? getTimeAgo(server.lastBump) : 'recently',
+        rating: 5.0,
+        reviewCount: server.bumps || 1,
+        description: server.description,
+        tags: server.tags,
+        inviteUrl: server.inviteLink || '#'
+    };
+}
+
+function sendDirectoryError(res, error, routeName) {
+    if (error && error.status === 400) {
+        return res.status(400).json({ success: false, error: error.message });
+    }
+    console.error('[Directory API] ' + routeName + ' failed:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch public server listings.' });
+}
+
 function setupWebDirectoryAPI(app) {
     if (!app) return;
 
-    app.get('/api/v1/servers/recently-bumped', async (req, res) => {
+    // All public directory surfaces are SFW-only, bounded, projected, and rate-limited.
+    app.get('/api/v1/servers/recently-bumped', directoryLimiter, async (req, res) => {
         try {
-            const limit = parseInt(req.query.limit) || 6;
-            const servers = await ServerListing.find({ isListed: true })
+            const limit = normalizeRecentlyBumpedLimit(req.query.limit);
+            const servers = await ServerListing.find(buildPublicServerFilter())
+                .select(PUBLIC_SERVER_PROJECTION)
                 .sort({ lastBump: -1, bumps: -1 })
-                .limit(limit);
+                .limit(limit)
+                .lean();
 
-            const formatted = servers.map(s => ({
-                id: s.guildId,
-                name: s.name,
-                icon: s.iconUrl || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                onlineCount: Math.floor(s.memberCount * 0.35) || 12,
-                bumpedTime: s.lastBump ? getTimeAgo(s.lastBump) : 'recently',
-                rating: 5.0,
-                reviewCount: s.bumps || 1,
-                description: s.description,
-                tags: s.tags,
-                inviteUrl: s.inviteLink
-            }));
-
-            res.json({ success: true, data: formatted });
-        } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
+            res.set('Cache-Control', 'public, max-age=30');
+            return res.json({ success: true, data: servers.map(server => directoryCard(server, 12)) });
+        } catch (error) {
+            return sendDirectoryError(res, error, 'recently-bumped');
         }
     });
 
-    app.get('/api/v1/servers', async (req, res) => {
+    app.get('/api/v1/servers', directoryLimiter, async (req, res) => {
         try {
-            const { q, sort = 'bumped', page = 1, limit = 12, nsfw = 0 } = req.query;
-            const query = { isListed: true };
+            const searchTerm = normalizeSearchTerm(req.query.q);
+            const { page, limit, skip } = normalizeDirectoryPagination(req.query.page, req.query.limit);
+            const sortOption = normalizeDirectorySort(req.query.sort);
+            const query = buildPublicServerFilter(searchTerm);
+            const [total, rawList] = await Promise.all([
+                ServerListing.countDocuments(query),
+                ServerListing.find(query)
+                    .select(PUBLIC_SERVER_PROJECTION)
+                    .sort(sortOption)
+                    .skip(skip)
+                    .limit(limit)
+                    .lean()
+            ]);
 
-            if (nsfw === '0') query.isNsfw = false;
-            if (q) {
-                query.$or = [
-                    { name: { $regex: q, $options: 'i' } },
-                    { tags: { $in: [q.toLowerCase()] } },
-                    { description: { $regex: q, $options: 'i' } }
-                ];
-            }
-
-            let sortOption = { lastBump: -1 };
-            if (sort === 'members') sortOption = { memberCount: -1 };
-            if (sort === 'newest') sortOption = { _id: -1 };
-
-            const skip = (parseInt(page) - 1) * parseInt(limit);
-            const total = await ServerListing.countDocuments(query);
-            const rawList = await ServerListing.find(query).sort(sortOption).skip(skip).limit(parseInt(limit));
-
-            const list = rawList.map(s => ({
-                id: s.guildId,
-                name: s.name,
-                icon: s.iconUrl || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                onlineCount: Math.floor(s.memberCount * 0.35) || 10,
-                bumpedTime: s.lastBump ? getTimeAgo(s.lastBump) : 'recently',
-                rating: 5.0,
-                reviewCount: s.bumps || 1,
-                description: s.description,
-                tags: s.tags,
-                inviteUrl: s.inviteLink
-            }));
-
-            res.json({ success: true, data: { total, list } });
-        } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
+            res.set('Cache-Control', 'public, max-age=30');
+            return res.json({
+                success: true,
+                data: { total, page, limit, list: rawList.map(server => directoryCard(server, 10)) }
+            });
+        } catch (error) {
+            return sendDirectoryError(res, error, 'server-search');
         }
     });
 
-    app.get('/api/servers', async (req, res) => {
+    // Keep the module-level compatibility route safe even when mounted without src/index.js.
+    app.get('/api/servers', directoryLimiter, async (req, res) => {
         try {
-            const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
-            res.json(servers);
-        } catch (err) {
-            res.status(500).json({ error: err.message });
+            const servers = await ServerListing.find(buildPublicServerFilter())
+                .select(PUBLIC_SERVER_PROJECTION)
+                .sort({ lastBump: -1 })
+                .limit(50)
+                .lean();
+            res.set('Cache-Control', 'public, max-age=30');
+            return res.json(servers.map(toPublicServerListing));
+        } catch (error) {
+            return sendDirectoryError(res, error, 'servers');
         }
     });
 }
-
 function getTimeAgo(date) {
     const seconds = Math.floor((new Date() - new Date(date)) / 1000);
     if (seconds < 60) return `${seconds}s ago`;
