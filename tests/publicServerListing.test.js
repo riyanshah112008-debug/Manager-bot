@@ -15,7 +15,7 @@ assert.deepEqual(buildPublicServerFilter(), { isListed: true, isNsfw: false });
 assert.match(PUBLIC_SERVER_PROJECTION, /guildId name description iconUrl inviteLink memberCount tags bumps lastBump/);
 assert.equal(PUBLIC_SERVER_PROJECTION.includes('ownerId'), false);
 assert.equal(PUBLIC_SERVER_PROJECTION.includes('isNsfw'), false);
-assert.equal(PUBLIC_SERVER_PROJECTION.includes('-__v'), true);
+assert.equal(PUBLIC_SERVER_PROJECTION.includes('__v'), false);
 
 const result = toPublicServerListing({
     guildId: '123456789012345678',
