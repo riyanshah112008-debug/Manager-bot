@@ -1219,6 +1219,23 @@
         let currentGuildId = '';
         let guildDataCache = {};
 
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[character]);
+        }
+
+        function safeDiscordInvite(value) {
+            try {
+                const url = new URL(String(value || ''), window.location.origin);
+                const host = url.hostname.toLowerCase();
+                if (url.protocol !== 'https:') return '#';
+                if (host === 'discord.gg') return url.href;
+                if ((host === 'discord.com' || host === 'www.discord.com') && url.pathname.startsWith('/invite/')) return url.href;
+            } catch (_) {}
+            return '#';
+        }
+
         // The backend command registry is the single source of truth for this console.
         let commandCatalog = [];
         let commandCatalogGuildId = '';
@@ -1312,7 +1329,7 @@
                 const sel = document.getElementById('guild-selector');
                 sel.innerHTML = '';
                 guilds.forEach(g => {
-                    sel.innerHTML += `<option value="${g.id}">${g.name} (${g.memberCount} members)</option>`;
+                    sel.innerHTML += `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${Number(g.memberCount || 0).toLocaleString()} members)</option>`;
                 });
                 if (guilds.length > 0) loadGuildData(guilds[0].id);
             } catch (e) {}
@@ -1338,7 +1355,7 @@
                     if (el) {
                         el.innerHTML = '<option value="">Select Channel</option>';
                         textChannels.forEach(tc => {
-                            el.innerHTML += `<option value="${tc.id}">#${tc.name}</option>`;
+                            el.innerHTML += `<option value="${escapeHtml(tc.id)}">#${escapeHtml(tc.name)}</option>`;
                         });
                     }
                 });
@@ -1351,7 +1368,7 @@
                     if (el) {
                         el.innerHTML = '<option value="">Select Role</option>';
                         roles.forEach(r => {
-                            el.innerHTML += `<option value="${r.id}">@${r.name}</option>`;
+                            el.innerHTML += `<option value="${escapeHtml(r.id)}">@${escapeHtml(r.name)}</option>`;
                         });
                     }
                 });
@@ -1605,13 +1622,14 @@
                     return;
                 }
                 servers.forEach(s => {
+                    const inviteUrl = safeDiscordInvite(s.inviteLink || s.inviteUrl);
                     container.innerHTML += `
                         <div class="stat-card">
-                            <h4 style="font-size: 1.05rem; color: #fff; margin-bottom: 6px;">${s.name}</h4>
-                            <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 12px;">${s.description || 'Community Discord Server'}</p>
+                            <h4 style="font-size: 1.05rem; color: #fff; margin-bottom: 6px;">${escapeHtml(s.name)}</h4>
+                            <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 12px;">${escapeHtml(s.description || 'Community Discord Server')}</p>
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 0.78rem; color: var(--gold); font-weight: 700;">🔥 ${s.totalBumps || s.bumps || 1} Bumps</span>
-                                <a href="${s.inviteLink || s.inviteUrl || '#'}" target="_blank" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;">Join</a>
+                                <span style="font-size: 0.78rem; color: var(--gold); font-weight: 700;">🔥 ${Number(s.totalBumps || s.bumps || 1) || 1} Bumps</span>
+                                <a href="${escapeHtml(inviteUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;">Join</a>
                             </div>
                         </div>
                     `;
