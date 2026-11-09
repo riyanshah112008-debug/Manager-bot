@@ -25,4 +25,22 @@ assert.ok(dashboardSource.includes("const guildName = escapeHtml(guild ? guild.n
 assert.ok(dashboardSource.includes('<img src="${escapeHtml(guildIcon)}" class="icon"'));
 assert.equal((dashboardSource.match(/\$\{guildName\}/g) || []).length, 2);
 
+
+const legacySource = fs.readFileSync(
+    path.join(__dirname, '../public/legacy-console.html'),
+    'utf8'
+);
+assert.ok(legacySource.includes('function escapeHtml(value)'));
+assert.ok(legacySource.includes('function safeDiscordInvite(value)'));
+assert.ok(legacySource.includes('${escapeHtml(g.name)}'));
+assert.ok(legacySource.includes('${escapeHtml(tc.name)}'));
+assert.ok(legacySource.includes('${escapeHtml(r.name)}'));
+assert.ok(legacySource.includes('${escapeHtml(s.name)}'));
+assert.ok(legacySource.includes("${escapeHtml(s.description || 'Community Discord Server')}"));
+assert.ok(legacySource.includes('href="${escapeHtml(inviteUrl)}" target="_blank" rel="noopener noreferrer"'));
+assert.ok(!legacySource.includes('${g.name}'));
+assert.ok(!legacySource.includes('${tc.name}'));
+assert.ok(!legacySource.includes('${r.name}'));
+assert.ok(!legacySource.includes('${s.name}'));
+
 process.stdout.write('Dashboard HTML escaping tests passed.\n');
