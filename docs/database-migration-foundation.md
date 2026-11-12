@@ -4,7 +4,7 @@
 
 **Foundation only; no production cutover or live synchronization has occurred.**
 
-The public/phone-database.html page and public/phone-database.js module provide a browser-held SQLite database using SQLite WASM (sql.js), with its exported database file persisted in IndexedDB. The page can create local records, maintain a local outbox, run SQLite integrity checks, and export a .sqlite backup.
+The public/phone-database.html page and public/phone-database.js module provide a browser-held SQLite database using SQLite WASM (sql.js), with its exported database file persisted in IndexedDB. The page can create local records, maintain a local outbox, run SQLite integrity checks, export a .sqlite backup, and restore a compatible backup after validating its SQLite integrity, required tables, and schema version. Restore is limited to 50 MB and does not replace the current database if validation or persistence fails.
 
 This is a browser-managed SQLite file, not Android's shared/native SQLite database and not OPFS. It belongs to the browser profile on that device. Browser storage can be cleared by the user or reclaimed by the browser. Export backups regularly.
 
