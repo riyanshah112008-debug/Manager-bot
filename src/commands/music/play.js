@@ -241,14 +241,12 @@ module.exports = {
           // ⚡ Launch playback asynchronously in background - NEVER wait for it before showing embed!
           player.playNext().catch(err => console.warn('playNext error:', err.message || err));
 
-          // ⚡ Deliver Now Playing embed immediately (< 2 seconds)!
-          const payload = player.buildNowPlayingPayload(track);
+          // Do not claim a track is playing until the audio resource has started.
+          // NativeAudioEngine posts the single authoritative now-playing panel after player.play().
           const replyFunc = interaction.editReply || interaction.reply;
-          const msg = await replyFunc.call(interaction, payload).catch(() => null);
-          if (msg) {
-            player.nowPlayingMessage = msg;
-          }
-          return;
+          return replyFunc.call(interaction, {
+            content: '✅ Track added. Connecting to voice and resolving the audio stream…'
+          });
         } else {
           player.queue.push(track);
           const embed = new EmbedBuilder()
