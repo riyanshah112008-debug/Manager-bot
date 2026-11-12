@@ -44,10 +44,13 @@
     <div class="actions" style="margin-top:16px">
       <button class="secondary" id="integrity-button" type="button" disabled>Check integrity</button>
       <button class="secondary" id="export-button" type="button" disabled>Export SQLite backup</button>
+      <button class="secondary" id="restore-button" type="button" disabled>Restore SQLite backup</button>
+      <input id="restore-file" type="file" accept=".sqlite,.db,application/vnd.sqlite3" hidden>
       <button id="pair-button" type="button" disabled>Pair this phone</button>
       <button id="sync-button" type="button" disabled>Sync now</button>
       <button class="secondary" id="unpair-button" type="button" disabled>Unpair phone</button>
     </div>
+    <p class="muted small">Restore accepts a verified Starry SQLite backup up to 50 MB. An invalid or incompatible file will not replace the current database.</p>
     <p class="muted small" id="health-result" role="status" aria-live="polite"></p>
     <p class="muted small" id="sync-result" role="status" aria-live="polite">Cloud sync is available only after server credentials are configured and you are signed in on this same website origin.</p>
   </section>
