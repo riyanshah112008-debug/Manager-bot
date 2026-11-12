@@ -290,7 +290,7 @@ const commands = [
                 // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
                     StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 4s')), 4000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
