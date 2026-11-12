@@ -318,7 +318,49 @@
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function restoreBackup(file) {
+    if (!file) return;
+    if (file.size < 16 || file.size > 50 * 1024 * 1024) {
+      throw new Error("Backup must be a valid SQLite file no larger than 50 MB.");
+    }
+    if (!window.confirm("Restore this backup? It will replace the SQLite database currently saved in this browser. Export your current database first if you need to keep it.")) return;
+
+    await writeQueue;
+    let candidate = null;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      candidate = new sqlite.SQL.Database(bytes);
+      const integrity = candidate.exec("PRAGMA integrity_check");
+      if (!integrity.length || !integrity[0].values?.length || integrity[0].values[0][0] !== "ok") {
+        throw new Error("Backup failed SQLite integrity_check. The current database was not changed.");
+      }
+
+      const tables = candidate.exec("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = new Set((tables[0]?.values || []).map((row) => row[0]));
+      for (const name of ["records", "outbox", "metadata", "applied_operations"]) {
+        if (!tableNames.has(name)) throw new Error("Backup is missing the required " + name + " table. The current database was not changed.");
+      }
+
+      candidate.exec("SELECT entity_type, entity_id, payload_json, revision, updated_at, deleted_at FROM records LIMIT 0");
+      candidate.exec("SELECT operation_id, entity_type, entity_id, operation, payload_json, base_revision, created_at, status, attempts FROM outbox LIMIT 0");
+      const version = candidate.exec("SELECT value FROM metadata WHERE key='schema_version'");
+      if (version[0]?.values?.[0]?.[0] !== "1") {
+        throw new Error("Backup schema version is not supported. The current database was not changed.");
+      }
+
+      await saveBytes(sqlite.storage, candidate.export());
+      const previous = database;
+      database = candidate;
+      candidate = null;
+      previous.close();
+      refresh();
+      setText("health-result", "Backup restored and verified. SQLite integrity_check: ok.");
+    } finally {
+      if (candidate) candidate.close();
+    }
   }
 
   async function start() {
@@ -334,7 +376,7 @@
 
     setText("engine-state", "SQLite WASM ready");
     setText("db-status", "Local database ready");
-    for (const id of ["integrity-button","export-button","refresh-button","save-button","sync-button","pair-button","unpair-button"]) byId(id).disabled = false;
+    for (const id of ["integrity-button","export-button","restore-button","refresh-button","save-button","sync-button","pair-button","unpair-button"]) byId(id).disabled = false;
     refresh();
   }
 
@@ -363,6 +405,22 @@
       catch (error) { setText("health-result", "Integrity check failed: " + error.message); }
     });
     byId("export-button").addEventListener("click", exportBackup);
+    byId("restore-button").addEventListener("click", () => byId("restore-file").click());
+    byId("restore-file").addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const button = byId("restore-button");
+      button.disabled = true;
+      setText("health-result", "Validating SQLite backup…");
+      try {
+        await restoreBackup(file);
+      } catch (error) {
+        setText("health-result", "Restore failed: " + (error.message || "Invalid backup. The current database was kept."));
+      } finally {
+        event.target.value = "";
+        button.disabled = false;
+      }
+    });
     start().catch((error) => {
       setText("engine-state", "Unavailable");
       setText("db-status", "Local database failed");
