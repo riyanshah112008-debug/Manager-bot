@@ -360,7 +360,7 @@ async function handleSearchButton(interaction, client) {
             )
             .setFooter({ text: 'Starry Multi-Platform Search Engine' });
 
-        return interaction.editReply({ embeds: [failedEmbed], components: [buildSearchSourceRow(searchId)] }).catch(() => {});
+        return interaction.editReply({ embeds: [failedEmbed], components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)] }).catch(() => {});
     }
 
     session.cachedTracks = searchResult.tracks.slice(0, 10);
