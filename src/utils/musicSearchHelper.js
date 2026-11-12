@@ -92,6 +92,11 @@ function buildSearchSourceRow(searchId) {
             .setLabel('YouTube Music')
             .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
+            .setCustomId(`search_src_dz:${searchId}`)
+            .setEmoji('🟣')
+            .setLabel('Deezer')
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
             .setCustomId(`search_cancel:${searchId}`)
             .setEmoji('❌')
             .setStyle(ButtonStyle.Danger)
@@ -206,7 +211,29 @@ async function getSongAutocomplete(rawQuery, manager) {
         } catch (_) {}
     }
 
-    // 3. Tertiary: Instant iTunes Metadata API (Returns Title + Artist + Duration in ~40ms)
+    // 3. Tertiary: Deezer catalogue suggestions.
+    if (suggestions.length < 5) {
+        try {
+            const response = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(cleanQuery)}&limit=8`, {
+                signal: AbortSignal.timeout(1000)
+            });
+            if (response.ok) {
+                const data = await response.json();
+                for (const r of (data.data || [])) {
+                    const title = r.title || 'Track';
+                    const author = r.artist?.name || 'Artist';
+                    const label = formatChoiceLabel(title, author, formatDuration((r.duration || 0) * 1000));
+                    const value = `${title} ${author}`.substring(0, 100);
+                    if (!seen.has(label.toLowerCase())) {
+                        seen.add(label.toLowerCase());
+                        suggestions.push({ name: label, value });
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    // 4. Fourth: Apple Music/iTunes metadata suggestions.
     if (suggestions.length < 5) {
         try {
             const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=10`;
@@ -288,7 +315,8 @@ async function handleSearchButton(interaction, client) {
     const sourceNames = {
         sc: 'SoundCloud 🟠',
         sp: 'Spotify 🟢',
-        ytm: 'YouTube Music 🎵'
+        ytm: 'YouTube Music 🎵',
+        dz: 'Deezer 🟣'
     };
     const sourceName = sourceNames[sourceKey] || 'Unknown';
 
@@ -323,6 +351,15 @@ async function handleSearchButton(interaction, client) {
             searchResult = await manager.search(session.query, { requester: interaction.user, engine: 'spotify' });
             if (!searchResult || !searchResult.tracks?.length) {
                 searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });
+            }
+        } else if (sourceKey === 'dz') {
+            const response = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(session.query)}&limit=5`, {
+                signal: AbortSignal.timeout(5000)
+            });
+            const data = response.ok ? await response.json() : { data: [] };
+            const first = (data.data || []).find(item => item?.title && item?.artist?.name);
+            if (first) {
+                searchResult = await manager.search(`${first.artist.name} - ${first.title}`, { requester: interaction.user });
             }
         } else {
             // ytm
