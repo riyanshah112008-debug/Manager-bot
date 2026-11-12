@@ -285,8 +285,6 @@ const commands = [
 
             // Route 2: Native Audio Engine (Local / Standalone / Cloud fallback)
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            // ⚡ Instantly join voice channel in background without blocking search
-            player.connect().catch(() => {});
 
             try {
                 // Fast search with 4-second timeout guarantee
@@ -306,12 +304,13 @@ const commands = [
                         player.queue.push(track);
                     }
                     if (!player.currentTrack) {
+                        if (ctx.isSlash && ctx.interaction) {
+                            await ctx.reply('⏳ Connecting to voice and starting the playlist. Now Playing will appear after audio is confirmed.');
+                            player.loadingMessage = await ctx.interaction.fetchReply().catch(() => null);
+                        } else {
+                            player.loadingMessage = loadingMsg;
+                        }
                         player.playNext().catch(err => console.warn('playNext error:', err.message || err));
-                    }
-
-                    if (loadingMsg) {
-                        loadingMsg.delete().catch(() => {});
-                        player.loadingMessage = null;
                     }
 
                     const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
@@ -346,23 +345,14 @@ const commands = [
                     const track = result.tracks[0];
                     if (!player.currentTrack) {
                         player.queue.push(track);
-                        // ⚡ Launch playback asynchronously in background - NEVER wait for it before showing embed!
-                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
-
-                        // ⚡ Deliver Now Playing embed immediately (< 2 seconds)!
-                        const payload = player.buildNowPlayingPayload(track);
-                        let sentMsg = null;
-                        if (ctx.isSlash) {
-                            sentMsg = await ctx.reply(payload).catch(() => null);
-                        } else if (loadingMsg) {
-                            sentMsg = await loadingMsg.edit({ content: null, ...payload }).catch(() => null);
-                            if (!sentMsg) sentMsg = await ctx.reply(payload).catch(() => null);
+                        // The engine posts the single Now Playing panel only after Discord reports Playing.
+                        if (ctx.isSlash && ctx.interaction) {
+                            await ctx.reply('⏳ Connecting to voice and resolving **' + track.title + '**. Now Playing will appear after audio is confirmed.');
+                            player.loadingMessage = await ctx.interaction.fetchReply().catch(() => null);
                         } else {
-                            sentMsg = await ctx.reply(payload).catch(() => null);
+                            player.loadingMessage = loadingMsg;
                         }
-                        if (sentMsg) {
-                            player.nowPlayingMessage = sentMsg;
-                        }
+                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
                         return;
                     } else {
                         if (loadingMsg) {
