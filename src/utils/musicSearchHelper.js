@@ -76,25 +76,17 @@ function formatChoiceLabel(title, artist, duration) {
  */
 function buildSearchSourceRow(searchId) {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`search_src_sc:${searchId}`)
-            .setEmoji('🟠')
-            .setLabel('SoundCloud')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`search_src_sp:${searchId}`)
-            .setEmoji('🟢')
-            .setLabel('Spotify')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`search_src_ytm:${searchId}`)
-            .setEmoji('🎵')
-            .setLabel('YouTube Music')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`search_cancel:${searchId}`)
-            .setEmoji('❌')
-            .setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`search_src_sc:${searchId}`).setEmoji('🟠').setLabel('SoundCloud').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`search_src_sp:${searchId}`).setEmoji('🟢').setLabel('Spotify').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`search_src_ytm:${searchId}`).setEmoji('🎵').setLabel('YouTube Music').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`search_src_am:${searchId}`).setEmoji('🍎').setLabel('Apple Music').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`search_src_dz:${searchId}`).setEmoji('🔵').setLabel('Deezer').setStyle(ButtonStyle.Secondary)
+    );
+}
+
+function buildSearchCancelRow(searchId) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`search_cancel:${searchId}`).setEmoji('❌').setLabel('Cancel Search').setStyle(ButtonStyle.Danger)
     );
 }
 
@@ -114,7 +106,7 @@ function buildNoResultsPayload(query, searchId) {
 
     return {
         embeds: [embed],
-        components: [buildSearchSourceRow(searchId)]
+        components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]
     };
 }
 
@@ -288,7 +280,9 @@ async function handleSearchButton(interaction, client) {
     const sourceNames = {
         sc: 'SoundCloud 🟠',
         sp: 'Spotify 🟢',
-        ytm: 'YouTube Music 🎵'
+        ytm: 'YouTube Music 🎵',
+        am: 'Apple Music 🍎',
+        dz: 'Deezer 🔵'
     };
     const sourceName = sourceNames[sourceKey] || 'Unknown';
 
@@ -301,7 +295,7 @@ async function handleSearchButton(interaction, client) {
         .setDescription(`Searching for: **\`${session.query}\`** on **${sourceName}**...`)
         .setFooter({ text: 'Resolving streaming master...' });
 
-    await interaction.editReply({ embeds: [searchingEmbed], components: [buildSearchSourceRow(searchId)] }).catch(() => {});
+    await interaction.editReply({ embeds: [searchingEmbed], components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)] }).catch(() => {});
 
     const manager = client.manager;
     if (!manager) {
@@ -324,8 +318,28 @@ async function handleSearchButton(interaction, client) {
             if (!searchResult || !searchResult.tracks?.length) {
                 searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });
             }
+        } else if (sourceKey === 'am' || sourceKey === 'dz') {
+            // Apple Music and Deezer provide catalogue metadata; resolve the chosen
+            // result to a playable YouTube Music/YouTube stream (never stream previews).
+            const { StarryAudioEngine } = require('./nativeAudioEngine');
+            const providerResult = await StarryAudioEngine.search(session.query, interaction.user);
+            const wantedSource = sourceKey === 'am' ? 'Apple Music' : 'Deezer';
+            const metadata = (providerResult?.tracks || []).filter(track => track.source === wantedSource).slice(0, 8);
+            const resolved = await Promise.all(metadata.map(async item => {
+                const match = await manager.search(`ytsearch:${item.author || ''} ${item.title}`.trim(), { requester: interaction.user }).catch(() => null);
+                const playable = match?.tracks?.[0];
+                return playable ? {
+                    ...playable,
+                    title: item.title || playable.title,
+                    author: item.author || playable.author,
+                    thumbnail: item.thumbnail || playable.thumbnail,
+                    length: item.duration || playable.length,
+                    sourceName: item.source
+                } : null;
+            }));
+            searchResult = { tracks: resolved.filter(Boolean) };
         } else {
-            // ytm
+            // YouTube Music primary, YouTube fallback.
             searchResult = await manager.search(`ytmsearch:${session.query}`, { requester: interaction.user });
             if (!searchResult || !searchResult.tracks?.length) {
                 searchResult = await manager.search(`ytsearch:${session.query}`, { requester: interaction.user });
@@ -374,7 +388,7 @@ async function handleSearchButton(interaction, client) {
             .setDescription(`${desc}\n\n*Select a track from the dropdown below or click another platform to switch source.*`)
             .setFooter({ text: 'Starry Hi-Fi Interactive Search Engine' });
 
-        return interaction.editReply({ embeds: [resultsEmbed], components: [selectRow, sourceRow] }).catch(() => {});
+        return interaction.editReply({ embeds: [resultsEmbed], components: [selectRow, sourceRow, buildSearchCancelRow(searchId)] }).catch(() => {});
     }
 
     // If initiated from `,play` or `/play` fallback: automatically play the top track found!
@@ -584,7 +598,7 @@ async function executeSearchCommand(ctx, rawQuery) {
         .setDescription(`${desc}\n\n*Select a track from the dropdown below or switch streaming platforms:*`)
         .setFooter({ text: 'Starry Multi-Platform Search Engine • Pick track or change source' });
 
-    return ctx.reply({ embeds: [embed], components: [selectRow, sourceRow] });
+    return ctx.reply({ embeds: [embed], components: [selectRow, sourceRow, buildSearchCancelRow(searchId)] });
 }
 
 module.exports = {
