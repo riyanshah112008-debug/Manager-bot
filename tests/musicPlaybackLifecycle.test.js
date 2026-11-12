@@ -42,3 +42,7 @@ test('Starry source selector exposes five services and a separate cancel row', (
   }
   assert.ok(search.includes("wantedSource = sourceKey === 'am' ? 'Apple Music' : 'Deezer'"));
 });
+
+test('Starry keeps Cancel Search available when a provider has no playable results', () => {
+  assert.ok(search.includes('components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]'));
+});
