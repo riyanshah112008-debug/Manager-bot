@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType, MessageFlags } = require('discord.js');
-const platforms = ['instagram','youtube','tiktok','twitch','x','twitter','facebook','threads','reddit','kick','rumble','pinterest','tumblr','bluesky','mastodon','linkedin','snapchat','telegram','discord','github','patreon','ko-fi','substack','medium','spotify','soundcloud','vimeo','dailymotion','other'];
+const platforms = ['instagram','youtube','tiktok','twitch','x','facebook','threads','reddit','kick','rumble','pinterest','tumblr','bluesky','mastodon','linkedin','snapchat','telegram','patreon','substack','spotify','soundcloud','vimeo','dailymotion','other'];
 const feedSchema = new mongoose.Schema({
  guildId:{type:String,required:true,index:true}, platform:{type:String,required:true}, account:{type:String,required:true},
  feedUrl:{type:String,required:true}, channelId:{type:String,required:true}, mentionRoleId:{type:String,default:null},
