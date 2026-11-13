@@ -27,12 +27,13 @@ module.exports = {
         const guild = ctx.guild || interaction?.guild;
         const member = ctx.member || interaction?.member;
         const user = ctx.user || interaction?.user;
-        if (!guild) return ctx.reply('This command can only be used inside a server.');
+        const reply = content => isSlash ? interaction.reply({ content, ephemeral: true }) : ctx.reply(content);
+        if (!guild) return reply('This command can only be used inside a server.');
         if (!member?.permissions?.has(PermissionFlagsBits.ManageRoles) && !config.BOT_OWNERS.includes(user?.id)) {
-            return ctx.reply('You need the Manage Roles permission to use this command.');
+            return reply('You need the Manage Roles permission to use this command.');
         }
         const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
-        if (!botMember?.permissions?.has(PermissionFlagsBits.ManageRoles)) return ctx.reply('Starry needs the Manage Roles permission.');
+        if (!botMember?.permissions?.has(PermissionFlagsBits.ManageRoles)) return reply('Starry needs the Manage Roles permission.');
         let action, audience, role;
         if (isSlash) {
             const options = interaction.options;
@@ -46,15 +47,15 @@ module.exports = {
             role = guild.roles.cache.get(roleId) || guild.roles.cache.find(r => r.name.toLowerCase() === ctx.args?.slice(2).join(' ').toLowerCase());
         }
         if (!['add', 'remove'].includes(action) || !['all', 'humans', 'bots'].includes(audience) || !role) {
-            return ctx.reply('Usage: /massroles add|remove with a role and member group (Everyone, Humans, or Bots). Prefix: ,massroles add|remove all|humans|bots @role.');
+            return reply('Usage: /massroles add|remove with a role and member group (Everyone, Humans, or Bots). Prefix: ,massroles add|remove all|humans|bots @role.');
         }
         if (role.id === guild.id || role.managed || role.position >= botMember.roles.highest.position) {
-            return ctx.reply('That role is managed, everyone, or above Starry in the role hierarchy.');
+            return reply('That role is managed, everyone, or above Starry in the role hierarchy.');
         }
         if (!isSlash && role.position >= member.roles.highest.position && guild.ownerId !== user.id && !config.BOT_OWNERS.includes(user.id)) {
-            return ctx.reply('You cannot modify a role at or above your highest role.');
+            return reply('You cannot modify a role at or above your highest role.');
         }
-        if (ctx.isSlash) await interaction.deferReply({ ephemeral: true });
+        if (isSlash) await interaction.deferReply({ ephemeral: true });
         else await ctx.reply('⏳ Fetching members and applying the role. This may take a while.');
         const members = await guild.members.fetch();
         let changed = 0, skipped = 0, failed = 0;
