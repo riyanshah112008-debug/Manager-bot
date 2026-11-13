@@ -37,7 +37,7 @@ async function announceBirthdays(client) {
                 const role = settings.mentionRoleId ? '<@&' + settings.mentionRoleId + '> ' : '';
                 const embed = new EmbedBuilder().setColor('#F472B6').setTitle('🎂 Birthday Celebration!').setDescription(content).setFooter({ text: 'Starry Birthday System' }).setTimestamp();
                 try {
-                    await channel.send({ content: role, embeds: [embed], allowedMentions: { users: [entry.userId], roles: settings.mentionRoleId ? [settings.mentionRoleId] : [] } });
+                    await channel.send({ content: role + mention, embeds: [embed], allowedMentions: { users: [entry.userId], roles: settings.mentionRoleId ? [settings.mentionRoleId] : [] } });
                     await Birthday.updateOne({ _id: entry._id, lastAnnouncedDate: { $ne: today.key } }, { $set: { lastAnnouncedDate: today.key } });
                 } catch (error) {
                     console.warn('[Birthday] Could not announce in guild ' + config.guildId + ':', error.message);
