@@ -46,3 +46,14 @@ test('Starry source selector exposes five services and a separate cancel row', (
 test('Starry keeps Cancel Search available when a provider has no playable results', () => {
   assert.ok(search.includes('components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]'));
 });
+test('Only the initiating user can cancel an interactive search', () => {
+  const cancelBranch = search.indexOf("if (action === 'search_cancel')");
+  const expiredGuard = search.indexOf('if (!session)', cancelBranch);
+  const ownerGuard = search.indexOf('if (interaction.user.id !== session.userId)', cancelBranch);
+  const deleteSession = search.indexOf('searchSessions.delete(searchId)', cancelBranch);
+  const deleteMessage = search.indexOf('interaction.message.delete()', cancelBranch);
+  assert.ok(cancelBranch >= 0);
+  assert.ok(expiredGuard > cancelBranch && expiredGuard < ownerGuard);
+  assert.ok(ownerGuard > expiredGuard && ownerGuard < deleteSession);
+  assert.ok(deleteSession > ownerGuard && deleteSession < deleteMessage);
+});
