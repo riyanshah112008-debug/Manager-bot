@@ -32,6 +32,26 @@ const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+const getOAuthEncryptionKey = () => {
+    const secret = process.env.SESSION_ENCRYPTION_KEY || process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
+    if (!secret) throw new Error('Dashboard OAuth encryption is not configured. Please contact the bot owner.');
+    return crypto.createHash('sha256').update('starry-discord-oauth-v1:' + secret).digest();
+};
+const encryptOAuthSecret = (value) => {
+    if (!value) return null;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+    return ['v1', iv.toString('hex'), cipher.getAuthTag().toString('hex'), encrypted.toString('hex')].join(':');
+};
+const decryptOAuthSecret = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    const [version, ivHex, tagHex, dataHex] = value.split(':');
+    if (version !== 'v1' || !ivHex || !tagHex || !dataHex) throw new Error('Stored Discord session needs a fresh login.');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getOAuthEncryptionKey(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
+};
 
 function bestPlayableMusicMatch(tracks, query) {
     const ranked = rankAndFilterCanonicalTracks(Array.isArray(tracks) ? tracks : [], query);
@@ -111,7 +131,7 @@ function setupDashboardRoutes(app, client) {
         userSessions.delete(token);
         const stored = await OAuthSession.findOne({ tokenHash, expiresAt: { $gt: new Date(now) } }).lean();
         if (!stored) return null;
-        const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], expiresAt: new Date(stored.expiresAt).getTime() };
+        const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], discordRefreshTokenEncrypted: stored.discordRefreshTokenEncrypted || null, expiresAt: new Date(stored.expiresAt).getTime() };
         try { await renewIfNeeded(session); } catch (error) {
             console.warn('Dashboard session renewal deferred:', error.message);
         }
@@ -389,6 +409,7 @@ function setupDashboardRoutes(app, client) {
                     email: userData.email || null
                 },
                 guilds: userGuilds,
+                discordRefreshTokenEncrypted: encryptOAuthSecret(tokenData.refresh_token),
                 expiresAt: expiresAt.getTime()
             };
 
@@ -401,6 +422,7 @@ function setupDashboardRoutes(app, client) {
                 tokenHash: hashSessionToken(sessionToken),
                 user: sessionData.user,
                 guilds: sessionData.guilds,
+                discordRefreshTokenEncrypted: sessionData.discordRefreshTokenEncrypted,
                 expiresAt
             });
             userSessions.set(sessionToken, sessionData);
@@ -535,16 +557,70 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Refresh the user's Discord guild list instead of trusting the login-time snapshot.
+    // This removes deleted/left servers and discovers newly joined servers without requiring logout.
+    const refreshDiscordGuilds = async (session) => {
+        if (!session.discordRefreshTokenEncrypted) {
+            const error = new Error('Your Discord session predates live server-list sync. Sign out and sign in again once to refresh it.');
+            error.statusCode = 401;
+            throw error;
+        }
+        const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
+        const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
+        if (!clientSecret) throw new Error('Discord OAuth is not configured on the dashboard.');
+        const refreshToken = decryptOAuthSecret(session.discordRefreshTokenEncrypted);
+        const tokenParams = new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        });
+        const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: tokenParams.toString()
+        });
+        const tokenData = await tokenRes.json().catch(() => ({}));
+        if (!tokenRes.ok || !tokenData.access_token) {
+            const error = new Error('Discord could not refresh your server access. Sign out and sign in again.');
+            error.statusCode = 401;
+            throw error;
+        }
+        const guildsRes = await fetch('https://discord.com/api/users/@me/guilds', {
+            headers: { Authorization: 'Bearer ' + tokenData.access_token, Accept: 'application/json' }
+        });
+        const latestGuilds = await guildsRes.json().catch(() => null);
+        if (!guildsRes.ok || !Array.isArray(latestGuilds)) {
+            const error = new Error('Discord did not return a fresh server list. Please retry in a moment.');
+            error.statusCode = 503;
+            throw error;
+        }
+        session.guilds = latestGuilds;
+        session.discordRefreshTokenEncrypted = encryptOAuthSecret(tokenData.refresh_token || refreshToken);
+        await OAuthSession.updateOne(
+            { tokenHash: hashSessionToken(session.token), expiresAt: { $gt: new Date() } },
+            { $set: { guilds: latestGuilds, discordRefreshTokenEncrypted: session.discordRefreshTokenEncrypted } }
+        );
+        userSessions.set(session.token, {
+            user: session.user,
+            guilds: latestGuilds,
+            discordRefreshTokenEncrypted: session.discordRefreshTokenEncrypted,
+            expiresAt: session.expiresAt
+        });
+        return latestGuilds;
+    };
+
     // ==========================================
     // 1. GUILD & SERVER MANAGEMENT APIS
     // ==========================================
     
-    // GET /api/guilds - Return every server the signed-in user can manage,
+    // GET /api/guilds - Return the user's live Discord servers they can manage,
     // including servers where Starry has not been invited yet.
     app.get('/api/guilds', requireAuth, async (req, res) => {
         try {
             res.set('Cache-Control', 'no-store, private');
-            const guilds = (req.session.guilds || []).filter(g => {
+            const liveGuilds = await refreshDiscordGuilds(req.session);
+            const guilds = liveGuilds.filter(g => {
                 try {
                     const permissions = BigInt(g.permissions || 0);
                     return Boolean(g.owner) || (permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20);
@@ -570,7 +646,7 @@ function setupDashboardRoutes(app, client) {
             }).sort((a, b) => Number(b.botInGuild) - Number(a.botInGuild) || a.name.localeCompare(b.name));
             res.json({ success: true, guilds, publicUrl: getPublicUrl() });
         } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            res.status(e.statusCode || 500).json({ success: false, error: e.message });
         }
     });
 
