@@ -22,7 +22,8 @@ module.exports = {
     usage: ',massroles <add|remove> <all|humans|bots> @role',
     data,
     async execute(ctx) {
-        const interaction = ctx.interaction;
+        const interaction = ctx.interaction || (typeof ctx.isChatInputCommand === 'function' && ctx.isChatInputCommand() ? ctx : null);
+        const isSlash = Boolean(interaction);
         const guild = ctx.guild || interaction?.guild;
         const member = ctx.member || interaction?.member;
         const user = ctx.user || interaction?.user;
@@ -33,7 +34,7 @@ module.exports = {
         const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
         if (!botMember?.permissions?.has(PermissionFlagsBits.ManageRoles)) return ctx.reply('Starry needs the Manage Roles permission.');
         let action, audience, role;
-        if (ctx.isSlash) {
+        if (isSlash) {
             const options = interaction.options;
             action = options.getSubcommand();
             audience = options.getString('members');
@@ -50,7 +51,7 @@ module.exports = {
         if (role.id === guild.id || role.managed || role.position >= botMember.roles.highest.position) {
             return ctx.reply('That role is managed, everyone, or above Starry in the role hierarchy.');
         }
-        if (!ctx.isSlash && role.position >= member.roles.highest.position && guild.ownerId !== user.id && !config.BOT_OWNERS.includes(user.id)) {
+        if (!isSlash && role.position >= member.roles.highest.position && guild.ownerId !== user.id && !config.BOT_OWNERS.includes(user.id)) {
             return ctx.reply('You cannot modify a role at or above your highest role.');
         }
         if (ctx.isSlash) await interaction.deferReply({ ephemeral: true });
@@ -73,7 +74,7 @@ module.exports = {
             (action === 'add' ? 'Added' : 'Removed') + ' <@&' + role.id + '> ' +
             (action === 'add' ? 'to' : 'from') + ' ' + changed + ' members.\n' +
             'Skipped: ' + skipped + ' · Failed: ' + failed;
-        if (ctx.isSlash) return interaction.editReply({ content: summary, allowedMentions: { parse: [] } });
+        if (isSlash) return interaction.editReply({ content: summary, allowedMentions: { parse: [] } });
         return guild.channels.cache.get(ctx.channel?.id)?.send({ content: summary, allowedMentions: { parse: [] } });
     }
 };
