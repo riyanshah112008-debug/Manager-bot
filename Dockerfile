@@ -23,11 +23,17 @@ RUN npm install --omit=dev --legacy-peer-deps
 # Copy entire application codebase
 COPY . .
 
+# Give the unprivileged Node.js user ownership of the application directory.
+RUN chown -R node:node /app
+
 # Expose Web Dashboard port
 EXPOSE 10000
 
 ENV NODE_ENV=production
 ENV PORT=10000
+
+# Run the bot without root privileges. npm start still executes prestart.
+USER node
 
 # Use npm start so the prestart lifecycle deploys the current Discord
 # application-command payload before the bot connects to the gateway.
