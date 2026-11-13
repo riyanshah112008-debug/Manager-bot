@@ -83,7 +83,9 @@ async function openBuilder(i) {
   const id = randomUUID().replace(/-/g, '').slice(0, 16);
   const session = { id, ownerId: i.user.id, guildId: i.guild.id, channelId: channel.id, mode: 'multiple', mappings: [], createdAt: Date.now() };
   sessions.set(id, session);
-  return i.reply({ embeds: [sessionEmbed(session)], components: sessionComponents(session), flags: EPHEMERAL });
+  await i.reply({ embeds: [sessionEmbed(session)], components: sessionComponents(session), flags: EPHEMERAL });
+  session.builderMessage = await i.fetchReply().catch(() => null);
+  return;
 }
 
 async function publish(i, session) {
@@ -219,7 +221,8 @@ module.exports = client => {
         const me = i.guild.members.me || await i.guild.members.fetchMe();
         if (role.position >= me.roles.highest.position) throw new Error(`Move my highest role above <@&${role.id}> first.`);
         session.mappings.push({ emoji: parsed.display, reaction: parsed.reaction, emojiKey: parsed.key, roleId: role.id, roleName: role.name, animated: parsed.animated });
-        return i.reply({ content: `Added ${parsed.display} → <@&${role.id}>. Return to your builder message to continue.`, flags: EPHEMERAL });
+        await session.builderMessage?.edit({ embeds: [sessionEmbed(session)], components: sessionComponents(session) }).catch(() => {});
+        return i.reply({ content: `Added ${parsed.display} → <@&${role.id}>.`, flags: EPHEMERAL });
       } catch (error) {
         return i.reply({ content: `❌ ${error.message}`, flags: EPHEMERAL });
       }
@@ -228,7 +231,8 @@ module.exports = client => {
     if (i.isStringSelectMenu() && action === 'remove') {
       const indexes = i.values.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < session.mappings.length);
       session.mappings = session.mappings.filter((_, index) => !indexes.includes(index));
-      return i.update({ content: `Removed ${indexes.length} mapping(s). Use the builder buttons to continue.`, components: [] });
+      await session.builderMessage?.edit({ embeds: [sessionEmbed(session)], components: sessionComponents(session) }).catch(() => {});
+      return i.update({ content: `Removed ${indexes.length} mapping(s). The builder has been updated.`, components: [] });
     }
   });
 
