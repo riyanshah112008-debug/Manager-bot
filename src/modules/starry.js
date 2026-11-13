@@ -1058,10 +1058,23 @@ module.exports = async (client) => {
             }
             const numberMatch = lowerContent.match(/\b\d+\b/);
             const count = numberMatch ? parseInt(numberMatch[0]) : 5;
-            const deleteCount = Math.min(count, 99) + 1;
-
-            const deleted = await message.channel.bulkDelete(deleteCount, true).catch(() => null);
-            const actualDeletedCount = deleted ? Math.max(0, deleted.size - 1) : count;
+            const requestedCount = Math.max(1, Math.min(Number.isFinite(count) ? count : 5, 100));
+            // Fetch one extra only to account for the prefix invocation; never include it in the requested purge count.
+            const candidates = await message.channel.messages.fetch({ limit: Math.min(requestedCount + 1, 100) }).catch(() => null);
+            if (!candidates) {
+                await message.reply('❌ I could not fetch messages to purge.').catch(() => {});
+                return true;
+            }
+            const targets = candidates
+                .filter(m => m.id !== message.id)
+                .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+                .first(requestedCount);
+            const deleted = targets.length
+                ? await message.channel.bulkDelete(targets, true).catch(() => null)
+                : null;
+            // Delete the invoking prefix command separately; it is never counted as one of the requested messages.
+            await message.delete().catch(() => {});
+            const actualDeletedCount = deleted?.size || 0;
 
             const sent = await message.channel.send(`🧹 Successfully cleared ${actualDeletedCount} messages!`).catch(() => null);
             if (sent) setTimeout(() => sent.delete().catch(() => {}), 3500);

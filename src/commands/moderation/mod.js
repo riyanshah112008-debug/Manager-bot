@@ -392,9 +392,13 @@ module.exports = {
                     const targetFilter = options.getUser('target');
                     const channel = interaction.channel;
 
-                    const fetched = await channel.messages.fetch({ limit: amount });
-                    const toDelete = targetFilter ? fetched.filter(m => m.author.id === targetFilter.id) : fetched;
-                    const deleted = await channel.bulkDelete(toDelete, true);
+                    // Slash invocations are interactions, not channel messages; count only matching messages.
+                    const fetched = await channel.messages.fetch({ limit: 100 });
+                    const candidates = fetched
+                        .filter(m => !m.interactionMetadata && !m.interaction && (!targetFilter || m.author.id === targetFilter.id))
+                        .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+                        .first(amount);
+                    const deleted = candidates.length ? await channel.bulkDelete(candidates, true) : new Map();
 
                     const logEmbed = buildStarryLogEmbed({
                         title: 'Channel Messages Purged',
