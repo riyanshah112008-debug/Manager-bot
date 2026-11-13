@@ -755,7 +755,7 @@ const levelingModule = (client) => {
                     .setCustomId('in_lvl_title')
                     .setLabel('Level-Up Embed Title')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.title || '✨ Congratulations {user}!')
+                    .setValue(settings.title || 'Congratulations {user}!')
                     .setRequired(true);
 
                 const descInput = new TextInputBuilder()
@@ -833,7 +833,7 @@ const levelingModule = (client) => {
                     .setCustomId('in_lvl_ping')
                     .setLabel('Content Above Embed')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.pingContent || '✨ <@{user}> just hit **Level {level}**!')
+                    .setValue(settings.pingContent || DEFAULT_LEVEL_UP_MESSAGE)
                     .setRequired(true);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(pingInput));
@@ -845,7 +845,7 @@ const levelingModule = (client) => {
                 try {
                     const latest = await LevelSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
-                    const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
+                    const pingText = replaceLvlPlaceholders(latest.pingContent || DEFAULT_LEVEL_UP_MESSAGE, interaction.user, 5, 2500, interaction.guild);
 
                     return await interaction.reply({ 
                         content: `${pingText} *(Setup Preview)*`, 
@@ -863,7 +863,7 @@ const levelingModule = (client) => {
             // RESET DEFAULTS HANDLER
             if (interaction.customId === 'lvl_btn_reset') {
                 const defaults = {
-                    title: '✨ Congratulations {user}!',
+                    title: 'Congratulations {user}!',
                     description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                     color: '#FFD700',
                     image: '',
