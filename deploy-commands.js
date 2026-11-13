@@ -454,20 +454,17 @@ commands.push(
     autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     
-    {
-        name: 'reactionroles',
-        description: 'Create and manage self-assignable reaction-role panels',
-        default_member_permissions: MANAGE_ROLES,
-        options: [
-            { name: 'action', type: 3, required: true, description: 'Action', choices: [{ name: 'Create panel', value: 'create' }, { name: 'List panels', value: 'list' }, { name: 'Delete panel', value: 'delete' }] },
-            { name: 'channel', type: 7, required: false, description: 'Panel channel' },
-            { name: 'title', type: 3, required: false, description: 'Panel title' },
-            { name: 'description', type: 3, required: false, description: 'Panel instructions' },
-            { name: 'roles', type: 3, required: false, description: 'One mapping per line: 😀 = @Role (up to 20)' },
-            { name: 'mode', type: 3, required: false, description: 'Role selection mode', choices: [{ name: 'Multiple roles', value: 'multiple' }, { name: 'One role at a time', value: 'single' }] },
-            { name: 'message_id', type: 3, required: false, description: 'Panel message ID (delete)' }
-        ]
-    },
+    new SlashCommandBuilder()
+        .setName('reactionroles')
+        .setDescription('Open the interactive reaction-role panel builder')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('Where to publish the role panel (defaults to this channel)')
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                .setRequired(false)
+        )
+        .toJSON(),
 
     { name: 'setlogs', description: 'Set server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
     { name: 'setupvc', description: 'Configure join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel' }] },
