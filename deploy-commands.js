@@ -454,48 +454,18 @@ commands.push(
     autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     
-    // UPDATED FULL REACTION ROLES COMMAND (SUBCOMMANDS: spawn, add, remove, list)
     {
-        name: 'rr',
-        description: 'Manage reaction-role panels',
-        default_member_permissions: ADMIN,
+        name: 'reactionroles',
+        description: 'Create and manage self-assignable reaction-role panels',
+        default_member_permissions: MANAGE_ROLES,
         options: [
-            {
-                name: 'spawn',
-                type: 1,
-                description: 'Create a reaction role panel embed',
-                options: [
-                    { name: 'channel', type: 7, required: true, description: 'Target channel' },
-                    { name: 'title', type: 3, required: true, description: 'Embed title' },
-                    { name: 'text', type: 3, required: true, description: 'Embed description text' }
-                ]
-            },
-            {
-                name: 'add',
-                type: 1,
-                description: 'Attach a reaction role to an existing panel',
-                options: [
-                    { name: 'channel', type: 7, required: true, description: 'Channel containing the panel' },
-                    { name: 'message_id', type: 3, required: true, description: 'Message ID of the panel embed' },
-                    { name: 'role', type: 8, required: true, description: 'Role to grant on reaction' },
-                    { name: 'emoji', type: 3, required: true, description: 'Emoji to use for reaction' }
-                ]
-            },
-            {
-                name: 'remove',
-                type: 1,
-                description: 'Remove a reaction role from a panel',
-                options: [
-                    { name: 'channel', type: 7, required: true, description: 'Channel containing the panel' },
-                    { name: 'message_id', type: 3, required: true, description: 'Message ID of the panel embed' },
-                    { name: 'emoji', type: 3, required: true, description: 'Emoji to remove' }
-                ]
-            },
-            {
-                name: 'list',
-                type: 1,
-                description: 'List all active reaction roles in this server'
-            }
+            { name: 'action', type: 3, required: true, description: 'Action', choices: [{ name: 'Create panel', value: 'create' }, { name: 'List panels', value: 'list' }, { name: 'Delete panel', value: 'delete' }] },
+            { name: 'channel', type: 7, required: false, description: 'Panel channel' },
+            { name: 'title', type: 3, required: false, description: 'Panel title' },
+            { name: 'description', type: 3, required: false, description: 'Panel instructions' },
+            { name: 'roles', type: 3, required: false, description: 'One mapping per line: 😀 = @Role (up to 20)' },
+            { name: 'mode', type: 3, required: false, description: 'Role selection mode', choices: [{ name: 'Multiple roles', value: 'multiple' }, { name: 'One role at a time', value: 'single' }] },
+            { name: 'message_id', type: 3, required: false, description: 'Panel message ID (delete)' }
         ]
     },
 

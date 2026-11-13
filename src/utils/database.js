@@ -31,6 +31,7 @@ const defaultStore = {
   music_request_channels: {},
   counting_config: {},
   server_listings: {},
+  reaction_role_panels: {},
 };
 
 let store = { ...defaultStore };
@@ -543,6 +544,11 @@ function getAllCountingConfigs() {
   return store.counting_config || {};
 }
 
+
+function getReactionRolePanels(guildId) { if (!store.reaction_role_panels) store.reaction_role_panels = {}; return store.reaction_role_panels[guildId] || {}; }
+function setReactionRolePanel(guildId, messageId, panel) { if (!store.reaction_role_panels) store.reaction_role_panels = {}; if (!store.reaction_role_panels[guildId]) store.reaction_role_panels[guildId] = {}; store.reaction_role_panels[guildId][messageId] = { ...panel, guildId, messageId, updatedAt: new Date().toISOString() }; scheduleSave(); return store.reaction_role_panels[guildId][messageId]; }
+function deleteReactionRolePanel(guildId, messageId) { const panels = getReactionRolePanels(guildId); if (!panels[messageId]) return false; delete panels[messageId]; if (!Object.keys(panels).length) delete store.reaction_role_panels[guildId]; scheduleSave(); return true; }
+
 // ================= Server Listings =================
 function getServerListing(guildId) {
   return store.server_listings ? store.server_listings[guildId] || null : null;
@@ -613,4 +619,7 @@ module.exports = {
   getServerListing,
   setServerListing,
   getAllServerListings,
+  getReactionRolePanels,
+  setReactionRolePanel,
+  deleteReactionRolePanel,
 };
