@@ -25,10 +25,10 @@ module.exports = {
         const interaction = ctx.interaction || (typeof ctx.isChatInputCommand === 'function' && ctx.isChatInputCommand() ? ctx : null);
         const isSlash = Boolean(interaction);
         const guild = ctx.guild || interaction?.guild;
-        const member = ctx.member || interaction?.member;
         const user = ctx.user || interaction?.user;
+        if (!guild) return isSlash ? interaction.reply({ content: 'This command can only be used inside a server.', ephemeral: true }) : ctx.reply('This command can only be used inside a server.');
+        const member = isSlash ? await guild.members.fetch(user.id).catch(() => null) : ctx.member;
         const reply = content => isSlash ? interaction.reply({ content, ephemeral: true }) : ctx.reply(content);
-        if (!guild) return reply('This command can only be used inside a server.');
         if (!member?.permissions?.has(PermissionFlagsBits.ManageRoles) && !config.BOT_OWNERS.includes(user?.id)) {
             return reply('You need the Manage Roles permission to use this command.');
         }
@@ -52,7 +52,7 @@ module.exports = {
         if (role.id === guild.id || role.managed || role.position >= botMember.roles.highest.position) {
             return reply('That role is managed, everyone, or above Starry in the role hierarchy.');
         }
-        if (!isSlash && role.position >= member.roles.highest.position && guild.ownerId !== user.id && !config.BOT_OWNERS.includes(user.id)) {
+        if (role.position >= member.roles.highest.position && guild.ownerId !== user.id && !config.BOT_OWNERS.includes(user.id)) {
             return reply('You cannot modify a role at or above your highest role.');
         }
         if (isSlash) await interaction.deferReply({ ephemeral: true });
