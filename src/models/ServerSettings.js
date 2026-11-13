@@ -90,7 +90,7 @@ const serverSettingsSchema = new mongoose.Schema({
         channelId: { type: String, default: '' },
         mentionRoleId: { type: String, default: '' },
         message: { type: String, default: '🎂 Happy birthday {user}! Everyone wish them a wonderful day! 🎉' },
-        timezone: { type: String, default: 'UTC' }
+        timezone: { type: String, default: 'Asia/Kolkata' }
     },
 
     // 🎫 Starry Support Tickets
