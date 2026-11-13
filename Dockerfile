@@ -29,5 +29,6 @@ EXPOSE 10000
 ENV NODE_ENV=production
 ENV PORT=10000
 
-# Start Starry Bot
-CMD ["node", "src/index.js"]
+# Use npm start so the prestart lifecycle deploys the current Discord
+# application-command payload before the bot connects to the gateway.
+CMD ["npm", "start"]
