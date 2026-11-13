@@ -539,22 +539,35 @@ function setupDashboardRoutes(app, client) {
     // 1. GUILD & SERVER MANAGEMENT APIS
     // ==========================================
     
-    // GET /api/guilds - Return all guilds the bot is currently serving
+    // GET /api/guilds - Return every server the signed-in user can manage,
+    // including servers where Starry has not been invited yet.
     app.get('/api/guilds', requireAuth, async (req, res) => {
         try {
             res.set('Cache-Control', 'no-store, private');
-            const manageableGuildIds = new Set((req.session.guilds || []).filter(g => {
-                const permissions = BigInt(g.permissions || 0);
-                return Boolean(g.owner) || (permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20);
-            }).map(g => String(g.id)));
-            const guilds = client.guilds.cache.filter(g => manageableGuildIds.has(g.id)).map(g => ({
-                id: g.id,
-                name: g.name,
-                icon: g.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                memberCount: g.memberCount,
-                ownerId: g.ownerId,
-                botJoinedAt: g.joinedAt
-            }));
+            const guilds = (req.session.guilds || []).filter(g => {
+                try {
+                    const permissions = BigInt(g.permissions || 0);
+                    return Boolean(g.owner) || (permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20);
+                } catch (_) {
+                    return false;
+                }
+            }).map(g => {
+                const botGuild = client.guilds.cache.get(String(g.id));
+                const botClientId = client.user?.id || process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '';
+                const inviteUrl = botClientId
+                    ? 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(botClientId) + '&permissions=0&scope=bot%20applications.commands&guild_id=' + encodeURIComponent(g.id) + '&disable_guild_select=true'
+                    : '';
+                return {
+                    id: String(g.id),
+                    name: g.name || 'Discord Server',
+                    icon: g.icon ? 'https://cdn.discordapp.com/icons/' + g.id + '/' + g.icon + '.png' : 'https://cdn.discordapp.com/embed/avatars/0.png',
+                    memberCount: botGuild?.memberCount || 0,
+                    ownerId: botGuild?.ownerId || null,
+                    botJoinedAt: botGuild?.joinedAt || null,
+                    botInGuild: Boolean(botGuild),
+                    inviteUrl
+                };
+            }).sort((a, b) => Number(b.botInGuild) - Number(a.botInGuild) || a.name.localeCompare(b.name));
             res.json({ success: true, guilds, publicUrl: getPublicUrl() });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
