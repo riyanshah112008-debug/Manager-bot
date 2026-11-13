@@ -33,7 +33,7 @@ async function announceBirthdays(client) {
                 const member = await client.guilds.cache.get(config.guildId)?.members.fetch(entry.userId).catch(() => null);
                 const mention = member ? member.toString() : '<@' + entry.userId + '>';
                 const raw = settings.message || '🎂 Happy birthday {user}! Everyone wish them a wonderful day! 🎉';
-                const content = raw.replace(/\{user\}/gi, mention).replace(/\{username\}/gi, user?.username || 'friend').replace(/\{server\}/gi, client.guilds.cache.get(config.guildId)?.name || 'our server');
+                const content = raw.replace(/\{user\}/gi, user?.username || 'member').replace(/\{username\}/gi, user?.username || 'friend').replace(/\{server\}/gi, client.guilds.cache.get(config.guildId)?.name || 'our server');
                 const role = settings.mentionRoleId ? '<@&' + settings.mentionRoleId + '> ' : '';
                 const embed = new EmbedBuilder().setColor('#F472B6').setTitle('🎂 Birthday Celebration!').setDescription(content).setFooter({ text: 'Starry Birthday System' }).setTimestamp();
                 try {
