@@ -139,6 +139,16 @@ function setupDashboardRoutes(app, client) {
         return { token, ...session };
     };
 
+    // Resolve a guild across the primary bot and every connected physical worker.
+    const getGuildRuntime = (guildId) => {
+        const runtimes = [client, ...Array.from(client.multiBot?.instances?.values?.() || []).map(info => info?.client).filter(Boolean)];
+        for (const botClient of runtimes) {
+            const guild = botClient.guilds?.cache?.get(String(guildId));
+            if (guild) return { guild, client: botClient };
+        }
+        return { guild: null, client: null };
+    };
+
     // 🛡️ Middleware: Require Authenticated Guild Administrator
     const requireGuildAdmin = async (req, res, next) => {
         let session;
@@ -155,7 +165,8 @@ function setupDashboardRoutes(app, client) {
             return res.status(400).json({ success: false, error: 'Guild ID is required.' });
         }
 
-        const guild = client.guilds.cache.get(guildId);
+        const runtime = getGuildRuntime(guildId);
+        const guild = runtime.guild;
         if (!guild) {
             return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
         }
@@ -184,6 +195,7 @@ function setupDashboardRoutes(app, client) {
 
         req.session = session;
         req.guild = guild;
+        req.botClient = runtime.client;
         next();
     };
 
@@ -199,9 +211,11 @@ function setupDashboardRoutes(app, client) {
         }
 
         const guildId = req.params.id || req.body.guildId;
-        const guild = client.guilds.cache.get(guildId);
+        if (!guildId) return res.status(400).json({ success: false, error: 'Guild ID is required.' });
+        const runtime = getGuildRuntime(guildId);
+        const guild = runtime.guild;
         if (!guild) {
-            return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
+            return res.status(404).json({ success: false, error: 'Starry is not connected to this server right now.' });
         }
 
         const member = await guild.members.fetch(session.user.id).catch(() => null);
@@ -211,6 +225,7 @@ function setupDashboardRoutes(app, client) {
 
         req.session = session;
         req.guild = guild;
+        req.botClient = runtime.client;
         req.member = member;
         next();
     };
@@ -628,8 +643,9 @@ function setupDashboardRoutes(app, client) {
                     return false;
                 }
             }).map(g => {
-                const botGuild = client.guilds.cache.get(String(g.id));
-                const botClientId = client.user?.id || process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '';
+                const runtime = getGuildRuntime(g.id);
+                const botGuild = runtime.guild;
+                const botClientId = runtime.client?.user?.id || client.user?.id || process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '';
                 const inviteUrl = botClientId
                     ? 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(botClientId) + '&permissions=0&scope=bot%20applications.commands&guild_id=' + encodeURIComponent(g.id) + '&disable_guild_select=true'
                     : '';
