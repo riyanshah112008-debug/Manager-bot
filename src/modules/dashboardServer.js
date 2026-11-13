@@ -211,9 +211,11 @@ function setupDashboardRoutes(app, client) {
         }
 
         const guildId = req.params.id || req.body.guildId;
-        const guild = client.guilds.cache.get(guildId);
+        if (!guildId) return res.status(400).json({ success: false, error: 'Guild ID is required.' });
+        const runtime = getGuildRuntime(guildId);
+        const guild = runtime.guild;
         if (!guild) {
-            return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
+            return res.status(404).json({ success: false, error: 'Starry is not connected to this server right now.' });
         }
 
         const member = await guild.members.fetch(session.user.id).catch(() => null);
