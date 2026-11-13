@@ -16,7 +16,6 @@ const data = new SlashCommandBuilder()
 
 module.exports = {
     name: 'massroles',
-    aliases: ['massrole', 'roleall'],
     category: 'Moderation',
     description: 'Bulk add or remove a role from all members, humans, or bots.',
     usage: ',massroles <add|remove> <all|humans|bots> @role',
