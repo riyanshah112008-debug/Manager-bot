@@ -11,13 +11,17 @@ function parseMappings(raw, guild) {
   return lines.map((line, i) => {
     const m = line.match(/^(.+?)\s*(?:=|\|)\s*(?:<@&)?(\d{17,20})(?:>)?$/);
     if (!m) throw new Error(`Line ${i+1}: use 😀 = @Role.`);
-    const emoji = m[1].trim(), custom = emoji.match(/^<a?:[\w]+:(\d+)>$/);
-    const key = custom ? `custom:${custom[1]}` : `unicode:${emoji}`;
+    const emoji = m[1].trim();
+    // Discord custom emoji mentions use <:name:id> (static) or <a:name:id> (animated).
+    const custom = emoji.match(/^<(a?):([\w~]+):(\d+)>$/);
+    const key = custom ? `custom:${custom[3]}` : `unicode:${emoji}`;
+    // Pass custom emoji to Discord.js as the canonical name:id identifier.
+    const reactionEmoji = custom ? `${custom[2]}:${custom[3]}` : emoji;
     const role = guild.roles.cache.get(m[2]);
-    if (!emoji || emoji.length > 32 || !role || role.id === guild.id || role.managed || used.has(key))
+    if (!emoji || emoji.length > 64 || !role || role.id === guild.id || role.managed || used.has(key))
       throw new Error(`Line ${i+1}: invalid/duplicate emoji or role.`);
     used.add(key);
-    return { emoji, emojiKey:key, roleId:role.id, roleName:role.name };
+    return { emoji, reactionEmoji, emojiKey:key, roleId:role.id, roleName:role.name };
   });
 }
 
@@ -35,6 +39,10 @@ async function createPanel(i) {
   try { mappings=parseMappings(raw,i.guild); } catch(e) { return i.reply({content:`❌ ${e.message}`,flags:EPHEMERAL}); }
   const invalid=mappings.find(x=>{const r=i.guild.roles.cache.get(x.roleId);return !r || r.position>=me.roles.highest.position;});
   if(invalid) return i.reply({content:`Move my highest role above <@&${invalid.roleId}> first.`,flags:EPHEMERAL});
+  const needsExternalEmojiPermission=mappings.some(x=>x.emojiKey.startsWith('custom:') && !i.guild.emojis.cache.has(x.emojiKey.slice(7)));
+  if(needsExternalEmojiPermission && !channel.permissionsFor(me)?.has(PermissionsBitField.Flags.UseExternalEmojis)) {
+    return i.reply({content:'I need **Use External Emojis** permission in this channel to react with emojis from other servers.',flags:EPHEMERAL});
+  }
   const roleText=mappings.map(x=>`${x.emoji}  <@&${x.roleId}>`).join('\n');
   const embed=new EmbedBuilder().setColor(0x5865F2).setTitle(title).setDescription(`${description}\n\n${roleText}`)
     .setFooter({text:mode==='single'?'Choose one role • React again to switch':'React to add a role • Remove reaction to remove it'}).setTimestamp();
@@ -42,7 +50,7 @@ async function createPanel(i) {
   let message;
   try {
     message=await channel.send({embeds:[embed],allowedMentions:{parse:[]}});
-    for(const x of mappings) await message.react(x.emoji);
+    for(const x of mappings) await message.react(x.reactionEmoji || x.emoji);
     db.setReactionRolePanel(i.guild.id,message.id,{channelId:channel.id,mode,mappings,createdBy:i.user.id});
     return i.editReply(`✅ Panel created in <#${channel.id}>. Message ID: \`${message.id}\` • ${mappings.length} roles • ${mode} selection.`);
   } catch(e) {

@@ -31,7 +31,7 @@ const LevelUserSchema = new mongoose.Schema({
 LevelUserSchema.index({ userId: 1, guildId: 1 }, { unique: true });
 const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', LevelUserSchema);
 
-const DEFAULT_LEVEL_UP_MESSAGE = '✨ <@{user}> just hit **Level {level}**!';
+const DEFAULT_LEVEL_UP_MESSAGE = '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!';
 const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
 
 const LevelSettingsSchema = new mongoose.Schema({
@@ -695,18 +695,13 @@ const levelingModule = (client) => {
             const configuredPing = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
             const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
             const pingMsg = replaceLvlPlaceholders(pingTemplate, message.author, newLevel, userDoc.xp, message.guild);
-            const useCustomCard = hasCustomLevelUpCard(guildSettings);
 
+            // Level-up announcements stay compact and plain-text: no generated embed or extra XP fields.
+            const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
             if (logChannel && typeof logChannel.send === 'function') {
-                const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
-                if (useCustomCard) payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
                 logChannel.send(payload).catch(() => {});
             } else {
-                const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
-                if (useCustomCard) payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
-                message.reply(payload).catch(() => {
-                    message.react('⭐').catch(() => {});
-                });
+                message.channel.send(payload).catch(() => {});
             }
         }
     });
