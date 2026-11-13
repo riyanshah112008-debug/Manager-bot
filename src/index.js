@@ -709,6 +709,10 @@ client.once(Events.ClientReady, async () => {
     // Initialize 150+ Master Commands Registry & Unified Dispatcher
     commandRegistry.init(client);
 
+    // Start daily birthday announcements.
+    try { require('./modules/birthdayEngine').startBirthdayScheduler(client); }
+    catch (birthdayError) { console.warn('⚠️ Birthday scheduler could not start:', birthdayError.message); }
+
     // Global command registration is an explicit release task, not a bot-startup task.
     // This avoids every worker/restart racing to overwrite the same application command set.
     if (String(process.env.AUTO_DEPLOY_COMMANDS || '').toLowerCase() === 'true' && client.isPrimary !== false) {

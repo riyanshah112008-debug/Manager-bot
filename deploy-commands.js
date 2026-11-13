@@ -102,6 +102,11 @@ if (portalModule && portalModule.data) {
     masterPayloads.push(portalModule.data.toJSON ? portalModule.data.toJSON() : portalModule.data);
 }
 
+const birthdayModule = safeRequire(['./src/commands/utility/birthday', './commands/utility/birthday']);
+if (birthdayModule && birthdayModule.data) {
+    masterPayloads.push(birthdayModule.data.toJSON ? birthdayModule.data.toJSON() : birthdayModule.data);
+}
+
 const pulseModule = safeRequire(['./src/commands/utility/pulse', './commands/utility/pulse']);
 if (pulseModule && pulseModule.data) {
     masterPayloads.push(pulseModule.data.toJSON ? pulseModule.data.toJSON() : pulseModule.data);

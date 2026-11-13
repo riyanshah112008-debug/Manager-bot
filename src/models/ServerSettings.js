@@ -84,6 +84,15 @@ const serverSettingsSchema = new mongoose.Schema({
         defaultFilter: { type: String, default: 'clear' }
     },
 
+    // 🎂 Starry Birthday Announcements
+    birthdays: {
+        enabled: { type: Boolean, default: false },
+        channelId: { type: String, default: '' },
+        mentionRoleId: { type: String, default: '' },
+        message: { type: String, default: '🎂 Happy birthday {user}! Everyone wish them a wonderful day! 🎉' },
+        timezone: { type: String, default: 'Asia/Kolkata' }
+    },
+
     // 🎫 Starry Support Tickets
     tickets: {
         enabled: { type: Boolean, default: false },

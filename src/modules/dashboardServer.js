@@ -1025,6 +1025,18 @@ function setupDashboardRoutes(app, client) {
             if (payload.triggerWord !== undefined && (typeof payload.triggerWord !== 'string' || payload.triggerWord.trim().length < 1 || payload.triggerWord.trim().length > 32)) {
                 return res.status(400).json({ success: false, error: 'Assistant trigger word must contain 1 to 32 characters.' });
             }
+            if (payload.birthdays !== undefined) {
+                const b = payload.birthdays;
+                const allowed = new Set(['enabled', 'channelId', 'mentionRoleId', 'message', 'timezone']);
+                if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(key => !allowed.has(key))) return res.status(400).json({ success: false, error: 'Invalid birthday settings.' });
+                if (b.enabled !== undefined && typeof b.enabled !== 'boolean') return res.status(400).json({ success: false, error: 'Birthday enabled must be true or false.' });
+                for (const key of ['channelId', 'mentionRoleId']) if (b[key] !== undefined) { if (typeof b[key] !== 'string') return res.status(400).json({ success: false, error: key + ' must be a Discord ID.' }); b[key] = b[key].trim(); }
+                if (b.channelId && (!guild.channels.cache.get(b.channelId) || !guild.channels.cache.get(b.channelId).isTextBased() || typeof guild.channels.cache.get(b.channelId).send !== 'function')) return res.status(400).json({ success: false, error: 'Choose a text announcement channel from this server.' });
+                if (b.mentionRoleId && (!guild.roles.cache.has(b.mentionRoleId) || guild.roles.cache.get(b.mentionRoleId).managed || b.mentionRoleId === guild.id)) return res.status(400).json({ success: false, error: 'Choose a normal mention role from this server.' });
+                if (b.message !== undefined && (typeof b.message !== 'string' || !b.message.trim() || b.message.length > 1000)) return res.status(400).json({ success: false, error: 'Birthday message must be 1–1000 characters.' });
+                if (b.timezone !== undefined) { if (typeof b.timezone !== 'string' || b.timezone.length > 64) return res.status(400).json({ success: false, error: 'Enter a valid IANA timezone.' }); try { new Intl.DateTimeFormat('en-US', { timeZone: b.timezone }).format(); } catch (_) { return res.status(400).json({ success: false, error: 'Enter a valid IANA timezone, such as Asia/Kolkata.' }); } }
+                if (b.enabled && !b.channelId) return res.status(400).json({ success: false, error: 'Select an announcement channel before enabling birthdays.' });
+            }
             if (payload.logging !== undefined) {
                 const allowedLogKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
                 if (!payload.logging || typeof payload.logging !== 'object' || Array.isArray(payload.logging) ||
@@ -1154,6 +1166,7 @@ function setupDashboardRoutes(app, client) {
                 if (p && payload.music.is247 !== undefined) p.is247 = payload.music.is247;
             }
             if (payload.tickets) settings.tickets = { ...settings.tickets.toObject(), ...payload.tickets };
+            if (payload.birthdays) settings.birthdays = { ...(settings.birthdays?.toObject?.() || settings.birthdays || {}), ...payload.birthdays };
             if (payload.mediaPerms) settings.mediaPerms = { ...settings.mediaPerms?.toObject(), ...payload.mediaPerms };
 
             await settings.save();
