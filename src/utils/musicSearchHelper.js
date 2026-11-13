@@ -247,6 +247,20 @@ async function handleSearchButton(interaction, client) {
     const session = searchSessions.get(searchId);
 
     if (action === 'search_cancel') {
+        if (!session) {
+            return interaction.reply({
+                content: '⚠️ This search session has expired. Please run `,play` or `/play` again!',
+                flags: [EPHEMERAL_FLAG]
+            }).catch(() => {});
+        }
+
+        if (interaction.user.id !== session.userId) {
+            return interaction.reply({
+                content: '❌ Only the person who initiated this search can cancel it.',
+                flags: [EPHEMERAL_FLAG]
+            }).catch(() => {});
+        }
+
         searchSessions.delete(searchId);
         if (interaction.message && typeof interaction.message.delete === 'function') {
             return interaction.message.delete().catch(() => {});
