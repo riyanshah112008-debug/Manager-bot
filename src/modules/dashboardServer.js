@@ -53,6 +53,40 @@ const decryptOAuthSecret = (value) => {
     return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
 };
 
+function getClusterClients(primaryClient) {
+    const clients = [];
+    const seen = new Set();
+    const add = candidate => {
+        if (!candidate || seen.has(candidate)) return;
+        seen.add(candidate);
+        if (typeof candidate.isReady === 'function' && !candidate.isReady()) return;
+        clients.push(candidate);
+    };
+    add(primaryClient);
+    const instances = primaryClient?.multiBot?.instances;
+    if (instances && typeof instances.values === 'function') {
+        for (const info of instances.values()) add(info?.client);
+    }
+    return clients;
+}
+
+function getClusterGuildMatches(primaryClient, guildId) {
+    const id = String(guildId || '');
+    if (!id) return [];
+    return getClusterClients(primaryClient).flatMap(botClient => {
+        const guild = botClient.guilds?.cache?.get(id);
+        if (!guild) return [];
+        const info = Array.from(primaryClient?.multiBot?.instances?.values?.() || [])
+            .find(entry => entry?.client === botClient);
+        return [{ client: botClient, guild, botName: info?.name || botClient.user?.username || 'Starry' }];
+    });
+}
+
+function findClusterGuild(primaryClient, guildId) {
+    const matches = getClusterGuildMatches(primaryClient, guildId);
+    return matches.find(match => match.client === primaryClient) || matches[0] || null;
+}
+
 function bestPlayableMusicMatch(tracks, query) {
     const ranked = rankAndFilterCanonicalTracks(Array.isArray(tracks) ? tracks : [], query);
     const candidate = ranked[0];
@@ -155,9 +189,10 @@ function setupDashboardRoutes(app, client) {
             return res.status(400).json({ success: false, error: 'Guild ID is required.' });
         }
 
-        const guild = client.guilds.cache.get(guildId);
+        const guildMatch = findClusterGuild(client, guildId);
+        const guild = guildMatch?.guild;
         if (!guild) {
-            return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
+            return res.status(404).json({ success: false, error: 'Starry is not connected to this server on any active bot instance.' });
         }
 
         const isOwner = (config.BOT_OWNERS || []).includes(session.user?.id);
@@ -199,9 +234,10 @@ function setupDashboardRoutes(app, client) {
         }
 
         const guildId = req.params.id || req.body.guildId;
-        const guild = client.guilds.cache.get(guildId);
+        const guildMatch = findClusterGuild(client, guildId);
+        const guild = guildMatch?.guild;
         if (!guild) {
-            return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
+            return res.status(404).json({ success: false, error: 'Starry is not connected to this server on any active bot instance.' });
         }
 
         const member = await guild.members.fetch(session.user.id).catch(() => null);
@@ -211,6 +247,7 @@ function setupDashboardRoutes(app, client) {
 
         req.session = session;
         req.guild = guild;
+        req.guildClient = guildMatch.client;
         req.member = member;
         next();
     };
@@ -628,8 +665,10 @@ function setupDashboardRoutes(app, client) {
                     return false;
                 }
             }).map(g => {
-                const botGuild = client.guilds.cache.get(String(g.id));
-                const botClientId = client.user?.id || process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '';
+                const botMatches = getClusterGuildMatches(client, g.id);
+                const botMatch = botMatches.find(match => match.client === client) || botMatches[0] || null;
+                const botGuild = botMatch?.guild;
+                const botClientId = botMatch?.client?.user?.id || (botGuild ? '' : (client.user?.id || process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || ''));
                 const inviteUrl = botClientId
                     ? 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(botClientId) + '&permissions=0&scope=bot%20applications.commands&guild_id=' + encodeURIComponent(g.id) + '&disable_guild_select=true'
                     : '';
@@ -641,6 +680,9 @@ function setupDashboardRoutes(app, client) {
                     ownerId: botGuild?.ownerId || null,
                     botJoinedAt: botGuild?.joinedAt || null,
                     botInGuild: Boolean(botGuild),
+                    connectedBotCount: botMatches.length,
+                    connectedBotNames: botMatches.map(match => match.botName),
+                    activeBotName: botMatch?.botName || null,
                     inviteUrl
                 };
             }).sort((a, b) => Number(b.botInGuild) - Number(a.botInGuild) || a.name.localeCompare(b.name));
