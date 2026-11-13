@@ -1,121 +1,237 @@
 'use strict';
-const { PermissionsBitField, EmbedBuilder, MessageFlags } = require('discord.js');
+
+const {
+  PermissionsBitField, EmbedBuilder, MessageFlags, ActionRowBuilder,
+  ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
+  StringSelectMenuBuilder, ChannelType
+} = require('discord.js');
+const { randomUUID } = require('node:crypto');
 const db = require('../utils/database');
+
 const EPHEMERAL = MessageFlags.Ephemeral ?? 64;
+const sessions = new Map();
 const emojiKey = e => e.id ? `custom:${e.id}` : `unicode:${e.name}`;
 
-function parseMappings(raw, guild) {
-  const lines = String(raw || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  if (!lines.length || lines.length > 20) throw new Error('Provide between 1 and 20 emoji = @Role mappings.');
-  const used = new Set();
-  return lines.map((line, i) => {
-    const m = line.match(/^(.+?)\s*(?:=|\|)\s*(?:<@&)?(\d{17,20})(?:>)?$/);
-    if (!m) throw new Error(`Line ${i+1}: use 😀 = @Role.`);
-    const emoji = m[1].trim();
-    // Discord custom emoji mentions use <:name:id> (static) or <a:name:id> (animated).
-    const custom = emoji.match(/^<(a?):([\w~]+):(\d+)>$/);
-    const key = custom ? `custom:${custom[3]}` : `unicode:${emoji}`;
-    // Pass custom emoji to Discord.js as the canonical name:id identifier.
-    const reactionEmoji = custom ? `${custom[2]}:${custom[3]}` : emoji;
-    const role = guild.roles.cache.get(m[2]);
-    if (!emoji || emoji.length > 64 || !role || role.id === guild.id || role.managed || used.has(key))
-      throw new Error(`Line ${i+1}: invalid/duplicate emoji or role.`);
-    used.add(key);
-    return { emoji, reactionEmoji, emojiKey:key, roleId:role.id, roleName:role.name };
-  });
+function parseEmoji(input) {
+  const emoji = String(input || '').trim();
+  const custom = emoji.match(/^<(a?):([\w~]+):(\d{17,20})>$/);
+  if (custom) {
+    return {
+      display: emoji,
+      reaction: `${custom[2]}:${custom[3]}`,
+      key: `custom:${custom[3]}`,
+      animated: custom[1] === 'a'
+    };
+  }
+  if (!emoji || emoji.length > 32 || /[\s=|]/u.test(emoji)) {
+    throw new Error('Enter one valid Unicode emoji or a custom emoji mention.');
+  }
+  return { display: emoji, reaction: emoji, key: `unicode:${emoji}`, animated: false };
 }
 
-async function createPanel(i) {
-  const channel=i.options.getChannel('channel'), title=i.options.getString('title');
-  const description=i.options.getString('description'), raw=i.options.getString('roles');
-  const mode=i.options.getString('mode') || 'multiple';
-  if (!channel?.isTextBased() || !channel.send || !title || !description || !raw)
-    return i.reply({content:'For Create, provide channel, title, description and role mappings.',flags:EPHEMERAL});
-  if(title.length>256 || description.length>2500) return i.reply({content:'Title max 256 characters; description max 2,500.',flags:EPHEMERAL});
-  const me=i.guild.members.me || await i.guild.members.fetchMe();
-  const needed=[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages,PermissionsBitField.Flags.EmbedLinks,PermissionsBitField.Flags.AddReactions,PermissionsBitField.Flags.ReadMessageHistory];
-  if(!channel.permissionsFor(me)?.has(needed)) return i.reply({content:'I need View Channel, Send Messages, Embed Links, Add Reactions and Read Message History.',flags:EPHEMERAL});
-  let mappings;
-  try { mappings=parseMappings(raw,i.guild); } catch(e) { return i.reply({content:`❌ ${e.message}`,flags:EPHEMERAL}); }
-  const invalid=mappings.find(x=>{const r=i.guild.roles.cache.get(x.roleId);return !r || r.position>=me.roles.highest.position;});
-  if(invalid) return i.reply({content:`Move my highest role above <@&${invalid.roleId}> first.`,flags:EPHEMERAL});
-  const needsExternalEmojiPermission=mappings.some(x=>x.emojiKey.startsWith('custom:') && !i.guild.emojis.cache.has(x.emojiKey.slice(7)));
-  if(needsExternalEmojiPermission && !channel.permissionsFor(me)?.has(PermissionsBitField.Flags.UseExternalEmojis)) {
-    return i.reply({content:'I need **Use External Emojis** permission in this channel to react with emojis from other servers.',flags:EPHEMERAL});
+function parseRole(input, guild) {
+  const value = String(input || '').trim();
+  const id = value.match(/^(?:<@&)?(\d{17,20})>?$/)?.[1];
+  const role = id ? guild.roles.cache.get(id) : guild.roles.cache.find(r => r.name.toLowerCase() === value.toLowerCase());
+  if (!role || role.id === guild.id || role.managed) {
+    throw new Error('Role not found. Paste its @mention or ID, and make sure it is assignable.');
   }
-  const roleText=mappings.map(x=>`${x.emoji}  <@&${x.roleId}>`).join('\n');
-  const embed=new EmbedBuilder().setColor(0x5865F2).setTitle(title).setDescription(`${description}\n\n${roleText}`)
-    .setFooter({text:mode==='single'?'Choose one role • React again to switch':'React to add a role • Remove reaction to remove it'}).setTimestamp();
-  await i.deferReply({flags:EPHEMERAL});
+  return role;
+}
+
+function sessionEmbed(session) {
+  const lines = session.mappings.length
+    ? session.mappings.map((m, index) => `**${index + 1}.** ${m.emoji}  <@&${m.roleId}>`).join('\n')
+    : '*No roles added yet. Select **Add role** to begin.*';
+  return new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('Reaction Roles • Panel Builder')
+    .setDescription(`Configure your self-assignable roles below.\n\n${lines}`)
+    .addFields(
+      { name: 'Destination', value: `<#${session.channelId}>`, inline: true },
+      { name: 'Selection mode', value: session.mode === 'single' ? 'One role at a time' : 'Multiple roles', inline: true },
+      { name: 'Roles', value: `${session.mappings.length}/20`, inline: true }
+    )
+    .setFooter({ text: 'Add roles, choose a mode, then publish when ready.' });
+}
+
+function sessionComponents(session) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`rr:add:${session.id}`).setLabel('Add role').setStyle(ButtonStyle.Primary).setEmoji('➕'),
+    new ButtonBuilder().setCustomId(`rr:remove:${session.id}`).setLabel('Remove role').setStyle(ButtonStyle.Secondary).setEmoji('➖').setDisabled(!session.mappings.length),
+    new ButtonBuilder().setCustomId(`rr:mode:${session.id}`).setLabel(session.mode === 'single' ? 'Switch to multiple' : 'Switch to single').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`rr:publish:${session.id}`).setLabel('Publish panel').setStyle(ButtonStyle.Success).setEmoji('📨').setDisabled(!session.mappings.length),
+    new ButtonBuilder().setCustomId(`rr:cancel:${session.id}`).setLabel('Cancel').setStyle(ButtonStyle.Danger)
+  );
+  return [row];
+}
+
+async function openBuilder(i) {
+  const channel = i.options.getChannel('channel') || i.channel;
+  if (!channel?.isTextBased() || !channel.send) {
+    return i.reply({ content: 'Choose a text channel for the reaction-role panel.', flags: EPHEMERAL });
+  }
+  const me = i.guild.members.me || await i.guild.members.fetchMe();
+  const needed = [
+    PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages,
+    PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.AddReactions,
+    PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageRoles
+  ];
+  if (!channel.permissionsFor(me)?.has(needed)) {
+    return i.reply({ content: 'I need View Channel, Send Messages, Embed Links, Add Reactions, Read Message History and Manage Roles in that channel.', flags: EPHEMERAL });
+  }
+  const id = randomUUID().replace(/-/g, '').slice(0, 16);
+  const session = { id, ownerId: i.user.id, guildId: i.guild.id, channelId: channel.id, mode: 'multiple', mappings: [], createdAt: Date.now() };
+  sessions.set(id, session);
+  return i.reply({ embeds: [sessionEmbed(session)], components: sessionComponents(session), flags: EPHEMERAL });
+}
+
+async function publish(i, session) {
+  const channel = await i.guild.channels.fetch(session.channelId).catch(() => null);
+  if (!channel?.isTextBased() || !channel.send) {
+    return i.reply({ content: 'The destination channel is no longer available.', flags: EPHEMERAL });
+  }
+  const me = i.guild.members.me || await i.guild.members.fetchMe();
+  const missing = session.mappings.find(m => {
+    const role = i.guild.roles.cache.get(m.roleId);
+    return !role || role.managed || role.position >= me.roles.highest.position;
+  });
+  if (missing) {
+    return i.reply({ content: `Move my highest role above <@&${missing.roleId}> and try publishing again.`, flags: EPHEMERAL });
+  }
+  const needsExternal = session.mappings.some(m => m.emojiKey.startsWith('custom:') && !i.guild.emojis.cache.has(m.emojiKey.slice(7)));
+  if (needsExternal && !channel.permissionsFor(me)?.has(PermissionsBitField.Flags.UseExternalEmojis)) {
+    return i.reply({ content: 'I need **Use External Emojis** in the destination channel to use emojis from other servers.', flags: EPHEMERAL });
+  }
+  const body = session.mappings.map(m => `${m.emoji}  <@&${m.roleId}>`).join('\n');
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('Choose your roles')
+    .setDescription(`${body}\n\nReact below to ${session.mode === 'single' ? 'select one role. Choosing another replaces it.' : 'add roles. Remove your reaction to remove a role.'}`)
+    .setFooter({ text: session.mode === 'single' ? 'Single selection' : 'Multiple selections' });
+  await i.deferReply({ flags: EPHEMERAL });
   let message;
   try {
-    message=await channel.send({embeds:[embed],allowedMentions:{parse:[]}});
-    for(const x of mappings) await message.react(x.reactionEmoji || x.emoji);
-    db.setReactionRolePanel(i.guild.id,message.id,{channelId:channel.id,mode,mappings,createdBy:i.user.id});
-    return i.editReply(`✅ Panel created in <#${channel.id}>. Message ID: \`${message.id}\` • ${mappings.length} roles • ${mode} selection.`);
-  } catch(e) {
-    if(message) await message.delete().catch(()=>{});
-    console.error('[ReactionRoles] Create failed:',e);
-    return i.editReply('❌ Panel creation failed. Check channel permissions and emoji access.');
+    message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+    for (const mapping of session.mappings) await message.react(mapping.reaction);
+    db.setReactionRolePanel(i.guild.id, message.id, {
+      channelId: channel.id, mode: session.mode, mappings: session.mappings,
+      createdBy: i.user.id
+    });
+    sessions.delete(session.id);
+    return i.editReply(`✅ Reaction-role panel published in <#${channel.id}> with ${session.mappings.length} roles.`);
+  } catch (error) {
+    if (message) await message.delete().catch(() => {});
+    console.error('[ReactionRoles] Publish failed:', error);
+    return i.editReply('❌ I could not publish the panel. Check my channel permissions and emoji access.');
   }
 }
 
-async function handleReaction(reaction,user,adding) {
-  if(user.bot) return;
-  if(reaction.partial) reaction=await reaction.fetch().catch(()=>null);
-  if(!reaction?.message?.guild) return;
-  if(reaction.message.partial) await reaction.message.fetch().catch(()=>null);
-  const guild=reaction.message.guild;
-  const panel=db.getReactionRolePanels(guild.id)[reaction.message.id];
-  if(!panel) return;
-  const mapping=panel.mappings.find(x=>x.emojiKey===emojiKey(reaction.emoji));
-  if(!mapping) return;
-  const member=await guild.members.fetch(user.id).catch(()=>null);
-  if(!member || member.user.bot) return;
-  const me=guild.members.me || await guild.members.fetchMe().catch(()=>null);
-  const role=guild.roles.cache.get(mapping.roleId);
-  if(!role || role.managed || !me || role.position>=me.roles.highest.position) return;
+async function handleReaction(reaction, user, adding) {
+  if (user.bot) return;
+  if (reaction.partial) reaction = await reaction.fetch().catch(() => null);
+  if (!reaction?.message?.guild) return;
+  if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
+  const guild = reaction.message.guild;
+  const panel = db.getReactionRolePanels(guild.id)[reaction.message.id];
+  if (!panel) return;
+  const mapping = panel.mappings.find(x => x.emojiKey === emojiKey(reaction.emoji));
+  if (!mapping) return;
+  const member = await guild.members.fetch(user.id).catch(() => null);
+  if (!member || member.user.bot) return;
+  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  const role = guild.roles.cache.get(mapping.roleId);
+  if (!role || role.managed || !me || role.position >= me.roles.highest.position) return;
   try {
-    if(adding) {
-      if(panel.mode==='single') {
-        const remove=panel.mappings.filter(x=>x.roleId!==role.id).map(x=>x.roleId).filter(id=>member.roles.cache.has(id));
-        if(remove.length) await member.roles.remove(remove,'Single-select reaction role');
+    if (adding) {
+      if (panel.mode === 'single') {
+        const remove = panel.mappings.filter(x => x.roleId !== role.id).map(x => x.roleId).filter(id => member.roles.cache.has(id));
+        if (remove.length) await member.roles.remove(remove, 'Single-select reaction role');
       }
-      if(!member.roles.cache.has(role.id)) await member.roles.add(role,'Reaction role selection');
-    } else if(member.roles.cache.has(role.id)) await member.roles.remove(role,'Reaction role deselection');
-  } catch(e) { console.warn('[ReactionRoles] Role update failed:',e.message); }
+      if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Reaction role selection');
+    } else if (member.roles.cache.has(role.id)) {
+      await member.roles.remove(role, 'Reaction role deselection');
+    }
+  } catch (error) {
+    console.warn('[ReactionRoles] Role update failed:', error.message);
+  }
 }
 
 module.exports = client => {
-  client.on('interactionCreate',async i=>{
-    if(!i.isChatInputCommand() || i.commandName!=='reactionroles') return;
-    if(!i.guild) return i.reply({content:'Use this command inside a server.',flags:EPHEMERAL}).catch(()=>{});
-    const allowed=i.memberPermissions?.has(PermissionsBitField.Flags.ManageRoles) || i.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
-    if(!allowed) return i.reply({content:'You need Manage Roles permission.',flags:EPHEMERAL}).catch(()=>{});
-    try {
-      const action=i.options.getString('action');
-      if(action==='create') return await createPanel(i);
-      if(action==='list') {
-        const panels=Object.values(db.getReactionRolePanels(i.guild.id));
-        if(!panels.length) return i.reply({content:'No reaction-role panels configured.',flags:EPHEMERAL});
-        const lines=panels.slice(0,20).map((p,n)=>`**${n+1}.** <#${p.channelId}> • \`${p.messageId}\` • ${p.mappings.length} roles • ${p.mode}`);
-        return i.reply({embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Reaction-role panels').setDescription(lines.join('\n'))],flags:EPHEMERAL});
+  client.on('interactionCreate', async i => {
+    if (!i.guild) return;
+    if (i.isChatInputCommand() && i.commandName === 'reactionroles') {
+      const allowed = i.memberPermissions?.has(PermissionsBitField.Flags.ManageRoles)
+        || i.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
+      if (!allowed) return i.reply({ content: 'You need Manage Roles permission.', flags: EPHEMERAL }).catch(() => {});
+      return openBuilder(i).catch(error => {
+        console.error('[ReactionRoles] Builder failed:', error);
+        const payload = { content: 'Could not open the reaction-role builder. Check permissions and try again.', flags: EPHEMERAL };
+        return (i.deferred || i.replied) ? i.followUp(payload).catch(() => {}) : i.reply(payload).catch(() => {});
+      });
+    }
+
+    const customId = i.customId || '';
+    const match = customId.match(/^rr:(add|remove|mode|publish|cancel|save):([a-f0-9]+)$/);
+    if (!match) return;
+    const [, action, id] = match;
+    const session = sessions.get(id);
+    if (!session || session.guildId !== i.guild.id || session.ownerId !== i.user.id) {
+      return i.reply({ content: 'This builder has expired or belongs to another moderator. Run /reactionroles again.', flags: EPHEMERAL }).catch(() => {});
+    }
+    if (Date.now() - session.createdAt > 15 * 60 * 1000) {
+      sessions.delete(id);
+      return i.reply({ content: 'This builder expired. Run /reactionroles again.', flags: EPHEMERAL }).catch(() => {});
+    }
+
+    if (i.isButton()) {
+      if (action === 'add') {
+        const modal = new ModalBuilder().setCustomId(`rr:save:${id}`).setTitle('Add a reaction role');
+        const emojiInput = new TextInputBuilder().setCustomId('emoji').setLabel('Emoji (Unicode or custom emoji)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder('🎮 or <:name:id> or <a:name:id>');
+        const roleInput = new TextInputBuilder().setCustomId('role').setLabel('Role mention or role ID').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder('@Gamer or role ID');
+        modal.addComponents(new ActionRowBuilder().addComponents(emojiInput), new ActionRowBuilder().addComponents(roleInput));
+        return i.showModal(modal);
       }
-      if(action==='delete') {
-        const id=i.options.getString('message_id'), panel=id && db.getReactionRolePanels(i.guild.id)[id];
-        if(!panel) return i.reply({content:'Provide a valid configured panel message ID.',flags:EPHEMERAL});
-        db.deleteReactionRolePanel(i.guild.id,id);
-        const ch=i.guild.channels.cache.get(panel.channelId);
-        const msg=ch?.isTextBased()?await ch.messages.fetch(id).catch(()=>null):null;
-        if(msg) await msg.delete().catch(()=>{});
-        return i.reply({content:'✅ Reaction-role panel removed.',flags:EPHEMERAL});
+      if (action === 'remove') {
+        const menu = new StringSelectMenuBuilder().setCustomId(`rr:remove:${id}`).setPlaceholder('Select a role mapping to remove').setMinValues(1).setMaxValues(Math.min(session.mappings.length, 20))
+          .addOptions(session.mappings.map((m, index) => ({ label: m.roleName.slice(0, 80), description: `Remove ${m.emoji}`, value: String(index), emoji: m.emoji.startsWith('<') ? undefined : m.emoji })));
+        return i.reply({ content: 'Choose the mappings to remove:', components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
       }
-    } catch(e) {
-      console.error('[ReactionRoles] Command failed:',e);
-      const payload={content:'Reaction-role action failed. Check permissions and try again.',flags:EPHEMERAL};
-      return (i.deferred||i.replied)?i.followUp(payload).catch(()=>{}):i.reply(payload).catch(()=>{});
+      if (action === 'mode') {
+        session.mode = session.mode === 'single' ? 'multiple' : 'single';
+        return i.update({ embeds: [sessionEmbed(session)], components: sessionComponents(session) });
+      }
+      if (action === 'publish') return publish(i, session);
+      if (action === 'cancel') {
+        sessions.delete(id);
+        return i.update({ content: 'Reaction-role setup cancelled.', embeds: [], components: [] });
+      }
+    }
+
+    if (i.isModalSubmit() && action === 'save') {
+      let parsed, role;
+      try {
+        parsed = parseEmoji(i.fields.getTextInputValue('emoji'));
+        role = parseRole(i.fields.getTextInputValue('role'), i.guild);
+        if (session.mappings.length >= 20) throw new Error('A panel can contain up to 20 role mappings.');
+        if (session.mappings.some(m => m.emojiKey === parsed.key)) throw new Error('That emoji is already used in this panel.');
+        if (session.mappings.some(m => m.roleId === role.id)) throw new Error('That role is already used in this panel.');
+        const me = i.guild.members.me || await i.guild.members.fetchMe();
+        if (role.position >= me.roles.highest.position) throw new Error(`Move my highest role above <@&${role.id}> first.`);
+        session.mappings.push({ emoji: parsed.display, reaction: parsed.reaction, emojiKey: parsed.key, roleId: role.id, roleName: role.name, animated: parsed.animated });
+        return i.reply({ content: `Added ${parsed.display} → <@&${role.id}>. Return to your builder message to continue.`, flags: EPHEMERAL });
+      } catch (error) {
+        return i.reply({ content: `❌ ${error.message}`, flags: EPHEMERAL });
+      }
+    }
+
+    if (i.isStringSelectMenu() && action === 'remove') {
+      const indexes = i.values.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < session.mappings.length);
+      session.mappings = session.mappings.filter((_, index) => !indexes.includes(index));
+      return i.update({ content: `Removed ${indexes.length} mapping(s). Use the builder buttons to continue.`, components: [] });
     }
   });
-  client.on('messageReactionAdd',(r,u)=>handleReaction(r,u,true));
-  client.on('messageReactionRemove',(r,u)=>handleReaction(r,u,false));
+
+  client.on('messageReactionAdd', (reaction, user) => handleReaction(reaction, user, true));
+  client.on('messageReactionRemove', (reaction, user) => handleReaction(reaction, user, false));
 };
