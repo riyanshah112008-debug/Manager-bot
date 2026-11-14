@@ -1,3 +1,4 @@
+process.env.STARRY_DISABLE_STREAM_RESOLVER = '1';
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
