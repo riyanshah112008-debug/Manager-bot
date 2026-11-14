@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Birthday = require('../../models/Birthday');
 
 function parseDate(value) {
@@ -29,27 +29,34 @@ module.exports = {
     aliases: ['bday'],
     category: 'Social',
     description: 'Privately save or remove your birthday. Starry celebrates without revealing the date.',
-    usage: ',birthday set YYYY-MM-DD | ,birthday remove',
+    usage: '/birthday set (opens a private form) | /birthday remove',
+    autoDefer: false,
+    ephemeral: true,
     data: new SlashCommandBuilder()
         .setName('birthday')
         .setDescription('Privately manage your birthday')
         .setContexts([0]).setIntegrationTypes([0])
-        .addSubcommand(sub => sub.setName('set').setDescription('Privately save your birthday (year is discarded)')
-            .addStringOption(option => option.setName('date').setDescription('Birthday in YYYY-MM-DD format').setRequired(true)))
+        .addSubcommand(sub => sub.setName('set').setDescription('Open a private form to save your birthday (year is discarded)'))
         .addSubcommand(sub => sub.setName('remove').setDescription('Privately remove your saved birthday')),
     async execute(ctx) {
         if (!ctx.guild) return privateReply(ctx, 'Birthday settings are only available inside a server.');
         const sub = ctx.isSlash ? ctx.interaction.options.getSubcommand() : (ctx.args[0] || '').toLowerCase();
         if (sub === 'set' || sub === 'add') {
-            const rawDate = ctx.isSlash ? ctx.interaction.options.getString('date') : ctx.args[1];
-            const parsed = parseDate(rawDate);
-            if (!parsed) return privateReply(ctx, 'Please use a real date in YYYY-MM-DD format. Your date is handled privately and the year is discarded.');
-            await Birthday.findOneAndUpdate(
-                { guildId: ctx.guild.id, userId: ctx.user.id },
-                { $set: { ...parsed, lastAnnouncedDate: '', birthdayRoleGrantedDate: '', birthdayRoleId: '' } },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
-            );
-            return privateReply(ctx, '🎂 Your birthday is saved privately! Starry will celebrate you on your special day. Your birth year is not stored, and your date will never appear in a public birthday list.');
+            if (!ctx.isSlash) return privateReply(ctx, 'For privacy, use /birthday set. It opens a private form so your date is never posted in the channel.');
+            const modal = new ModalBuilder()
+                .setCustomId('starry_birthday_set')
+                .setTitle('Your private birthday')
+                .addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('birthday_date')
+                        .setLabel('Birthday (YYYY-MM-DD)')
+                        .setPlaceholder('2008-09-24')
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(10)
+                        .setMaxLength(10)
+                        .setRequired(true)
+                ));
+            return ctx.interaction.showModal(modal);
         }
         if (sub === 'remove' || sub === 'delete') {
             const result = await Birthday.deleteOne({ guildId: ctx.guild.id, userId: ctx.user.id });
