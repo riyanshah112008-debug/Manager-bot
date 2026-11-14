@@ -1,15 +1,6 @@
 const { SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Birthday = require('../../models/Birthday');
 
-function parseDate(value) {
-    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return null;
-    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
-    const date = new Date(Date.UTC(year, month - 1, day));
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
-    return { month, day };
-}
-
 async function privateReply(ctx, content) {
     if (ctx.isSlash && ctx.interaction) {
         const interaction = ctx.interaction;
