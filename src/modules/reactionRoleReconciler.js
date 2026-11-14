@@ -82,6 +82,7 @@ function createReconciler(client, db, serializeByKey, withDiscordRetry) {
     // Fetch each configured reaction's complete voter list. A missing reaction
     // means nobody currently has that selection; failed fetches are skipped.
     const votersByRole = new Map();
+    let voterFetchIncomplete = false;
     for (const mapping of usableMappings) {
       const reaction = message.reactions.cache.find(item => emojiKey(item.emoji) === mapping.emojiKey);
       if (!reaction) {
@@ -93,8 +94,16 @@ function createReconciler(client, db, serializeByKey, withDiscordRetry) {
         votersByRole.set(mapping.roleId, new Set(voters.keys()));
       } catch (error) {
         totals.fetchFailures += 1;
+        voterFetchIncomplete = true;
         console.warn(`[ReactionRoles] Reconcile: could not read voters for ${mapping.emoji} on ${messageId}: ${error.message}`);
       }
+    }
+
+    // In single-select mode, an unreadable reaction makes the user's intended
+    // choice ambiguous. Skip the panel rather than assigning the wrong role.
+    if (panel.mode === 'single' && voterFetchIncomplete) {
+      console.warn(`[ReactionRoles] Reconcile: skipped single-select panel ${messageId} because at least one voter list could not be read.`);
+      return;
     }
 
     const userIds = new Set();
