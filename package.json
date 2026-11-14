@@ -7,7 +7,7 @@
     "prestart": "npm run deploy",
     "start": "node src/index.js",
     "deploy": "node deploy-commands.js",
-    "test": "node tests/birthdayRoleCleanup.test.js && node tests/dashboardOrigins.test.js && node tests/verification.test.js && node tests/musicPlayerResolver.test.js && node tests/musicPlaybackLifecycle.test.js && node tests/aiVision.test.js && node tests/botAvatar.test.js && node tests/botStudio.test.js && node tests/colorBlend.test.js && node tests/mediaPerms.test.js && node tests/ownerPrefixPolicy.test.js && node tests/tickets.test.js && node tests/commandExecutionContract.test.js && node --check public/phone-database.js && node tests/phoneSync.test.js && node --check src/modules/phoneSync.js"
+    "test": "node tests/discordSnowflake.test.js && node tests/birthdayRoleCleanup.test.js && node tests/dashboardOrigins.test.js && node tests/verification.test.js && node tests/musicPlayerResolver.test.js && node tests/musicPlaybackLifecycle.test.js && node tests/aiVision.test.js && node tests/botAvatar.test.js && node tests/botStudio.test.js && node tests/colorBlend.test.js && node tests/mediaPerms.test.js && node tests/ownerPrefixPolicy.test.js && node tests/tickets.test.js && node tests/commandExecutionContract.test.js && node --check public/phone-database.js && node tests/phoneSync.test.js && node --check src/modules/phoneSync.js"
   },
   "engines": {
     "node": ">=22.12.0"
