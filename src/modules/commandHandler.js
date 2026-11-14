@@ -608,6 +608,30 @@ NaN
 
             // 2. Handle Modal Submissions
             if (interaction.isModalSubmit()) {
+                if (interaction.customId === 'starry_birthday_set') {
+                    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
+                    try {
+                        const raw = interaction.fields.getTextInputValue('birthday_date').trim();
+                        const match = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+                        const year = match ? Number(match[1]) : 0;
+                        const month = match ? Number(match[2]) : 0;
+                        const day = match ? Number(match[3]) : 0;
+                        const parsedDate = match ? new Date(Date.UTC(year, month - 1, day)) : null;
+                        if (!parsedDate || parsedDate.getUTCFullYear() !== year || parsedDate.getUTCMonth() + 1 !== month || parsedDate.getUTCDate() !== day) {
+                            return interaction.editReply({ content: 'Please enter a real date in YYYY-MM-DD format. Your date has not been saved.' });
+                        }
+                        const Birthday = require('../models/Birthday');
+                        await Birthday.findOneAndUpdate(
+                            { guildId: interaction.guildId, userId: interaction.user.id },
+                            { $set: { month, day, lastAnnouncedDate: '', birthdayRoleGrantedDate: '', birthdayRoleId: '' } },
+                            { upsert: true, new: true, setDefaultsOnInsert: true }
+                        );
+                        return interaction.editReply({ content: '🎂 Your birthday is saved privately! Starry will celebrate you on your special day. Your birth year is not stored, and your date will never appear in a public birthday list.' });
+                    } catch (error) {
+                        console.error('[Birthday] Private birthday modal failed:', error);
+                        return interaction.editReply({ content: 'I could not save your birthday right now. Please try again later.' }).catch(() => {});
+                    }
+                }
                 if (interaction.customId.startsWith('modal_botstudio_gh_')) {
                     const sessionId = interaction.customId.replace('modal_botstudio_gh_', '');
                     const botStudio = require('./botStudio');
