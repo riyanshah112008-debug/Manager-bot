@@ -31,8 +31,9 @@ const LevelUserSchema = new mongoose.Schema({
 LevelUserSchema.index({ userId: 1, guildId: 1 }, { unique: true });
 const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', LevelUserSchema);
 
-const DEFAULT_LEVEL_UP_MESSAGE = '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!';
+const DEFAULT_LEVEL_UP_MESSAGE = '🎉 Congratulations, <@{user}>! You reached **Level {level}**.';
 const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
+const OLDER_DEFAULT_LEVEL_UP_MESSAGE = '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!';
 
 const LevelSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
@@ -100,8 +101,11 @@ function hasCustomLevelUpCard(settings = {}) {
 
 function replaceLvlPlaceholders(text, user, level, xp, guild) {
     if (!text || typeof text !== 'string' || text === 'undefined') return '';
+    // Keep legacy mention templates valid; bare {user} is a readable username.
     return text
-        .replace(/\{user\}/g, `<@${user.id}>`)
+        .replace(/<@\{user\}>/g, `<@${user.id}>`)
+        .replace(/\{mention\}/g, `<@${user.id}>`)
+        .replace(/\{user\}/g, user.username || 'User')
         .replace(/\{username\}/g, user.username || 'User')
         .replace(/\{tag\}/g, user.tag || user.username || 'User')
         .replace(/\{server\}/g, guild?.name || 'Server')
@@ -273,7 +277,7 @@ async function getLevelControlPanel(guildId, client) {
         )
         .addFields({
             name: 'Supported Variables',
-            value: '`{user}` • `{username}` • `{tag}` • `{server}` • `{level}` • `{xp}` • `{count}`',
+            value: '`{user}` • `{mention}` • `{username}` • `{tag}` • `{server}` • `{level}` • `{xp}` • `{count}`',
             inline: false
         })
         .setFooter({ text: 'Use the buttons below or type ,leveling toggle to change configuration.' });
@@ -693,7 +697,7 @@ const levelingModule = (client) => {
             }
 
             const configuredPing = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
-            const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
+            const pingTemplate = [LEGACY_DEFAULT_LEVEL_UP_MESSAGE, OLDER_DEFAULT_LEVEL_UP_MESSAGE].includes(configuredPing) ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
             const pingMsg = replaceLvlPlaceholders(pingTemplate, message.author, newLevel, userDoc.xp, message.guild);
 
             // Level-up announcements stay compact and plain-text: no generated embed or extra XP fields.
@@ -751,7 +755,7 @@ const levelingModule = (client) => {
                     .setCustomId('in_lvl_title')
                     .setLabel('Level-Up Embed Title')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.title || '✨ Congratulations {user}!')
+                    .setValue(settings.title || 'Congratulations {user}!')
                     .setRequired(true);
 
                 const descInput = new TextInputBuilder()
@@ -829,7 +833,7 @@ const levelingModule = (client) => {
                     .setCustomId('in_lvl_ping')
                     .setLabel('Content Above Embed')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.pingContent || '✨ <@{user}> just hit **Level {level}**!')
+                    .setValue(settings.pingContent || DEFAULT_LEVEL_UP_MESSAGE)
                     .setRequired(true);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(pingInput));
@@ -841,7 +845,7 @@ const levelingModule = (client) => {
                 try {
                     const latest = await LevelSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
-                    const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
+                    const pingText = replaceLvlPlaceholders(latest.pingContent || DEFAULT_LEVEL_UP_MESSAGE, interaction.user, 5, 2500, interaction.guild);
 
                     return await interaction.reply({ 
                         content: `${pingText} *(Setup Preview)*`, 
@@ -859,7 +863,7 @@ const levelingModule = (client) => {
             // RESET DEFAULTS HANDLER
             if (interaction.customId === 'lvl_btn_reset') {
                 const defaults = {
-                    title: '✨ Congratulations {user}!',
+                    title: 'Congratulations {user}!',
                     description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                     color: '#FFD700',
                     image: '',
