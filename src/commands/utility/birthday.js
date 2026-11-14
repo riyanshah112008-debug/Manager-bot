@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Birthday = require('../../models/Birthday');
+const { buildBirthdayFilter } = require('../../utils/discordSnowflake');
 
 async function privateReply(ctx, content) {
     if (ctx.isSlash && ctx.interaction) {
@@ -50,7 +51,7 @@ module.exports = {
             return ctx.interaction.showModal(modal);
         }
         if (sub === 'remove' || sub === 'delete') {
-            const birthdayFilter = { guildId: ctx.guild.id, userId: ctx.user.id };
+            const birthdayFilter = buildBirthdayFilter(ctx.guild.id, ctx.user.id);
             const existingBirthday = await Birthday.findOne(birthdayFilter).lean();
             if (!existingBirthday) return privateReply(ctx, 'You do not have a saved birthday in this server.');
             if (existingBirthday.birthdayRoleId) {
