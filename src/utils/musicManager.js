@@ -371,7 +371,7 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
-            { label: '⭐ Balanced Studio EQ', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
+            { label: '⭐ Studio master', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
             { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
             { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },

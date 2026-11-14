@@ -90,7 +90,7 @@ function getFilterArgs(filterName, volumePercent = 100) {
     const adjustedFilterStr = filterStr.replace(/volume=([0-9.]+)/, (match, baseVol) => {
         const adjustedVol = (parseFloat(baseVol) * volScale).toFixed(2);
         return `volume=${adjustedVol}`;
-    });
+    }) + ',aresample=48000:resampler=swr:filter_size=32:phase_shift=10';
     return ['-af', adjustedFilterStr];
 }
 
@@ -608,7 +608,6 @@ class StarryGuildPlayer {
                         ...inputArgs,
                         ...activeFilter,
                         '-c:a', 'libopus',
-                        '-af', 'aresample=48000:resampler=swr:filter_size=32:phase_shift=10',
                         '-ar', '48000',
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
@@ -636,7 +635,6 @@ class StarryGuildPlayer {
                         '-i', 'pipe:0',
                         ...activeFilter,
                         '-c:a', 'libopus',
-                        '-af', 'aresample=48000:resampler=swr:filter_size=32:phase_shift=10',
                         '-ar', '48000',
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
@@ -1066,7 +1064,6 @@ class StarryGuildPlayer {
                         '-i', file,
                         ...activeFilter,
                         '-c:a', 'libopus',
-                        '-af', 'aresample=48000:resampler=swr:filter_size=32:phase_shift=10',
                         '-ar', '48000',
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,

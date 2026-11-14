@@ -1352,7 +1352,8 @@ function setupDashboardRoutes(app, client) {
                 const volume = Number(value);
                 if (!Number.isInteger(volume) || volume < 1 || volume > 150) return res.status(400).json({ success: false, error: 'Volume must be a whole number from 1 to 150.' });
                 if (typeof player.setVolume !== 'function') return res.status(400).json({ success: false, error: 'Volume control is not supported by this player.' });
-                player.setVolume(volume);
+                // Lavalink's global volume is linear; keep it at unity to avoid clipping at 150%.
+                player.setVolume(player.shoukaku ? Math.min(volume, 100) : volume);
             } else if (action === 'filter') {
                 const hasPremium = await isServerOrUserPremium(guild.id, req.session?.user?.id, client);
                 if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro Cluster or Lifetime premium.' });
