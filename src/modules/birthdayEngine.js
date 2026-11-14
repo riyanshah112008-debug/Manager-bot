@@ -17,13 +17,9 @@ async function ensureBirthdayRole(guild, settings) {
     if (settings.autoRoleEnabled === false) return null;
     let role = settings.roleId ? guild.roles.cache.get(settings.roleId) : null;
     if (role) return role;
+    // Never adopt an unrelated role by name: it may carry privileged permissions.
+    // Only reuse the role ID Starry previously created and stored for this guild.
     const name = String(settings.roleName || '🎂 Birthday Star').trim().slice(0, 100) || '🎂 Birthday Star';
-    role = guild.roles.cache.find(candidate => candidate.name === name && !candidate.managed) || null;
-    if (role) {
-        await ServerSettings.updateOne({ guildId: guild.id }, { $set: { 'birthdays.roleId': role.id } });
-        settings.roleId = role.id;
-        return role;
-    }
     const me = guild.members.me;
     if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Starry needs Manage Roles permission to create the birthday role.');
     role = await guild.roles.create({
