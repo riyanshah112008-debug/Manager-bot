@@ -111,8 +111,7 @@ const serverSettingsSchema = new mongoose.Schema({
         isPremium: { type: Boolean, default: false },
         tier: { type: String, default: 'none' }, // 'none' | 'shield_plus' | 'pro_cluster' | 'lifetime'
         expiresAt: { type: Date, default: null },
-        activatedBy: { type: String, default: null },
-        customBotToken: { type: String, default: null }
+        activatedBy: { type: String, default: null }
     },
 
     // 🎨 Embed Visuality & Theme Settings
