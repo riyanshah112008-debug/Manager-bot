@@ -10,11 +10,11 @@ function dateInZone(timeZone, date = new Date()) {
         timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit'
     }).formatToParts(date);
     const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-    return { year: values.year, month: Number(values.month), day: Number(values.day), key: values.year + '-' + values.month + '-' + values.day };
+    return { year: values.year, month: Number(values.month), day: Number(values.day), key: values.year + '-' + String(values.month).padStart(2, '0') + '-' + String(values.day).padStart(2, '0') };
 }
 
 async function ensureBirthdayRole(guild, settings) {
-    if (!settings.autoRoleEnabled) return null;
+    if (settings.autoRoleEnabled === false) return null;
     let role = settings.roleId ? guild.roles.cache.get(settings.roleId) : null;
     if (role) return role;
     const name = String(settings.roleName || '🎂 Birthday Star').trim().slice(0, 100) || '🎂 Birthday Star';
@@ -58,7 +58,7 @@ async function announceBirthdays(client) {
     if (running || !client?.isReady?.()) return;
     running = true;
     try {
-        const configs = await ServerSettings.find({ 'birthdays.enabled': true, 'birthdays.channelId': { $ne: '' } }).select('guildId birthdays').lean();
+        const configs = await ServerSettings.find({ $or: [{ 'birthdays.enabled': true }, { 'birthdays.roleId': { $ne: '' } }] }).select('guildId birthdays').lean();
         for (const config of configs) {
             const settings = config.birthdays || {};
             const guild = client.guilds.cache.get(config.guildId);
@@ -66,6 +66,7 @@ async function announceBirthdays(client) {
             let today;
             try { today = dateInZone(settings.timezone || 'Asia/Kolkata'); } catch (_) { continue; }
             await removeExpiredBirthdayRoles(guild, today.key);
+            if (!settings.enabled || !settings.channelId) continue;
             const channel = guild.channels.cache.get(settings.channelId);
             if (!channel?.isTextBased?.() || typeof channel.send !== 'function') continue;
             const entries = await Birthday.find({
