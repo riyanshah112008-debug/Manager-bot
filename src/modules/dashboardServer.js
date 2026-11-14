@@ -1334,7 +1334,7 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
 
             const { action, value } = req.body || {};
-            const player = client.multiBot?.getPlayerForGuild(guild.id) || StarryAudioEngine.getPlayer(guild.id) || (client.manager ? client.manager.getPlayer(guild.id) : null);
+            const player = getActiveMusicPlayer(guild.id, client);
             if (!player) return res.status(400).json({ success: false, error: 'No active voice/music session in this server.' });
 
             if (action === 'pause') {
@@ -1358,8 +1358,16 @@ function setupDashboardRoutes(app, client) {
                 if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro Cluster or Lifetime premium.' });
                 const allowed = new Set(['clear', 'flat', 'empowering', 'bass', 'bassboost', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop']);
                 if (typeof value !== 'string' || !allowed.has(value)) return res.status(400).json({ success: false, error: 'Choose a supported audio profile.' });
-                if (typeof player.setFilter !== 'function') return res.status(400).json({ success: false, error: 'Audio profiles are not supported by this player.' });
-                await player.setFilter(value);
+                if (player.shoukaku) {
+                    const { applyKazagumoFilter } = require('../utils/musicManager');
+                    const applied = await applyKazagumoFilter(player, value);
+                    if (!applied) return res.status(502).json({ success: false, error: 'The Lavalink node could not apply this audio profile. Please retry or choose Clear.' });
+                    player.filter = value;
+                } else if (typeof player.setFilter === 'function') {
+                    await player.setFilter(value);
+                } else {
+                    return res.status(400).json({ success: false, error: 'Audio profiles are not supported by this player.' });
+                }
             } else if (action === 'loop') {
                 if (!['none', 'track', 'queue'].includes(value)) return res.status(400).json({ success: false, error: 'Choose Off, Track or Queue repeat mode.' });
                 if (typeof player.setLoop === 'function') player.setLoop(value);
@@ -1377,7 +1385,7 @@ function setupDashboardRoutes(app, client) {
                 return res.status(400).json({ success: false, error: 'Unknown music control action.' });
             }
 
-            return res.json({ success: true, message: 'Music control updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none', autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')), volume: Number(player.volume ?? 100) } });
+            return res.json({ success: true, message: 'Music control updated.', player: { paused: Boolean(player.paused), is247: Boolean(player.is247), loop: player.loop || 'none', autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')), volume: Number(player.volume ?? 100), filter: player.filter || player.data?.get?.('activeFilter') || 'clear' } });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
