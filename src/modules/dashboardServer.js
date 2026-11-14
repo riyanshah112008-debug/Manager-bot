@@ -1116,9 +1116,14 @@ function setupDashboardRoutes(app, client) {
             }
             if (payload.birthdays !== undefined) {
                 const b = payload.birthdays;
-                const allowed = new Set(['enabled', 'channelId', 'mentionRoleId', 'message', 'timezone']);
+                const allowed = new Set(['enabled', 'channelId', 'mentionRoleId', 'autoRoleEnabled', 'roleName', 'roleColor', 'message', 'timezone']);
                 if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(key => !allowed.has(key))) return res.status(400).json({ success: false, error: 'Invalid birthday settings.' });
                 if (b.enabled !== undefined && typeof b.enabled !== 'boolean') return res.status(400).json({ success: false, error: 'Birthday enabled must be true or false.' });
+                if (b.autoRoleEnabled !== undefined && typeof b.autoRoleEnabled !== 'boolean') return res.status(400).json({ success: false, error: 'Automatic birthday role must be true or false.' });
+                if (b.roleName !== undefined && (typeof b.roleName !== 'string' || !b.roleName.trim() || b.roleName.trim().length > 100)) return res.status(400).json({ success: false, error: 'Birthday role name must be 1–100 characters.' });
+                if (b.roleColor !== undefined && (typeof b.roleColor !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(b.roleColor.trim()))) return res.status(400).json({ success: false, error: 'Birthday role color must be a valid hex color.' });
+                if (b.roleName !== undefined) b.roleName = b.roleName.trim();
+                if (b.roleColor !== undefined) b.roleColor = b.roleColor.trim();
                 for (const key of ['channelId', 'mentionRoleId']) if (b[key] !== undefined) { if (typeof b[key] !== 'string') return res.status(400).json({ success: false, error: key + ' must be a Discord ID.' }); b[key] = b[key].trim(); }
                 if (b.channelId && (!guild.channels.cache.get(b.channelId) || !guild.channels.cache.get(b.channelId).isTextBased() || typeof guild.channels.cache.get(b.channelId).send !== 'function')) return res.status(400).json({ success: false, error: 'Choose a text announcement channel from this server.' });
                 if (b.mentionRoleId && (!guild.roles.cache.has(b.mentionRoleId) || guild.roles.cache.get(b.mentionRoleId).managed || b.mentionRoleId === guild.id)) return res.status(400).json({ success: false, error: 'Choose a normal mention role from this server.' });

@@ -5,7 +5,9 @@ const birthdaySchema = new mongoose.Schema({
     userId: { type: String, required: true },
     month: { type: Number, required: true, min: 1, max: 12 },
     day: { type: Number, required: true, min: 1, max: 31 },
-    lastAnnouncedDate: { type: String, default: '' }
+    lastAnnouncedDate: { type: String, default: '' },
+    birthdayRoleGrantedDate: { type: String, default: '' },
+    birthdayRoleId: { type: String, default: '' }
 }, { timestamps: true });
 
 birthdaySchema.index({ guildId: 1, userId: 1 }, { unique: true });
