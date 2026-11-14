@@ -22,6 +22,7 @@ const { CommandContext, ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../utils/contex
 const { usesNativeInteraction } = require('../utils/commandExecutionContract');
 const { buildCategoryEmbed, createHelpComponents } = require('../utils/helpHelper');
 const User = require('../models/User');
+const { buildBirthdayFilter } = require('../utils/discordSnowflake');
 
 // Guild Prefix In-Memory Cache
 const guildPrefixCache = new Map();
@@ -612,7 +613,7 @@ NaN
                     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
                     try {
                         const raw = interaction.fields.getTextInputValue('birthday_date').trim();
-                        const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        const match = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
                         const year = match ? Number(match[1]) : 0;
                         const month = match ? Number(match[2]) : 0;
                         const day = match ? Number(match[3]) : 0;
@@ -620,10 +621,37 @@ NaN
                         if (!parsedDate || parsedDate.getUTCFullYear() !== year || parsedDate.getUTCMonth() + 1 !== month || parsedDate.getUTCDate() !== day) {
                             return interaction.editReply({ content: 'Please enter a real date in YYYY-MM-DD format. Your date has not been saved.' });
                         }
+                        if (!interaction.guildId) {
+                            return interaction.editReply({ content: 'Birthday settings are only available inside a server.' });
+                        }
                         const Birthday = require('../models/Birthday');
+                        const birthdayFilter = buildBirthdayFilter(interaction.guildId, interaction.user.id);
+                        const existingBirthday = await Birthday.findOne(birthdayFilter).lean();
+                        const sameBirthday = Boolean(existingBirthday && existingBirthday.month === month && existingBirthday.day === day);
+
+                        // Keep an active birthday role when the member simply resaves the same date.
+                        // Only a changed date should remove the currently assigned temporary role.
+                        if (!sameBirthday && existingBirthday?.birthdayRoleId) {
+                            const guild = interaction.guild || client.guilds.cache.get(interaction.guildId);
+                            if (!guild) throw new Error('The server is not available to safely remove the existing birthday role.');
+                            const { removeBirthdayRoleAssignment } = require('./birthdayEngine');
+                            await removeBirthdayRoleAssignment(guild, existingBirthday, 'Member updated their birthday');
+                        }
+
+                        const trackingReset = sameBirthday ? {} : {
+                            birthdayRoleGrantedDate: '',
+                            birthdayRoleId: ''
+                        };
                         await Birthday.findOneAndUpdate(
-                            { guildId: interaction.guildId, userId: interaction.user.id },
-                            { $set: { month, day, lastAnnouncedDate: '', birthdayRoleGrantedDate: '', birthdayRoleId: '' } },
+                            birthdayFilter,
+                            {
+                                $set: {
+                                    month,
+                                    day,
+                                    lastAnnouncedDate: sameBirthday ? (existingBirthday.lastAnnouncedDate || '') : '',
+                                    ...trackingReset
+                                }
+                            },
                             { upsert: true, new: true, setDefaultsOnInsert: true }
                         );
                         return interaction.editReply({ content: '🎂 Your birthday is saved privately! Starry will celebrate you on your special day. Your birth year is not stored, and your date will never appear in a public birthday list.' });
