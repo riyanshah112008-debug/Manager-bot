@@ -17,7 +17,7 @@ function isTransientDiscordError(error) {
   const status = Number(error?.status || error?.httpStatus || 0);
   const code = String(error?.code || error?.cause?.code || '');
   return status === 429 || status >= 500 ||
-    ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT'].includes(code);
+    ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'].includes(code);
 }
 
 async function withDiscordRetry(operation, options = {}) {
