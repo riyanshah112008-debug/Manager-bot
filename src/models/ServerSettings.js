@@ -89,7 +89,11 @@ const serverSettingsSchema = new mongoose.Schema({
         enabled: { type: Boolean, default: false },
         channelId: { type: String, default: '' },
         mentionRoleId: { type: String, default: '' },
-        message: { type: String, default: '🎂 Happy birthday {user}! Everyone wish them a wonderful day! 🎉' },
+        autoRoleEnabled: { type: Boolean, default: true },
+        roleId: { type: String, default: '' },
+        roleName: { type: String, default: '🎂 Birthday Star' },
+        roleColor: { type: String, default: '#F472B6' },
+        message: { type: String, default: '🎂 Happy birthday {user}! We hope your day is full of joy, laughter and lovely surprises. 💖' },
         timezone: { type: String, default: 'Asia/Kolkata' }
     },
 
