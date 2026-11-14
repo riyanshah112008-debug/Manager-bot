@@ -620,10 +620,25 @@ NaN
                         if (!parsedDate || parsedDate.getUTCFullYear() !== year || parsedDate.getUTCMonth() + 1 !== month || parsedDate.getUTCDate() !== day) {
                             return interaction.editReply({ content: 'Please enter a real date in YYYY-MM-DD format. Your date has not been saved.' });
                         }
+                        if (!interaction.guildId) {
+                            return interaction.editReply({ content: 'Birthday settings are only available inside a server.' });
+                        }
                         const Birthday = require('../models/Birthday');
+                        const birthdayFilter = { guildId: interaction.guildId, userId: interaction.user.id };
+                        const existingBirthday = await Birthday.findOne(birthdayFilter).lean();
+                        if (existingBirthday?.birthdayRoleId) {
+                            const guild = interaction.guild || client.guilds.cache.get(interaction.guildId);
+                            if (!guild) throw new Error('The server is not available to safely remove the existing birthday role.');
+                            const { removeBirthdayRoleAssignment } = require('./birthdayEngine');
+                            await removeBirthdayRoleAssignment(guild, existingBirthday, 'Member updated their birthday');
+                        }
+                        const lastAnnouncedDate = existingBirthday &&
+                            existingBirthday.month === month && existingBirthday.day === day
+                            ? (existingBirthday.lastAnnouncedDate || '')
+                            : '';
                         await Birthday.findOneAndUpdate(
-                            { guildId: interaction.guildId, userId: interaction.user.id },
-                            { $set: { month, day, lastAnnouncedDate: '', birthdayRoleGrantedDate: '', birthdayRoleId: '' } },
+                            birthdayFilter,
+                            { $set: { month, day, lastAnnouncedDate, birthdayRoleGrantedDate: '', birthdayRoleId: '' } },
                             { upsert: true, new: true, setDefaultsOnInsert: true }
                         );
                         return interaction.editReply({ content: '🎂 Your birthday is saved privately! Starry will celebrate you on your special day. Your birth year is not stored, and your date will never appear in a public birthday list.' });
