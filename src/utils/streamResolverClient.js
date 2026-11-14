@@ -10,10 +10,13 @@ class StreamResolverClient {
         this.reqId = 0;
         this.pending = new Map();
         this.cache = new Map();
-        this.init();
+        // Unit tests and short-lived tooling can opt out of the long-running Python worker.
+        this.disabled = process.env.STARRY_DISABLE_STREAM_RESOLVER === '1';
+        if (!this.disabled) this.init();
     }
 
     init() {
+        if (this.disabled) return;
         if (this.process) {
             try { this.process.kill(); } catch (e) {}
         }
