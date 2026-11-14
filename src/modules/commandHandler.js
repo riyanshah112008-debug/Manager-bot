@@ -35,6 +35,7 @@ async function getGuildPrefix(guildId) {
     // 1. Try MongoDB ServerSettings
     try {
         const mongoose = require('mongoose');
+const { buildBirthdayFilter } = require('../utils/discordSnowflake');
         if (mongoose.connection && mongoose.connection.readyState === 1) {
             const ServerSettings = require('../models/ServerSettings');
             // Keep first-use prefix resolution bounded; always clear the timeout when MongoDB wins.
@@ -624,7 +625,7 @@ NaN
                             return interaction.editReply({ content: 'Birthday settings are only available inside a server.' });
                         }
                         const Birthday = require('../models/Birthday');
-                        const birthdayFilter = { guildId: interaction.guildId, userId: interaction.user.id };
+                        const birthdayFilter = buildBirthdayFilter(interaction.guildId, interaction.user.id);
                         const existingBirthday = await Birthday.findOne(birthdayFilter).lean();
                         if (existingBirthday?.birthdayRoleId) {
                             const guild = interaction.guild || client.guilds.cache.get(interaction.guildId);
