@@ -612,7 +612,7 @@ NaN
                     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
                     try {
                         const raw = interaction.fields.getTextInputValue('birthday_date').trim();
-                        const match = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+                        const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
                         const year = match ? Number(match[1]) : 0;
                         const month = match ? Number(match[2]) : 0;
                         const day = match ? Number(match[3]) : 0;
