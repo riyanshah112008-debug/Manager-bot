@@ -15,6 +15,17 @@ test('transient Discord failures are retried and eventually succeed', async () =
   assert.equal(calls, 3);
 });
 
+test('Undici socket disconnects are retried', async () => {
+  let calls = 0;
+  const result = await withDiscordRetry(async () => {
+    calls += 1;
+    if (calls === 1) throw Object.assign(new Error('socket closed'), { code: 'UND_ERR_SOCKET' });
+    return 'recovered';
+  }, { delayMs: 0 });
+  assert.equal(result, 'recovered');
+  assert.equal(calls, 2);
+});
+
 test('permission and validation errors are not retried', async () => {
   let calls = 0;
   const error = Object.assign(new Error('Missing Permissions'), { status: 403, code: 50013 });
