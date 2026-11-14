@@ -3,6 +3,7 @@
 // File Path: modules/autorole.js
 // ==========================================
 
+const mongoose = require('mongoose');
 const { PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { AutoroleConfig, StickyRole } = require('../models/AutoroleSchema');
 const ServerSettings = require('../models/ServerSettings');
@@ -15,6 +16,12 @@ const EPHEMERAL_FLAG = MessageFlags.Ephemeral || 6;
 const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 function getSafeDiscordId(value) {
     return typeof value === 'string' && DISCORD_SNOWFLAKE_PATTERN.test(value) ? value : null;
+}
+
+// Mongoose's sanitizeFilter neutralizes selector-shaped values before they
+// enter a query. IDs are also constrained to Discord's decimal Snowflake format.
+function safeIdFilter(fields) {
+    return mongoose.sanitizeFilter(fields);
 }
 
 module.exports = (client) => {
@@ -30,8 +37,8 @@ module.exports = (client) => {
 
         try {
             const [config, serverSettings] = await Promise.all([
-                AutoroleConfig.findOne({ guildId }).lean(),
-                ServerSettings.findOne({ guildId }).select('autorole').lean()
+                AutoroleConfig.findOne(safeIdFilter({ guildId })).lean(),
+                ServerSettings.findOne(safeIdFilter({ guildId })).select('autorole').lean()
             ]);
             const stickyEnabled = serverSettings?.autorole?.stickyRoles ?? config?.stickyRolesEnabled ?? true;
             if (!stickyEnabled) return;
@@ -67,8 +74,8 @@ module.exports = (client) => {
             if (!botMember || !botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) return;
 
             const [legacyConfig, serverSettings] = await Promise.all([
-                AutoroleConfig.findOne({ guildId }).lean(),
-                ServerSettings.findOne({ guildId }).select('autorole').lean()
+                AutoroleConfig.findOne(safeIdFilter({ guildId })).lean(),
+                ServerSettings.findOne(safeIdFilter({ guildId })).select('autorole').lean()
             ]);
             const dashboardConfig = serverSettings?.autorole || {};
             const isBot = Boolean(member.user.bot);
@@ -82,7 +89,7 @@ module.exports = (client) => {
             // Sticky-role restoration applies only to returning human members.
             const stickyEnabled = dashboardConfig.stickyRoles ?? legacyConfig?.stickyRolesEnabled ?? true;
             if (!isBot && stickyEnabled) {
-                const previousData = await StickyRole.findOne({ guildId, userId }).lean();
+                const previousData = await StickyRole.findOne(safeIdFilter({ guildId, userId })).lean();
                 for (const roleId of previousData?.roles || []) {
                     const role = member.guild.roles.cache.get(roleId);
                     if (role && role.position < botHighestRolePosition && !role.managed) rolesToApply.push(roleId);
@@ -123,7 +130,7 @@ module.exports = (client) => {
         const guildId = getSafeDiscordId(interaction.guild.id);
         if (!guildId) return interaction.reply({ content: '❌ Invalid server ID.', flags: [EPHEMERAL_FLAG] });
 
-        let config = await AutoroleConfig.findOne({ guildId });
+        let config = await AutoroleConfig.findOne(safeIdFilter({ guildId }));
         if (!config) config = new AutoroleConfig({ guildId, roleIds: [], stickyRolesEnabled: true });
 
         const stickyOption = interaction.options.getBoolean('sticky_roles');
