@@ -740,7 +740,7 @@ function setupDashboardRoutes(app, client) {
                     paused: Boolean(player.paused),
                     volume: Number(player.volume ?? 100),
                     loop: player.loop || 'none',
-                    filter: player.filter || 'clear',
+                    filter: player.filter || player.data?.get?.('activeFilter') || 'clear',
                     autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')),
                     is247: Boolean(player.is247),
                     botName: workerInfo?.name || client.user?.username || 'Starry'
