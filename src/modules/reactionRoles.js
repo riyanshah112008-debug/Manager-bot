@@ -277,4 +277,6 @@ module.exports = client => {
       console.error('[ReactionRoles] Unhandled remove event failure:', error)
     );
   });
+  const { createReconciler } = require('./reactionRoleReconciler');
+  createReconciler(client, db, serializeByKey, withDiscordRetry);
 };
