@@ -64,6 +64,9 @@ function scoreTrack(track, rawQuery, positionIndex = 0) {
     // 2. Heavy penalties for duplicate / cover / bootleg / remix keywords (unless requested in query)
     const modifierChecks = [
         { key: 'cover', penalty: 180 },
+        { key: 'lyric video', penalty: 110 },
+        { key: 'lyrics video', penalty: 110 },
+        { key: 'fan made', penalty: 150 },
         { key: 'covered by', penalty: 180 },
         { key: 'fan cover', penalty: 180 },
         { key: 'slowed', penalty: 150 },
@@ -165,8 +168,9 @@ function scoreTrack(track, rawQuery, positionIndex = 0) {
 
     // 5. Mild tie-breaker bonuses for verified releases (kept small so they never override exact title)
     if (author.endsWith('- topic') || author.includes(' - topic')) {
-        score += 20;
+        score += 45;
     }
+    if (title.includes('official audio') || title.includes('official music video')) score += 25;
     if (title.includes('official audio') || title.includes('(audio)') || title.includes('[audio]')) {
         score += 20;
     } else if (title.includes('official music video') || title.includes('official video') || title.includes('(video)') || title.includes('[video]')) {
@@ -196,8 +200,9 @@ Kazagumo.prototype.search = async function(query, options) {
 
     const cleanQueryForScoring = query.replace(/^(ytsearch|ytmsearch|scsearch):/i, '').trim();
 
-    // 1. Primary search via default engine (YouTube Music)
-    let res = await rawKazagumoSearch.call(this, query, options).catch(() => null);
+    // 1. Prefer YouTube Music's official artist/topic catalogue before broad YouTube results.
+    const primaryQuery = /^(ytmsearch|ytsearch|scsearch):/i.test(query) ? query : `ytmsearch:${cleanQueryForScoring}`;
+    let res = await rawKazagumoSearch.call(this, primaryQuery, options).catch(() => null);
     if (res && res.tracks && res.tracks.length > 0) {
         res.tracks = rankAndFilterCanonicalTracks(res.tracks, cleanQueryForScoring);
     }
@@ -366,7 +371,7 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
-            { label: '⭐ Balanced Studio EQ', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
+            { label: '⭐ Studio master', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
             { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
             { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -393,6 +398,30 @@ async function applyKazagumoFilter(player, filterName) {
     try {
         const shoukakuPlayer = player.shoukaku;
         const normalized = (filterName || 'clear').toLowerCase().trim();
+        const setFilters = async (filters) => {
+            const safe = {
+                volume: Math.max(0, Math.min(1, Number(filters.volume ?? 1))),
+                equalizer: (filters.equalizer || []).map(band => ({
+                    band: band.band,
+                    gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
+                })),
+                timescale: null,
+                karaoke: null,
+                rotation: null,
+                tremolo: null,
+                vibrato: null,
+                lowPass: null,
+                channelMix: null,
+                distortion: null,
+                ...filters
+            };
+            safe.volume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
+            safe.equalizer = (filters.equalizer || []).map(band => ({
+                band: band.band,
+                gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
+            }));
+            await shoukakuPlayer.setFilters(safe);
+        };
 
         switch (normalized) {
             case 'bass':
@@ -406,7 +435,7 @@ async function applyKazagumoFilter(player, filterName) {
                 // Band 5 (250Hz) is gently dipped to keep the low-end separated from male/female vocals.
                 // Volume pre-attenuated to 0.70 to provide +3.5dB of clean headroom, completely eliminating
                 // digital clipping, square-wave distortion, and voice crackling!
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.70,
                     equalizer: [
                         { band: 0, gain: 0.28 },  // 25 Hz - Clean sub-rumble
@@ -437,7 +466,7 @@ async function applyKazagumoFilter(player, filterName) {
 
             case '8d':
                 // 🌀 360° Rotating Binaural Surround Sound
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.94,
                     rotation: { rotationHz: 0.22 },
                     equalizer: [
@@ -458,7 +487,7 @@ async function applyKazagumoFilter(player, filterName) {
 
             case 'nightcore':
                 // ✨ Upbeat tempo + pitched vocal remix with de-essed highs
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.92,
                     timescale: { speed: 1.25, pitch: 1.25, rate: 1.0 },
                     equalizer: [
@@ -480,7 +509,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'daycore':
             case 'slowed':
                 // 🌅 Relaxed slowed tempo + deep acoustic body
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.88,
                     timescale: { speed: 0.85, pitch: 0.85, rate: 1.0 },
                     equalizer: [
@@ -502,14 +531,14 @@ async function applyKazagumoFilter(player, filterName) {
 
             case 'vaporwave':
                 // 🪩 Retro slowed cassette tape vibe with subtle tremolo
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.86,
                     timescale: { speed: 0.80, pitch: 0.80, rate: 1.0 },
                     tremolo: { frequency: 2.2, depth: 0.16 },
                     equalizer: [
                         { band: 0, gain: 0.18 },
                         { band: 1, gain: 0.15 },
-                        { band: 2, gain: 0.10 },
+                        { band: 2, gain: 0.08 },
                         { band: 10, gain: -0.10 },
                         { band: 11, gain: -0.15 }
                     ],
@@ -526,7 +555,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'lo-fi':
             case 'chill':
                 // ☕ Warm analog vinyl tape flutter & softened highs
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.92,
                     lowPass: { smoothing: 16.0 },
                     timescale: { speed: 0.96, pitch: 0.96, rate: 1.0 },
@@ -554,7 +583,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'hall':
             case 'echo':
                 // 🌌 Massive concert hall / arena spatial reverberation
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.92,
                     timescale: { speed: 0.88, pitch: 0.88, rate: 1.0 },
                     tremolo: { frequency: 1.6, depth: 0.14 },
@@ -579,7 +608,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'instrumental':
             case 'vocalcut':
                 // 🎤 Center vocal cancellation for sing-along / instrumental
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.95,
                     karaoke: {
                         level: 1.0,
@@ -602,7 +631,7 @@ async function applyKazagumoFilter(player, filterName) {
             case '3d':
             case 'spatial':
                 // 🎧 Wide 3D soundstage with panoramic channel crossfeed
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.94,
                     channelMix: {
                         leftToLeft: 0.85,
@@ -631,7 +660,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'edm':
             case 'club':
                 // ⚡ High-energy club master with thumping kick & sizzling highs
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.75,
                     equalizer: [
                         { band: 0, gain: 0.28 },
@@ -661,7 +690,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'mellow':
             case 'relax':
                 // 🍃 Non-fatiguing smooth sound with rolled-off treble
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.95,
                     lowPass: { smoothing: 10.0 },
                     equalizer: [
@@ -686,7 +715,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'radio':
             case 'vintage':
                 // 📻 Retro 1950s AM telephone receiver bandpass filter
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.90,
                     equalizer: [
                         { band: 0, gain: -0.25 },
@@ -715,7 +744,7 @@ async function applyKazagumoFilter(player, filterName) {
 
             case 'treble':
                 // 💎 Crisp, crystal clear high-frequency sparkle
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.88,
                     equalizer: [
                         { band: 0, gain: -0.10 },
@@ -740,7 +769,7 @@ async function applyKazagumoFilter(player, filterName) {
 
             case 'pop':
                 // 🎙️ Modern vocal forward pop master with clean lows & headroom
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 0.82,
                     equalizer: [
                         { band: 0, gain: 0.08 },
@@ -777,11 +806,11 @@ async function applyKazagumoFilter(player, filterName) {
                 // - Silky airy highs: 10kHz (+0.06), 16kHz (+0.04)
                 // - Master volume set to 0.80 (~2.0dB digital headroom) to reduce clipping risk in the encoded Discord Opus output
                 // - In-phase stereo (channelMix: null) for crystal-clear centered vocals and zero comb-filtering
-                await shoukakuPlayer.setFilters({
-                    volume: 0.80,
+                await setFilters({
+                    volume: 0.94,
                     equalizer: [
                         { band: 0, gain: 0.06 },  // 25 Hz: Clean sub rumble
-                        { band: 1, gain: 0.14 },  // 40 Hz: Warm, tactile chest punch
+                        { band: 1, gain: 0.10 },  // 40 Hz: Warm, tactile chest punch
                         { band: 2, gain: 0.10 },  // 63 Hz: Solid kick definition
                         { band: 3, gain: 0.04 },  // 100 Hz: Gentle warmth
                         { band: 4, gain: -0.04 }, // 160 Hz: Transition slope
@@ -789,11 +818,11 @@ async function applyKazagumoFilter(player, filterName) {
                         { band: 6, gain: -0.02 }, // 400 Hz: Clean separation
                         { band: 7, gain: 0.00 },  // 630 Hz: Neutral
                         { band: 8, gain: 0.02 },  // 1.0 kHz: Vocal intelligibility
-                        { band: 9, gain: 0.04 },  // 1.6 kHz: Vocal forwardness
-                        { band: 10, gain: 0.05 }, // 2.5 kHz: Crystal-clear vocal bite
+                        { band: 9, gain: 0.05 },  // 1.6 kHz: Vocal forwardness
+                        { band: 10, gain: 0.08 }, // 2.5 kHz: Crystal-clear vocal bite
                         { band: 11, gain: 0.03 }, // 4.0 kHz: Snare snap & presence
                         { band: 12, gain: 0.02 }, // 6.3 kHz: Smooth highs
-                        { band: 13, gain: 0.06 }, // 10.0 kHz: Air & sparkle
+                        { band: 13, gain: 0.04 }, // 10.0 kHz: Air & sparkle
                         { band: 14, gain: 0.04 }  // 16.0 kHz: Ultra-high brilliance
                     ],
                     channelMix: null,
@@ -810,7 +839,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'clear':
             case 'flat':
             default:
-                await shoukakuPlayer.setFilters({
+                await setFilters({
                     volume: 1.0,
                     equalizer: [],
                     timescale: null,
