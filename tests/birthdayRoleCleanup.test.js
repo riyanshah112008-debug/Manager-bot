@@ -21,9 +21,17 @@ const birthdayModel = {
         };
     }
 };
+const serverSettingsModel = {
+    updates: [],
+    async updateOne(filter, update) {
+        this.updates.push({ filter, update });
+        return { acknowledged: true };
+    }
+};
 
 Module._load = function (request, parent, isMain) {
-    if (request === '../models/Birthday' && parent?.filename === enginePath) return birthdayModel;
+    if (parent?.filename === enginePath && request === '../models/Birthday') return birthdayModel;
+    if (parent?.filename === enginePath && request === '../models/ServerSettings') return serverSettingsModel;
     return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -137,6 +145,30 @@ async function run() {
         _id: 'birthday-6', userId: 'user-6', birthdayRoleId: ''
     });
     assert.strictEqual(birthdayModel.updates.length, 0, 'Entries without an assigned role require no cleanup.');
+
+    serverSettingsModel.updates.length = 0;
+    {
+        const existingPrivilegedRole = { id: 'existing-role', name: '🎂 Birthday Star', managed: false };
+        const createdRole = { id: 'new-role', name: '🎂 Birthday Star' };
+        let createOptions = null;
+        const guild = {
+            id: 'guild-2',
+            roles: {
+                cache: new Map([[existingPrivilegedRole.id, existingPrivilegedRole]]),
+                async create(options) {
+                    createOptions = options;
+                    return createdRole;
+                }
+            },
+            members: { me: { permissions: { has: () => true } } }
+        };
+        const settings = { autoRoleEnabled: true, roleName: '🎂 Birthday Star', roleColor: '#F472B6' };
+        const result = await birthdayEngine.ensureBirthdayRole(guild, settings);
+        assert.strictEqual(result, createdRole, 'Starry must create its own role instead of adopting an unrelated same-name role.');
+        assert.strictEqual(createOptions.name, '🎂 Birthday Star');
+        assert.strictEqual(settings.roleId, createdRole.id);
+        assert.strictEqual(serverSettingsModel.updates.length, 1, 'The newly created role ID should be persisted.');
+    }
 
     console.log('Birthday role cleanup regression tests passed.');
 }
