@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 const { randomUUID } = require('node:crypto');
 const db = require('../utils/database');
+const { serializeByKey, withDiscordRetry } = require('./reactionRoleReliability');
 
 const EPHEMERAL = MessageFlags.Ephemeral ?? 64;
 const sessions = new Map();
@@ -130,33 +131,104 @@ async function publish(i, session) {
 }
 
 async function handleReaction(reaction, user, adding) {
-  if (user.bot) return;
-  if (reaction.partial) reaction = await reaction.fetch().catch(() => null);
-  if (!reaction?.message?.guild) return;
-  if (reaction.message.partial) await reaction.message.fetch().catch(() => null);
-  const guild = reaction.message.guild;
-  const panel = db.getReactionRolePanels(guild.id)[reaction.message.id];
-  if (!panel) return;
-  const mapping = panel.mappings.find(x => x.emojiKey === emojiKey(reaction.emoji));
-  if (!mapping) return;
-  const member = await guild.members.fetch(user.id).catch(() => null);
-  if (!member || member.user.bot) return;
-  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
-  const role = guild.roles.cache.get(mapping.roleId);
-  if (!role || role.managed || !me || role.position >= me.roles.highest.position) return;
-  try {
-    if (adding) {
-      if (panel.mode === 'single') {
-        const remove = panel.mappings.filter(x => x.roleId !== role.id).map(x => x.roleId).filter(id => member.roles.cache.has(id));
-        if (remove.length) await member.roles.remove(remove, 'Single-select reaction role');
-      }
-      if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Reaction role selection');
-    } else if (member.roles.cache.has(role.id)) {
-      await member.roles.remove(role, 'Reaction role deselection');
+  if (!user || user.bot) return;
+
+  // Resolve Discord partials before reading guild/message metadata. A failed fetch
+  // must stop processing rather than silently acting on incomplete objects.
+  if (reaction?.partial) {
+    try { reaction = await reaction.fetch(); }
+    catch (error) {
+      console.warn('[ReactionRoles] Could not fetch partial reaction:', error.message);
+      return;
     }
-  } catch (error) {
-    console.warn('[ReactionRoles] Role update failed:', error.message);
   }
+  if (!reaction?.message) return;
+  if (reaction.message.partial) {
+    try { await reaction.message.fetch(); }
+    catch (error) {
+      console.warn('[ReactionRoles] Could not fetch partial panel message:', error.message);
+      return;
+    }
+  }
+
+  const guild = reaction.message.guild;
+  if (!guild) return;
+  const panel = db.getReactionRolePanels(guild.id)?.[reaction.message.id];
+  if (!panel || !Array.isArray(panel.mappings)) return;
+  const mapping = panel.mappings.find(x => x.emojiKey === emojiKey(reaction.emoji));
+  if (!mapping?.roleId) return;
+
+  // Discord can deliver add/remove events close together. Serialize mutations
+  // per member so single-select panels cannot race and leave multiple roles.
+  return serializeByKey(`${guild.id}:${user.id}`, async () => {
+    const member = await withDiscordRetry(
+      () => guild.members.fetch({ user: user.id, force: true }),
+      { label: 'fetch member' }
+    ).catch(error => {
+      console.warn(`[ReactionRoles] Could not fetch member ${user.id} in ${guild.id}:`, error.message);
+      return null;
+    });
+    if (!member || member.user?.bot) return;
+
+    const me = guild.members.me || await withDiscordRetry(
+      () => guild.members.fetchMe(),
+      { label: 'fetch bot member' }
+    ).catch(error => {
+      console.warn(`[ReactionRoles] Could not fetch bot member in ${guild.id}:`, error.message);
+      return null;
+    });
+    if (!me) return;
+
+    // Resolve the role through REST when it is absent from cache.
+    const role = guild.roles.cache.get(mapping.roleId) || await withDiscordRetry(
+      () => guild.roles.fetch(mapping.roleId),
+      { label: 'fetch reaction role' }
+    ).catch(error => {
+      console.warn(`[ReactionRoles] Could not resolve role ${mapping.roleId} in ${guild.id}:`, error.message);
+      return null;
+    });
+    if (!role || role.managed || role.id === guild.id) {
+      console.warn(`[ReactionRoles] Role ${mapping.roleId} is missing or not assignable in ${guild.id}.`);
+      return;
+    }
+    if (!me.permissions.has(PermissionsBitField.Flags.ManageRoles) ||
+        role.position >= me.roles.highest.position) {
+      console.warn(`[ReactionRoles] Cannot assign role ${role.id} in ${guild.id}: check Manage Roles and role hierarchy.`);
+      return;
+    }
+
+    try {
+      if (adding) {
+        if (panel.mode === 'single') {
+          const remove = panel.mappings
+            .filter(x => x.roleId !== role.id)
+            .map(x => x.roleId)
+            .filter(id => member.roles.cache.has(id));
+          if (remove.length) {
+            await withDiscordRetry(
+              () => member.roles.remove(remove, 'Single-select reaction role'),
+              { label: 'remove previous reaction roles' }
+            );
+          }
+        }
+        // Refresh the member after a single-select removal before deciding whether
+        // the selected role still needs to be added.
+        if (!member.roles.cache.has(role.id)) {
+          await withDiscordRetry(
+            () => member.roles.add(role.id, 'Reaction role selection'),
+            { label: 'add reaction role' }
+          );
+        }
+      } else if (member.roles.cache.has(role.id)) {
+        await withDiscordRetry(
+          () => member.roles.remove(role.id, 'Reaction role deselection'),
+          { label: 'remove reaction role' }
+        );
+      }
+    } catch (error) {
+      console.error(`[ReactionRoles] Assignment failed (guild=${guild.id}, user=${user.id}, role=${role.id}, action=${adding ? 'add' : 'remove'}):`, error.message);
+    }
+  });
 }
 
 module.exports = client => {
@@ -236,6 +308,14 @@ module.exports = client => {
     }
   });
 
-  client.on('messageReactionAdd', (reaction, user) => handleReaction(reaction, user, true));
-  client.on('messageReactionRemove', (reaction, user) => handleReaction(reaction, user, false));
+  client.on('messageReactionAdd', (reaction, user) => {
+    handleReaction(reaction, user, true).catch(error =>
+      console.error('[ReactionRoles] Unhandled add event failure:', error)
+    );
+  });
+  client.on('messageReactionRemove', (reaction, user) => {
+    handleReaction(reaction, user, false).catch(error =>
+      console.error('[ReactionRoles] Unhandled remove event failure:', error)
+    );
+  });
 };
