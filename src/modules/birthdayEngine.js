@@ -38,6 +38,35 @@ async function ensureBirthdayRole(guild, settings) {
     return role;
 }
 
+// Remove a tracked birthday role before its database record is changed or deleted.
+// Transient Discord API failures must leave the tracking fields intact so cleanup can retry.
+async function removeBirthdayRoleAssignment(guild, entry, reason = 'Birthday celebration ended') {
+    if (!entry?.birthdayRoleId) return;
+
+    let role = guild.roles.cache.get(entry.birthdayRoleId) || null;
+    if (!role && typeof guild.roles.fetch === 'function') {
+        try {
+            role = await guild.roles.fetch(entry.birthdayRoleId);
+        } catch (error) {
+            if (Number(error?.code) !== 10011 && Number(error?.status) !== 404) throw error;
+        }
+    }
+
+    let member = null;
+    try {
+        member = await guild.members.fetch(entry.userId);
+    } catch (error) {
+        if (Number(error?.code) !== 10007 && Number(error?.status) !== 404) throw error;
+    }
+
+    if (member && role && member.roles.cache.has(role.id)) {
+        await member.roles.remove(role, reason);
+    }
+
+    const filter = entry._id ? { _id: entry._id } : { guildId: guild.id, userId: entry.userId };
+    await Birthday.updateOne(filter, { $set: { birthdayRoleGrantedDate: '', birthdayRoleId: '' } });
+}
+
 async function removeExpiredBirthdayRoles(guild, todayKey) {
     const expired = await Birthday.find({
         guildId: guild.id,
@@ -45,12 +74,11 @@ async function removeExpiredBirthdayRoles(guild, todayKey) {
         birthdayRoleId: { $ne: '' }
     }).limit(500).lean();
     for (const entry of expired) {
-        const member = await guild.members.fetch(entry.userId).catch(() => null);
-        const role = guild.roles.cache.get(entry.birthdayRoleId);
-        if (member && role && member.roles.cache.has(role.id)) {
-            await member.roles.remove(role, 'Birthday celebration ended').catch(error => console.warn('[Birthday] Could not remove temporary birthday role:', error.message));
+        try {
+            await removeBirthdayRoleAssignment(guild, entry, 'Birthday celebration ended');
+        } catch (error) {
+            console.warn('[Birthday] Could not remove temporary birthday role; cleanup will retry:', error.message);
         }
-        await Birthday.updateOne({ _id: entry._id }, { $set: { birthdayRoleGrantedDate: '', birthdayRoleId: '' } });
     }
 }
 
@@ -117,4 +145,4 @@ function startBirthdayScheduler(client) {
     announceBirthdays(client).catch(() => {});
 }
 
-module.exports = { startBirthdayScheduler, announceBirthdays, dateInZone, ensureBirthdayRole, removeExpiredBirthdayRoles };
+module.exports = { startBirthdayScheduler, announceBirthdays, dateInZone, ensureBirthdayRole, removeExpiredBirthdayRoles, removeBirthdayRoleAssignment };
