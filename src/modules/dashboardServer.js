@@ -1051,6 +1051,7 @@ function setupDashboardRoutes(app, client) {
             const { LevelSettings } = leveling;
             const guild = req.guild, body = req.body || {}, updates = {};
             if (typeof body.enabled === 'boolean') updates.enabled = body.enabled;
+            if (typeof body.embedEnabled === 'boolean') updates.embedEnabled = body.embedEnabled;
             if (body.logChannelId !== undefined) {
                 const channelId = String(body.logChannelId || '').trim();
                 const channel = channelId ? guild.channels.cache.get(channelId) : null;

@@ -28,7 +28,7 @@ test('AI and code slash commands are explicitly excluded from global deployment'
 });
 
 test('leveling panel exposes activity, channel, exclusions, reward and announcement controls', () => {
-  for (const button of ['toggle', 'xp', 'channel', 'ignore', 'rewards', 'text', 'media', 'style', 'ping', 'preview', 'reset']) {
+  for (const button of ['toggle', 'embed_toggle', 'xp', 'channel', 'ignore', 'rewards', 'text', 'media', 'style', 'ping', 'preview', 'reset']) {
     includes(leveling, `setCustomId('lvl_btn_${button}')`);
   }
   for (const field of ['messageXpMin', 'messageXpMax', 'messageCooldownSeconds', 'voiceXpPerMinute', 'ignoredChannelIds', 'ignoredRoleIds', 'roleRewards']) {
@@ -55,11 +55,17 @@ test('leveling configuration modals validate user-supplied IDs and numeric range
   includes(leveling, 'interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)');
 });
 
-test('activation never posts a level-up embed or setup test to public channels', () => {
+test('level-up embeds are opt-in and plain text remains the default', () => {
   assert.ok(!leveling.includes('Leveling System Setup Test'));
   includes(leveling, 'Leveling enabled.');
   includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
+  includes(leveling, 'embedEnabled: { type: Boolean, default: false }');
+  includes(leveling, "if (guildSettings.embedEnabled === true)");
+  includes(leveling, 'Custom embed enabled');
+  includes(leveling, 'Plain text (default)');
+  includes(dashboard, 'levelEmbedEnabled');
+  includes(api, 'if (typeof body.embedEnabled === \'boolean\') updates.embedEnabled = body.embedEnabled;');
   includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
 });
 
