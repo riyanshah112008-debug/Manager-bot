@@ -950,6 +950,9 @@ const levelingModule = (client) => {
                 const channels = parseSnowflakeList(interaction.fields.getTextInputValue('in_lvl_ignore_channels'));
                 const roles = parseSnowflakeList(interaction.fields.getTextInputValue('in_lvl_ignore_roles'));
                 if (!channels || !roles) return interaction.reply({ content: 'Use up to 20 valid Discord IDs in each field, separated by commas.', flags: [EPHEMERAL_FLAG] });
+                const missingChannel = channels.find(channelId => !interaction.guild.channels.cache.has(channelId));
+                const missingRole = roles.find(roleId => !interaction.guild.roles.cache.has(roleId));
+                if (missingChannel || missingRole) return interaction.reply({ content: 'One or more ignored channel or role IDs do not belong to this server.', flags: [EPHEMERAL_FLAG] });
                 await saveLevelSettings(guildId, { ignoredChannelIds: channels, ignoredRoleIds: roles });
             }
 
@@ -964,9 +967,12 @@ const levelingModule = (client) => {
                     }
                 }
                 if (rewards.length > 20) return interaction.reply({ content: 'You can configure up to 20 level rewards.', flags: [EPHEMERAL_FLAG] });
+                if (new Set(rewards.map(item => item.level)).size !== rewards.length) return interaction.reply({ content: 'Each level can have only one reward role.', flags: [EPHEMERAL_FLAG] });
+                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply({ content: 'Starry needs Manage Roles permission before reward roles can be configured.', flags: [EPHEMERAL_FLAG] });
                 for (const reward of rewards) {
                     const role = await interaction.guild.roles.fetch(reward.roleId).catch(() => null);
-                    if (!role || role.managed || role.position >= interaction.guild.members.me.roles.highest.position) return interaction.reply({ content: 'One or more reward roles are missing, managed, or above Starry highest role.', flags: [EPHEMERAL_FLAG] });
+                    if (!role || role.managed || role.position >= botMember.roles.highest.position) return interaction.reply({ content: 'One or more reward roles are missing, managed, or above Starry highest role.', flags: [EPHEMERAL_FLAG] });
                 }
                 await saveLevelSettings(guildId, { roleRewards: rewards });
             }
