@@ -47,6 +47,22 @@ test('XP awarding reads configured ranges, cooldowns and exclusions', () => {
   assert.ok(!leveling.includes('Math.random()'), 'XP awards must not use a weak random generator');
 });
 
+test('every visible leveling panel button has a working interaction handler', () => {
+  for (const button of ['xp', 'channel', 'ignore', 'rewards', 'text', 'media', 'style', 'ping', 'preview', 'reset', 'toggle', 'embed_toggle']) {
+    includes(leveling, `if (interaction.customId === 'lvl_btn_${button}')`, `missing click handler for lvl_btn_${button}`);
+  }
+  for (const modal of ['xp', 'channel', 'ignore', 'rewards']) {
+    includes(leveling, `setCustomId('lvl_modal_${modal}')`, `missing modal for lvl_btn_${modal}`);
+    includes(leveling, `interaction.customId === 'lvl_modal_${modal}'`, `missing save handler for lvl_modal_${modal}`);
+  }
+});
+
+test('live preview follows the saved embed opt-in setting', () => {
+  includes(leveling, 'if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed]');
+  includes(leveling, 'allowedMentions: { parse: [] }');
+  assert.ok(!leveling.includes('content: `${pingText} *(Setup Preview)*`, \n                        embeds: [previewEmbed]'));
+});
+
 test('leveling configuration modals validate user-supplied IDs and numeric ranges', () => {
   includes(leveling, 'function parseSnowflakeList');
   includes(leveling, 'min < 0 || max < min || max > 100');
