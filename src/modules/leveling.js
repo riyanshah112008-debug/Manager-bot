@@ -585,8 +585,12 @@ const levelingModule = (client) => {
                     }
 
                     if (sub === 'preview' || sub === 'test') {
-                        const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                        return message.reply({ content: `🧪 **[Leveling Card Live Preview]**`, embeds: [previewEmbed] });
+                        const previewContent = replaceLvlPlaceholders((settingsCache.get(guildId)?.pingContent || DEFAULT_LEVEL_UP_MESSAGE), message.author, 5, 2500, message.guild);
+                        if (settingsCache.get(guildId)?.embedEnabled === true) {
+                            const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
+                            return message.reply({ content: `🧪 **[Leveling Card Live Preview]**\\n${previewContent}`, embeds: [previewEmbed] });
+                        }
+                        return message.reply({ content: `🧪 **[Leveling Text Preview]**\\n${previewContent}` });
                     }
 
                     // Default: show full interactive control panel
@@ -887,7 +891,7 @@ const levelingModule = (client) => {
                     .setCustomId('in_lvl_ping')
                     .setLabel('Content Above Embed')
                     .setStyle(TextInputStyle.Short)
-                    .setValue(settings.pingContent || '✨ <@{user}> just hit **Level {level}**!')
+                    .setValue(settings.pingContent || '✨ {user} just hit **Level {level}**!')
                     .setRequired(true);
 
                 modal.addComponents(new ActionRowBuilder().addComponents(pingInput));
@@ -899,7 +903,7 @@ const levelingModule = (client) => {
                 try {
                     const latest = await LevelSettings.findOne({ guildId: interaction.guildId }) || settings;
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
-                    const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
+                    const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ {user} just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
 
                     const previewPayload = { content: `${pingText} *(Setup Preview)*`, flags: [EPHEMERAL_FLAG] };
                     if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed];
