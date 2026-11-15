@@ -71,7 +71,8 @@ test('activation never posts a level-up embed or setup test to public channels',
   includes(leveling, 'Leveling enabled.');
   includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
-  includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
+  includes(leveling, "? { embeds: [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)] }");
+  includes(leveling, ": { content: pingMsg, allowedMentions: { users: [userId] } }");
 });
 
 test('level-up announcements are atomically claimed to prevent duplicate spam', () => {
