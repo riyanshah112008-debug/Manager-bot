@@ -69,6 +69,10 @@ test('custom level-up embeds are opt-in and configurable in Discord and dashboar
   includes(leveling, "settings.embedEnabled === true ? 'Disable Embeds' : 'Enable Custom Embeds'");
   includes(leveling, 'if (guildSettings.embedEnabled === true) payload.embeds = [buildLevelUpEmbed');
   includes(leveling, 'if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed]');
+  includes(leveling, ".replace(/<@!?\\\\{user\\\\}>/g, '{user}')");
+  includes(leveling, 'const userLabel = mentionUser ?');
+  includes(leveling, 'if (guildSettings.embedEnabled === true) payload.embeds');
+  assert.ok(!leveling.includes("✨ <@{user}> just hit **Level {level}**!"), 'default template must not nest a mention');
   includes(dashboard, 'levelEmbedEnabled');
   includes(dashboard, 'embedEnabled:$("#levelEmbedEnabled").checked');
   includes(api, "if (typeof body.embedEnabled === 'boolean') updates.embedEnabled = body.embedEnabled;");
