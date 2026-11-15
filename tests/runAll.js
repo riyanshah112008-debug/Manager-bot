@@ -31,7 +31,7 @@ let passed = 0;
 for (const [name, ...args] of suites) {
   console.log('\n===== START: ' + name + ' =====');
   const started = Date.now();
-  const result = spawnSync(process.execPath, args, { stdio: 'inherit', timeout: timeoutMs, windowsHide: true });
+  const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...process.env, STARRY_DISABLE_STREAM_RESOLVER: '1' }, timeout: timeoutMs, windowsHide: true });
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
   if (result.error || result.status !== 0) {
     if (result.error && result.error.code === 'ETIMEDOUT') console.error('\nFAILED: ' + name + ' exceeded ' + (timeoutMs / 1000) + 's and was terminated.');
