@@ -32,7 +32,7 @@ const LevelUserSchema = new mongoose.Schema({
 LevelUserSchema.index({ userId: 1, guildId: 1 }, { unique: true });
 const LevelUser = mongoose.models.LevelUser || mongoose.model('LevelUser', LevelUserSchema);
 
-const DEFAULT_LEVEL_UP_MESSAGE = '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!';
+const DEFAULT_LEVEL_UP_MESSAGE = '✨ Level Up! ✨ {user} just hit **Level {level}**!';
 const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
 
 const LevelSettingsSchema = new mongoose.Schema({
@@ -115,10 +115,12 @@ function hasCustomLevelUpCard(settings = {}) {
     );
 }
 
-function replaceLvlPlaceholders(text, user, level, xp, guild) {
+function replaceLvlPlaceholders(text, user, level, xp, guild, mentionUser = true) {
     if (!text || typeof text !== 'string' || text === 'undefined') return '';
+    const userLabel = mentionUser ? `<@${user.id}>` : (user.globalName || user.displayName || user.username || 'User');
     return text
-        .replace(/\{user\}/g, `<@${user.id}>`)
+        .replace(/<@!?\{user\}>/g, '{user}')
+        .replace(/\{user\}/g, userLabel)
         .replace(/\{username\}/g, user.username || 'User')
         .replace(/\{tag\}/g, user.tag || user.username || 'User')
         .replace(/\{server\}/g, guild?.name || 'Server')
@@ -138,10 +140,10 @@ function buildLevelUpEmbed(user, newLevel, newXp, guild, customSettings = null) 
     const descRaw = settings.description || 'Your active participation in **{server}** has paid off! You reached **Level {level}**!';
     const footerRaw = (settings.footer || '{server} • Leveling System').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim() || '{server} • Leveling System';
 
-    const authorText = replaceLvlPlaceholders(authorRaw, user, newLevel, newXp, guild);
-    const titleText = replaceLvlPlaceholders(titleRaw, user, newLevel, newXp, guild);
-    const descText = replaceLvlPlaceholders(descRaw, user, newLevel, newXp, guild);
-    const footerText = replaceLvlPlaceholders(footerRaw, user, newLevel, newXp, guild);
+    const authorText = replaceLvlPlaceholders(authorRaw, user, newLevel, newXp, guild, false);
+    const titleText = replaceLvlPlaceholders(titleRaw, user, newLevel, newXp, guild, false);
+    const descText = replaceLvlPlaceholders(descRaw, user, newLevel, newXp, guild, false);
+    const footerText = replaceLvlPlaceholders(footerRaw, user, newLevel, newXp, guild, false);
 
     const embed = new EmbedBuilder()
         .setColor(color)
