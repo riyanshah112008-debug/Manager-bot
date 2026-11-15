@@ -16,6 +16,7 @@ const {
     MessageFlags 
 } = require('discord.js');
 const mongoose = require('mongoose');
+const { randomInt } = require('node:crypto');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
@@ -46,6 +47,12 @@ const LevelSettingsSchema = new mongoose.Schema({
     footer: { type: String, default: '{server} • Leveling System' },
     pingContent: { type: String, default: DEFAULT_LEVEL_UP_MESSAGE },
     roleRewards: { type: [{ level: { type: Number, min: 1, max: 10000 }, roleId: { type: String } }], default: [] },
+    messageXpMin: { type: Number, default: 15, min: 0, max: 100 },
+    messageXpMax: { type: Number, default: 25, min: 0, max: 100 },
+    messageCooldownSeconds: { type: Number, default: 60, min: 5, max: 3600 },
+    voiceXpPerMinute: { type: Number, default: 5, min: 0, max: 100 },
+    ignoredChannelIds: { type: [String], default: [] },
+    ignoredRoleIds: { type: [String], default: [] },
     authorName: { type: String, default: 'LEVEL UP UNLOCKED' }
 });
 const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', LevelSettingsSchema);
@@ -57,6 +64,15 @@ const vcJoinTimes = new Map();
 
 // Helpers
 function calculateLevel(xp) { return Math.floor(0.1 * Math.sqrt(xp)); }
+// Atomically claim a level-up so simultaneous message/voice events cannot announce it twice.
+async function claimLevelUp(guildId, userId, newLevel) {
+    const result = await LevelUser.updateOne(
+        { guildId, userId, level: { $lt: newLevel } },
+        { $set: { level: newLevel } }
+    ).catch(() => null);
+    return Boolean(result && (result.modifiedCount > 0 || result.nModified > 0));
+}
+
 function xpForNextLevel(currentLevel) { return Math.pow((currentLevel + 1) / 0.1, 2); }
 function formatVcTime(minutes) {
     if (!minutes) return '0m';
@@ -67,7 +83,7 @@ function formatVcTime(minutes) {
 
 function cleanImageUrl(str) {
     if (!str || typeof str !== 'string' || str === 'undefined' || str === 'avatar') return '';
-    return str.trim().replace(/[\`\<\>\s]/g, '');
+    return str.trim().replace(/[`\<\>\s]/g, '');
 }
 
 function isValidUrl(str) {
@@ -132,9 +148,9 @@ function buildLevelUpEmbed(user, newLevel, newXp, guild, customSettings = null) 
         .setTitle(titleText.slice(0, 256))
         .setDescription(descText.slice(0, 4000))
         .addFields(
-            { name: 'Level Reached', value: `\`Level ${newLevel}\``, inline: true },
-            { name: 'Total Experience', value: `\`${newXp.toLocaleString()} XP\``, inline: true },
-            { name: 'Next Target', value: `\`${Math.round(nextLevelXp).toLocaleString()} XP\``, inline: true }
+            { name: 'Level Reached', value: `\`Level ${newLevel}\``,  inline: true },
+            { name: 'Total Experience', value: `\`${newXp.toLocaleString()} XP\``,  inline: true },
+            { name: 'Next Target', value: `\`${Math.round(nextLevelXp).toLocaleString()} XP\``,  inline: true }
         )
         .setFooter({ text: footerText.slice(0, 2048), iconURL: guild?.iconURL({ dynamic: true }) })
         .setTimestamp();
@@ -211,91 +227,87 @@ async function setLevelingChannel(guildId, logChannelId) {
     return settings || newCached;
 }
 
-async function getLevelControlPanel(guildId, client) {
-    let settings = null;
+async function saveLevelSettings(guildId, update) {
+    let saved = { ...(settingsCache.get(guildId) || {}), ...update };
     if (isDbConnected()) {
-        settings = await LevelSettings.findOne({ guildId }).catch(() => null);
-        if (!settings) {
-            settings = await LevelSettings.create({
-                guildId,
-                enabled: true,
-                title: 'Congratulations {user}!',
-                description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
-                color: '#5865F2',
-                image: '',
-                thumbnail: 'avatar',
-                footer: '{server} • Leveling System',
-                pingContent: DEFAULT_LEVEL_UP_MESSAGE,
-                authorName: 'LEVEL UP UNLOCKED'
-            }).catch(() => null);
+        const doc = await LevelSettings.findOneAndUpdate({ guildId }, { $set: update }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean().catch(() => null);
+        if (doc) saved = { ...doc };
+    }
+    settingsCache.set(guildId, saved);
+    return saved;
+}
+
+function parseSnowflakeList(value) {
+    const ids = String(value || '').split(/[\s,;]+/).map(item => item.replace(/[<#@&!>]/g, '')).filter(Boolean);
+    if (ids.length > 20 || ids.some(id => !/^\d{17,20}$/.test(id))) return null;
+    return [...new Set(ids)];
+}
+
+async function getLevelControlPanel(guildId, client) {
+    const defaults = {
+        guildId, enabled: true, logChannelId: null,
+        title: 'Congratulations {user}!',
+        description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
+        color: '#5865F2', image: '', thumbnail: 'avatar',
+        footer: '{server} • Leveling System', pingContent: DEFAULT_LEVEL_UP_MESSAGE,
+        authorName: 'LEVEL UP UNLOCKED', roleRewards: [],
+        messageXpMin: 15, messageXpMax: 25, messageCooldownSeconds: 60,
+        voiceXpPerMinute: 5, ignoredChannelIds: [], ignoredRoleIds: []
+    };
+    let settings = settingsCache.get(guildId) || { ...defaults };
+    if (isDbConnected()) {
+        const stored = await LevelSettings.findOne({ guildId }).lean().catch(() => null);
+        if (stored) settings = { ...defaults, ...stored };
+        else {
+            const created = await LevelSettings.create(defaults).catch(() => null);
+            if (created) settings = { ...defaults, ...created.toObject() };
         }
+        settingsCache.set(guildId, settings);
     }
-    if (!settings) {
-        settings = settingsCache.get(guildId) || {
-            guildId,
-            enabled: true,
-            title: 'Congratulations {user}!',
-            description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
-            color: '#5865F2',
-            image: '',
-            thumbnail: 'avatar',
-            footer: '{server} • Leveling System',
-            pingContent: DEFAULT_LEVEL_UP_MESSAGE,
-            authorName: 'LEVEL UP UNLOCKED'
-        };
-    }
-
-    const isEnabled = settings.enabled !== false;
-    const channelDisplay = settings.logChannelId ? `<#${settings.logChannelId}>` : '*Current Channel (Where user levels up)*';
-    const pingDisplay = (settings.pingContent || DEFAULT_LEVEL_UP_MESSAGE).replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const authorDisplay = (settings.authorName || 'LEVEL UP UNLOCKED').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const titleDisplay = (settings.title || 'Congratulations {user}!').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const descDisplay = settings.description || 'Your active participation in **{server}** has paid off! You reached **Level {level}**!';
-    const colorDisplay = isValidHex(settings.color) ? settings.color : '#5865F2';
-    const footerDisplay = (settings.footer || '{server} • Leveling System').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    
-    const activeImage = cleanImageUrl(settings.image);
-    const imageDisplay = isValidUrl(activeImage) ? `[View Media Link](${activeImage})` : '*None*';
-
+    const enabled = settings.enabled !== false;
+    const channel = settings.logChannelId ? `<#${settings.logChannelId}>` : 'Channel where the member levels up';
+    const ignoredChannels = (settings.ignoredChannelIds || []).map(id => `<#${id}>`).join(', ') || 'None';
+    const ignoredRoles = (settings.ignoredRoleIds || []).map(id => `<@&${id}>`).join(', ') || 'None';
+    const rewards = (settings.roleRewards || []).slice().sort((a,b) => Number(a.level)-Number(b.level))
+        .map(item => `L${item.level}: <@&${item.roleId}>`).join(' • ') || 'None';
     const panelEmbed = new EmbedBuilder()
-        .setColor(isEnabled ? colorDisplay : '#ED4245')
-        .setTitle('Mina Leveling Engine • Server Control Center')
+        .setColor(enabled ? (isValidHex(settings.color) ? settings.color : '#5865F2') : '#ED4245')
+        .setTitle('⭐ Starry Leveling • Control Panel')
         .setDescription(
-            `Configure leveling rewards and design custom level-up announcement cards for your server.\n\n` +
-            `**System State:** ${isEnabled ? '**Enabled (Active)**' : '**Disabled (Suspended)**'}\n` +
-            `**Announcement Channel:** ${channelDisplay}\n` +
-            `**Message Header / Ping:** \`${pingDisplay}\`\n` +
-            `**Author Header:** \`${authorDisplay}\`\n` +
-            `**Title:** \`${titleDisplay}\`\n` +
-            `**Description:** \`\`\`${descDisplay}\`\`\`\n` +
-            `**Hex Color:** \`${colorDisplay}\` | **Footer:** \`${footerDisplay}\`\n` +
-            `**Banner Image:** ${imageDisplay}`
+            `**Status:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}\n` +
+            `**Level-up channel:** ${channel}\n\n` +
+            `**Message XP:** ${settings.messageXpMin ?? 15}–${settings.messageXpMax ?? 25} XP • ${settings.messageCooldownSeconds ?? 60}s cooldown\n` +
+            `**Voice XP:** ${settings.voiceXpPerMinute ?? 5} XP per minute\n` +
+            `**Ignored channels:** ${ignoredChannels}\n` +
+            `**Ignored roles:** ${ignoredRoles}\n` +
+            `**Level role rewards:** ${rewards}\n\n` +
+            `**Announcement:** ${settings.title || 'Congratulations {user}!'}\n` +
+            `**Embed color:** ${settings.color || '#5865F2'} • **Banner:** ${settings.image ? 'Configured' : 'None'}`
         )
         .addFields({
-            name: 'Supported Variables',
+            name: 'Announcement variables',
             value: '`{user}` • `{username}` • `{tag}` • `{server}` • `{level}` • `{xp}` • `{count}`',
             inline: false
         })
-        .setFooter({ text: 'Use the buttons below or type ,leveling toggle to change configuration.' });
-
+        .setFooter({ text: 'Changes apply to this server. Manage Server permission is required.' });
     const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('lvl_btn_toggle')
-            .setLabel(isEnabled ? 'Leveling: Enabled' : 'Leveling: Disabled')
-            .setStyle(isEnabled ? ButtonStyle.Success : ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('lvl_btn_toggle').setLabel(enabled ? 'Disable Leveling' : 'Enable Leveling').setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('lvl_btn_xp').setLabel('XP & Cooldowns').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('lvl_btn_channel').setLabel('Announcement Channel').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('lvl_btn_ignore').setLabel('Ignored Channels / Roles').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('lvl_btn_rewards').setLabel('Role Rewards').setStyle(ButtonStyle.Secondary)
+    );
+    const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('lvl_btn_text').setLabel('Edit Text').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('lvl_btn_media').setLabel('Edit Media').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('lvl_btn_style').setLabel('Edit Style').setStyle(ButtonStyle.Secondary)
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_style').setLabel('Edit Style').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('lvl_btn_ping').setLabel('Edit Header').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Defaults').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('visuality_btn_studio').setLabel('Studio Hub').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success)
     );
-
-    return { embeds: [panelEmbed], components: [row1, row2] };
+    const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Announcement Design').setStyle(ButtonStyle.Danger)
+    );
+    return { embeds: [panelEmbed], components: [row1, row2, row3] };
 }
 
 // Build Rank Embed
@@ -326,12 +338,12 @@ async function buildRankEmbed(targetUser, userData, guild) {
             `• **Total Experience:** ${userData.xp.toLocaleString()} XP`
         )
         .addFields(
-            { name: 'Messages Sent', value: `\`${(userData.messages || 0).toLocaleString()}\``, inline: true },
-            { name: 'Voice Time', value: `\`${formatVcTime(userData.vc_time)}\``, inline: true },
-            { name: 'Target Milestone', value: `\`Level ${userData.level + 1}\``, inline: true },
+            { name: 'Messages Sent', value: `\`${(userData.messages || 0).toLocaleString()}\``,  inline: true },
+            { name: 'Voice Time', value: `\`${formatVcTime(userData.vc_time)}\``,  inline: true },
+            { name: 'Target Milestone', value: `\`Level ${userData.level + 1}\``,  inline: true },
             { 
                 name: `Progress to Level ${userData.level + 1} (${pct}%)`, 
-                value: `${progressBar}\n\`${userData.xp.toLocaleString()} / ${Math.round(nextLevelXp).toLocaleString()} XP\` (${Math.max(0, Math.round(nextLevelXp - userData.xp)).toLocaleString()} XP needed)`, 
+                value: `${progressBar}\n\`${userData.xp.toLocaleString()} / ${Math.round(nextLevelXp).toLocaleString()} XP\` (${Math.max(0, Math.round(nextLevelXp - userData.xp)).toLocaleString()} XP needed)`,  
                 inline: false 
             }
         )
@@ -409,22 +421,45 @@ const levelingModule = (client) => {
 
         if (!oldState.channelId && newState.channelId) {
             const guildSettings = settingsCache.get(guildId) || { enabled: true };
-            if (guildSettings.enabled !== false) {
-                vcJoinTimes.set(cacheKey, Date.now());
-            }
+            const ignored = (guildSettings.ignoredChannelIds || []).includes(newState.channelId) ||
+                (guildSettings.ignoredRoleIds || []).some(roleId => newState.member.roles.cache.has(roleId));
+            if (guildSettings.enabled !== false && !ignored) vcJoinTimes.set(cacheKey, Date.now());
         } else if (oldState.channelId && !newState.channelId) {
             if (vcJoinTimes.has(cacheKey)) {
                 const durationMs = Date.now() - vcJoinTimes.get(cacheKey);
                 vcJoinTimes.delete(cacheKey);
                 const guildSettings = settingsCache.get(guildId) || { enabled: true };
-                if (guildSettings.enabled !== false) {
+                const ignored = (guildSettings.ignoredChannelIds || []).includes(oldState.channelId) ||
+                    (guildSettings.ignoredRoleIds || []).some(roleId => newState.member.roles.cache.has(roleId));
+                if (guildSettings.enabled !== false && !ignored) {
                     const durationMinutes = Math.floor(durationMs / 60000);
                     if (durationMinutes > 0) {
-                        await LevelUser.findOneAndUpdate(
-                            { userId, guildId }, 
-                            { $inc: { vc_time: durationMinutes, xp: durationMinutes * 5 } }, 
-                            { upsert: true }
-                        ).catch(() => {});
+                        const voiceXp = Number(guildSettings.voiceXpPerMinute ?? 5);
+                        const increment = { vc_time: durationMinutes };
+                        if (voiceXp > 0) increment.xp = durationMinutes * voiceXp;
+                        const voiceUser = await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: increment }, { new: true, upsert: true }).catch(() => null);
+                        if (voiceUser && voiceXp > 0) {
+                            const reachedLevel = calculateLevel(voiceUser.xp);
+                            if (reachedLevel > voiceUser.level) {
+                                const claimed = await claimLevelUp(guildId, userId, reachedLevel);
+                                if (claimed) {
+                                const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
+                                const reward = rewards.filter(item => Number(item.level) <= reachedLevel).sort((a, b) => Number(b.level) - Number(a.level))[0];
+                                if (reward && newState.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                                    const role = newState.guild.roles.cache.get(reward.roleId);
+                                    if (role && !role.managed && role.position < newState.guild.members.me.roles.highest.position) {
+                                        await newState.member.roles.add(role, `Reached level ${reachedLevel} (voice XP reward)`).catch(() => {});
+                                    }
+                                }
+                                const template = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
+                                const content = replaceLvlPlaceholders(template, newState.member.user, reachedLevel, voiceUser.xp, newState.guild);
+                                const channel = guildSettings.logChannelId
+                                    ? newState.guild.channels.cache.get(guildSettings.logChannelId)
+                                    : newState.guild.systemChannel;
+                                if (channel?.send) channel.send({ content, allowedMentions: { users: [userId] } }).catch(() => {});
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -485,13 +520,8 @@ const levelingModule = (client) => {
                     const logId = targetChan ? targetChan.id : null;
                     await enableLeveling(guildId, logId);
 
-                    const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                    let msg = `⚙️ **Leveling System Enabled!**\nMembers will now earn XP from chat and voice activity.`;
-                    if (targetChan) {
-                        msg += `\n📌 **Announcements Channel:** <#${targetChan.id}>`;
-                        targetChan.send({ content: `🧪 **[Leveling System Setup Test]**`, embeds: [previewEmbed] }).catch(() => {});
-                    }
-                    return message.reply({ content: msg, embeds: [previewEmbed] });
+                    const msg = `✅ **Leveling enabled.** XP is now active for chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen this control panel anytime with `/leveling`.`;
+                    return message.reply({ content: msg }).catch(() => {});
                 }
 
                 // 2. Disable Leveling
@@ -515,12 +545,8 @@ const levelingModule = (client) => {
                         const logId = targetChan ? targetChan.id : undefined;
                         await enableLeveling(guildId, logId);
 
-                        const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                        let msg = `✅ **Leveling System has been ENABLED for ${message.guild.name}!**\nMembers will now earn XP from chat and voice activity.`;
-                        if (targetChan) {
-                            msg += `\n📌 **Announcements Channel:** <#${targetChan.id}>`;
-                        }
-                        return message.reply({ content: msg, embeds: [previewEmbed] });
+                        const msg = `✅ **Leveling enabled for ${message.guild.name}.** Members now earn XP from chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen the full control panel anytime with `/leveling`.`;
+                        return message.reply({ content: msg }).catch(() => {});
                     }
 
                     if (sub === 'off' || sub === 'disable' || sub === 'stop') {
@@ -539,7 +565,7 @@ const levelingModule = (client) => {
                         const logId = isReset ? null : (targetChan ? targetChan.id : null);
 
                         if (!targetChan && !isReset) {
-                            return message.reply(`❌ Please mention a channel or use \`channel reset\`.\n*Usage: \`.leveling channel #channel\` or \`.leveling channel reset\`*`);
+                            return message.reply(`❌ Please mention a channel or use \`channel reset\`.\n*Usage: \`,leveling channel #channel\` or \`,leveling channel reset\`*`);
                         }
 
                         await setLevelingChannel(guildId, logId);
@@ -638,19 +664,29 @@ const levelingModule = (client) => {
         const guildSettings = settingsCache.get(guildId) || { enabled: true, logChannelId: null };
         if (!guildSettings.enabled) return; 
 
-        const cooldownKey = `${guildId}-${userId}`;
-        const onCooldown = xpCooldowns.has(cooldownKey) && (Date.now() - xpCooldowns.get(cooldownKey) < 60000);
+        const ignoredChannel = (guildSettings.ignoredChannelIds || []).includes(message.channel.id);
+        const ignoredRole = (guildSettings.ignoredRoleIds || []).some(roleId => message.member?.roles?.cache?.has(roleId));
+        if (ignoredChannel || ignoredRole) return;
 
+        const cooldownKey = `${guildId}-${userId}`;
+        const cooldownMs = Math.max(5, Number(guildSettings.messageCooldownSeconds ?? 60)) * 1000;
+        const onCooldown = xpCooldowns.has(cooldownKey) && (Date.now() - xpCooldowns.get(cooldownKey) < cooldownMs);
         if (onCooldown) {
             await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: { messages: 1 } }, { upsert: true }).catch(() => {});
             return;
         }
 
-        xpCooldowns.set(cooldownKey, Date.now()); 
-
+        const minXp = Math.max(0, Math.min(100, Number(guildSettings.messageXpMin ?? 15)));
+        const maxXp = Math.max(minXp, Math.min(100, Number(guildSettings.messageXpMax ?? 25)));
+        if (maxXp === 0) {
+            await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: { messages: 1 } }, { upsert: true }).catch(() => {});
+            return;
+        }
+        xpCooldowns.set(cooldownKey, Date.now());
+        const messageXp = randomInt(minXp, maxXp + 1);
         const userDoc = await LevelUser.findOneAndUpdate(
             { userId, guildId },
-            { $inc: { messages: 1, xp: 15 } },
+            { $inc: { messages: 1, xp: messageXp } },
             { new: true, upsert: true }
         ).catch(() => {});
 
@@ -658,7 +694,8 @@ const levelingModule = (client) => {
 
         const newLevel = calculateLevel(userDoc.xp);
         if (newLevel > userDoc.level) {
-            await LevelUser.updateOne({ userId, guildId }, { level: newLevel }).catch(() => {});
+            const claimed = await claimLevelUp(guildId, userId, newLevel);
+            if (!claimed) return;
 
             // Apply the highest configured level-role reward the member has reached.
             const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
@@ -850,7 +887,7 @@ const levelingModule = (client) => {
                     });
                 } catch (err) {
                     return await interaction.reply({ 
-                        content: `❌ **Preview Error:** \`${err.message}\``, 
+                        content: `❌ **Preview Error:** \`${err.message}\``,  
                         flags: [EPHEMERAL_FLAG] 
                     }).catch(() => {});
                 }
@@ -884,7 +921,65 @@ const levelingModule = (client) => {
         // 📝 LEVEL-UP MODAL SUBMISSION PROCESSORS
         // ==========================================
         if (interaction.isModalSubmit() && interaction.customId.startsWith('lvl_modal_')) {
+            if (!interaction.inGuild() || (!interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild) && !interaction.member?.permissions?.has(PermissionFlagsBits.Administrator))) {
+                return interaction.reply({ content: 'You need Manage Server or Administrator permissions to change leveling settings.', flags: [EPHEMERAL_FLAG] });
+            }
             const guildId = interaction.guildId;
+
+            if (interaction.customId === 'lvl_modal_xp') {
+                const min = Number(interaction.fields.getTextInputValue('in_lvl_xp_min'));
+                const max = Number(interaction.fields.getTextInputValue('in_lvl_xp_max'));
+                const cooldown = Number(interaction.fields.getTextInputValue('in_lvl_cooldown'));
+                const voice = Number(interaction.fields.getTextInputValue('in_lvl_voice_xp'));
+                if (![min, max, cooldown, voice].every(Number.isInteger) || min < 0 || max < min || max > 100 || cooldown < 5 || cooldown > 3600 || voice < 0 || voice > 100) {
+                    return interaction.reply({ content: 'Invalid settings. Message XP must be 0–100 (max ≥ min), cooldown 5–3600 seconds, and voice XP 0–100 per minute.', flags: [EPHEMERAL_FLAG] });
+                }
+                await saveLevelSettings(guildId, { messageXpMin: min, messageXpMax: max, messageCooldownSeconds: cooldown, voiceXpPerMinute: voice });
+            }
+
+            if (interaction.customId === 'lvl_modal_channel') {
+                const raw = interaction.fields.getTextInputValue('in_lvl_channel').trim();
+                const channelId = raw.toLowerCase() === 'none' ? null : raw.replace(/[<#>]/g, '');
+                if (channelId && !/^\d{17,20}$/.test(channelId)) {
+                    return interaction.reply({ content: 'Enter a valid channel mention/ID, or none to announce in the channel where the member levels up.', flags: [EPHEMERAL_FLAG] });
+                }
+                if (channelId) {
+                    const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+                    if (!channel || !channel.isTextBased() || !channel.send) return interaction.reply({ content: 'That channel is unavailable or cannot receive messages.', flags: [EPHEMERAL_FLAG] });
+                }
+                await saveLevelSettings(guildId, { logChannelId: channelId });
+            }
+
+            if (interaction.customId === 'lvl_modal_ignore') {
+                const channels = parseSnowflakeList(interaction.fields.getTextInputValue('in_lvl_ignore_channels'));
+                const roles = parseSnowflakeList(interaction.fields.getTextInputValue('in_lvl_ignore_roles'));
+                if (!channels || !roles) return interaction.reply({ content: 'Use up to 20 valid Discord IDs in each field, separated by commas.', flags: [EPHEMERAL_FLAG] });
+                const missingChannel = channels.find(channelId => !interaction.guild.channels.cache.has(channelId));
+                const missingRole = roles.find(roleId => !interaction.guild.roles.cache.has(roleId));
+                if (missingChannel || missingRole) return interaction.reply({ content: 'One or more ignored channel or role IDs do not belong to this server.', flags: [EPHEMERAL_FLAG] });
+                await saveLevelSettings(guildId, { ignoredChannelIds: channels, ignoredRoleIds: roles });
+            }
+
+            if (interaction.customId === 'lvl_modal_rewards') {
+                const raw = interaction.fields.getTextInputValue('in_lvl_rewards').trim();
+                const rewards = [];
+                if (raw) {
+                    for (const line of raw.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean)) {
+                        const match = line.match(/^(\d{1,5})\s*:\s*(\d{17,20})$/);
+                        if (!match || Number(match[1]) < 1 || Number(match[1]) > 10000) return interaction.reply({ content: 'Each reward must be level:roleID, with a level from 1 to 10000.', flags: [EPHEMERAL_FLAG] });
+                        rewards.push({ level: Number(match[1]), roleId: match[2] });
+                    }
+                }
+                if (rewards.length > 20) return interaction.reply({ content: 'You can configure up to 20 level rewards.', flags: [EPHEMERAL_FLAG] });
+                if (new Set(rewards.map(item => item.level)).size !== rewards.length) return interaction.reply({ content: 'Each level can have only one reward role.', flags: [EPHEMERAL_FLAG] });
+                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply({ content: 'Starry needs Manage Roles permission before reward roles can be configured.', flags: [EPHEMERAL_FLAG] });
+                for (const reward of rewards) {
+                    const role = await interaction.guild.roles.fetch(reward.roleId).catch(() => null);
+                    if (!role || role.managed || role.position >= botMember.roles.highest.position) return interaction.reply({ content: 'One or more reward roles are missing, managed, or above Starry highest role.', flags: [EPHEMERAL_FLAG] });
+                }
+                await saveLevelSettings(guildId, { roleRewards: rewards });
+            }
 
             if (interaction.customId === 'lvl_modal_text') {
                 const title = interaction.fields.getTextInputValue('in_lvl_title');
@@ -923,7 +1018,7 @@ const levelingModule = (client) => {
                 settingsCache.set(guildId, { ...cached, pingContent });
             }
 
-            await interaction.reply({ content: '✅ **Level-Up Embed Visuality Updated!**', flags: [EPHEMERAL_FLAG] });
+            await interaction.reply({ content: '✅ **Leveling settings saved.**', flags: [EPHEMERAL_FLAG] });
 
             const panelData = await getLevelControlPanel(guildId, client);
             if (interaction.message && panelData) {
@@ -934,22 +1029,13 @@ const levelingModule = (client) => {
 
         if (!interaction.isChatInputCommand()) return;
 
-        // /enableleveling
-        if (interaction.commandName === 'enableleveling' || interaction.commandName === 'setuplevels') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                return interaction.reply({ content: '❌ Admin or Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
+        // The single /leveling command opens the complete leveling setup panel.
+        if (interaction.commandName === 'leveling') {
+            if (!interaction.inGuild() || (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild))) {
+                return interaction.reply({ content: '❌ Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
             }
-
-            const channel = interaction.options.getChannel('channel');
-            const logChannelId = channel ? channel.id : null;
-            await enableLeveling(interaction.guildId, logChannelId);
-
             const panelData = await getLevelControlPanel(interaction.guildId, client);
-            return interaction.reply({ 
-                content: `⚙️ **Leveling System Configured & Enabled!** ${channel ? `Announcements sent to ${channel}.` : 'Announcements sent to active channels.'}`,
-                ...panelData,
-                flags: [EPHEMERAL_FLAG] 
-            });
+            return interaction.reply({ ...panelData, flags: [EPHEMERAL_FLAG] });
         }
 
         // /disableleveling
@@ -978,15 +1064,6 @@ const levelingModule = (client) => {
             });
         }
 
-        // /customizelevels or /leveling
-        if (interaction.commandName === 'customizelevels' || interaction.commandName === 'leveling') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                return interaction.reply({ content: '❌ Admin or Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
-            }
-
-            const panelData = await getLevelControlPanel(interaction.guildId, client);
-            return interaction.reply({ ...panelData, flags: [EPHEMERAL_FLAG] });
-        }
     });
 };
 
