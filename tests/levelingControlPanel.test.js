@@ -77,7 +77,7 @@ test('level-up embeds are opt-in and plain text remains the default', () => {
   includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
   includes(leveling, 'embedEnabled: { type: Boolean, default: false }');
-  includes(leveling, "if (guildSettings.embedEnabled === true)");
+  includes(leveling, "if (settings.embedEnabled === true)");
   includes(leveling, 'Custom embed enabled');
   includes(leveling, 'Plain text (default)');
   includes(dashboard, 'levelEmbedEnabled');
@@ -110,7 +110,7 @@ test('level-up announcements are isolated from moderation and general logs', () 
   includes(leveling, 'await sendLevelUpAnnouncement(newState.guild, guildSettings, newState.member.user, reachedLevel, voiceUser.xp, newState.guild.systemChannel)');
   assert.ok(!leveling.includes("client.getLogChannel(message.guild, 'misc')"), 'level-up announcements must never use the general log fallback');
   includes(leveling, 'announcementChannelId: { type: String, default: null }');
-  includes(dashboard, 'updates.announcementChannelId = channelId || null;');
+  includes(api, 'updates.announcementChannelId = channelId || null;');
   includes(dashboard, 'body.announcementChannelId !== undefined ? body.announcementChannelId : body.logChannelId');
   includes(dashboard, 'levelAnnouncementChannel');
 });
