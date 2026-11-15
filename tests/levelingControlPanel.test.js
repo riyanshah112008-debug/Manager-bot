@@ -56,8 +56,9 @@ test('leveling configuration modals validate user-supplied IDs and numeric range
 
 test('activation never posts a level-up embed or setup test to public channels', () => {
   assert.doesNotMatch(leveling, /Leveling System Setup Test/);
-  assert.match(leveling, /Leveling enabled\\. Members can now earn XP/);
-  assert.match(leveling, /Use \`\\/levelpanel\\` to configure the system/);
+  assert.ok(leveling.includes('Leveling enabled.'));
+  assert.ok(leveling.includes('Reopen this control panel anytime with `/enableleveling`.'));
+  assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
   assert.match(leveling, /const payload = \{ content: pingMsg, allowedMentions:/);
 });
 
