@@ -55,7 +55,15 @@ test('leveling configuration modals validate user-supplied IDs and numeric range
   includes(leveling, 'interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)');
 });
 
-test('activation never posts a level-up embed or setup test to public channels', () => {
+test('level-up announcements default to plain text and custom embeds require opt-in', () => {
+  includes(leveling, 'embedEnabled: { type: Boolean, default: false }');
+  includes(leveling, "setCustomId('lvl_btn_embed_toggle')");
+  includes(leveling, "settings.embedEnabled === true ? 'Disable Embeds' : 'Enable Custom Embeds'");
+  includes(leveling, 'if (guildSettings.embedEnabled === true) payload.embeds = [buildLevelUpEmbed');
+  includes(leveling, 'if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed]');
+  includes(api, "if (typeof body.embedEnabled === 'boolean') updates.embedEnabled = body.embedEnabled;");
+  includes(dashboard, 'check("levelEmbedEnabled","Enable custom embeds"');
+  includes(dashboard, 'embedEnabled:$("#levelEmbedEnabled").checked');
   assert.ok(!leveling.includes('Leveling System Setup Test'));
   includes(leveling, 'Leveling enabled.');
   includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
