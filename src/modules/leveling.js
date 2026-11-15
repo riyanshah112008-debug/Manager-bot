@@ -46,6 +46,12 @@ const LevelSettingsSchema = new mongoose.Schema({
     footer: { type: String, default: '{server} • Leveling System' },
     pingContent: { type: String, default: DEFAULT_LEVEL_UP_MESSAGE },
     roleRewards: { type: [{ level: { type: Number, min: 1, max: 10000 }, roleId: { type: String } }], default: [] },
+    messageXpMin: { type: Number, default: 15, min: 0, max: 100 },
+    messageXpMax: { type: Number, default: 25, min: 0, max: 100 },
+    messageCooldownSeconds: { type: Number, default: 60, min: 5, max: 3600 },
+    voiceXpPerMinute: { type: Number, default: 5, min: 0, max: 100 },
+    ignoredChannelIds: { type: [String], default: [] },
+    ignoredRoleIds: { type: [String], default: [] },
     authorName: { type: String, default: 'LEVEL UP UNLOCKED' }
 });
 const LevelSettings = mongoose.models.LevelSettings || mongoose.model('LevelSettings', LevelSettingsSchema);
@@ -212,90 +218,70 @@ async function setLevelingChannel(guildId, logChannelId) {
 }
 
 async function getLevelControlPanel(guildId, client) {
-    let settings = null;
+    const defaults = {
+        guildId, enabled: true, logChannelId: null,
+        title: 'Congratulations {user}!',
+        description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
+        color: '#5865F2', image: '', thumbnail: 'avatar',
+        footer: '{server} • Leveling System', pingContent: DEFAULT_LEVEL_UP_MESSAGE,
+        authorName: 'LEVEL UP UNLOCKED', roleRewards: [],
+        messageXpMin: 15, messageXpMax: 25, messageCooldownSeconds: 60,
+        voiceXpPerMinute: 5, ignoredChannelIds: [], ignoredRoleIds: []
+    };
+    let settings = settingsCache.get(guildId) || { ...defaults };
     if (isDbConnected()) {
-        settings = await LevelSettings.findOne({ guildId }).catch(() => null);
-        if (!settings) {
-            settings = await LevelSettings.create({
-                guildId,
-                enabled: true,
-                title: 'Congratulations {user}!',
-                description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
-                color: '#5865F2',
-                image: '',
-                thumbnail: 'avatar',
-                footer: '{server} • Leveling System',
-                pingContent: DEFAULT_LEVEL_UP_MESSAGE,
-                authorName: 'LEVEL UP UNLOCKED'
-            }).catch(() => null);
+        const stored = await LevelSettings.findOne({ guildId }).lean().catch(() => null);
+        if (stored) settings = { ...defaults, ...stored };
+        else {
+            const created = await LevelSettings.create(defaults).catch(() => null);
+            if (created) settings = { ...defaults, ...created.toObject() };
         }
+        settingsCache.set(guildId, settings);
     }
-    if (!settings) {
-        settings = settingsCache.get(guildId) || {
-            guildId,
-            enabled: true,
-            title: 'Congratulations {user}!',
-            description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
-            color: '#5865F2',
-            image: '',
-            thumbnail: 'avatar',
-            footer: '{server} • Leveling System',
-            pingContent: DEFAULT_LEVEL_UP_MESSAGE,
-            authorName: 'LEVEL UP UNLOCKED'
-        };
-    }
-
-    const isEnabled = settings.enabled !== false;
-    const channelDisplay = settings.logChannelId ? `<#${settings.logChannelId}>` : '*Current Channel (Where user levels up)*';
-    const pingDisplay = (settings.pingContent || DEFAULT_LEVEL_UP_MESSAGE).replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const authorDisplay = (settings.authorName || 'LEVEL UP UNLOCKED').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const titleDisplay = (settings.title || 'Congratulations {user}!').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const descDisplay = settings.description || 'Your active participation in **{server}** has paid off! You reached **Level {level}**!';
-    const colorDisplay = isValidHex(settings.color) ? settings.color : '#5865F2';
-    const footerDisplay = (settings.footer || '{server} • Leveling System').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    
-    const activeImage = cleanImageUrl(settings.image);
-    const imageDisplay = isValidUrl(activeImage) ? `[View Media Link](${activeImage})` : '*None*';
-
+    const enabled = settings.enabled !== false;
+    const channel = settings.logChannelId ? \`<#\${settings.logChannelId}>\` : 'Channel where the member levels up';
+    const ignoredChannels = (settings.ignoredChannelIds || []).map(id => \`<#\${id}>\`).join(', ') || 'None';
+    const ignoredRoles = (settings.ignoredRoleIds || []).map(id => \`<@&\${id}>\`).join(', ') || 'None';
+    const rewards = (settings.roleRewards || []).slice().sort((a,b) => Number(a.level)-Number(b.level))
+        .map(item => \`L\${item.level}: <@&\${item.roleId}>\`).join(' • ') || 'None';
     const panelEmbed = new EmbedBuilder()
-        .setColor(isEnabled ? colorDisplay : '#ED4245')
-        .setTitle('Mina Leveling Engine • Server Control Center')
+        .setColor(enabled ? (isValidHex(settings.color) ? settings.color : '#5865F2') : '#ED4245')
+        .setTitle('⭐ Starry Leveling • Control Panel')
         .setDescription(
-            `Configure leveling rewards and design custom level-up announcement cards for your server.\n\n` +
-            `**System State:** ${isEnabled ? '**Enabled (Active)**' : '**Disabled (Suspended)**'}\n` +
-            `**Announcement Channel:** ${channelDisplay}\n` +
-            `**Message Header / Ping:** \`${pingDisplay}\`\n` +
-            `**Author Header:** \`${authorDisplay}\`\n` +
-            `**Title:** \`${titleDisplay}\`\n` +
-            `**Description:** \`\`\`${descDisplay}\`\`\`\n` +
-            `**Hex Color:** \`${colorDisplay}\` | **Footer:** \`${footerDisplay}\`\n` +
-            `**Banner Image:** ${imageDisplay}`
+            \`**Status:** \${enabled ? '🟢 Enabled' : '🔴 Disabled'}\\n\` +
+            \`**Level-up channel:** \${channel}\\n\\n\` +
+            \`**Message XP:** \${settings.messageXpMin ?? 15}–\${settings.messageXpMax ?? 25} XP • \${settings.messageCooldownSeconds ?? 60}s cooldown\\n\` +
+            \`**Voice XP:** \${settings.voiceXpPerMinute ?? 5} XP per minute\\n\` +
+            \`**Ignored channels:** \${ignoredChannels}\\n\` +
+            \`**Ignored roles:** \${ignoredRoles}\\n\` +
+            \`**Level role rewards:** \${rewards}\\n\\n\` +
+            \`**Announcement:** \${settings.title || 'Congratulations {user}!'}\\n\` +
+            \`**Embed color:** \${settings.color || '#5865F2'} • **Banner:** \${settings.image ? 'Configured' : 'None'}\`
         )
         .addFields({
-            name: 'Supported Variables',
-            value: '`{user}` • `{username}` • `{tag}` • `{server}` • `{level}` • `{xp}` • `{count}`',
+            name: 'Announcement variables',
+            value: '\`{user}\` • \`{username}\` • \`{tag}\` • \`{server}\` • \`{level}\` • \`{xp}\` • \`{count}\`',
             inline: false
         })
-        .setFooter({ text: 'Use the buttons below or type ,leveling toggle to change configuration.' });
-
+        .setFooter({ text: 'Changes apply to this server. Manage Server permission is required.' });
     const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('lvl_btn_toggle')
-            .setLabel(isEnabled ? 'Leveling: Enabled' : 'Leveling: Disabled')
-            .setStyle(isEnabled ? ButtonStyle.Success : ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('lvl_btn_toggle').setLabel(enabled ? 'Disable Leveling' : 'Enable Leveling').setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('lvl_btn_xp').setLabel('XP & Cooldowns').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('lvl_btn_channel').setLabel('Announcement Channel').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('lvl_btn_ignore').setLabel('Ignored Channels / Roles').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('lvl_btn_rewards').setLabel('Role Rewards').setStyle(ButtonStyle.Secondary)
+    );
+    const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('lvl_btn_text').setLabel('Edit Text').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('lvl_btn_media').setLabel('Edit Media').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('lvl_btn_style').setLabel('Edit Style').setStyle(ButtonStyle.Secondary)
-    );
-
-    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_style').setLabel('Edit Style').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('lvl_btn_ping').setLabel('Edit Header').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Defaults').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('visuality_btn_studio').setLabel('Studio Hub').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success)
     );
-
-    return { embeds: [panelEmbed], components: [row1, row2] };
+    const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Announcement Design').setStyle(ButtonStyle.Danger)
+    );
+    return { embeds: [panelEmbed], components: [row1, row2, row3] };
 }
 
 // Build Rank Embed
