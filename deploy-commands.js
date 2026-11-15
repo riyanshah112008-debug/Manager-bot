@@ -215,10 +215,23 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-    // ⭐ Unified administrator leveling control panel
+    // Existing command: enable the leveling engine.
     new SlashCommandBuilder()
-        .setName('leveling')
-        .setDescription('Open the complete server leveling control panel')
+        .setName('enableleveling')
+        .setDescription('Enable leveling and optionally choose the announcement channel')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('Level-up announcement channel')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    // Separate command: open the complete leveling control panel.
+    new SlashCommandBuilder()
+        .setName('levelpanel')
+        .setDescription('Open Starry’s leveling design and settings panel')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
