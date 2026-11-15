@@ -38,6 +38,7 @@ const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
 const LevelSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     enabled: { type: Boolean, default: true },
+    embedEnabled: { type: Boolean, default: false },
     logChannelId: { type: String, default: null },
     title: { type: String, default: 'Congratulations {user}!' },
     description: { type: String, default: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!' },
@@ -245,7 +246,7 @@ function parseSnowflakeList(value) {
 
 async function getLevelControlPanel(guildId, client) {
     const defaults = {
-        guildId, enabled: true, logChannelId: null,
+        guildId, enabled: true, embedEnabled: false, logChannelId: null,
         title: 'Congratulations {user}!',
         description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
         color: '#5865F2', image: '', thumbnail: 'avatar',
@@ -275,7 +276,8 @@ async function getLevelControlPanel(guildId, client) {
         .setTitle('⭐ Starry Leveling • Control Panel')
         .setDescription(
             `**Status:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}\n` +
-            `**Level-up channel:** ${channel}\n\n` +
+            `**Level-up channel:** ${channel}\n` +
+            `**Announcement format:** ${settings.embedEnabled === true ? '🟣 Custom embed enabled' : '📝 Plain text (default)'}\n\n` +
             `**Message XP:** ${settings.messageXpMin ?? 15}–${settings.messageXpMax ?? 25} XP • ${settings.messageCooldownSeconds ?? 60}s cooldown\n` +
             `**Voice XP:** ${settings.voiceXpPerMinute ?? 5} XP per minute\n` +
             `**Ignored channels:** ${ignoredChannels}\n` +
@@ -305,6 +307,7 @@ async function getLevelControlPanel(guildId, client) {
         new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success)
     );
     const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_embed_toggle').setLabel(settings.embedEnabled === true ? 'Disable Embeds' : 'Enable Custom Embeds').setStyle(settings.embedEnabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Announcement Design').setStyle(ButtonStyle.Danger)
     );
     return { embeds: [panelEmbed], components: [row1, row2, row3] };
@@ -456,7 +459,11 @@ const levelingModule = (client) => {
                                 const channel = guildSettings.logChannelId
                                     ? newState.guild.channels.cache.get(guildSettings.logChannelId)
                                     : newState.guild.systemChannel;
-                                if (channel?.send) channel.send({ content, allowedMentions: { users: [userId] } }).catch(() => {});
+                                if (channel?.send) {
+                                    const payload = { content, allowedMentions: { users: [userId] } };
+                                    if (guildSettings.embedEnabled === true) payload.embeds = [buildLevelUpEmbed(newState.member.user, reachedLevel, voiceUser.xp, newState.guild, guildSettings)];
+                                    channel.send(payload).catch(() => {});
+                                }
                                 }
                             }
                         }
@@ -577,7 +584,9 @@ const levelingModule = (client) => {
 
                     if (sub === 'preview' || sub === 'test') {
                         const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                        return message.reply({ content: `🧪 **[Leveling Card Live Preview]**`, embeds: [previewEmbed] });
+                        const preview = { content: `🧪 **[Leveling Preview]** ${replaceLvlPlaceholders(guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE, message.author, 5, 2500, message.guild)}` };
+                        if (guildSettings.embedEnabled === true) preview.embeds = [previewEmbed];
+                        return message.reply(preview);
                     }
 
                     // Default: show full interactive control panel
@@ -735,6 +744,7 @@ const levelingModule = (client) => {
 
             // Level-up announcements stay compact and plain-text: no generated embed or extra XP fields.
             const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
+            if (guildSettings.embedEnabled === true) payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
             if (logChannel && typeof logChannel.send === 'function') {
                 logChannel.send(payload).catch(() => {});
             } else {
@@ -763,6 +773,16 @@ const levelingModule = (client) => {
 
             let settings = await LevelSettings.findOne({ guildId: interaction.guildId });
             if (!settings) settings = await LevelSettings.create({ guildId: interaction.guildId, enabled: true });
+
+            // Custom embeds are opt-in; plain text is the default.
+            if (interaction.customId === 'lvl_btn_embed_toggle') {
+                const embedEnabled = settings.embedEnabled !== true;
+                await LevelSettings.findOneAndUpdate({ guildId: interaction.guildId }, { embedEnabled }, { upsert: true });
+                const existing = settingsCache.get(interaction.guildId) || {};
+                settingsCache.set(interaction.guildId, { ...existing, embedEnabled });
+                const panelData = await getLevelControlPanel(interaction.guildId, client);
+                return interaction.message ? interaction.update(panelData).catch(() => {}) : interaction.reply({ ...panelData, flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            }
 
             // TOGGLE LEVELING STATE BUTTON
             if (interaction.customId === 'lvl_btn_toggle') {
@@ -880,11 +900,9 @@ const levelingModule = (client) => {
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
                     const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
 
-                    return await interaction.reply({ 
-                        content: `${pingText} *(Setup Preview)*`, 
-                        embeds: [previewEmbed], 
-                        flags: [EPHEMERAL_FLAG] 
-                    });
+                    const previewPayload = { content: `${pingText} *(Setup Preview)*`, flags: [EPHEMERAL_FLAG] };
+                    if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed];
+                    return await interaction.reply(previewPayload);
                 } catch (err) {
                     return await interaction.reply({ 
                         content: `❌ **Preview Error:** \`${err.message}\``,  
