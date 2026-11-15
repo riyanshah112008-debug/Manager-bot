@@ -544,12 +544,8 @@ const levelingModule = (client) => {
                         const logId = targetChan ? targetChan.id : undefined;
                         await enableLeveling(guildId, logId);
 
-                        const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                        let msg = `✅ **Leveling System has been ENABLED for ${message.guild.name}!**\nMembers will now earn XP from chat and voice activity.`;
-                        if (targetChan) {
-                            msg += `\n📌 **Announcements Channel:** <#${targetChan.id}>`;
-                        }
-                        return message.reply({ content: msg, embeds: [previewEmbed] });
+                        const msg = `✅ **Leveling enabled for ${message.guild.name}.** Members now earn XP from chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nOpen `/levelpanel` to configure the system.`;
+                        return message.reply({ content: msg }).catch(() => {});
                     }
 
                     if (sub === 'off' || sub === 'disable' || sub === 'stop') {
