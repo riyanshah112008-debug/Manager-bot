@@ -1028,20 +1028,13 @@ const levelingModule = (client) => {
 
         if (!interaction.isChatInputCommand()) return;
 
-        // /enableleveling remains the simple activation command; /levelpanel opens the studio.
-        if (interaction.commandName === 'enableleveling' || interaction.commandName === 'setuplevels') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                return interaction.reply({ content: '❌ Admin or Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
+        // The single /enableleveling command opens the complete leveling setup panel.
+        if (interaction.commandName === 'enableleveling') {
+            if (!interaction.inGuild() || (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild))) {
+                return interaction.reply({ content: '❌ Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
             }
-
-            const channel = interaction.options.getChannel('channel');
-            const logChannelId = channel ? channel.id : null;
-            await enableLeveling(interaction.guildId, logChannelId);
-
-            return interaction.reply({
-                content: `✅ **Leveling enabled.** Members can now earn XP.${channel ? ` Announcements: ${channel}.` : ''} Use `/levelpanel` to configure the system.`,
-                flags: [EPHEMERAL_FLAG]
-            });
+            const panelData = await getLevelControlPanel(interaction.guildId, client);
+            return interaction.reply({ ...panelData, flags: [EPHEMERAL_FLAG] });
         }
 
         // /disableleveling
@@ -1070,15 +1063,6 @@ const levelingModule = (client) => {
             });
         }
 
-        // /levelpanel opens the dedicated leveling studio; legacy aliases remain supported.
-        if (interaction.commandName === 'levelpanel' || interaction.commandName === 'customizelevels' || interaction.commandName === 'leveling') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-                return interaction.reply({ content: '❌ Admin or Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
-            }
-
-            const panelData = await getLevelControlPanel(interaction.guildId, client);
-            return interaction.reply({ ...panelData, flags: [EPHEMERAL_FLAG] });
-        }
     });
 };
 
