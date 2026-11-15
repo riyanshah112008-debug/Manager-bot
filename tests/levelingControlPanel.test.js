@@ -51,3 +51,18 @@ test('leveling configuration modals validate user-supplied IDs and numeric range
   assert.match(leveling, /rewards\.length > 20/);
   assert.match(leveling, /interaction\.member\?\.permissions\?\.has\(PermissionFlagsBits\.ManageGuild\)/);
 });
+
+
+test('activation never posts a level-up embed or setup test to public channels', () => {
+  assert.doesNotMatch(leveling, /Leveling System Setup Test/);
+  assert.match(leveling, /Leveling enabled\\. Members can now earn XP/);
+  assert.match(leveling, /Use \`\\/levelpanel\\` to configure the system/);
+  assert.match(leveling, /const payload = \{ content: pingMsg, allowedMentions:/);
+});
+
+test('level-up announcements are atomically claimed to prevent duplicate spam', () => {
+  assert.match(leveling, /async function claimLevelUp/);
+  assert.match(leveling, /level: \{ \$lt: newLevel \}/);
+  assert.match(leveling, /if \(!claimed\) return/);
+  assert.match(leveling, /if \(claimed\) \{/);
+});
