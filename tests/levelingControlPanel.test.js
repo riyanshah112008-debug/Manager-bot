@@ -5,80 +5,79 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
-const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const deploy = read('deploy-commands.js');
-const leveling = read('src/modules/leveling.js');
+const deploy = fs.readFileSync(path.resolve(__dirname, '../deploy-commands.js'), 'utf8');
+const leveling = fs.readFileSync(path.resolve(__dirname, '../src/modules/leveling.js'), 'utf8');
+const dashboard = fs.readFileSync(path.resolve(__dirname, '../public/workspace.js'), 'utf8');
+const api = fs.readFileSync(path.resolve(__dirname, '../src/modules/dashboardServer.js'), 'utf8');
+
+const includes = (source, fragment, message) => assert.ok(source.includes(fragment), message || `Expected source to include: ${fragment}`);
 
 test('one /leveling command opens the full interactive leveling panel', () => {
-  assert.ok(deploy.includes(".setName('leveling')"));
+  includes(deploy, ".setName('leveling')");
   assert.ok(!deploy.includes(".setName('levelpanel')"));
-  assert.ok(leveling.includes("interaction.commandName === 'leveling'"));
-  assert.ok(leveling.includes('getLevelControlPanel(interaction.guildId, client)'));
+  includes(leveling, "interaction.commandName === 'leveling'");
+  includes(leveling, 'getLevelControlPanel(interaction.guildId, client)');
 });
 
 test('AI and code slash commands are explicitly excluded from global deployment', () => {
   for (const command of ['ai', 'vision', 'image', 'summarize', 'codebot', 'code-studio', 'setup-starry', 'ask', 'gemini', 'gpt', 'dev-council', 'catchup', 'pulse', 'spark', 'gazette']) {
-    assert.match(deploy, new RegExp("'" + command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "'"));
+    includes(deploy, `'${command}'`, `AI/code command exclusion missing: ${command}`);
   }
   for (const moduleName of ['catchupModule', 'pulseModule', 'sparkModule', 'gazetteModule', 'codeStudioModule']) {
-    assert.doesNotMatch(deploy, new RegExp('const ' + moduleName + ' = safeRequire'));
+    assert.ok(!deploy.includes(`const ${moduleName} = safeRequire`), `unexpected module registration: ${moduleName}`);
   }
 });
 
 test('leveling panel exposes activity, channel, exclusions, reward and announcement controls', () => {
   for (const button of ['toggle', 'xp', 'channel', 'ignore', 'rewards', 'text', 'media', 'style', 'ping', 'preview', 'reset']) {
-    assert.match(leveling, new RegExp("setCustomId\\('lvl_btn_" + button + "'\\)"));
+    includes(leveling, `setCustomId('lvl_btn_${button}')`);
   }
   for (const field of ['messageXpMin', 'messageXpMax', 'messageCooldownSeconds', 'voiceXpPerMinute', 'ignoredChannelIds', 'ignoredRoleIds', 'roleRewards']) {
-    assert.match(leveling, new RegExp(field));
+    includes(leveling, field);
   }
 });
 
 test('XP awarding reads configured ranges, cooldowns and exclusions', () => {
-  assert.match(leveling, /messageXpMin \?\? 15/);
-  assert.match(leveling, /messageXpMax \?\? 25/);
-  assert.match(leveling, /messageCooldownSeconds \?\? 60/);
-  assert.match(leveling, /voiceXpPerMinute \?\? 5/);
-  assert.match(leveling, /ignoredChannelIds/);
-  assert.match(leveling, /ignoredRoleIds/);
-  assert.match(leveling, /Math\.random\(\) \* \(maxXp - minXp \+ 1\)/);
+  includes(leveling, 'messageXpMin ?? 15');
+  includes(leveling, 'messageXpMax ?? 25');
+  includes(leveling, 'messageCooldownSeconds ?? 60');
+  includes(leveling, 'voiceXpPerMinute ?? 5');
+  includes(leveling, 'ignoredChannelIds');
+  includes(leveling, 'ignoredRoleIds');
+  includes(leveling, 'randomInt(minXp, maxXp + 1)');
+  assert.ok(!leveling.includes('Math.random()'), 'XP awards must not use a weak random generator');
 });
 
 test('leveling configuration modals validate user-supplied IDs and numeric ranges', () => {
-  assert.match(leveling, /function parseSnowflakeList/);
-  assert.match(leveling, /min < 0 \|\| max < min \|\| max > 100/);
-  assert.match(leveling, /cooldown < 5 \|\| cooldown > 3600/);
-  assert.match(leveling, /rewards\.length > 20/);
-  assert.match(leveling, /interaction\.member\?\.permissions\?\.has\(PermissionFlagsBits\.ManageGuild\)/);
+  includes(leveling, 'function parseSnowflakeList');
+  includes(leveling, 'min < 0 || max < min || max > 100');
+  includes(leveling, 'cooldown < 5 || cooldown > 3600');
+  includes(leveling, 'rewards.length > 20');
+  includes(leveling, 'interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)');
 });
 
-
 test('activation never posts a level-up embed or setup test to public channels', () => {
-  assert.doesNotMatch(leveling, /Leveling System Setup Test/);
-  assert.ok(leveling.includes('Leveling enabled.'));
-  assert.ok(leveling.includes('Reopen this control panel anytime with `/leveling`.'));
+  assert.ok(!leveling.includes('Leveling System Setup Test'));
+  includes(leveling, 'Leveling enabled.');
+  includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
-  assert.match(leveling, /const payload = \{ content: pingMsg, allowedMentions:/);
+  includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
 });
 
 test('level-up announcements are atomically claimed to prevent duplicate spam', () => {
-  assert.match(leveling, /async function claimLevelUp/);
-  assert.match(leveling, /level: \{ \$lt: newLevel \}/);
-  assert.match(leveling, /if \(!claimed\) return/);
-  assert.match(leveling, /if \(claimed\) \{/);
+  includes(leveling, 'async function claimLevelUp');
+  includes(leveling, 'level: { $lt: newLevel }');
+  includes(leveling, 'if (!claimed) return');
+  includes(leveling, 'if (claimed) {');
 });
 
-
 test('dashboard exposes the same XP, exclusion, announcement and reward settings', () => {
-  const dashboard = read('public/workspace.js');
-  const api = read('src/modules/dashboardServer.js');
   for (const field of ['messageXpMin','messageXpMax','messageCooldownSeconds','voiceXpPerMinute','ignoredChannelIds','ignoredRoleIds','roleRewards']) {
-    assert.ok(api.includes(field), 'dashboard API missing ' + field);
+    includes(api, field, `dashboard API missing ${field}`);
   }
   for (const field of ['messageXpMin','messageXpMax','messageCooldownSeconds','voiceXpPerMinute','ignoredLevelChannels','ignoredLevelRoles','levelPingContent']) {
-    assert.ok(dashboard.includes(field), 'dashboard UI missing ' + field);
+    includes(dashboard, field, `dashboard UI missing ${field}`);
   }
-  assert.ok(dashboard.includes('levelThumbnail:d.settings?.thumbnail||"avatar"'), 'saved thumbnail selection must load');
-  assert.ok(api.includes('isValidationError = /^Invalid /'), 'invalid numeric settings should return a client validation response');
+  includes(dashboard, 'levelThumbnail:d.settings?.thumbnail||"avatar"', 'saved thumbnail selection must load');
+  includes(api, 'isValidationError = /^Invalid /', 'invalid numeric settings should return a client validation response');
 });
