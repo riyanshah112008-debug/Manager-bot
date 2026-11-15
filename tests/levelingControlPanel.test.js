@@ -77,12 +77,12 @@ test('level-up embeds are opt-in and plain text remains the default', () => {
   includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
   includes(leveling, 'embedEnabled: { type: Boolean, default: false }');
-  includes(leveling, "if (guildSettings.embedEnabled === true)");
+  includes(leveling, "if (settings.embedEnabled === true)");
   includes(leveling, 'Custom embed enabled');
   includes(leveling, 'Plain text (default)');
   includes(dashboard, 'levelEmbedEnabled');
   includes(api, 'if (typeof body.embedEnabled === \'boolean\') updates.embedEnabled = body.embedEnabled;');
-  includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
+  includes(leveling, 'const payload = { content, allowedMentions:');
 });
 
 test('level-up announcements are atomically claimed to prevent duplicate spam', () => {
@@ -101,4 +101,16 @@ test('dashboard exposes the same XP, exclusion, announcement and reward settings
   }
   includes(dashboard, 'levelThumbnail:d.settings?.thumbnail||"avatar"', 'saved thumbnail selection must load');
   includes(api, 'isValidationError = /^Invalid /', 'invalid numeric settings should return a client validation response');
+});
+
+test('level-up announcements are isolated from moderation and general logs', () => {
+  includes(leveling, 'function resolveLevelAnnouncementChannel');
+  includes(leveling, 'function sendLevelUpAnnouncement');
+  includes(leveling, 'await sendLevelUpAnnouncement(message.guild, guildSettings, message.author, newLevel, userDoc.xp, message.channel)');
+  includes(leveling, 'await sendLevelUpAnnouncement(newState.guild, guildSettings, newState.member.user, reachedLevel, voiceUser.xp, newState.guild.systemChannel)');
+  assert.ok(!leveling.includes("client.getLogChannel(message.guild, 'misc')"), 'level-up announcements must never use the general log fallback');
+  includes(leveling, 'announcementChannelId: { type: String, default: null }');
+  includes(api, 'updates.announcementChannelId = channelId || null;');
+  includes(api, 'const requestedAnnouncementChannel = body.announcementChannelId');
+  includes(dashboard, 'levelAnnouncementChannel');
 });
