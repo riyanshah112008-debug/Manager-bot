@@ -508,13 +508,8 @@ const levelingModule = (client) => {
                     const logId = targetChan ? targetChan.id : null;
                     await enableLeveling(guildId, logId);
 
-                    const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                    let msg = `⚙️ **Leveling System Enabled!**\nMembers will now earn XP from chat and voice activity.`;
-                    if (targetChan) {
-                        msg += `\n📌 **Announcements Channel:** <#${targetChan.id}>`;
-                        targetChan.send({ content: `🧪 **[Leveling System Setup Test]**`, embeds: [previewEmbed] }).catch(() => {});
-                    }
-                    return message.reply({ content: msg, embeds: [previewEmbed] });
+                    const msg = `✅ **Leveling enabled.** XP is now active for chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nUse `/levelpanel` to configure XP, rewards, exclusions and announcements.`;
+                    return message.reply({ content: msg }).catch(() => {});
                 }
 
                 // 2. Disable Leveling
@@ -1025,7 +1020,7 @@ const levelingModule = (client) => {
 
         if (!interaction.isChatInputCommand()) return;
 
-        // /enableleveling
+        // /enableleveling remains the simple activation command; /levelpanel opens the studio.
         if (interaction.commandName === 'enableleveling' || interaction.commandName === 'setuplevels') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                 return interaction.reply({ content: '❌ Admin or Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
@@ -1035,11 +1030,9 @@ const levelingModule = (client) => {
             const logChannelId = channel ? channel.id : null;
             await enableLeveling(interaction.guildId, logChannelId);
 
-            const panelData = await getLevelControlPanel(interaction.guildId, client);
-            return interaction.reply({ 
-                content: `⚙️ **Leveling System Configured & Enabled!** ${channel ? `Announcements sent to ${channel}.` : 'Announcements sent to active channels.'}`,
-                ...panelData,
-                flags: [EPHEMERAL_FLAG] 
+            return interaction.reply({
+                content: `✅ **Leveling enabled.** Members can now earn XP.${channel ? ` Announcements: ${channel}.` : ''} Use `/levelpanel` to configure the system.`,
+                flags: [EPHEMERAL_FLAG]
             });
         }
 
@@ -1069,8 +1062,8 @@ const levelingModule = (client) => {
             });
         }
 
-        // /customizelevels or /leveling
-        if (interaction.commandName === 'customizelevels' || interaction.commandName === 'leveling') {
+        // /levelpanel opens the dedicated leveling studio; legacy aliases remain supported.
+        if (interaction.commandName === 'levelpanel' || interaction.commandName === 'customizelevels' || interaction.commandName === 'leveling') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                 return interaction.reply({ content: '❌ Admin or Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
             }
