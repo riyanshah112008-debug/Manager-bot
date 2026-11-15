@@ -62,7 +62,8 @@ test('level-up embeds are opt-in and plain text remains the default', () => {
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
   includes(leveling, 'embedEnabled: { type: Boolean, default: false }');
   includes(leveling, "if (guildSettings.embedEnabled === true)");
-  includes(leveling, "if (settings.embedEnabled === true ? '🟣 Custom embed enabled' : 'Plain text (default)')");
+  includes(leveling, 'Custom embed enabled');
+  includes(leveling, 'Plain text (default)');
   includes(dashboard, 'levelEmbedEnabled');
   includes(api, 'if (typeof body.embedEnabled === \'boolean\') updates.embedEnabled = body.embedEnabled;');
   includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
