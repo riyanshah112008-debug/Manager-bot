@@ -10,10 +10,10 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const deploy = read('deploy-commands.js');
 const leveling = read('src/modules/leveling.js');
 
-test('one /enableleveling command opens the full interactive leveling panel', () => {
-  assert.ok(deploy.includes(".setName('enableleveling')"));
+test('one /leveling command opens the full interactive leveling panel', () => {
+  assert.ok(deploy.includes(".setName('leveling')"));
   assert.ok(!deploy.includes(".setName('levelpanel')"));
-  assert.ok(leveling.includes("interaction.commandName === 'enableleveling'"));
+  assert.ok(leveling.includes("interaction.commandName === 'leveling'"));
   assert.ok(leveling.includes('getLevelControlPanel(interaction.guildId, client)'));
 });
 
@@ -57,7 +57,7 @@ test('leveling configuration modals validate user-supplied IDs and numeric range
 test('activation never posts a level-up embed or setup test to public channels', () => {
   assert.doesNotMatch(leveling, /Leveling System Setup Test/);
   assert.ok(leveling.includes('Leveling enabled.'));
-  assert.ok(leveling.includes('Reopen this control panel anytime with `/enableleveling`.'));
+  assert.ok(leveling.includes('Reopen this control panel anytime with `/leveling`.'));
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
   assert.match(leveling, /const payload = \{ content: pingMsg, allowedMentions:/);
 });
