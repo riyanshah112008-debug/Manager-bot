@@ -581,7 +581,7 @@ const levelingModule = (client) => {
                     if (sub === 'preview' || sub === 'test') {
                         const latest = await LevelSettings.findOne({ guildId }).lean().catch(() => null) || settingsCache.get(guildId) || {};
                         const previewText = replaceLvlPlaceholders(latest.pingContent || DEFAULT_LEVEL_UP_MESSAGE, message.author, 5, 2500, message.guild);
-                        const previewPayload = { content: `${previewText} *(Setup Preview)*` };
+                        const previewPayload = { content: `${previewText} *(Setup Preview)*`, allowedMentions: { parse: [] } };
                         if (latest.embedEnabled === true) {
                             previewPayload.embeds = [buildLevelUpEmbed(message.author, 5, 2500, message.guild, latest)];
                         }
@@ -821,7 +821,7 @@ const levelingModule = (client) => {
             if (interaction.customId === 'lvl_btn_channel') {
                 const modal = new ModalBuilder().setCustomId('lvl_modal_channel').setTitle('Announcement Channel');
                 const input = new TextInputBuilder().setCustomId('in_lvl_channel')
-                    .setLabel('Channel ID, mention, or none for current channel')
+                    .setLabel('Channel ID or mention; enter none for current')
                     .setStyle(TextInputStyle.Short).setRequired(false)
                     .setValue(settings.logChannelId ? String(settings.logChannelId) : 'none');
                 modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -961,7 +961,8 @@ const levelingModule = (client) => {
 
                     const previewPayload = {
                         content: `${pingText} *(Setup Preview)*`,
-                        flags: [EPHEMERAL_FLAG]
+                        flags: [EPHEMERAL_FLAG],
+                        allowedMentions: { parse: [] }
                     };
                     if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed];
                     return await interaction.reply(previewPayload);
