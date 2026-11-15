@@ -217,7 +217,7 @@ const commands = [
 
     // One command opens the complete leveling control panel.
     new SlashCommandBuilder()
-        .setName('enableleveling')
+        .setName('leveling')
         .setDescription('Open Starry’s complete leveling setup and control panel')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
