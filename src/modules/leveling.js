@@ -138,9 +138,9 @@ function buildLevelUpEmbed(user, newLevel, newXp, guild, customSettings = null) 
         .setTitle(titleText.slice(0, 256))
         .setDescription(descText.slice(0, 4000))
         .addFields(
-            { name: 'Level Reached', value: ``Level ${newLevel}``, inline: true },
-            { name: 'Total Experience', value: ``${newXp.toLocaleString()} XP``, inline: true },
-            { name: 'Next Target', value: ``${Math.round(nextLevelXp).toLocaleString()} XP``, inline: true }
+            { name: 'Level Reached', value: `\`Level ${newLevel}\``,  inline: true },
+            { name: 'Total Experience', value: `\`${newXp.toLocaleString()} XP\``,  inline: true },
+            { name: 'Next Target', value: `\`${Math.round(nextLevelXp).toLocaleString()} XP\``,  inline: true }
         )
         .setFooter({ text: footerText.slice(0, 2048), iconURL: guild?.iconURL({ dynamic: true }) })
         .setTimestamp();
@@ -328,12 +328,12 @@ async function buildRankEmbed(targetUser, userData, guild) {
             `• **Total Experience:** ${userData.xp.toLocaleString()} XP`
         )
         .addFields(
-            { name: 'Messages Sent', value: ``${(userData.messages || 0).toLocaleString()}``, inline: true },
-            { name: 'Voice Time', value: ``${formatVcTime(userData.vc_time)}``, inline: true },
-            { name: 'Target Milestone', value: ``Level ${userData.level + 1}``, inline: true },
+            { name: 'Messages Sent', value: `\`${(userData.messages || 0).toLocaleString()}\``,  inline: true },
+            { name: 'Voice Time', value: `\`${formatVcTime(userData.vc_time)}\``,  inline: true },
+            { name: 'Target Milestone', value: `\`Level ${userData.level + 1}\``,  inline: true },
             { 
                 name: `Progress to Level ${userData.level + 1} (${pct}%)`, 
-                value: `${progressBar}\n`${userData.xp.toLocaleString()} / ${Math.round(nextLevelXp).toLocaleString()} XP` (${Math.max(0, Math.round(nextLevelXp - userData.xp)).toLocaleString()} XP needed)`, 
+                value: `${progressBar}\n\`${userData.xp.toLocaleString()} / ${Math.round(nextLevelXp).toLocaleString()} XP\` (${Math.max(0, Math.round(nextLevelXp - userData.xp)).toLocaleString()} XP needed)`,  
                 inline: false 
             }
         )
@@ -364,9 +364,9 @@ async function buildLeaderboardData(guildId, guild, type = 'xp') {
     } else {
         topUsers.forEach((user, index) => {
             const rankNum = index + 1;
-            if (type === 'xp') description += `**#${rankNum}** <@${user.userId}>\n↳ Level ${user.level} • `${user.xp.toLocaleString()} XP`\n\n`;
-            if (type === 'messages') description += `**#${rankNum}** <@${user.userId}>\n↳ `${user.messages.toLocaleString()} Messages`\n\n`;
-            if (type === 'vc') description += `**#${rankNum}** <@${user.userId}>\n↳ `${formatVcTime(user.vc_time)}` in Voice\n\n`;
+            if (type === 'xp') description += `**#${rankNum}** <@${user.userId}>\n↳ Level ${user.level} • \`${user.xp.toLocaleString()} XP\`\n\n`;
+            if (type === 'messages') description += `**#${rankNum}** <@${user.userId}>\n↳ \`${user.messages.toLocaleString()} Messages\`\n\n`;
+            if (type === 'vc') description += `**#${rankNum}** <@${user.userId}>\n↳ \`${formatVcTime(user.vc_time)}\` in Voice\n\n`;
         });
     }
 
@@ -562,7 +562,7 @@ const levelingModule = (client) => {
                         const logId = isReset ? null : (targetChan ? targetChan.id : null);
 
                         if (!targetChan && !isReset) {
-                            return message.reply(`❌ Please mention a channel or use `channel reset`.\n*Usage: `.leveling channel #channel` or `.leveling channel reset`*`);
+                            return message.reply(`❌ Please mention a channel or use \`channel reset\`.\n*Usage: \`,leveling channel #channel\` or \`,leveling channel reset\`*`);
                         }
 
                         await setLevelingChannel(guildId, logId);
@@ -595,7 +595,7 @@ const levelingModule = (client) => {
                         { $set: { level: targetLvl, xp: targetXp } },
                         { new: true, upsert: true }
                     );
-                    return message.reply(`✅ Set <@${targetUser.id}>'s level directly to **Level ${targetLvl}** (`${targetXp.toLocaleString()} XP`).`);
+                    return message.reply(`✅ Set <@${targetUser.id}>'s level directly to **Level ${targetLvl}** (\`${targetXp.toLocaleString()} XP\`).`);
                 }
 
                 if (command === 'setxp') {
@@ -883,7 +883,7 @@ const levelingModule = (client) => {
                     });
                 } catch (err) {
                     return await interaction.reply({ 
-                        content: `❌ **Preview Error:** `${err.message}``, 
+                        content: `❌ **Preview Error:** \`${err.message}\``,  
                         flags: [EPHEMERAL_FLAG] 
                     }).catch(() => {});
                 }
