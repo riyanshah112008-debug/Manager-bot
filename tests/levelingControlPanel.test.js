@@ -63,6 +63,17 @@ test('activation never posts a level-up embed or setup test to public channels',
   includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
 });
 
+test('custom level-up embeds are opt-in and configurable in Discord and dashboard', () => {
+  includes(leveling, 'embedEnabled: { type: Boolean, default: false }');
+  includes(leveling, "setCustomId('lvl_btn_embed')");
+  includes(leveling, "settings.embedEnabled === true ? 'Disable Embeds' : 'Enable Custom Embeds'");
+  includes(leveling, 'if (guildSettings.embedEnabled === true) payload.embeds = [buildLevelUpEmbed');
+  includes(leveling, 'if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed]');
+  includes(dashboard, 'levelEmbedEnabled');
+  includes(dashboard, 'embedEnabled:$("#levelEmbedEnabled").checked');
+  includes(api, "if (typeof body.embedEnabled === 'boolean') updates.embedEnabled = body.embedEnabled;");
+});
+
 test('level-up announcements are atomically claimed to prevent duplicate spam', () => {
   includes(leveling, 'async function claimLevelUp');
   includes(leveling, 'level: { $lt: newLevel }');
