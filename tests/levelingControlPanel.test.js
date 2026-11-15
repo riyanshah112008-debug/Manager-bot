@@ -79,4 +79,6 @@ test('dashboard exposes the same XP, exclusion, announcement and reward settings
   for (const field of ['messageXpMin','messageXpMax','messageCooldownSeconds','voiceXpPerMinute','ignoredLevelChannels','ignoredLevelRoles','levelPingContent']) {
     assert.ok(dashboard.includes(field), 'dashboard UI missing ' + field);
   }
+  assert.ok(dashboard.includes('levelThumbnail:d.settings?.thumbnail||"avatar"'), 'saved thumbnail selection must load');
+  assert.ok(api.includes('isValidationError = /^Invalid /'), 'invalid numeric settings should return a client validation response');
 });
