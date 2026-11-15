@@ -102,3 +102,15 @@ test('dashboard exposes the same XP, exclusion, announcement and reward settings
   includes(dashboard, 'levelThumbnail:d.settings?.thumbnail||"avatar"', 'saved thumbnail selection must load');
   includes(api, 'isValidationError = /^Invalid /', 'invalid numeric settings should return a client validation response');
 });
+
+test('level-up announcements are isolated from moderation and general logs', () => {
+  includes(leveling, 'function resolveLevelAnnouncementChannel');
+  includes(leveling, 'function sendLevelUpAnnouncement');
+  includes(leveling, 'await sendLevelUpAnnouncement(message.guild, guildSettings, message.author, newLevel, userDoc.xp, message.channel)');
+  includes(leveling, 'await sendLevelUpAnnouncement(newState.guild, guildSettings, newState.member.user, reachedLevel, voiceUser.xp, newState.guild.systemChannel)');
+  assert.ok(!leveling.includes("client.getLogChannel(message.guild, 'misc')"), 'level-up announcements must never use the general log fallback');
+  includes(leveling, 'announcementChannelId: { type: String, default: null }');
+  includes(dashboard, 'updates.announcementChannelId = channelId || null;');
+  includes(dashboard, 'body.announcementChannelId !== undefined ? body.announcementChannelId : body.logChannelId');
+  includes(dashboard, 'levelAnnouncementChannel');
+});
