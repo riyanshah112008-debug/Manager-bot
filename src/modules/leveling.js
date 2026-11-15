@@ -212,10 +212,14 @@ async function enableLeveling(guildId, announcementChannelId = undefined) {
     if (announcementChannelId !== undefined) update.announcementChannelId = announcementChannelId;
     let settings = null;
     if (isDbConnected()) {
-        settings = await LevelSettings.findOneAndUpdate({ guildId }, update, { new: true, upsert: true }).catch(() => null);
+        settings = await LevelSettings.findOneAndUpdate(
+            { guildId },
+            { $set: update, ...(announcementChannelId !== undefined ? { $unset: { logChannelId: 1 } } : {}) },
+            { new: true, upsert: true }
+        ).catch(() => null);
     }
     const cached = settingsCache.get(guildId) || {};
-    const newCached = { ...cached, enabled: true, ...(announcementChannelId !== undefined ? { announcementChannelId } : {}) };
+    const newCached = { ...cached, enabled: true, ...(announcementChannelId !== undefined ? { announcementChannelId, logChannelId: null } : {}) };
     settingsCache.set(guildId, newCached);
     return settings || newCached;
 }
@@ -258,7 +262,7 @@ async function setLevelingChannel(guildId, announcementChannelId) {
         settings = await LevelSettings.findOneAndUpdate({ guildId }, { $set: { announcementChannelId }, $unset: { logChannelId: 1 } }, { new: true, upsert: true }).catch(() => null);
     }
     const cached = settingsCache.get(guildId) || {};
-    const newCached = { ...cached, announcementChannelId };
+    const newCached = { ...cached, announcementChannelId, logChannelId: null };
     settingsCache.set(guildId, newCached);
     return settings || newCached;
 }
@@ -705,7 +709,7 @@ const levelingModule = (client) => {
         // XP Gain Logic - skip if MongoDB connection is temporarily unavailable
         if (mongoose.connection?.readyState !== 1) return;
 
-        const guildSettings = settingsCache.get(guildId) || { enabled: true, logChannelId: null };
+        const guildSettings = settingsCache.get(guildId) || { enabled: true, announcementChannelId: null };
         if (!guildSettings.enabled) return; 
 
         const ignoredChannel = (guildSettings.ignoredChannelIds || []).includes(message.channel.id);
