@@ -1,3 +1,4 @@
+process.env.STARRY_DISABLE_STREAM_RESOLVER = '1';
 const assert = require('assert');
 const { selectActiveMusicPlayer, isActiveMusicPlayer } = require('../src/utils/musicPlayerResolver');
 const streamResolver = require('../src/utils/streamResolverClient');
