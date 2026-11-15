@@ -38,6 +38,7 @@ const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
 const LevelSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     enabled: { type: Boolean, default: true },
+    embedEnabled: { type: Boolean, default: false },
     logChannelId: { type: String, default: null },
     title: { type: String, default: 'Congratulations {user}!' },
     description: { type: String, default: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!' },
@@ -245,7 +246,7 @@ function parseSnowflakeList(value) {
 
 async function getLevelControlPanel(guildId, client) {
     const defaults = {
-        guildId, enabled: true, logChannelId: null,
+        guildId, enabled: true, embedEnabled: false, logChannelId: null,
         title: 'Congratulations {user}!',
         description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
         color: '#5865F2', image: '', thumbnail: 'avatar',
@@ -281,6 +282,7 @@ async function getLevelControlPanel(guildId, client) {
             `**Ignored channels:** ${ignoredChannels}\n` +
             `**Ignored roles:** ${ignoredRoles}\n` +
             `**Level role rewards:** ${rewards}\n\n` +
+            `**Announcement format:** ${settings.embedEnabled === true ? '🟣 Custom embed enabled' : 'Plain text (default)'}\n` +
             `**Announcement:** ${settings.title || 'Congratulations {user}!'}\n` +
             `**Embed color:** ${settings.color || '#5865F2'} • **Banner:** ${settings.image ? 'Configured' : 'None'}`
         )
@@ -305,6 +307,7 @@ async function getLevelControlPanel(guildId, client) {
         new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success)
     );
     const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_embed_toggle').setLabel(settings.embedEnabled === true ? 'Disable Embed Messages' : 'Enable Embed Messages').setStyle(settings.embedEnabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Announcement Design').setStyle(ButtonStyle.Danger)
     );
     return { embeds: [panelEmbed], components: [row1, row2, row3] };
@@ -733,8 +736,11 @@ const levelingModule = (client) => {
             const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
             const pingMsg = replaceLvlPlaceholders(pingTemplate, message.author, newLevel, userDoc.xp, message.guild);
 
-            // Level-up announcements stay compact and plain-text: no generated embed or extra XP fields.
+            // Plain text is the default. Only attach the customized card after an admin opts in.
             const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
+            if (guildSettings.embedEnabled === true) {
+                payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
+            }
             if (logChannel && typeof logChannel.send === 'function') {
                 logChannel.send(payload).catch(() => {});
             } else {
@@ -763,6 +769,14 @@ const levelingModule = (client) => {
 
             let settings = await LevelSettings.findOne({ guildId: interaction.guildId });
             if (!settings) settings = await LevelSettings.create({ guildId: interaction.guildId, enabled: true });
+
+            // Embed announcements are opt-in. Plain text remains the default.
+            if (interaction.customId === 'lvl_btn_embed_toggle') {
+                const embedEnabled = settings.embedEnabled !== true;
+                await saveLevelSettings(interaction.guildId, { embedEnabled });
+                const panelData = await getLevelControlPanel(interaction.guildId, client);
+                return interaction.update(panelData).catch(() => {});
+            }
 
             // TOGGLE LEVELING STATE BUTTON
             if (interaction.customId === 'lvl_btn_toggle') {
