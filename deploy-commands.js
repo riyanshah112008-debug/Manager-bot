@@ -215,26 +215,12 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-    // Existing command: enable the leveling engine.
+    // One command opens the complete leveling control panel.
     new SlashCommandBuilder()
         .setName('enableleveling')
-        .setDescription('Enable leveling and optionally choose the announcement channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .addChannelOption(option =>
-            option.setName('channel')
-                .setDescription('Level-up announcement channel')
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(false)
-        )
-        .toJSON(),
-
-    // Separate command: open the complete leveling control panel.
-    new SlashCommandBuilder()
-        .setName('levelpanel')
-        .setDescription('Open Starry’s leveling design and settings panel')
+        .setDescription('Open Starry’s complete leveling setup and control panel')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
-
 
     // 📥 GLOBAL EMOJI & STICKER STEALER COMMANDS
     new SlashCommandBuilder()
