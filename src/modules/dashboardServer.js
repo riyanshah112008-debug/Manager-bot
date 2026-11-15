@@ -1028,7 +1028,7 @@ function setupDashboardRoutes(app, client) {
             const { LevelSettings, LevelUser } = leveling;
             const guildId = req.guild.id;
             const settings = await LevelSettings.findOne({ guildId }).lean() || {
-                enabled: true, logChannelId: null, title: 'Congratulations {user}!',
+                enabled: true, embedsEnabled: false, logChannelId: null, title: 'Congratulations {user}!',
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                 color: '#5865F2', image: '', thumbnail: 'avatar',
                 footer: '{server} • Leveling System', pingContent: '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!', authorName: 'LEVEL UP UNLOCKED', roleRewards: []
@@ -1051,6 +1051,7 @@ function setupDashboardRoutes(app, client) {
             const { LevelSettings } = leveling;
             const guild = req.guild, body = req.body || {}, updates = {};
             if (typeof body.enabled === 'boolean') updates.enabled = body.enabled;
+            if (typeof body.embedsEnabled === 'boolean') updates.embedsEnabled = body.embedsEnabled;
             if (body.logChannelId !== undefined) {
                 const channelId = String(body.logChannelId || '').trim();
                 const channel = channelId ? guild.channels.cache.get(channelId) : null;
