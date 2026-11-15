@@ -1031,7 +1031,7 @@ function setupDashboardRoutes(app, client) {
                 enabled: true, embedEnabled: false, logChannelId: null,
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                 color: '#5865F2', image: '', thumbnail: 'avatar',
-                footer: '{server} • Leveling System', pingContent: '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!', authorName: 'LEVEL UP UNLOCKED', roleRewards: []
+                footer: '{server} • Leveling System', pingContent: '✨ Level Up! ✨ {user} just hit **Level {level}**!', authorName: 'LEVEL UP UNLOCKED', roleRewards: []
             };
             const [membersTracked, totals, leaderboard] = await Promise.all([
                 LevelUser.countDocuments({ guildId }),
