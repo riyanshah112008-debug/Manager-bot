@@ -128,10 +128,7 @@ if (chronosModule && chronosModule.data) {
     masterPayloads.push(chronosModule.data.toJSON ? chronosModule.data.toJSON() : chronosModule.data);
 }
 
-const gazetteModule = safeRequire(['./src/commands/utility/gazette', './commands/utility/gazette']);
-if (gazetteModule && gazetteModule.data) {
-    masterPayloads.push(gazetteModule.data.toJSON ? gazetteModule.data.toJSON() : gazetteModule.data);
-}
+// AI-generated Gazette command is intentionally not registered as a slash command.
 
 // codeStudio is intentionally excluded from global slash-command deployment.
 
@@ -529,7 +526,8 @@ commands.push(
 
 const REMOVED_AI_CODE_SLASH_COMMANDS = new Set([
     'ai', 'vision', 'image', 'summarize', 'codebot', 'code-studio',
-    'setup-starry', 'ask', 'gemini', 'gpt', 'dev-council'
+    'setup-starry', 'ask', 'gemini', 'gpt', 'dev-council',
+    'catchup', 'pulse', 'spark', 'gazette'
 ]);
 
 // 3. STRICT DEDUPLICATION ENGINE & DISCORD 100-COMMAND LIMIT ENFORCER
