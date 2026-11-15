@@ -411,22 +411,23 @@ const levelingModule = (client) => {
 
         if (!oldState.channelId && newState.channelId) {
             const guildSettings = settingsCache.get(guildId) || { enabled: true };
-            if (guildSettings.enabled !== false) {
-                vcJoinTimes.set(cacheKey, Date.now());
-            }
+            const ignored = (guildSettings.ignoredChannelIds || []).includes(newState.channelId) ||
+                (guildSettings.ignoredRoleIds || []).some(roleId => newState.member.roles.cache.has(roleId));
+            if (guildSettings.enabled !== false && !ignored) vcJoinTimes.set(cacheKey, Date.now());
         } else if (oldState.channelId && !newState.channelId) {
             if (vcJoinTimes.has(cacheKey)) {
                 const durationMs = Date.now() - vcJoinTimes.get(cacheKey);
                 vcJoinTimes.delete(cacheKey);
                 const guildSettings = settingsCache.get(guildId) || { enabled: true };
-                if (guildSettings.enabled !== false) {
+                const ignored = (guildSettings.ignoredChannelIds || []).includes(oldState.channelId) ||
+                    (guildSettings.ignoredRoleIds || []).some(roleId => newState.member.roles.cache.has(roleId));
+                if (guildSettings.enabled !== false && !ignored) {
                     const durationMinutes = Math.floor(durationMs / 60000);
                     if (durationMinutes > 0) {
-                        await LevelUser.findOneAndUpdate(
-                            { userId, guildId }, 
-                            { $inc: { vc_time: durationMinutes, xp: durationMinutes * 5 } }, 
-                            { upsert: true }
-                        ).catch(() => {});
+                        const voiceXp = Number(guildSettings.voiceXpPerMinute ?? 5);
+                        const increment = { vc_time: durationMinutes };
+                        if (voiceXp > 0) increment.xp = durationMinutes * voiceXp;
+                        await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: increment }, { upsert: true }).catch(() => {});
                     }
                 }
             }
@@ -640,19 +641,29 @@ const levelingModule = (client) => {
         const guildSettings = settingsCache.get(guildId) || { enabled: true, logChannelId: null };
         if (!guildSettings.enabled) return; 
 
-        const cooldownKey = `${guildId}-${userId}`;
-        const onCooldown = xpCooldowns.has(cooldownKey) && (Date.now() - xpCooldowns.get(cooldownKey) < 60000);
+        const ignoredChannel = (guildSettings.ignoredChannelIds || []).includes(message.channel.id);
+        const ignoredRole = (guildSettings.ignoredRoleIds || []).some(roleId => message.member?.roles?.cache?.has(roleId));
+        if (ignoredChannel || ignoredRole) return;
 
+        const cooldownKey = `${guildId}-${userId}`;
+        const cooldownMs = Math.max(5, Number(guildSettings.messageCooldownSeconds ?? 60)) * 1000;
+        const onCooldown = xpCooldowns.has(cooldownKey) && (Date.now() - xpCooldowns.get(cooldownKey) < cooldownMs);
         if (onCooldown) {
             await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: { messages: 1 } }, { upsert: true }).catch(() => {});
             return;
         }
 
-        xpCooldowns.set(cooldownKey, Date.now()); 
-
+        const minXp = Math.max(0, Math.min(100, Number(guildSettings.messageXpMin ?? 15)));
+        const maxXp = Math.max(minXp, Math.min(100, Number(guildSettings.messageXpMax ?? 25)));
+        if (maxXp === 0) {
+            await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: { messages: 1 } }, { upsert: true }).catch(() => {});
+            return;
+        }
+        xpCooldowns.set(cooldownKey, Date.now());
+        const messageXp = minXp + Math.floor(Math.random() * (maxXp - minXp + 1));
         const userDoc = await LevelUser.findOneAndUpdate(
             { userId, guildId },
-            { $inc: { messages: 1, xp: 15 } },
+            { $inc: { messages: 1, xp: messageXp } },
             { new: true, upsert: true }
         ).catch(() => {});
 
