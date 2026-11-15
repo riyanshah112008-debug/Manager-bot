@@ -82,7 +82,7 @@ test('level-up embeds are opt-in and plain text remains the default', () => {
   includes(leveling, 'Plain text (default)');
   includes(dashboard, 'levelEmbedEnabled');
   includes(api, 'if (typeof body.embedEnabled === \'boolean\') updates.embedEnabled = body.embedEnabled;');
-  includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
+  includes(leveling, 'const payload = { content, allowedMentions:');
 });
 
 test('level-up announcements are atomically claimed to prevent duplicate spam', () => {
