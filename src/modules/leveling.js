@@ -921,7 +921,8 @@ const levelingModule = (client) => {
                     thumbnail: 'avatar',
                     footer: '{server} • Leveling System',
                     pingContent: DEFAULT_LEVEL_UP_MESSAGE,
-                    authorName: '🎉 LEVEL UP UNLOCKED!'
+                    authorName: '🎉 LEVEL UP UNLOCKED!',
+                    embedEnabled: false
                 };
                 await LevelSettings.findOneAndUpdate({ guildId: interaction.guildId }, defaults, { upsert: true });
                 settingsCache.set(interaction.guildId, { ...settingsCache.get(interaction.guildId), ...defaults });
