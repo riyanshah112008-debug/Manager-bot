@@ -230,39 +230,13 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-    // 📊 SINGLE LEVELING SLASH COMMAND
+    // ⭐ Unified administrator leveling control panel
     new SlashCommandBuilder()
-        .setName('enableleveling')
-        .setDescription('⚙️ Enable leveling system and select log channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addChannelOption(option =>
-            option.setName('channel')
-                .setDescription('Select channel for level-up notifications')
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(false)
-        )
+        .setName('leveling')
+        .setDescription('Open the complete server leveling control panel')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .toJSON(),
 
-
-    // 🎨 AI IMAGE GENERATION SLASH COMMANDS (Usable in Guilds, DMs, & Group Chats)
-    new SlashCommandBuilder()
-        .setName('image')
-        .setDescription('🎨 Generate AI images and artwork from text prompts')
-        .setIntegrationTypes(
-            ApplicationIntegrationType.GuildInstall, 
-            ApplicationIntegrationType.UserInstall
-        )
-        .setContexts(
-            InteractionContextType.Guild, 
-            InteractionContextType.BotDM, 
-            InteractionContextType.PrivateChannel
-        )
-        .addStringOption(option => 
-            option.setName('prompt')
-                .setDescription('Detailed text description of the image to generate')
-                .setRequired(true)
-        )
-        .toJSON(),
 
     // 📥 GLOBAL EMOJI & STICKER STEALER COMMANDS
     new SlashCommandBuilder()
@@ -373,75 +347,15 @@ if (socialModule && socialModule.socialCommandPayload) {
 // Social actions are intentionally exposed only through the grouped /social command.
 // This avoids spending one global application-command slot per individual action.
 
-// ✨ AI, VISION, SUMMARIZE, SETPREFIX & TOP.GG VOTE SLASH COMMANDS
+// Server prefix configuration remains a normal utility command.
 commands.push(
-    new SlashCommandBuilder()
-        .setName('ai')
-        .setDescription('✨ Ask Starry AI anything with interactive embed page-turning buttons & vision!')
-        .setContexts([0, 1, 2])
-        .setIntegrationTypes([0, 1])
-        .addStringOption(option => 
-            option.setName('question')
-                .setDescription('The question or prompt for Starry AI')
-                .setRequired(true)
-        )
-        .addAttachmentOption(option =>
-            option.setName('image')
-                .setDescription('Optional image, screenshot, or diagram to visually analyze')
-                .setRequired(false)
-        )
-        .toJSON(),
-
-    new SlashCommandBuilder()
-        .setName('vision')
-        .setDescription('🌌 Multimodal Vision: Analyze any image, screenshot, error log, or diagram')
-        .setContexts([0, 1, 2])
-        .setIntegrationTypes([0, 1])
-        .addAttachmentOption(option =>
-            option.setName('image')
-                .setDescription('Image file to visually inspect')
-                .setRequired(true)
-        )
-        .addStringOption(option =>
-            option.setName('prompt')
-                .setDescription('Specific question about the image (optional)')
-                .setRequired(false)
-        )
-        .toJSON(),
-
-    new SlashCommandBuilder()
-        .setName('summarize')
-        .setDescription('📰 AI Channel Catch-Up: Executive briefing of missed conversations and debates')
-        .setContexts([0])
-        .setIntegrationTypes([0])
-        .addIntegerOption(option =>
-            option.setName('hours')
-                .setDescription('Time window in hours to summarize (1-24, default 6)')
-                .setMinValue(1)
-                .setMaxValue(24)
-                .setRequired(false)
-        )
-        .toJSON(),
-
-    new SlashCommandBuilder()
-        .setName('codebot')
-        .setDescription('🚀 Autonomous Bot Studio: Build a complete multi-file bot pushed to GitHub or ZIP')
-        .setContexts([0, 1, 2])
-        .setIntegrationTypes([0, 1])
-        .addStringOption(option =>
-            option.setName('prompt')
-                .setDescription('Describe the features and theme of your bot')
-                .setRequired(false)
-        )
-        .toJSON(),
-
     new SlashCommandBuilder()
         .setName('setprefix')
         .setDescription('⚙️ Set a custom prefix for this server')
         .setContexts([0])
         .setIntegrationTypes([0])
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-        .addStringOption(option => 
+        .addStringOption(option =>
             option.setName('prefix')
                 .setDescription('The new prefix (e.g. ! or ? or -)')
                 .setRequired(true)
@@ -450,12 +364,6 @@ commands.push(
 );
 
 commands.push(
-    { 
-        name: 'setup-starry', 
-        description: '🧠 AI MASTER COMMAND: Scans, builds, & configures custom server layout + infrastructure.', 
-        default_member_permissions: '8',
-        options: [{ name: 'prompt', type: 3, required: false, description: 'Describe your server theme' }]
-    },
     autoroleCommandDef,
     { name: 'role', description: 'Manage server roles', default_member_permissions: MANAGE_ROLES, options: [{ name: 'create', type: 1, description: 'Create role', options: [{ name: 'name', type: 3, required: true, description: 'Role name' }] }] },
     
@@ -631,6 +539,11 @@ commands.push(
     }
 );
 
+const REMOVED_AI_CODE_SLASH_COMMANDS = new Set([
+    'ai', 'vision', 'image', 'summarize', 'codebot', 'code-studio',
+    'setup-starry', 'ask', 'gemini', 'gpt', 'dev-council'
+]);
+
 // 3. STRICT DEDUPLICATION ENGINE & DISCORD 100-COMMAND LIMIT ENFORCER
 const commandMap = new Map();
 commands.forEach(cmd => { 
@@ -638,6 +551,10 @@ commands.forEach(cmd => {
         const jsonCmd = typeof cmd.toJSON === 'function' ? cmd.toJSON() : cmd;
         if (jsonCmd.name) {
             const commandName = String(jsonCmd.name).trim().toLowerCase();
+            if (REMOVED_AI_CODE_SLASH_COMMANDS.has(commandName)) {
+                console.warn(`[COMMAND CLEANUP] Excluding removed AI/code slash command /${commandName}.`);
+                return;
+            }
             if (commandMap.has(commandName)) {
                 console.warn(`⚠️ [Slash Registry] Duplicate "/${commandName}" definition detected; keeping the first definition.`);
                 return;
