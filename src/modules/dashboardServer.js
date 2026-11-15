@@ -1028,7 +1028,7 @@ function setupDashboardRoutes(app, client) {
             const { LevelSettings, LevelUser } = leveling;
             const guildId = req.guild.id;
             const settings = await LevelSettings.findOne({ guildId }).lean() || {
-                enabled: true, logChannelId: null, title: 'Congratulations {user}!',
+                enabled: true, announcementChannelId: null, logChannelId: null, title: 'Congratulations {user}!',
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                 color: '#5865F2', image: '', thumbnail: 'avatar',
                 footer: '{server} • Leveling System', pingContent: '✨ Level Up! ✨ <@{user}> just hit **Level {level}**!', authorName: 'LEVEL UP UNLOCKED', roleRewards: []
@@ -1052,11 +1052,13 @@ function setupDashboardRoutes(app, client) {
             const guild = req.guild, body = req.body || {}, updates = {};
             if (typeof body.enabled === 'boolean') updates.enabled = body.enabled;
             if (typeof body.embedEnabled === 'boolean') updates.embedEnabled = body.embedEnabled;
-            if (body.logChannelId !== undefined) {
-                const channelId = String(body.logChannelId || '').trim();
+            const requestedAnnouncementChannel = body.announcementChannelId !== undefined ? body.announcementChannelId : body.logChannelId;
+            if (requestedAnnouncementChannel !== undefined) {
+                const channelId = String(requestedAnnouncementChannel || '').trim();
                 const channel = channelId ? guild.channels.cache.get(channelId) : null;
-                if (channelId && (!channel || !channel.isTextBased())) return res.status(400).json({ success: false, error: 'Choose a valid text channel from this server.' });
-                updates.logChannelId = channelId || null;
+                if (channelId && (!channel || !channel.isTextBased() || typeof channel.send !== 'function')) return res.status(400).json({ success: false, error: 'Choose a valid text announcement channel from this server.' });
+                updates.announcementChannelId = channelId || null;
+                updates.logChannelId = null;
             }
             const boundedNumber = (key, min, max) => {
                 if (body[key] === undefined) return;
