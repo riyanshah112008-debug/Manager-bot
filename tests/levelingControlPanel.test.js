@@ -55,12 +55,24 @@ test('leveling configuration modals validate user-supplied IDs and numeric range
   includes(leveling, 'interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)');
 });
 
+test('level-up embeds are opt-in and configurable from Discord and dashboard', () => {
+  includes(leveling, 'embedsEnabled: { type: Boolean, default: false }');
+  includes(leveling, "setCustomId('lvl_btn_embedtoggle')");
+  includes(leveling, "settings.embedsEnabled === true");
+  includes(leveling, "buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)");
+  includes(leveling, "buildLevelUpEmbed(newState.member.user, reachedLevel, voiceUser.xp, newState.guild, guildSettings)");
+  includes(api, "body.embedsEnabled === 'boolean'");
+  includes(dashboard, 'levelEmbedsEnabled');
+  includes(dashboard, 'embedsEnabled:$("#levelEmbedsEnabled").checked');
+});
+
 test('activation never posts a level-up embed or setup test to public channels', () => {
   assert.ok(!leveling.includes('Leveling System Setup Test'));
   includes(leveling, 'Leveling enabled.');
   includes(leveling, 'Reopen this control panel anytime with `/leveling`.');
   assert.ok(!leveling.includes('/levelpanel'), 'legacy /levelpanel guidance must be removed');
-  includes(leveling, 'const payload = { content: pingMsg, allowedMentions:');
+  includes(leveling, "? { embeds: [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)] }");
+  includes(leveling, ": { content: pingMsg, allowedMentions: { users: [userId] } }");
 });
 
 test('level-up announcements are atomically claimed to prevent duplicate spam', () => {

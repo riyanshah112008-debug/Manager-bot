@@ -38,6 +38,7 @@ const LEGACY_DEFAULT_LEVEL_UP_MESSAGE = '**Level Up:** <@{user}>';
 const LevelSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     enabled: { type: Boolean, default: true },
+    embedsEnabled: { type: Boolean, default: false },
     logChannelId: { type: String, default: null },
     title: { type: String, default: 'Congratulations {user}!' },
     description: { type: String, default: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!' },
@@ -245,7 +246,7 @@ function parseSnowflakeList(value) {
 
 async function getLevelControlPanel(guildId, client) {
     const defaults = {
-        guildId, enabled: true, logChannelId: null,
+        guildId, enabled: true, embedsEnabled: false, logChannelId: null,
         title: 'Congratulations {user}!',
         description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
         color: '#5865F2', image: '', thumbnail: 'avatar',
@@ -275,6 +276,7 @@ async function getLevelControlPanel(guildId, client) {
         .setTitle('⭐ Starry Leveling • Control Panel')
         .setDescription(
             `**Status:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}\n` +
+            `**Announcement format:** ${settings.embedsEnabled === true ? 'Embed (customizable)' : 'Plain text'}\n` +
             `**Level-up channel:** ${channel}\n\n` +
             `**Message XP:** ${settings.messageXpMin ?? 15}–${settings.messageXpMax ?? 25} XP • ${settings.messageCooldownSeconds ?? 60}s cooldown\n` +
             `**Voice XP:** ${settings.voiceXpPerMinute ?? 5} XP per minute\n` +
@@ -305,6 +307,7 @@ async function getLevelControlPanel(guildId, client) {
         new ButtonBuilder().setCustomId('lvl_btn_preview').setLabel('Live Preview').setStyle(ButtonStyle.Success)
     );
     const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('lvl_btn_embedtoggle').setLabel(settings.embedsEnabled === true ? 'Disable Embeds' : 'Enable Embeds').setStyle(settings.embedsEnabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('lvl_btn_reset').setLabel('Reset Announcement Design').setStyle(ButtonStyle.Danger)
     );
     return { embeds: [panelEmbed], components: [row1, row2, row3] };
@@ -456,7 +459,12 @@ const levelingModule = (client) => {
                                 const channel = guildSettings.logChannelId
                                     ? newState.guild.channels.cache.get(guildSettings.logChannelId)
                                     : newState.guild.systemChannel;
-                                if (channel?.send) channel.send({ content, allowedMentions: { users: [userId] } }).catch(() => {});
+                                if (channel?.send) {
+                                    const payload = guildSettings.embedsEnabled === true
+                                        ? { embeds: [buildLevelUpEmbed(newState.member.user, reachedLevel, voiceUser.xp, newState.guild, guildSettings)] }
+                                        : { content, allowedMentions: { users: [userId] } };
+                                    channel.send(payload).catch(() => {});
+                                }
                                 }
                             }
                         }
@@ -733,8 +741,10 @@ const levelingModule = (client) => {
             const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
             const pingMsg = replaceLvlPlaceholders(pingTemplate, message.author, newLevel, userDoc.xp, message.guild);
 
-            // Level-up announcements stay compact and plain-text: no generated embed or extra XP fields.
-            const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
+            // Plain text is the default. Embeds are sent only after an administrator explicitly enables them.
+            const payload = guildSettings.embedsEnabled === true
+                ? { embeds: [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)] }
+                : { content: pingMsg, allowedMentions: { users: [userId] } };
             if (logChannel && typeof logChannel.send === 'function') {
                 logChannel.send(payload).catch(() => {});
             } else {
@@ -763,6 +773,14 @@ const levelingModule = (client) => {
 
             let settings = await LevelSettings.findOne({ guildId: interaction.guildId });
             if (!settings) settings = await LevelSettings.create({ guildId: interaction.guildId, enabled: true });
+
+            // Toggle optional level-up embed announcements (plain text is the default).
+            if (interaction.customId === 'lvl_btn_embedtoggle') {
+                const embedsEnabled = settings.embedsEnabled !== true;
+                await saveLevelSettings(interaction.guildId, { embedsEnabled });
+                const panelData = await getLevelControlPanel(interaction.guildId, client);
+                return interaction.update(panelData).catch(() => {});
+            }
 
             // TOGGLE LEVELING STATE BUTTON
             if (interaction.customId === 'lvl_btn_toggle') {
@@ -880,11 +898,10 @@ const levelingModule = (client) => {
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
                     const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
 
-                    return await interaction.reply({ 
-                        content: `${pingText} *(Setup Preview)*`, 
-                        embeds: [previewEmbed], 
-                        flags: [EPHEMERAL_FLAG] 
-                    });
+                    if (latest.embedsEnabled === true) {
+                        return await interaction.reply({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG] });
+                    }
+                    return await interaction.reply({ content: `${pingText} *(Text preview — embeds are disabled)*`, flags: [EPHEMERAL_FLAG] });
                 } catch (err) {
                     return await interaction.reply({ 
                         content: `❌ **Preview Error:** \`${err.message}\``,  
