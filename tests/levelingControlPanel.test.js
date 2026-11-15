@@ -3,12 +3,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 
-const deploy = fs.readFileSync(path.resolve(__dirname, '../deploy-commands.js'), 'utf8');
-const leveling = fs.readFileSync(path.resolve(__dirname, '../src/modules/leveling.js'), 'utf8');
-const dashboard = fs.readFileSync(path.resolve(__dirname, '../public/workspace.js'), 'utf8');
-const api = fs.readFileSync(path.resolve(__dirname, '../src/modules/dashboardServer.js'), 'utf8');
+const deploy = fs.readFileSync('deploy-commands.js', 'utf8');
+const leveling = fs.readFileSync('src/modules/leveling.js', 'utf8');
+const dashboard = fs.readFileSync('public/workspace.js', 'utf8');
+const api = fs.readFileSync('src/modules/dashboardServer.js', 'utf8');
 
 const includes = (source, fragment, message) => assert.ok(source.includes(fragment), message || `Expected source to include: ${fragment}`);
 
