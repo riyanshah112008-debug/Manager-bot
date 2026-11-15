@@ -1316,7 +1316,8 @@ const commands = [
             if (sub === 'status') {
                 let settings = await levelingModule.LevelSettings.findOne({ guildId: ctx.guild.id });
                 const isEnabled = settings ? settings.enabled !== false : true;
-                const chan = settings?.logChannelId ? `<#${settings.logChannelId}>` : '*Current active channel*';
+                const channelId = settings?.announcementChannelId || settings?.logChannelId;
+                const chan = channelId ? `<#${channelId}>` : '*Current level-up channel*';
                 const embed = new EmbedBuilder()
                     .setColor(isEnabled ? '#57F287' : '#ED4245')
                     .setTitle(`📊 Leveling System Status — ${ctx.guild.name}`)
