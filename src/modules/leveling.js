@@ -441,7 +441,7 @@ const levelingModule = (client) => {
                             const reachedLevel = calculateLevel(voiceUser.xp);
                             if (reachedLevel > voiceUser.level) {
                                 const claimed = await claimLevelUp(guildId, userId, reachedLevel);
-                                if (!claimed) continue;
+                                if (claimed) {
                                 const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
                                 const reward = rewards.filter(item => Number(item.level) <= reachedLevel).sort((a, b) => Number(b.level) - Number(a.level))[0];
                                 if (reward && newState.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
@@ -456,6 +456,7 @@ const levelingModule = (client) => {
                                     ? newState.guild.channels.cache.get(guildSettings.logChannelId)
                                     : newState.guild.systemChannel;
                                 if (channel?.send) channel.send({ content, allowedMentions: { users: [userId] } }).catch(() => {});
+                                }
                             }
                         }
                     }
