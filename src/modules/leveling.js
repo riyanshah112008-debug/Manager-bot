@@ -519,7 +519,7 @@ const levelingModule = (client) => {
                     const logId = targetChan ? targetChan.id : null;
                     await enableLeveling(guildId, logId);
 
-                    const msg = `✅ **Leveling enabled.** XP is now active for chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nUse `/levelpanel` to configure XP, rewards, exclusions and announcements.`;
+                    const msg = `✅ **Leveling enabled.** XP is now active for chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen this control panel anytime with `/enableleveling`.`;
                     return message.reply({ content: msg }).catch(() => {});
                 }
 
@@ -544,7 +544,7 @@ const levelingModule = (client) => {
                         const logId = targetChan ? targetChan.id : undefined;
                         await enableLeveling(guildId, logId);
 
-                        const msg = `✅ **Leveling enabled for ${message.guild.name}.** Members now earn XP from chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nOpen `/levelpanel` to configure the system.`;
+                        const msg = `✅ **Leveling enabled for ${message.guild.name}.** Members now earn XP from chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen the full control panel anytime with `/enableleveling`.`;
                         return message.reply({ content: msg }).catch(() => {});
                     }
 
