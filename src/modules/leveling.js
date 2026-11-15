@@ -519,7 +519,7 @@ const levelingModule = (client) => {
                     const logId = targetChan ? targetChan.id : null;
                     await enableLeveling(guildId, logId);
 
-                    const msg = `✅ **Leveling enabled.** XP is now active for chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen this control panel anytime with `/enableleveling`.`;
+                    const msg = `✅ **Leveling enabled.** XP is now active for chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen this control panel anytime with `/leveling`.`;
                     return message.reply({ content: msg }).catch(() => {});
                 }
 
@@ -544,7 +544,7 @@ const levelingModule = (client) => {
                         const logId = targetChan ? targetChan.id : undefined;
                         await enableLeveling(guildId, logId);
 
-                        const msg = `✅ **Leveling enabled for ${message.guild.name}.** Members now earn XP from chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen the full control panel anytime with `/enableleveling`.`;
+                        const msg = `✅ **Leveling enabled for ${message.guild.name}.** Members now earn XP from chat and voice activity.${targetChan ? `\n📌 Announcements: <#${targetChan.id}>` : ''}\nReopen the full control panel anytime with `/leveling`.`;
                         return message.reply({ content: msg }).catch(() => {});
                     }
 
@@ -1028,8 +1028,8 @@ const levelingModule = (client) => {
 
         if (!interaction.isChatInputCommand()) return;
 
-        // The single /enableleveling command opens the complete leveling setup panel.
-        if (interaction.commandName === 'enableleveling') {
+        // The single /leveling command opens the complete leveling setup panel.
+        if (interaction.commandName === 'leveling') {
             if (!interaction.inGuild() || (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild))) {
                 return interaction.reply({ content: '❌ Manage Server permissions required.', flags: [EPHEMERAL_FLAG] });
             }
