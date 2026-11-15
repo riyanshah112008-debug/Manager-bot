@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const Birthday = require('../../models/Birthday');
+const { buildBirthdayFilter } = require('../../utils/discordSnowflake');
 
 async function privateReply(ctx, content) {
     if (ctx.isSlash && ctx.interaction) {
@@ -50,7 +51,19 @@ module.exports = {
             return ctx.interaction.showModal(modal);
         }
         if (sub === 'remove' || sub === 'delete') {
-            const result = await Birthday.deleteOne({ guildId: ctx.guild.id, userId: ctx.user.id });
+            const birthdayFilter = buildBirthdayFilter(ctx.guild.id, ctx.user.id);
+            const existingBirthday = await Birthday.findOne(birthdayFilter).lean();
+            if (!existingBirthday) return privateReply(ctx, 'You do not have a saved birthday in this server.');
+            if (existingBirthday.birthdayRoleId) {
+                try {
+                    const { removeBirthdayRoleAssignment } = require('../../modules/birthdayEngine');
+                    await removeBirthdayRoleAssignment(ctx.guild, existingBirthday, 'Member removed their birthday');
+                } catch (error) {
+                    console.warn('[Birthday] Could not remove the assigned role before deleting the birthday:', error.message);
+                    return privateReply(ctx, 'I could not safely remove your temporary birthday role. Your birthday is still saved; please try again shortly.');
+                }
+            }
+            const result = await Birthday.deleteOne(birthdayFilter);
             return privateReply(ctx, result.deletedCount ? '💗 Your saved birthday has been privately removed.' : 'You do not have a saved birthday in this server.');
         }
         return privateReply(ctx, 'Use the birthday set command to save your birthday privately, or birthday remove to delete it. Starry never publishes birthday dates or lists.');
