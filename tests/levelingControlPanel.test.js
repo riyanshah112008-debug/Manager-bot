@@ -10,10 +10,11 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const deploy = read('deploy-commands.js');
 const leveling = read('src/modules/leveling.js');
 
-test('one /leveling command replaces the old one-off enable command', () => {
-  assert.match(deploy, /\.setName\('leveling'\)/);
-  assert.doesNotMatch(deploy, /\.setName\('enableleveling'\)/);
-  assert.match(leveling, /interaction\.commandName === 'customizelevels' \|\| interaction\.commandName === 'leveling'/);
+test('existing /enableleveling remains and /levelpanel is a separate control-panel command', () => {
+  assert.match(deploy, /\\.setName\\('enableleveling'\\)/);
+  assert.match(deploy, /\\.setName\\('levelpanel'\\)/);
+  assert.match(leveling, /interaction\\.commandName === 'levelpanel'/);
+  assert.match(leveling, /interaction\\.commandName === 'enableleveling'/);
 });
 
 test('AI and code slash commands are explicitly excluded from global deployment', () => {
