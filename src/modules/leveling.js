@@ -217,6 +217,22 @@ async function setLevelingChannel(guildId, logChannelId) {
     return settings || newCached;
 }
 
+async function saveLevelSettings(guildId, update) {
+    let saved = { ...(settingsCache.get(guildId) || {}), ...update };
+    if (isDbConnected()) {
+        const doc = await LevelSettings.findOneAndUpdate({ guildId }, { $set: update }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean().catch(() => null);
+        if (doc) saved = { ...doc };
+    }
+    settingsCache.set(guildId, saved);
+    return saved;
+}
+
+function parseSnowflakeList(value) {
+    const ids = String(value || '').split(/[\\s,;]+/).map(item => item.replace(/[<#@&!>]/g, '')).filter(Boolean);
+    if (ids.length > 20 || ids.some(id => !/^\\d{17,20}$/.test(id))) return null;
+    return [...new Set(ids)];
+}
+
 async function getLevelControlPanel(guildId, client) {
     const defaults = {
         guildId, enabled: true, logChannelId: null,
@@ -871,6 +887,55 @@ const levelingModule = (client) => {
         // ==========================================
         if (interaction.isModalSubmit() && interaction.customId.startsWith('lvl_modal_')) {
             const guildId = interaction.guildId;
+
+            if (interaction.customId === 'lvl_modal_xp') {
+                const min = Number(interaction.fields.getTextInputValue('in_lvl_xp_min'));
+                const max = Number(interaction.fields.getTextInputValue('in_lvl_xp_max'));
+                const cooldown = Number(interaction.fields.getTextInputValue('in_lvl_cooldown'));
+                const voice = Number(interaction.fields.getTextInputValue('in_lvl_voice_xp'));
+                if (![min, max, cooldown, voice].every(Number.isInteger) || min < 0 || max < min || max > 100 || cooldown < 5 || cooldown > 3600 || voice < 0 || voice > 100) {
+                    return interaction.reply({ content: 'Invalid settings. Message XP must be 0–100 (max ≥ min), cooldown 5–3600 seconds, and voice XP 0–100 per minute.', flags: [EPHEMERAL_FLAG] });
+                }
+                await saveLevelSettings(guildId, { messageXpMin: min, messageXpMax: max, messageCooldownSeconds: cooldown, voiceXpPerMinute: voice });
+            }
+
+            if (interaction.customId === 'lvl_modal_channel') {
+                const raw = interaction.fields.getTextInputValue('in_lvl_channel').trim();
+                const channelId = raw.toLowerCase() === 'none' ? null : raw.replace(/[<#>]/g, '');
+                if (channelId && !/^\\d{17,20}$/.test(channelId)) {
+                    return interaction.reply({ content: 'Enter a valid channel mention/ID, or none to announce in the channel where the member levels up.', flags: [EPHEMERAL_FLAG] });
+                }
+                if (channelId) {
+                    const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+                    if (!channel || !channel.isTextBased() || !channel.send) return interaction.reply({ content: 'That channel is unavailable or cannot receive messages.', flags: [EPHEMERAL_FLAG] });
+                }
+                await saveLevelSettings(guildId, { logChannelId: channelId });
+            }
+
+            if (interaction.customId === 'lvl_modal_ignore') {
+                const channels = parseSnowflakeList(interaction.fields.getTextInputValue('in_lvl_ignore_channels'));
+                const roles = parseSnowflakeList(interaction.fields.getTextInputValue('in_lvl_ignore_roles'));
+                if (!channels || !roles) return interaction.reply({ content: 'Use up to 20 valid Discord IDs in each field, separated by commas.', flags: [EPHEMERAL_FLAG] });
+                await saveLevelSettings(guildId, { ignoredChannelIds: channels, ignoredRoleIds: roles });
+            }
+
+            if (interaction.customId === 'lvl_modal_rewards') {
+                const raw = interaction.fields.getTextInputValue('in_lvl_rewards').trim();
+                const rewards = [];
+                if (raw) {
+                    for (const line of raw.split(/[\\n,;]+/).map(value => value.trim()).filter(Boolean)) {
+                        const match = line.match(/^(\\d{1,5})\\s*:\\s*(\\d{17,20})$/);
+                        if (!match || Number(match[1]) < 1 || Number(match[1]) > 10000) return interaction.reply({ content: 'Each reward must be level:roleID, with a level from 1 to 10000.', flags: [EPHEMERAL_FLAG] });
+                        rewards.push({ level: Number(match[1]), roleId: match[2] });
+                    }
+                }
+                if (rewards.length > 20) return interaction.reply({ content: 'You can configure up to 20 level rewards.', flags: [EPHEMERAL_FLAG] });
+                for (const reward of rewards) {
+                    const role = await interaction.guild.roles.fetch(reward.roleId).catch(() => null);
+                    if (!role || role.managed || role.position >= interaction.guild.members.me.roles.highest.position) return interaction.reply({ content: 'One or more reward roles are missing, managed, or above Starry highest role.', flags: [EPHEMERAL_FLAG] });
+                }
+                await saveLevelSettings(guildId, { roleRewards: rewards });
+            }
 
             if (interaction.customId === 'lvl_modal_text') {
                 const title = interaction.fields.getTextInputValue('in_lvl_title');
