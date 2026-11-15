@@ -107,25 +107,16 @@ if (birthdayModule && birthdayModule.data) {
     masterPayloads.push(birthdayModule.data.toJSON ? birthdayModule.data.toJSON() : birthdayModule.data);
 }
 
-const pulseModule = safeRequire(['./src/commands/utility/pulse', './commands/utility/pulse']);
-if (pulseModule && pulseModule.data) {
-    masterPayloads.push(pulseModule.data.toJSON ? pulseModule.data.toJSON() : pulseModule.data);
-}
+// pulse is intentionally excluded from global slash-command deployment.
 
-const sparkModule = safeRequire(['./src/commands/utility/spark', './commands/utility/spark']);
-if (sparkModule && sparkModule.data) {
-    masterPayloads.push(sparkModule.data.toJSON ? sparkModule.data.toJSON() : sparkModule.data);
-}
+// spark is intentionally excluded from global slash-command deployment.
 
 const raidModule = safeRequire(['./src/commands/game/raid', './commands/game/raid']);
 if (raidModule && raidModule.data) {
     masterPayloads.push(raidModule.data.toJSON ? raidModule.data.toJSON() : raidModule.data);
 }
 
-const catchupModule = safeRequire(['./src/commands/utility/catchup', './commands/utility/catchup']);
-if (catchupModule && catchupModule.data) {
-    masterPayloads.push(catchupModule.data.toJSON ? catchupModule.data.toJSON() : catchupModule.data);
-}
+// catchup is intentionally excluded from global slash-command deployment.
 
 const pentestModule = safeRequire(['./src/commands/utility/pentest', './commands/utility/pentest']);
 if (pentestModule && pentestModule.data) {
@@ -142,10 +133,7 @@ if (gazetteModule && gazetteModule.data) {
     masterPayloads.push(gazetteModule.data.toJSON ? gazetteModule.data.toJSON() : gazetteModule.data);
 }
 
-const codeStudioModule = safeRequire(['./src/commands/utility/codeStudio', './commands/utility/codeStudio']);
-if (codeStudioModule && codeStudioModule.data) {
-    masterPayloads.push(codeStudioModule.data.toJSON ? codeStudioModule.data.toJSON() : codeStudioModule.data);
-}
+// codeStudio is intentionally excluded from global slash-command deployment.
 
 const botavatarModule = safeRequire(['./src/commands/moderation/botavatar', './commands/moderation/botavatar']);
 if (botavatarModule && botavatarModule.data) {
