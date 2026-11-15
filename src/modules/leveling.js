@@ -39,6 +39,8 @@ const LevelSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     enabled: { type: Boolean, default: true },
     embedEnabled: { type: Boolean, default: false },
+    announcementChannelId: { type: String, default: null },
+    // Deprecated legacy field. Migrated to announcementChannelId; never used for log routing.
     logChannelId: { type: String, default: null },
     title: { type: String, default: 'Congratulations {user}!' },
     description: { type: String, default: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!' },
@@ -128,6 +130,39 @@ function replaceLvlPlaceholders(text, user, level, xp, guild) {
 }
 
 // 🚀 UPGRADED SUPREME LEVEL-UP EMBED BUILDER
+function buildLevelUpPayload(user, level, xp, guild, settings = {}) {
+    const configuredPing = settings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
+    const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
+    const content = replaceLvlPlaceholders(pingTemplate, user, level, xp, guild);
+    const payload = { content, allowedMentions: { users: [user.id] } };
+    if (settings.embedEnabled === true) payload.embeds = [buildLevelUpEmbed(user, level, xp, guild, settings)];
+    return payload;
+}
+
+// Level announcements have their own destination and never use moderation/audit log routing.
+function resolveLevelAnnouncementChannel(guild, settings = {}, fallbackChannel = null) {
+    const configuredId = settings.announcementChannelId || settings.logChannelId || null;
+    if (configuredId) {
+        const configured = guild.channels.cache.get(configuredId);
+        return configured && typeof configured.send === 'function' ? configured : null;
+    }
+    if (fallbackChannel && typeof fallbackChannel.send === 'function') return fallbackChannel;
+    const systemChannel = guild.systemChannel;
+    return systemChannel && typeof systemChannel.send === 'function' ? systemChannel : null;
+}
+
+async function sendLevelUpAnnouncement(guild, settings, user, level, xp, fallbackChannel = null) {
+    const channel = resolveLevelAnnouncementChannel(guild, settings, fallbackChannel);
+    if (!channel) return false;
+    try {
+        await channel.send(buildLevelUpPayload(user, level, xp, guild, settings));
+        return true;
+    } catch (error) {
+        console.error('[Leveling] Could not send level-up announcement:', error.message);
+        return false;
+    }
+}
+
 function buildLevelUpEmbed(user, newLevel, newXp, guild, customSettings = null) {
     const nextLevelXp = xpForNextLevel(newLevel);
     const settings = customSettings || settingsCache.get(guild?.id) || {};
@@ -172,15 +207,15 @@ function buildLevelUpEmbed(user, newLevel, newXp, guild, customSettings = null) 
 const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 
 // ⚙️ Leveling State Management Helpers
-async function enableLeveling(guildId, logChannelId = undefined) {
+async function enableLeveling(guildId, announcementChannelId = undefined) {
     const update = { enabled: true };
-    if (logChannelId !== undefined) update.logChannelId = logChannelId;
+    if (announcementChannelId !== undefined) update.announcementChannelId = announcementChannelId;
     let settings = null;
     if (isDbConnected()) {
         settings = await LevelSettings.findOneAndUpdate({ guildId }, update, { new: true, upsert: true }).catch(() => null);
     }
     const cached = settingsCache.get(guildId) || {};
-    const newCached = { ...cached, enabled: true, ...(logChannelId !== undefined ? { logChannelId } : {}) };
+    const newCached = { ...cached, enabled: true, ...(announcementChannelId !== undefined ? { announcementChannelId } : {}) };
     settingsCache.set(guildId, newCached);
     return settings || newCached;
 }
@@ -217,13 +252,13 @@ async function toggleLeveling(guildId) {
     return { enabled: nextState, settings: settings || newCached };
 }
 
-async function setLevelingChannel(guildId, logChannelId) {
+async function setLevelingChannel(guildId, announcementChannelId) {
     let settings = null;
     if (isDbConnected()) {
-        settings = await LevelSettings.findOneAndUpdate({ guildId }, { logChannelId }, { new: true, upsert: true }).catch(() => null);
+        settings = await LevelSettings.findOneAndUpdate({ guildId }, { $set: { announcementChannelId }, $unset: { logChannelId: 1 } }, { new: true, upsert: true }).catch(() => null);
     }
     const cached = settingsCache.get(guildId) || {};
-    const newCached = { ...cached, logChannelId };
+    const newCached = { ...cached, announcementChannelId };
     settingsCache.set(guildId, newCached);
     return settings || newCached;
 }
@@ -246,7 +281,7 @@ function parseSnowflakeList(value) {
 
 async function getLevelControlPanel(guildId, client) {
     const defaults = {
-        guildId, enabled: true, embedEnabled: false, logChannelId: null,
+        guildId, enabled: true, embedEnabled: false, announcementChannelId: null,
         title: 'Congratulations {user}!',
         description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
         color: '#5865F2', image: '', thumbnail: 'avatar',
@@ -266,7 +301,7 @@ async function getLevelControlPanel(guildId, client) {
         settingsCache.set(guildId, settings);
     }
     const enabled = settings.enabled !== false;
-    const channel = settings.logChannelId ? `<#${settings.logChannelId}>` : 'Channel where the member levels up';
+    const channel = settings.announcementChannelId ? `<#${settings.announcementChannelId}>` : 'Current level-up channel (fallback)';
     const ignoredChannels = (settings.ignoredChannelIds || []).map(id => `<#${id}>`).join(', ') || 'None';
     const ignoredRoles = (settings.ignoredRoleIds || []).map(id => `<@&${id}>`).join(', ') || 'None';
     const rewards = (settings.roleRewards || []).slice().sort((a,b) => Number(a.level)-Number(b.level))
@@ -408,7 +443,13 @@ const levelingModule = (client) => {
     async function initSettings() {
         try {
             const settings = await LevelSettings.find();
-            settings.forEach(s => settingsCache.set(s.guildId, { ...s.toObject(), enabled: s.enabled !== false, logChannelId: s.logChannelId || null }));
+            for (const s of settings) {
+                const legacyChannelId = s.announcementChannelId || s.logChannelId || null;
+                settingsCache.set(s.guildId, { ...s.toObject(), enabled: s.enabled !== false, announcementChannelId: legacyChannelId });
+                if (!s.announcementChannelId && s.logChannelId) {
+                    await LevelSettings.updateOne({ guildId: s.guildId }, { $set: { announcementChannelId: s.logChannelId }, $unset: { logChannelId: 1 } }).catch(() => {});
+                }
+            }
             console.log('✅ Leveling Module Loaded (MongoDB Synced)');
         } catch (err) {}
     }
@@ -454,12 +495,7 @@ const levelingModule = (client) => {
                                         await newState.member.roles.add(role, `Reached level ${reachedLevel} (voice XP reward)`).catch(() => {});
                                     }
                                 }
-                                const template = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
-                                const content = replaceLvlPlaceholders(template, newState.member.user, reachedLevel, voiceUser.xp, newState.guild);
-                                const channel = guildSettings.logChannelId
-                                    ? newState.guild.channels.cache.get(guildSettings.logChannelId)
-                                    : newState.guild.systemChannel;
-                                if (channel?.send) channel.send({ content, allowedMentions: { users: [userId] } }).catch(() => {});
+                                await sendLevelUpAnnouncement(newState.guild, guildSettings, newState.member.user, reachedLevel, voiceUser.xp, newState.guild.systemChannel);
                                 }
                             }
                         }
@@ -724,33 +760,9 @@ const levelingModule = (client) => {
                 }
             }
 
-            let logChannel = null;
-            if (guildSettings.logChannelId) {
-                logChannel = message.guild.channels.cache.get(guildSettings.logChannelId);
-            }
-
-            if (!logChannel && typeof client.getLogChannel === 'function') {
-                try {
-                    logChannel = await client.getLogChannel(message.guild, 'misc');
-                } catch (e) {
-                    logChannel = null;
-                }
-            }
-
-            const configuredPing = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
-            const pingTemplate = configuredPing === LEGACY_DEFAULT_LEVEL_UP_MESSAGE ? DEFAULT_LEVEL_UP_MESSAGE : configuredPing;
-            const pingMsg = replaceLvlPlaceholders(pingTemplate, message.author, newLevel, userDoc.xp, message.guild);
-
-            // Plain text is the default. Only attach the customized card after an admin opts in.
-            const payload = { content: pingMsg, allowedMentions: { users: [userId] } };
-            if (guildSettings.embedEnabled === true) {
-                payload.embeds = [buildLevelUpEmbed(message.author, newLevel, userDoc.xp, message.guild, guildSettings)];
-            }
-            if (logChannel && typeof logChannel.send === 'function') {
-                logChannel.send(payload).catch(() => {});
-            } else {
-                message.channel.send(payload).catch(() => {});
-            }
+            // Only the configured leveling channel (or the channel where the member leveled up) receives this.
+            // Moderation and audit log destinations are never consulted here.
+            await sendLevelUpAnnouncement(message.guild, guildSettings, message.author, newLevel, userDoc.xp, message.channel);
         }
     });
     // ==========================================
@@ -823,7 +835,7 @@ const levelingModule = (client) => {
                 const input = new TextInputBuilder().setCustomId('in_lvl_channel')
                     .setLabel('Channel ID or mention; enter none for current')
                     .setStyle(TextInputStyle.Short).setRequired(false)
-                    .setValue(settings.logChannelId ? String(settings.logChannelId) : 'none');
+                    .setValue(settings.announcementChannelId || settings.logChannelId ? String(settings.announcementChannelId || settings.logChannelId) : 'none');
                 modal.addComponents(new ActionRowBuilder().addComponents(input));
                 return interaction.showModal(modal);
             }
@@ -1028,7 +1040,7 @@ const levelingModule = (client) => {
                     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
                     if (!channel || !channel.isTextBased() || !channel.send) return interaction.reply({ content: 'That channel is unavailable or cannot receive messages.', flags: [EPHEMERAL_FLAG] });
                 }
-                await saveLevelSettings(guildId, { logChannelId: channelId });
+                await saveLevelSettings(guildId, { announcementChannelId: channelId, logChannelId: null });
             }
 
             if (interaction.customId === 'lvl_modal_ignore') {
@@ -1152,6 +1164,9 @@ levelingModule.LevelSettings = LevelSettings;
 levelingModule.LevelUser = LevelUser;
 levelingModule.getLevelControlPanel = getLevelControlPanel;
 levelingModule.buildLevelUpEmbed = buildLevelUpEmbed;
+levelingModule.buildLevelUpPayload = buildLevelUpPayload;
+levelingModule.resolveLevelAnnouncementChannel = resolveLevelAnnouncementChannel;
+levelingModule.sendLevelUpAnnouncement = sendLevelUpAnnouncement;
 levelingModule.buildRankEmbed = buildRankEmbed;
 levelingModule.buildLeaderboardData = buildLeaderboardData;
 levelingModule.settingsCache = settingsCache;
