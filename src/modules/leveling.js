@@ -63,6 +63,15 @@ const vcJoinTimes = new Map();
 
 // Helpers
 function calculateLevel(xp) { return Math.floor(0.1 * Math.sqrt(xp)); }
+// Atomically claim a level-up so simultaneous message/voice events cannot announce it twice.
+async function claimLevelUp(guildId, userId, newLevel) {
+    const result = await LevelUser.updateOne(
+        { guildId, userId, level: { $lt: newLevel } },
+        { $set: { level: newLevel } }
+    ).catch(() => null);
+    return Boolean(result && (result.modifiedCount > 0 || result.nModified > 0));
+}
+
 function xpForNextLevel(currentLevel) { return Math.pow((currentLevel + 1) / 0.1, 2); }
 function formatVcTime(minutes) {
     if (!minutes) return '0m';
@@ -431,7 +440,8 @@ const levelingModule = (client) => {
                         if (voiceUser && voiceXp > 0) {
                             const reachedLevel = calculateLevel(voiceUser.xp);
                             if (reachedLevel > voiceUser.level) {
-                                await LevelUser.updateOne({ userId, guildId }, { level: reachedLevel }).catch(() => {});
+                                const claimed = await claimLevelUp(guildId, userId, reachedLevel);
+                                if (!claimed) continue;
                                 const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
                                 const reward = rewards.filter(item => Number(item.level) <= reachedLevel).sort((a, b) => Number(b.level) - Number(a.level))[0];
                                 if (reward && newState.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
@@ -686,7 +696,8 @@ const levelingModule = (client) => {
 
         const newLevel = calculateLevel(userDoc.xp);
         if (newLevel > userDoc.level) {
-            await LevelUser.updateOne({ userId, guildId }, { level: newLevel }).catch(() => {});
+            const claimed = await claimLevelUp(guildId, userId, newLevel);
+            if (!claimed) return;
 
             // Apply the highest configured level-role reward the member has reached.
             const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
