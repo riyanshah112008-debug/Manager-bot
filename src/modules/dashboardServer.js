@@ -1057,6 +1057,41 @@ function setupDashboardRoutes(app, client) {
                 if (channelId && (!channel || !channel.isTextBased())) return res.status(400).json({ success: false, error: 'Choose a valid text channel from this server.' });
                 updates.logChannelId = channelId || null;
             }
+            const boundedNumber = (key, min, max) => {
+                if (body[key] === undefined) return;
+                const value = Number(body[key]);
+                if (!Number.isInteger(value) || value < min || value > max) throw new Error('Invalid ' + key + ' value.');
+                updates[key] = value;
+            };
+            boundedNumber('messageXpMin', 0, 100);
+            boundedNumber('messageXpMax', 0, 100);
+            boundedNumber('messageCooldownSeconds', 5, 3600);
+            boundedNumber('voiceXpPerMinute', 0, 100);
+            if (updates.messageXpMin !== undefined && updates.messageXpMax !== undefined && updates.messageXpMax < updates.messageXpMin) {
+                return res.status(400).json({ success: false, error: 'Maximum message XP must be greater than or equal to minimum XP.' });
+            }
+            for (const key of ['ignoredChannelIds', 'ignoredRoleIds']) {
+                if (body[key] === undefined) continue;
+                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value))) {
+                    return res.status(400).json({ success: false, error: 'Invalid ' + key + ' selection.' });
+                }
+                const collection = key === 'ignoredChannelIds' ? guild.channels.cache : guild.roles.cache;
+                if (body[key].some(value => !collection.has(value))) return res.status(400).json({ success: false, error: 'One or more ignored items do not belong to this server.' });
+                updates[key] = [...new Set(body[key])];
+            }
+            if (body.roleRewards !== undefined) {
+                if (!Array.isArray(body.roleRewards) || body.roleRewards.length > 50) return res.status(400).json({ success: false, error: 'Configure up to 50 level rewards.' });
+                const rewards = [];
+                for (const item of body.roleRewards) {
+                    const level = Number(item?.level), roleId = String(item?.roleId || '');
+                    const role = guild.roles.cache.get(roleId);
+                    if (!Number.isInteger(level) || level < 1 || level > 10000 || !role || role.managed || role.position >= guild.members.me.roles.highest.position) {
+                        return res.status(400).json({ success: false, error: 'Each reward needs a valid level and a role below Starry’s highest role.' });
+                    }
+                    rewards.push({ level, roleId });
+                }
+                updates.roleRewards = rewards.sort((a, b) => a.level - b.level);
+            }
             for (const key of ['title', 'description', 'footer', 'pingContent', 'authorName']) {
                 if (body[key] === undefined) continue;
                 if (typeof body[key] !== 'string' || body[key].length > (key === 'description' ? 1800 : 300)) return res.status(400).json({ success: false, error: 'Invalid ' + key + ' value.' });
