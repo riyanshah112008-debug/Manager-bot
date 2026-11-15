@@ -228,8 +228,8 @@ async function saveLevelSettings(guildId, update) {
 }
 
 function parseSnowflakeList(value) {
-    const ids = String(value || '').split(/[\\s,;]+/).map(item => item.replace(/[<#@&!>]/g, '')).filter(Boolean);
-    if (ids.length > 20 || ids.some(id => !/^\\d{17,20}$/.test(id))) return null;
+    const ids = String(value || '').split(/[\s,;]+/).map(item => item.replace(/[<#@&!>]/g, '')).filter(Boolean);
+    if (ids.length > 20 || ids.some(id => !/^\d{17,20}$/.test(id))) return null;
     return [...new Set(ids)];
 }
 
@@ -264,14 +264,14 @@ async function getLevelControlPanel(guildId, client) {
         .setColor(enabled ? (isValidHex(settings.color) ? settings.color : '#5865F2') : '#ED4245')
         .setTitle('⭐ Starry Leveling • Control Panel')
         .setDescription(
-            \`**Status:** \${enabled ? '🟢 Enabled' : '🔴 Disabled'}\\n\` +
-            \`**Level-up channel:** \${channel}\\n\\n\` +
-            \`**Message XP:** \${settings.messageXpMin ?? 15}–\${settings.messageXpMax ?? 25} XP • \${settings.messageCooldownSeconds ?? 60}s cooldown\\n\` +
-            \`**Voice XP:** \${settings.voiceXpPerMinute ?? 5} XP per minute\\n\` +
-            \`**Ignored channels:** \${ignoredChannels}\\n\` +
-            \`**Ignored roles:** \${ignoredRoles}\\n\` +
-            \`**Level role rewards:** \${rewards}\\n\\n\` +
-            \`**Announcement:** \${settings.title || 'Congratulations {user}!'}\\n\` +
+            \`**Status:** \${enabled ? '🟢 Enabled' : '🔴 Disabled'}\n\` +
+            \`**Level-up channel:** \${channel}\n\n\` +
+            \`**Message XP:** \${settings.messageXpMin ?? 15}–\${settings.messageXpMax ?? 25} XP • \${settings.messageCooldownSeconds ?? 60}s cooldown\n\` +
+            \`**Voice XP:** \${settings.voiceXpPerMinute ?? 5} XP per minute\n\` +
+            \`**Ignored channels:** \${ignoredChannels}\n\` +
+            \`**Ignored roles:** \${ignoredRoles}\n\` +
+            \`**Level role rewards:** \${rewards}\n\n\` +
+            \`**Announcement:** \${settings.title || 'Congratulations {user}!'}\n\` +
             \`**Embed color:** \${settings.color || '#5865F2'} • **Banner:** \${settings.image ? 'Configured' : 'None'}\`
         )
         .addFields({
@@ -913,7 +913,7 @@ const levelingModule = (client) => {
             if (interaction.customId === 'lvl_modal_channel') {
                 const raw = interaction.fields.getTextInputValue('in_lvl_channel').trim();
                 const channelId = raw.toLowerCase() === 'none' ? null : raw.replace(/[<#>]/g, '');
-                if (channelId && !/^\\d{17,20}$/.test(channelId)) {
+                if (channelId && !/^\d{17,20}$/.test(channelId)) {
                     return interaction.reply({ content: 'Enter a valid channel mention/ID, or none to announce in the channel where the member levels up.', flags: [EPHEMERAL_FLAG] });
                 }
                 if (channelId) {
@@ -934,8 +934,8 @@ const levelingModule = (client) => {
                 const raw = interaction.fields.getTextInputValue('in_lvl_rewards').trim();
                 const rewards = [];
                 if (raw) {
-                    for (const line of raw.split(/[\\n,;]+/).map(value => value.trim()).filter(Boolean)) {
-                        const match = line.match(/^(\\d{1,5})\\s*:\\s*(\\d{17,20})$/);
+                    for (const line of raw.split(/[\n,;]+/).map(value => value.trim()).filter(Boolean)) {
+                        const match = line.match(/^(\d{1,5})\s*:\s*(\d{17,20})$/);
                         if (!match || Number(match[1]) < 1 || Number(match[1]) > 10000) return interaction.reply({ content: 'Each reward must be level:roleID, with a level from 1 to 10000.', flags: [EPHEMERAL_FLAG] });
                         rewards.push({ level: Number(match[1]), roleId: match[2] });
                     }
