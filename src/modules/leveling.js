@@ -427,7 +427,27 @@ const levelingModule = (client) => {
                         const voiceXp = Number(guildSettings.voiceXpPerMinute ?? 5);
                         const increment = { vc_time: durationMinutes };
                         if (voiceXp > 0) increment.xp = durationMinutes * voiceXp;
-                        await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: increment }, { upsert: true }).catch(() => {});
+                        const voiceUser = await LevelUser.findOneAndUpdate({ userId, guildId }, { $inc: increment }, { new: true, upsert: true }).catch(() => null);
+                        if (voiceUser && voiceXp > 0) {
+                            const reachedLevel = calculateLevel(voiceUser.xp);
+                            if (reachedLevel > voiceUser.level) {
+                                await LevelUser.updateOne({ userId, guildId }, { level: reachedLevel }).catch(() => {});
+                                const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
+                                const reward = rewards.filter(item => Number(item.level) <= reachedLevel).sort((a, b) => Number(b.level) - Number(a.level))[0];
+                                if (reward && newState.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                                    const role = newState.guild.roles.cache.get(reward.roleId);
+                                    if (role && !role.managed && role.position < newState.guild.members.me.roles.highest.position) {
+                                        await newState.member.roles.add(role, `Reached level ${reachedLevel} (voice XP reward)`).catch(() => {});
+                                    }
+                                }
+                                const template = guildSettings.pingContent || DEFAULT_LEVEL_UP_MESSAGE;
+                                const content = replaceLvlPlaceholders(template, newState.member.user, reachedLevel, voiceUser.xp, newState.guild);
+                                const channel = guildSettings.logChannelId
+                                    ? newState.guild.channels.cache.get(guildSettings.logChannelId)
+                                    : newState.guild.systemChannel;
+                                if (channel?.send) channel.send({ content, allowedMentions: { users: [userId] } }).catch(() => {});
+                            }
+                        }
                     }
                 }
             }
@@ -897,6 +917,9 @@ const levelingModule = (client) => {
         // 📝 LEVEL-UP MODAL SUBMISSION PROCESSORS
         // ==========================================
         if (interaction.isModalSubmit() && interaction.customId.startsWith('lvl_modal_')) {
+            if (!interaction.inGuild() || (!interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild) && !interaction.member?.permissions?.has(PermissionFlagsBits.Administrator))) {
+                return interaction.reply({ content: 'You need Manage Server or Administrator permissions to change leveling settings.', flags: [EPHEMERAL_FLAG] });
+            }
             const guildId = interaction.guildId;
 
             if (interaction.customId === 'lvl_modal_xp') {
@@ -985,7 +1008,7 @@ const levelingModule = (client) => {
                 settingsCache.set(guildId, { ...cached, pingContent });
             }
 
-            await interaction.reply({ content: '✅ **Level-Up Embed Visuality Updated!**', flags: [EPHEMERAL_FLAG] });
+            await interaction.reply({ content: '✅ **Leveling settings saved.**', flags: [EPHEMERAL_FLAG] });
 
             const panelData = await getLevelControlPanel(guildId, client);
             if (interaction.message && panelData) {
