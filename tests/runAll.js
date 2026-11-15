@@ -22,7 +22,10 @@ const suites = [
   ['Phone sync module syntax', '--check', 'src/modules/phoneSync.js'],
   ['Reaction-role reliability', '--test', 'tests/reactionRoleReliability.test.js'],
   ['Reaction-role reconciliation', '--test', 'tests/reactionRoleReconciliation.test.js'],
-  ['Music audio profiles', '--test', 'tests/musicAudioProfiles.test.js']
+  ['Music audio profiles', '--test', 'tests/musicAudioProfiles.test.js'],
+  ['Leveling control panel', '--test', 'tests/levelingControlPanel.test.js'],
+  ['Leveling module syntax', '--check', 'src/modules/leveling.js'],
+  ['Slash command deployment syntax', '--check', 'deploy-commands.js']
 ];
 
 const timeoutMs = Number(process.env.TEST_SUITE_TIMEOUT_MS) || 60000;
