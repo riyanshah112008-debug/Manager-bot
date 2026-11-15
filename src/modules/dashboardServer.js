@@ -1113,7 +1113,11 @@ function setupDashboardRoutes(app, client) {
             res.json({ success: true, settings, message: 'Leveling settings saved.' });
         } catch (error) {
             console.error('Dashboard leveling settings save failed:', error);
-            res.status(500).json({ success: false, error: 'Could not save leveling settings.' });
+            const isValidationError = /^Invalid /.test(String(error.message || ''));
+            res.status(isValidationError ? 400 : 500).json({
+                success: false,
+                error: isValidationError ? error.message : 'Could not save leveling settings.'
+            });
         }
     });
 
