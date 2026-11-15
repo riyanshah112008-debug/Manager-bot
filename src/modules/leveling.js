@@ -579,8 +579,13 @@ const levelingModule = (client) => {
                     }
 
                     if (sub === 'preview' || sub === 'test') {
-                        const previewEmbed = buildLevelUpEmbed(message.author, 5, 2500, message.guild);
-                        return message.reply({ content: `🧪 **[Leveling Card Live Preview]**`, embeds: [previewEmbed] });
+                        const latest = await LevelSettings.findOne({ guildId }).lean().catch(() => null) || settingsCache.get(guildId) || {};
+                        const previewText = replaceLvlPlaceholders(latest.pingContent || DEFAULT_LEVEL_UP_MESSAGE, message.author, 5, 2500, message.guild);
+                        const previewPayload = { content: `${previewText} *(Setup Preview)*` };
+                        if (latest.embedEnabled === true) {
+                            previewPayload.embeds = [buildLevelUpEmbed(message.author, 5, 2500, message.guild, latest)];
+                        }
+                        return message.reply(previewPayload);
                     }
 
                     // Default: show full interactive control panel
@@ -794,6 +799,66 @@ const levelingModule = (client) => {
                 }
             }
 
+            // XP & COOLDOWN SETTINGS MODAL
+            if (interaction.customId === 'lvl_btn_xp') {
+                const modal = new ModalBuilder().setCustomId('lvl_modal_xp').setTitle('XP & Cooldown Settings');
+                const fields = [
+                    ['in_lvl_xp_min', 'Minimum message XP', String(settings.messageXpMin ?? 15)],
+                    ['in_lvl_xp_max', 'Maximum message XP', String(settings.messageXpMax ?? 25)],
+                    ['in_lvl_cooldown', 'Cooldown in seconds', String(settings.messageCooldownSeconds ?? 60)],
+                    ['in_lvl_voice_xp', 'Voice XP per minute', String(settings.voiceXpPerMinute ?? 5)]
+                ];
+                modal.addComponents(...fields.map(([id, label, value]) =>
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId(id).setLabel(label)
+                            .setStyle(TextInputStyle.Short).setValue(value).setRequired(true)
+                    )
+                ));
+                return interaction.showModal(modal);
+            }
+
+            // ANNOUNCEMENT CHANNEL MODAL
+            if (interaction.customId === 'lvl_btn_channel') {
+                const modal = new ModalBuilder().setCustomId('lvl_modal_channel').setTitle('Announcement Channel');
+                const input = new TextInputBuilder().setCustomId('in_lvl_channel')
+                    .setLabel('Channel ID, mention, or none for current channel')
+                    .setStyle(TextInputStyle.Short).setRequired(false)
+                    .setValue(settings.logChannelId ? String(settings.logChannelId) : 'none');
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+
+            // IGNORED CHANNELS AND ROLES MODAL
+            if (interaction.customId === 'lvl_btn_ignore') {
+                const modal = new ModalBuilder().setCustomId('lvl_modal_ignore').setTitle('Ignored Channels & Roles');
+                const channelsInput = new TextInputBuilder().setCustomId('in_lvl_ignore_channels')
+                    .setLabel('Ignored channel IDs (comma separated)')
+                    .setStyle(TextInputStyle.Paragraph).setRequired(false)
+                    .setValue((settings.ignoredChannelIds || []).join(', ').slice(0, 4000));
+                const rolesInput = new TextInputBuilder().setCustomId('in_lvl_ignore_roles')
+                    .setLabel('Ignored role IDs (comma separated)')
+                    .setStyle(TextInputStyle.Paragraph).setRequired(false)
+                    .setValue((settings.ignoredRoleIds || []).join(', ').slice(0, 4000));
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(channelsInput),
+                    new ActionRowBuilder().addComponents(rolesInput)
+                );
+                return interaction.showModal(modal);
+            }
+
+            // ROLE REWARDS MODAL
+            if (interaction.customId === 'lvl_btn_rewards') {
+                const modal = new ModalBuilder().setCustomId('lvl_modal_rewards').setTitle('Level Role Rewards');
+                const rewardLines = (settings.roleRewards || [])
+                    .map(item => `${item.level}:${item.roleId}`).join('\n').slice(0, 4000);
+                const input = new TextInputBuilder().setCustomId('in_lvl_rewards')
+                    .setLabel('One reward per line: level:roleID')
+                    .setStyle(TextInputStyle.Paragraph).setRequired(false)
+                    .setValue(rewardLines);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return interaction.showModal(modal);
+            }
+
             // EDIT TITLE & DESCRIPTION MODAL
             if (interaction.customId === 'lvl_btn_text') {
                 const modal = new ModalBuilder().setCustomId('lvl_modal_text').setTitle('Edit Level-Up Title & Text');
@@ -894,11 +959,12 @@ const levelingModule = (client) => {
                     const previewEmbed = buildLevelUpEmbed(interaction.user, 5, 2500, interaction.guild, latest);
                     const pingText = replaceLvlPlaceholders(latest.pingContent || '✨ <@{user}> just hit **Level {level}**!', interaction.user, 5, 2500, interaction.guild);
 
-                    return await interaction.reply({ 
-                        content: `${pingText} *(Setup Preview)*`, 
-                        embeds: [previewEmbed], 
-                        flags: [EPHEMERAL_FLAG] 
-                    });
+                    const previewPayload = {
+                        content: `${pingText} *(Setup Preview)*`,
+                        flags: [EPHEMERAL_FLAG]
+                    };
+                    if (latest.embedEnabled === true) previewPayload.embeds = [previewEmbed];
+                    return await interaction.reply(previewPayload);
                 } catch (err) {
                     return await interaction.reply({ 
                         content: `❌ **Preview Error:** \`${err.message}\``,  
