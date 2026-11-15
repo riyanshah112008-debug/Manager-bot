@@ -16,6 +16,7 @@ const {
     MessageFlags 
 } = require('discord.js');
 const mongoose = require('mongoose');
+const { randomInt } = require('node:crypto');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
@@ -682,7 +683,7 @@ const levelingModule = (client) => {
             return;
         }
         xpCooldowns.set(cooldownKey, Date.now());
-        const messageXp = minXp + Math.floor(Math.random() * (maxXp - minXp + 1));
+        const messageXp = randomInt(minXp, maxXp + 1);
         const userDoc = await LevelUser.findOneAndUpdate(
             { userId, guildId },
             { $inc: { messages: 1, xp: messageXp } },
