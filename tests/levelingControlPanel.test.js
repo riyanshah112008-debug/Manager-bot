@@ -111,6 +111,6 @@ test('level-up announcements are isolated from moderation and general logs', () 
   assert.ok(!leveling.includes("client.getLogChannel(message.guild, 'misc')"), 'level-up announcements must never use the general log fallback');
   includes(leveling, 'announcementChannelId: { type: String, default: null }');
   includes(api, 'updates.announcementChannelId = channelId || null;');
-  includes(dashboard, 'body.announcementChannelId !== undefined ? body.announcementChannelId : body.logChannelId');
+  includes(api, 'const requestedAnnouncementChannel = body.announcementChannelId');
   includes(dashboard, 'levelAnnouncementChannel');
 });
