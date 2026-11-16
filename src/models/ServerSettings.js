@@ -68,6 +68,15 @@ const serverSettingsSchema = new mongoose.Schema({
 
     // 📜 Starry Audit & Security Telemetry Logging
     logging: {
+        // Master switch: disables every Starry audit/activity log without disabling bot features.
+        enabled: { type: Boolean, default: true },
+        aiEnabled: { type: Boolean, default: false },
+        moderationEnabled: { type: Boolean, default: true },
+        messagesEnabled: { type: Boolean, default: true },
+        membersEnabled: { type: Boolean, default: true },
+        voiceEnabled: { type: Boolean, default: true },
+        serverEnabled: { type: Boolean, default: true },
+        aiLogChannel: { type: String, default: '' },
         modLogChannel: { type: String, default: '' },
         messageLogChannel: { type: String, default: '' },
         voiceLogChannel: { type: String, default: '' },
