@@ -65,8 +65,10 @@ const loggingPanelCommand = {
                 new ButtonBuilder().setCustomId('logging_master_on').setLabel('Enable Starry Logs').setStyle(ButtonStyle.Success)
             );
             const keys = Object.keys(switches);
-            const makeRow = subset => new ActionRowBuilder().addComponents(...subset.map(key =>
-                new ButtonBuilder().setCustomId('logging_toggle_' + key).setLabel((s[switches[key]] === false ? 'Enable ' : 'Disable ') + labels[key]).setStyle(s[switches[key]] === false ? ButtonStyle.Success : ButtonStyle.Secondary)));
+            const makeRow = subset => new ActionRowBuilder().addComponents(...subset.map(key => {
+                const active = key === 'ai' ? s.aiEnabled === true : s[switches[key]] !== false;
+                return new ButtonBuilder().setCustomId('logging_toggle_' + key).setLabel((active ? 'Disable ' : 'Enable ') + labels[key]).setStyle(active ? ButtonStyle.Secondary : ButtonStyle.Success);
+            }));
             const category = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('logging_category').setPlaceholder('Choose a category to route').addOptions(keys.map(key => ({ label: labels[key], value: key, default: key === selectedCategory }))));
             const destination = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('logging_channel').setPlaceholder('Choose destination channel').setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(1));
             return { embeds: [embed], components: [master, makeRow(keys.slice(0, 3)), makeRow(keys.slice(3)), category, destination] };
