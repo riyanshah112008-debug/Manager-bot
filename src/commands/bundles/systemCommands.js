@@ -9,6 +9,7 @@ const {
     ButtonBuilder, 
     ButtonStyle, 
     PermissionFlagsBits,
+    SlashCommandBuilder,
     ChannelType,
     ComponentType,
     StringSelectMenuBuilder,
@@ -35,6 +36,7 @@ function hasManagePerms(ctx) {
 const loggingPanelCommand = {
     name: 'logging', aliases: ['logpanel', 'logsettings'], category: 'Systems',
     description: 'Open Starry’s unified logging control panel.', usage: ',logging',
+    data: new SlashCommandBuilder().setName('logging').setDescription('Configure Starry logging and AI activity channels.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     async execute(ctx) {
         if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
         if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
