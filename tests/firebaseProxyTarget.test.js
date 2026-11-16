@@ -15,7 +15,7 @@ test('relative API paths resolve against the configured backend origin', () => {
 test('protocol-relative request targets cannot replace the backend host', () => {
     assert.throws(
         () => resolveProxyTarget('//attacker.example/collect', new URL('https://backend.example')),
-        /relative path/
+        /configured backend origin/
     );
 });
 
