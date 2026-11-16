@@ -44,3 +44,11 @@ test('AI activity telemetry is privacy-safe and uses the dedicated AI route', ()
     assert.match(source, /client\.getLogChannel\(guild, 'ai'\)/);
     assert.match(source, /Prompt and response content are not stored/);
 });
+
+test('AI response pipeline emits success and failure telemetry without prompt content', () => {
+    const source = read('src/utils/aiEngine.js');
+    assert.match(source, /ctx\.client\?\.logAIActivity/);
+    assert.match(source, /status: 'completed'/);
+    assert.match(source, /status: 'failed'/);
+    assert.match(source, /Never send prompts, attachments, or AI response text/);
+});
