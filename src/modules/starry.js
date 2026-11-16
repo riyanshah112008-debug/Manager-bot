@@ -514,7 +514,9 @@ module.exports = async (client) => {
 
     // Dashboard-configured log routing with a short cache and legacy name-based fallback.
     const dashboardLogCache = new Map();
+    const { isLoggingAllowed, getLogChannelField } = require('../utils/loggingPolicy');
     const dashboardLogFields = {
+        ai: 'aiLogChannel',
         access: 'memberLogChannel',
         moderate: 'modLogChannel',
         messages: 'messageLogChannel',
@@ -532,18 +534,27 @@ module.exports = async (client) => {
         if (!guild) return null;
         const type = String(logType).toLowerCase();
         const cacheKey = guild.id + ':' + type;
-        const cached = dashboardLogCache.get(cacheKey);
-        if (cached && cached.expiresAt > Date.now()) {
-            if (!cached.channelId) return null;
-            const cachedChannel = guild.channels.cache.get(cached.channelId);
-            if (cachedChannel) return cachedChannel;
-            dashboardLogCache.delete(cacheKey);
-        }
-
-        const configuredField = dashboardLogFields[type] || 'serverLogChannel';
+        const configuredField = getLogChannelField(type);
         try {
+            // Read the master/category switches before consulting the channel cache.
+            // This makes disabling logging effective immediately and prevents fallback leaks.
             const serverSettings = await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean();
-            const configuredId = serverSettings?.logging?.[configuredField];
+            const logging = serverSettings?.logging || {};
+            if (!isLoggingAllowed(logging, type)) {
+                dashboardLogCache.set(cacheKey, { channelId: null, expiresAt: Date.now() + 15000 });
+                return null;
+            }
+            if (type === 'ai' && logging.aiEnabled !== true) return null;
+
+            const cached = dashboardLogCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) {
+                if (!cached.channelId) return null;
+                const cachedChannel = guild.channels.cache.get(cached.channelId);
+                if (cachedChannel) return cachedChannel;
+                dashboardLogCache.delete(cacheKey);
+            }
+
+            const configuredId = logging[configuredField];
             const configuredChannel = configuredId ? guild.channels.cache.get(String(configuredId)) : null;
             if (configuredChannel && configuredChannel.isTextBased() && typeof configuredChannel.send === 'function') {
                 dashboardLogCache.set(cacheKey, { channelId: configuredChannel.id, expiresAt: Date.now() + 15000 });
@@ -551,9 +562,11 @@ module.exports = async (client) => {
             }
         } catch (error) {
             console.error('Dashboard log routing lookup failed:', error);
+            return null;
         }
 
         const typeMap = {
+            ai: ['ai-logs', 'starry-ai-logs', 'ai-activity'],
             access: ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
             moderate: ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
             messages: ['logs-messages', 'message-logs', 'chat-logs'],
@@ -564,18 +577,37 @@ module.exports = async (client) => {
             misc: ['logs-server', 'server-logs', 'mod-logs', 'logs']
         };
         const targetNames = typeMap[type] || typeMap.access;
-        let channel = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+        let channel = guild.channels.cache.find(ch => ch && ch.type === ChannelType.GuildText && targetNames.some(name => ch.name.toLowerCase().includes(name)));
         if (!channel) {
             try {
                 const fetchedChannels = await guild.channels.fetch();
-                channel = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name))) ||
-                    fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+                channel = fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && targetNames.some(name => ch.name.toLowerCase().includes(name))) ||
+                    (type === 'ai' ? null : fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(ch.name.toLowerCase()))) || null;
             } catch (error) {
                 console.error('Log channel discovery failed:', error);
             }
         }
         dashboardLogCache.set(cacheKey, { channelId: channel?.id || null, expiresAt: Date.now() + 15000 });
         return channel || null;
+    };
+    // Privacy-safe AI telemetry hook for AI handlers. Never records prompts or generated content.
+    client.logAIActivity = async ({ guild, user, channel, model = 'Automatic', status = 'completed', durationMs = null } = {}) => {
+        if (!guild) return false;
+        const logChannel = await client.getLogChannel(guild, 'ai');
+        if (!logChannel) return false;
+        const embed = new EmbedBuilder()
+            .setColor(status === 'completed' ? '#5865F2' : '#ED4245')
+            .setTitle(status === 'completed' ? '🧠 Starry AI Activity' : '⚠️ Starry AI Activity')
+            .addFields(
+                { name: '👤 User', value: user?.id ? '<@' + user.id + '> (\\`' + String(user.tag || user.username || user.id).slice(0, 80) + '\\`)' : 'Unknown', inline: true },
+                { name: '📍 Channel', value: channel?.id ? '<#' + channel.id + '>' : 'Direct / unavailable', inline: true },
+                { name: '🤖 Model', value: String(model).slice(0, 100), inline: true },
+                { name: '📊 Status', value: String(status).slice(0, 40), inline: true }
+            );
+        if (Number.isFinite(durationMs)) embed.addFields({ name: '⏱️ Processing time', value: Math.max(0, Math.round(durationMs)) + ' ms', inline: true });
+        embed.setFooter({ text: 'Starry AI telemetry • Prompt and response content are not stored' }).setTimestamp();
+        await logChannel.send({ embeds: [embed] }).catch(() => {});
+        return true;
     };
 
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {

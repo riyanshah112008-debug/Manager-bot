@@ -8,7 +8,12 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    SlashCommandBuilder,
+    ChannelType,
+    ComponentType,
+    StringSelectMenuBuilder,
+    ChannelSelectMenuBuilder
 } = require('discord.js');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
@@ -17,6 +22,7 @@ const embedVisualityModule = require('../../modules/embedVisuality');
 const welcomeModule = require('../../modules/welcome');
 const goodbyeModule = require('../../modules/goodbye');
 const levelingModule = require('../../modules/leveling');
+const ServerSettings = require('../../models/ServerSettings');
 
 function hasManagePerms(ctx) {
     if (!ctx.guild) return false;
@@ -27,7 +33,86 @@ function hasManagePerms(ctx) {
     return false;
 }
 
+const loggingPanelCommand = {
+    name: 'logging', aliases: ['logpanel', 'logsettings'], category: 'Systems',
+    description: 'Open Starry’s unified logging control panel.', usage: ',logging',
+    data: new SlashCommandBuilder().setName('logging').setDescription('Configure Starry logging and AI activity channels.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    async execute(ctx) {
+        if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
+        if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
+        const guild = ctx.guild, ownerId = ctx.user.id;
+        const guildId = String(guild.id);
+        if (!/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+        const fields = { ai: 'aiLogChannel', moderate: 'modLogChannel', messages: 'messageLogChannel', members: 'memberLogChannel', voice: 'voiceLogChannel', channels: 'serverLogChannel' };
+        const switches = { ai: 'aiEnabled', moderate: 'moderationEnabled', messages: 'messagesEnabled', members: 'membersEnabled', voice: 'voiceEnabled', channels: 'serverEnabled' };
+        const labels = { ai: 'AI activity', moderate: 'Moderation', messages: 'Messages', members: 'Members & roles', voice: 'Voice', channels: 'Server & channels' };
+        let selectedCategory = 'ai';
+        const load = async () => {
+            const rows = await ServerSettings.find({ guildId }).select('logging').limit(1).lean();
+            return rows[0]?.logging || {};
+        };
+        const save = async patch => {
+            const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
+            await ServerSettings.updateOne({ guildId }, { $set: set, $setOnInsert: { guildId } }, { upsert: true, setDefaultsOnInsert: true });
+            ctx.client.invalidateLogSettings?.(guild.id);
+        };
+        const render = async () => {
+            const s = await load(), state = v => v === false ? '🔴 OFF' : '🟢 ON';
+            const lines = ['**Master logging:** ' + state(s.enabled)];
+            for (const key of Object.keys(switches)) lines.push('**' + labels[key] + ':** ' + (key === 'ai' ? (s.aiEnabled === true ? '🟢 ON' : '🔴 OFF') : state(s[switches[key]])));
+            lines.push('', '**Destinations**');
+            for (const key of Object.keys(fields)) lines.push('• **' + labels[key] + ':** ' + (s[fields[key]] ? '<#' + s[fields[key]] + '>' : 'Auto-detect / not set'));
+            const embed = new EmbedBuilder().setColor(s.enabled === false ? '#ED4245' : '#5865F2').setTitle('📜 Starry Logging Control Center')
+                .setDescription(lines.join('\n')).addFields({ name: 'Wick migration', value: 'Use **Disable All Starry Logs** to stop Starry audit messages while keeping moderation, AutoMod and security features running.' })
+                .setFooter({ text: 'Only server managers can change these settings.' });
+            const master = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('logging_master_off').setLabel('Disable All Starry Logs').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('logging_master_on').setLabel('Enable Starry Logs').setStyle(ButtonStyle.Success)
+            );
+            const keys = Object.keys(switches);
+            const makeRow = subset => new ActionRowBuilder().addComponents(...subset.map(key => {
+                const active = key === 'ai' ? s.aiEnabled === true : s[switches[key]] !== false;
+                return new ButtonBuilder().setCustomId('logging_toggle_' + key).setLabel((active ? 'Disable ' : 'Enable ') + labels[key]).setStyle(active ? ButtonStyle.Secondary : ButtonStyle.Success);
+            }));
+            const category = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('logging_category').setPlaceholder('Choose a category to route').addOptions(keys.map(key => ({ label: labels[key], value: key, default: key === selectedCategory }))));
+            const destination = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('logging_channel').setPlaceholder('Choose destination channel').setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(1));
+            return { embeds: [embed], components: [master, makeRow(keys.slice(0, 3)), makeRow(keys.slice(3)), category, destination] };
+        };
+        const sent = await ctx.reply(await render());
+        if (!sent?.createMessageComponentCollector) return;
+        const collectors = [
+            sent.createMessageComponentCollector({ componentType: ComponentType.Button, time: 600000 }),
+            sent.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 600000 }),
+            sent.createMessageComponentCollector({ componentType: ComponentType.ChannelSelect, time: 600000 })
+        ];
+        const allowed = async i => {
+            if (i.user.id !== ownerId) { await i.reply({ content: 'This panel belongs to the user who opened it.', ephemeral: true }); return false; }
+            if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild) && !i.memberPermissions?.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS?.includes(i.user.id)) {
+                await i.reply({ content: 'Manage Server permission is required.', ephemeral: true }); return false;
+            }
+            return true;
+        };
+        const refresh = async (i, patch) => { await save(patch); await i.update(await render()); };
+        collectors[0].on('collect', async i => {
+            if (!await allowed(i)) return;
+            if (i.customId === 'logging_master_off') return refresh(i, { enabled: false });
+            if (i.customId === 'logging_master_on') return refresh(i, { enabled: true });
+            const key = i.customId.replace('logging_toggle_', '');
+            if (!switches[key]) return;
+            const s = await load(), active = key === 'ai' ? s.aiEnabled === true : s[switches[key]] !== false;
+            return refresh(i, { [switches[key]]: !active });
+        });
+        collectors[1].on('collect', async i => { if (await allowed(i)) { selectedCategory = i.values[0] || 'ai'; await i.update(await render()); } });
+        collectors[2].on('collect', async i => {
+            if (!await allowed(i)) return;
+            await save({ [fields[selectedCategory]]: i.values[0] });
+            await i.update(await render());
+        });
+    }
+};
+
 const commands = [
+    loggingPanelCommand,
     // 1. MULTIBOT / BOTS / CLUSTER
     {
         name: 'multibot',

@@ -126,15 +126,21 @@ module.exports = (client) => {
     async function resolveLogChannel(guild, type = 'misc') {
         if (!guild) return null;
 
+        // The central resolver enforces the per-server master switch and category switches.
+        // Never fall through to the legacy setlogs channel when it intentionally returns null.
         if (typeof client.getLogChannel === 'function') {
-            const smartChannel = await client.getLogChannel(guild, type);
-            if (smartChannel) return smartChannel;
+            return await client.getLogChannel(guild, type);
         }
 
+        // Legacy fallback is retained only for deployments that have not initialized
+        // the central Starry logging resolver.
         try {
-            const config = await LogSettings.findOne({ guildId: guild.id });
-            if (!config || !config.logChannel) return null;
-            return guild.channels.cache.get(config.logChannel) || null;
+            const guildId = String(guild.id);
+            if (!/^\d{17,20}$/.test(guildId)) return null;
+            const legacyRows = await LogSettings.find({ guildId }).limit(1).lean();
+            const legacy = legacyRows[0];
+            if (!legacy?.logChannel) return null;
+            return guild.channels.cache.get(legacy.logChannel) || null;
         } catch (err) {
             return null;
         }
