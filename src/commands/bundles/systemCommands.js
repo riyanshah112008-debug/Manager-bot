@@ -8,7 +8,11 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    ChannelType,
+    ComponentType,
+    StringSelectMenuBuilder,
+    ChannelSelectMenuBuilder
 } = require('discord.js');
 const config = require('../../config');
 const { ONE_YEAR_MS } = require('../../utils/contextHelper');
@@ -17,6 +21,7 @@ const embedVisualityModule = require('../../modules/embedVisuality');
 const welcomeModule = require('../../modules/welcome');
 const goodbyeModule = require('../../modules/goodbye');
 const levelingModule = require('../../modules/leveling');
+const ServerSettings = require('../../models/ServerSettings');
 
 function hasManagePerms(ctx) {
     if (!ctx.guild) return false;
@@ -28,6 +33,7 @@ function hasManagePerms(ctx) {
 }
 
 const commands = [
+    loggingPanelCommand,
     // 1. MULTIBOT / BOTS / CLUSTER
     {
         name: 'multibot',
