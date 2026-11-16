@@ -514,6 +514,7 @@ module.exports = async (client) => {
 
     // Dashboard-configured log routing with a short cache and legacy name-based fallback.
     const dashboardLogCache = new Map();
+    const { isLoggingAllowed, getLogChannelField } = require('../utils/loggingPolicy');
     const dashboardLogFields = {
         ai: 'aiLogChannel',
         access: 'memberLogChannel',
@@ -533,24 +534,13 @@ module.exports = async (client) => {
         if (!guild) return null;
         const type = String(logType).toLowerCase();
         const cacheKey = guild.id + ':' + type;
-        const configuredField = dashboardLogFields[type] || 'serverLogChannel';
-        const enabledField = ({
-            ai: 'aiEnabled',
-            moderate: 'moderationEnabled',
-            messages: 'messagesEnabled',
-            voice: 'voiceEnabled',
-            access: 'membersEnabled',
-            members: 'membersEnabled',
-            roles: 'membersEnabled',
-            channels: 'serverEnabled',
-            misc: 'serverEnabled'
-        })[type] || 'serverEnabled';
+        const configuredField = getLogChannelField(type);
         try {
             // Read the master/category switches before consulting the channel cache.
             // This makes disabling logging effective immediately and prevents fallback leaks.
             const serverSettings = await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean();
             const logging = serverSettings?.logging || {};
-            if (logging.enabled === false || logging[enabledField] === false) {
+            if (!isLoggingAllowed(logging, type)) {
                 dashboardLogCache.set(cacheKey, { channelId: null, expiresAt: Date.now() + 15000 });
                 return null;
             }
