@@ -515,6 +515,7 @@ module.exports = async (client) => {
     // Dashboard-configured log routing with a short cache and legacy name-based fallback.
     const dashboardLogCache = new Map();
     const dashboardLogFields = {
+        ai: 'aiLogChannel',
         access: 'memberLogChannel',
         moderate: 'modLogChannel',
         messages: 'messageLogChannel',
