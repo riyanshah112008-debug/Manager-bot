@@ -90,11 +90,15 @@ async function resolveInput(ctx, attachment) {
     if (attachment?.url) return [{ name: attachment.name || 'upload', buffer: await download(attachment.url) }];
     let message = ctx.message;
     if (message?.reference?.messageId && message.fetchReference) message = await message.fetchReference().catch(() => message);
-    const file = message?.attachments?.first?.();
-    if (file?.url) return [{ name: file.name || 'upload', buffer: await download(file.url) }];
+    const attachments = message?.attachments ? Array.from(message.attachments.values()) : [];
+    if (attachments.length) {
+        const sources = [];
+        for (const file of attachments.slice(0, MAX_BATCH)) if (file?.url) sources.push({ name: file.name || 'upload', buffer: await download(file.url) });
+        if (sources.length) return sources;
+    }
     const sticker = message?.stickers?.first?.();
     if (sticker?.url) return [{ name: (sticker.name || 'sticker') + '.png', buffer: await download(sticker.url) }];
-    throw new Error('Attach a GIF/image/ZIP, or reply to a message containing a sticker. Supported: GIF, PNG, JPG, WEBP, ZIP.');
+    throw new Error('Attach one or more GIFs/images/ZIPs, or reply to a message containing a sticker. Supported: GIF, PNG, JPG, WEBP, ZIP.');
 }
 async function createAsset(guild, kind, item, reason) {
     const name = safeName(item.name);
@@ -131,25 +135,31 @@ module.exports = [{
         let temp;
         try {
             const sources = await resolveInput(ctx, attachment);
-            let items = sources;
-            if (sources.length === 1 && path.extname(sources[0].name).toLowerCase() === '.zip') {
-                if (sources[0].buffer.length > ZIP_LIMIT) throw new Error('ZIP files must be 200 MB or smaller.');
-                items = readZip(sources[0].buffer);
-                if (!items.length) throw new Error('No supported image/GIF files found in the ZIP.');
+            let items = [];
+            for (const source of sources) {
+                if (path.extname(source.name).toLowerCase() === '.zip') {
+                    if (source.buffer.length > ZIP_LIMIT) throw new Error('ZIP files must be 200 MB or smaller.');
+                    items.push(...readZip(source.buffer));
+                } else items.push(source);
+                if (items.length >= MAX_BATCH) break;
             }
             items = items.slice(0, MAX_BATCH);
+            if (!items.length) throw new Error('No supported image/GIF files were found in the upload or ZIP.');
             temp = await fs.mkdtemp(path.join(os.tmpdir(), 'starry-asset-'));
             const report = [];
+            let succeeded = 0;
             for (let i = 0; i < items.length; i++) {
+                await ctx.editReply('**Preparing ' + kind + ' import**\nProcessing **' + (i + 1) + '/' + items.length + '**: `' + items[i].name.slice(0, 60) + '`').catch(() => {});
                 try {
                     const ready = await convert(items[i], kind, temp, i);
                     if (customName && items.length === 1) ready.name = safeName(customName);
                     const created = await createAsset(ctx.guild, kind, ready, 'Asset added by ' + (ctx.user.tag || ctx.user.id));
-                    report.push('✅ ' + created + ' — ' + items[i].name.slice(0, 70));
-                } catch (error) { report.push('⚠️ ' + items[i].name.slice(0, 70) + ': ' + String(error.message || error).slice(0, 130)); }
+                    succeeded++;
+                    report.push('✅ ' + created + ' — ' + items[i].name.slice(0, 55));
+                } catch (error) { report.push('⚠️ ' + items[i].name.slice(0, 55) + ': ' + String(error.message || error).slice(0, 110)); }
             }
-            return ctx.editReply('**' + (kind === 'emoji' ? 'Emoji' : 'Sticker') + ' import results**\n' + report.join('\n') +
-                '\n\nUpload only non-explicit media that you own or have permission to use.');
+            const failed = items.length - succeeded;
+            return ctx.editReply('**' + (kind === 'emoji' ? 'Emoji' : 'Sticker') + ' import complete**\n✅ Added: **' + succeeded + '** · ⚠️ Failed: **' + failed + '**\n\n' + report.join('\n') + '\n\nOnly import media you own or have permission to use.');
         } catch (error) {
             return ctx.editReply('❌ ' + String(error.message || error).slice(0, 900));
         } finally {
