@@ -449,7 +449,35 @@ async function extractImageFromContext(ctx) {
 
 async function sendPaginatedAIResponse(ctx, prompt, imageInput = null) {
     const targetImage = imageInput || await extractImageFromContext(ctx);
-    const { text, model, image } = await generateStarryResponse(prompt, ctx.user.id, !ctx.guild, null, targetImage);
+    const aiStartedAt = Date.now();
+    let generated;
+    try {
+        generated = await generateStarryResponse(prompt, ctx.user.id, !ctx.guild, null, targetImage);
+        // Log only operational metadata. Never send prompts, attachments, or AI response text to log channels.
+        if (ctx.guild && typeof ctx.client?.logAIActivity === 'function') {
+            await ctx.client.logAIActivity({
+                guild: ctx.guild,
+                user: ctx.user,
+                channel: ctx.channel,
+                model: generated.model,
+                status: 'completed',
+                durationMs: Date.now() - aiStartedAt
+            });
+        }
+    } catch (error) {
+        if (ctx.guild && typeof ctx.client?.logAIActivity === 'function') {
+            await ctx.client.logAIActivity({
+                guild: ctx.guild,
+                user: ctx.user,
+                channel: ctx.channel,
+                model: 'Automatic',
+                status: 'failed',
+                durationMs: Date.now() - aiStartedAt
+            }).catch(() => {});
+        }
+        throw error;
+    }
+    const { text, model, image } = generated;
     const pages = splitIntoPages(text, 1400);
     let currentPage = 0;
     const sessionKey = Math.random().toString(36).substring(2, 8);
