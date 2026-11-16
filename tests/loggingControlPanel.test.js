@@ -1,0 +1,46 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+
+test('ServerSettings persists master, category, and dedicated AI logging controls', () => {
+    const model = read('src/models/ServerSettings.js');
+    for (const field of ['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled', 'aiLogChannel']) {
+        assert.match(model, new RegExp(field + ':'));
+    }
+});
+
+test('central log resolver checks master/category switches before returning a channel', () => {
+    const source = read('src/modules/starry.js');
+    assert.match(source, /logging\.enabled === false/);
+    assert.match(source, /logging\[enabledField\] === false/);
+    assert.match(source, /ai: 'aiEnabled'/);
+    assert.match(source, /ai: 'aiLogChannel'/);
+    assert.match(source, /type === 'ai' \? null/);
+});
+
+test('legacy audit logger cannot bypass an intentional master logging disable', () => {
+    const source = read('src/modules/logs.js');
+    assert.match(source, /Never fall through to the legacy setlogs channel/);
+    assert.match(source, /return await client\.getLogChannel\(guild, type\)/);
+});
+
+test('unified logging command exposes master-off, category controls, and channel routing', () => {
+    const source = read('src/commands/bundles/systemCommands.js');
+    assert.match(source, /setName\('logging'\)/);
+    assert.match(source, /logging_master_off/);
+    assert.match(source, /logging_master_on/);
+    assert.match(source, /logging_toggle_/);
+    assert.match(source, /ChannelSelectMenuBuilder/);
+    assert.match(source, /aiLogChannel/);
+    assert.match(source, /invalidateLogSettings/);
+});
+
+test('AI activity telemetry is privacy-safe and uses the dedicated AI route', () => {
+    const source = read('src/modules/starry.js');
+    assert.match(source, /client\.logAIActivity = async/);
+    assert.match(source, /client\.getLogChannel\(guild, 'ai'\)/);
+    assert.match(source, /Prompt and response content are not stored/);
+});
