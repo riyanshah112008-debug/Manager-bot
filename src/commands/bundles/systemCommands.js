@@ -41,14 +41,19 @@ const loggingPanelCommand = {
         if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
         if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
         const guild = ctx.guild, ownerId = ctx.user.id;
+        const guildId = String(guild.id);
+        if (!/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
         const fields = { ai: 'aiLogChannel', moderate: 'modLogChannel', messages: 'messageLogChannel', members: 'memberLogChannel', voice: 'voiceLogChannel', channels: 'serverLogChannel' };
         const switches = { ai: 'aiEnabled', moderate: 'moderationEnabled', messages: 'messagesEnabled', members: 'membersEnabled', voice: 'voiceEnabled', channels: 'serverEnabled' };
         const labels = { ai: 'AI activity', moderate: 'Moderation', messages: 'Messages', members: 'Members & roles', voice: 'Voice', channels: 'Server & channels' };
         let selectedCategory = 'ai';
-        const load = async () => (await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean())?.logging || {};
+        const load = async () => {
+            const rows = await ServerSettings.find({ guildId }).select('logging').limit(1).lean();
+            return rows[0]?.logging || {};
+        };
         const save = async patch => {
             const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
-            await ServerSettings.findOneAndUpdate({ guildId: guild.id }, { $set: set }, { upsert: true, new: true, setDefaultsOnInsert: true });
+            await ServerSettings.updateOne({ guildId }, { $set: set, $setOnInsert: { guildId } }, { upsert: true, setDefaultsOnInsert: true });
             ctx.client.invalidateLogSettings?.(guild.id);
         };
         const render = async () => {
