@@ -58,8 +58,15 @@ const loggingPanelCommand = {
         };
         const render = async () => {
             const s = await load(), state = v => v === false ? '🔴 OFF' : '🟢 ON';
-            const lines = ['**Master logging:** ' + state(s.enabled)];
-            for (const key of Object.keys(switches)) lines.push('**' + labels[key] + ':** ' + (key === 'ai' ? (s.aiEnabled === true ? '🟢 ON' : '🔴 OFF') : state(s[switches[key]])));
+            const masterEnabled = s.enabled !== false;
+            const lines = ['**Master logging:** ' + (masterEnabled ? '🟢 ON' : '🔴 OFF')];
+            for (const key of Object.keys(switches)) {
+                const savedEnabled = key === 'ai' ? s.aiEnabled === true : s[switches[key]] !== false;
+                const categoryState = !savedEnabled ? '🔴 OFF' : (masterEnabled ? '🟢 ON' : '⏸️ PAUSED');
+                const detail = !savedEnabled ? ' (disabled)' : (!masterEnabled ? ' (saved ON; master switch is OFF)' : '');
+                lines.push('**' + labels[key] + ':** ' + categoryState + detail);
+            }
+            if (!masterEnabled) lines.push('', '⏸️ **All Starry logging is paused.** Category preferences below are saved and will resume only when master logging is enabled.');
             lines.push('', '**Destinations**');
             for (const key of Object.keys(fields)) lines.push('• **' + labels[key] + ':** ' + (s[fields[key]] ? '<#' + s[fields[key]] + '>' : 'Auto-detect / not set'));
             const embed = new EmbedBuilder().setColor(s.enabled === false ? '#ED4245' : '#5865F2').setTitle('📜 Starry Logging Control Center')
