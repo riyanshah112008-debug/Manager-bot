@@ -11,6 +11,9 @@ const {
 } = require('discord.js');
 
 const afkCollection = new Map();
+// A message can be delivered to multiple Starry clients in a worker cluster.
+// Process each AFK prefix command only once across this module instance.
+const processedAfkCommandIds = new Set();
 const config = require('../config');
 const PREFIX = config.DEFAULT_PREFIX || ','; 
 
@@ -69,6 +72,7 @@ module.exports = (client) => {
         const guildId = interaction.guildId;
         const user = interaction.user;
         const member = interaction.member;
+        const memberPermissions = member?.permissions || interaction.memberPermissions;
 
         const subcommand = interaction.options.getSubcommand();
 
@@ -95,7 +99,7 @@ module.exports = (client) => {
             const targetUser = interaction.options.getUser('user');
 
             if (clearAll) {
-                if (!member.permissions.has(PermissionFlagsBits.Administrator) && !member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+                if (!memberPermissions?.has(PermissionFlagsBits.Administrator) && !memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
                     return interaction.reply({ content: '❌ You need **Manage Server** permissions to clear all AFK statuses.', ephemeral: true });
                 }
 
@@ -110,7 +114,7 @@ module.exports = (client) => {
             }
 
             if (targetUser && targetUser.id !== user.id) {
-                if (!member.permissions.has(PermissionFlagsBits.ManageMessages) && !member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                if (!memberPermissions?.has(PermissionFlagsBits.ManageMessages) && !memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
                     return interaction.reply({ content: '❌ You need **Manage Messages** permissions to clear someone else\'s AFK status.', ephemeral: true });
                 }
 
@@ -186,7 +190,14 @@ module.exports = (client) => {
     // 2. HANDLE PREFIX (.afk) AND MESSAGE TRACKING
     // ==========================================
     client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.guild) return;
+        if (message.author?.bot || !message.guild) return;
+
+        const isAfkPrefixCommand = message.content?.toLowerCase().startsWith(PREFIX + 'afk') || message.content?.toLowerCase().startsWith(',afk');
+        if (isAfkPrefixCommand) {
+            if (processedAfkCommandIds.has(message.id)) return;
+            processedAfkCommandIds.add(message.id);
+            if (processedAfkCommandIds.size > 5000) processedAfkCommandIds.clear();
+        }
 
         const authorKey = `${message.guild.id}-${message.author.id}`;
 
@@ -202,7 +213,7 @@ module.exports = (client) => {
                 const targetUser = message.mentions.users.first();
 
                 if (isAll) {
-                    if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+                    if (!message.member?.permissions?.has(PermissionFlagsBits.Administrator) && !message.member?.permissions?.has(PermissionFlagsBits.ManageGuild)) {
                         return message.reply('❌ You need **Manage Server** permissions to clear all AFK statuses.');
                     }
                     let count = 0;
@@ -216,7 +227,7 @@ module.exports = (client) => {
                 }
 
                 if (targetUser && targetUser.id !== message.author.id) {
-                    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages) && !message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+                    if (!message.member?.permissions?.has(PermissionFlagsBits.ManageMessages) && !message.member?.permissions?.has(PermissionFlagsBits.ModerateMembers)) {
                         return message.reply('❌ You need **Manage Messages** permissions to clear someone else\'s AFK status.');
                     }
                     const targetKey = `${message.guild.id}-${targetUser.id}`;
