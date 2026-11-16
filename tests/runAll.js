@@ -23,6 +23,7 @@ const suites = [
   ['Reaction-role reliability', '--test', 'tests/reactionRoleReliability.test.js'],
   ['Reaction-role reconciliation', '--test', 'tests/reactionRoleReconciliation.test.js'],
   ['Music audio profiles', '--test', 'tests/musicAudioProfiles.test.js'],
+  ['Firebase proxy target', '--test', 'tests/firebaseProxyTarget.test.js'],
   ['Leveling control panel', '--test', 'tests/levelingControlPanel.test.js'],
   ['Leveling module syntax', '--check', 'src/modules/leveling.js'],
   ['Slash command deployment syntax', '--check', 'deploy-commands.js']
