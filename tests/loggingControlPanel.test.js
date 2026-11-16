@@ -1,19 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 
-const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+const model = fs.readFileSync(require.resolve('../src/models/ServerSettings'), 'utf8');
+const starry = fs.readFileSync(require.resolve('../src/modules/starry'), 'utf8');
+const logs = fs.readFileSync(require.resolve('../src/modules/logs'), 'utf8');
+const commands = fs.readFileSync(require.resolve('../src/commands/bundles/systemCommands'), 'utf8');
 
 test('ServerSettings persists master, category, and dedicated AI logging controls', () => {
-    const model = read('src/models/ServerSettings.js');
     for (const field of ['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled', 'aiLogChannel']) {
-        assert.match(model, new RegExp(field + ':'));
+        assert.match(model, model.includes(field + ':'));
     }
 });
 
 test('central log resolver checks master/category switches before returning a channel', () => {
-    const source = read('src/modules/starry.js');
+    const source = starry;
     assert.match(source, /logging\.enabled === false/);
     assert.match(source, /logging\[enabledField\] === false/);
     assert.match(source, /ai: 'aiEnabled'/);
@@ -22,13 +23,13 @@ test('central log resolver checks master/category switches before returning a ch
 });
 
 test('legacy audit logger cannot bypass an intentional master logging disable', () => {
-    const source = read('src/modules/logs.js');
+    const source = logs;
     assert.match(source, /Never fall through to the legacy setlogs channel/);
     assert.match(source, /return await client\.getLogChannel\(guild, type\)/);
 });
 
 test('unified logging command exposes master-off, category controls, and channel routing', () => {
-    const source = read('src/commands/bundles/systemCommands.js');
+    const source = commands;
     assert.match(source, /setName\('logging'\)/);
     assert.match(source, /logging_master_off/);
     assert.match(source, /logging_master_on/);
