@@ -532,18 +532,38 @@ module.exports = async (client) => {
         if (!guild) return null;
         const type = String(logType).toLowerCase();
         const cacheKey = guild.id + ':' + type;
-        const cached = dashboardLogCache.get(cacheKey);
-        if (cached && cached.expiresAt > Date.now()) {
-            if (!cached.channelId) return null;
-            const cachedChannel = guild.channels.cache.get(cached.channelId);
-            if (cachedChannel) return cachedChannel;
-            dashboardLogCache.delete(cacheKey);
-        }
-
         const configuredField = dashboardLogFields[type] || 'serverLogChannel';
+        const enabledField = ({
+            ai: 'aiEnabled',
+            moderate: 'moderationEnabled',
+            messages: 'messagesEnabled',
+            voice: 'voiceEnabled',
+            access: 'membersEnabled',
+            members: 'membersEnabled',
+            roles: 'membersEnabled',
+            channels: 'serverEnabled',
+            misc: 'serverEnabled'
+        })[type] || 'serverEnabled';
         try {
+            // Read the master/category switches before consulting the channel cache.
+            // This makes disabling logging effective immediately and prevents fallback leaks.
             const serverSettings = await ServerSettings.findOne({ guildId: guild.id }).select('logging').lean();
-            const configuredId = serverSettings?.logging?.[configuredField];
+            const logging = serverSettings?.logging || {};
+            if (logging.enabled === false || logging[enabledField] === false) {
+                dashboardLogCache.set(cacheKey, { channelId: null, expiresAt: Date.now() + 15000 });
+                return null;
+            }
+            if (type === 'ai' && logging.aiEnabled !== true) return null;
+
+            const cached = dashboardLogCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) {
+                if (!cached.channelId) return null;
+                const cachedChannel = guild.channels.cache.get(cached.channelId);
+                if (cachedChannel) return cachedChannel;
+                dashboardLogCache.delete(cacheKey);
+            }
+
+            const configuredId = logging[configuredField];
             const configuredChannel = configuredId ? guild.channels.cache.get(String(configuredId)) : null;
             if (configuredChannel && configuredChannel.isTextBased() && typeof configuredChannel.send === 'function') {
                 dashboardLogCache.set(cacheKey, { channelId: configuredChannel.id, expiresAt: Date.now() + 15000 });
@@ -551,9 +571,11 @@ module.exports = async (client) => {
             }
         } catch (error) {
             console.error('Dashboard log routing lookup failed:', error);
+            return null;
         }
 
         const typeMap = {
+            ai: ['ai-logs', 'starry-ai-logs', 'ai-activity'],
             access: ['logs-access', 'user-invite-logs', 'invite-logs', 'join-logs'],
             moderate: ['logs-moderate', 'mod-logs', 'warning-logs', 'audit-logs'],
             messages: ['logs-messages', 'message-logs', 'chat-logs'],
@@ -564,12 +586,12 @@ module.exports = async (client) => {
             misc: ['logs-server', 'server-logs', 'mod-logs', 'logs']
         };
         const targetNames = typeMap[type] || typeMap.access;
-        let channel = guild.channels.cache.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name)));
+        let channel = guild.channels.cache.find(ch => ch && ch.type === ChannelType.GuildText && targetNames.some(name => ch.name.toLowerCase().includes(name)));
         if (!channel) {
             try {
                 const fetchedChannels = await guild.channels.fetch();
-                channel = fetchedChannels.find(c => c && c.type === ChannelType.GuildText && targetNames.some(name => c.name.toLowerCase().includes(name))) ||
-                    fetchedChannels.find(c => c && c.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(c.name.toLowerCase())) || null;
+                channel = fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && targetNames.some(name => ch.name.toLowerCase().includes(name))) ||
+                    fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(ch.name.toLowerCase())) || null;
             } catch (error) {
                 console.error('Log channel discovery failed:', error);
             }
@@ -577,7 +599,6 @@ module.exports = async (client) => {
         dashboardLogCache.set(cacheKey, { channelId: channel?.id || null, expiresAt: Date.now() + 15000 });
         return channel || null;
     };
-
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
         if (!member || !member.user || member.user.bot) return false;
         const actionType = action.toLowerCase();
