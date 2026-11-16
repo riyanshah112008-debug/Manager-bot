@@ -78,12 +78,26 @@ const loggingPanelCommand = {
             const destination = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('logging_channel').setPlaceholder('Choose destination channel').setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(1));
             return { embeds: [embed], components: [master, makeRow(keys.slice(0, 3)), makeRow(keys.slice(3)), category, destination] };
         };
-        const sent = await ctx.reply(await render());
-        if (!sent?.createMessageComponentCollector) return;
+        // CommandContext.reply() can return an InteractionCallbackResponse wrapper for
+        // slash commands rather than the underlying Discord Message. Always resolve the
+        // actual panel message before attaching collectors, otherwise every button is inert.
+        let panelMessage = await ctx.reply(await render());
+        if (typeof panelMessage?.createMessageComponentCollector !== 'function') {
+            if (ctx.isSlash && typeof ctx.interaction?.fetchReply === 'function') {
+                panelMessage = await ctx.interaction.fetchReply().catch(() => null);
+            }
+            if (typeof panelMessage?.createMessageComponentCollector !== 'function' && ctx.replyMessage) {
+                panelMessage = ctx.replyMessage;
+            }
+        }
+        if (typeof panelMessage?.createMessageComponentCollector !== 'function') {
+            await ctx.followUp('⚠️ The logging panel was sent, but its interactive controls could not be initialized. Please run /logging again.');
+            return;
+        }
         const collectors = [
-            sent.createMessageComponentCollector({ componentType: ComponentType.Button, time: 600000 }),
-            sent.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 600000 }),
-            sent.createMessageComponentCollector({ componentType: ComponentType.ChannelSelect, time: 600000 })
+            panelMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: 600000 }),
+            panelMessage.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 600000 }),
+            panelMessage.createMessageComponentCollector({ componentType: ComponentType.ChannelSelect, time: 600000 })
         ];
         const allowed = async i => {
             if (i.user.id !== ownerId) { await i.reply({ content: 'This panel belongs to the user who opened it.', ephemeral: true }); return false; }
@@ -92,7 +106,17 @@ const loggingPanelCommand = {
             }
             return true;
         };
-        const refresh = async (i, patch) => { await save(patch); await i.update(await render()); };
+        const refresh = async (i, patch) => {
+            try {
+                await save(patch);
+                await i.update(await render());
+            } catch (error) {
+                console.error('[Logging Panel] Failed to save setting:', error);
+                const message = '❌ Could not save this logging setting. Please try again.';
+                if (!i.replied && !i.deferred) await i.reply({ content: message, ephemeral: true }).catch(() => {});
+                else await i.followUp({ content: message, ephemeral: true }).catch(() => {});
+            }
+        };
         collectors[0].on('collect', async i => {
             if (!await allowed(i)) return;
             if (i.customId === 'logging_master_off') return refresh(i, { enabled: false });
@@ -102,11 +126,17 @@ const loggingPanelCommand = {
             const s = await load(), active = key === 'ai' ? s.aiEnabled === true : s[switches[key]] !== false;
             return refresh(i, { [switches[key]]: !active });
         });
-        collectors[1].on('collect', async i => { if (await allowed(i)) { selectedCategory = i.values[0] || 'ai'; await i.update(await render()); } });
+        collectors[1].on('collect', async i => {
+            if (!await allowed(i)) return;
+            selectedCategory = i.values[0] || 'ai';
+            await i.update(await render()).catch(async error => {
+                console.error('[Logging Panel] Category refresh failed:', error);
+                if (!i.replied && !i.deferred) await i.reply({ content: '❌ Could not refresh the logging panel.', ephemeral: true }).catch(() => {});
+            });
+        });
         collectors[2].on('collect', async i => {
             if (!await allowed(i)) return;
-            await save({ [fields[selectedCategory]]: i.values[0] });
-            await i.update(await render());
+            await refresh(i, { [fields[selectedCategory]]: i.values[0] });
         });
     }
 };
