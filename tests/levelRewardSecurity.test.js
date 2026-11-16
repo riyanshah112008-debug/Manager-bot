@@ -123,8 +123,7 @@ test('empty reward list can safely clear existing rewards without Manage Roles',
 test('both XP assignment paths and both configuration paths use the shared security guard', () => {
     const leveling = fs.readFileSync('src/modules/leveling.js', 'utf8');
     const dashboard = fs.readFileSync('src/modules/dashboardServer.js', 'utf8');
-    assert.ok(leveling.includes('isSafeLevelRewardRole(rewardRole, botMember)'));
-    assert.ok(leveling.includes('isSafeLevelRewardRole(role, botMember)'));
+    assert.equal((leveling.match(/isSafeLevelRewardRole\\(rewardRole, botMember\\)/g) || []).length, 2);
     assert.ok(leveling.includes('validateLevelRewardConfiguration({ guild: interaction.guild'));
     assert.ok(dashboard.includes('validateLevelRewardConfiguration({ guild, actor, botMember, rewards })'));
     assert.ok(dashboard.includes('isDiscordSnowflake(value)'));
