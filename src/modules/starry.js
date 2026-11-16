@@ -592,7 +592,7 @@ module.exports = async (client) => {
             try {
                 const fetchedChannels = await guild.channels.fetch();
                 channel = fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && targetNames.some(name => ch.name.toLowerCase().includes(name))) ||
-                    fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(ch.name.toLowerCase())) || null;
+                    (type === 'ai' ? null : fetchedChannels.find(ch => ch && ch.type === ChannelType.GuildText && ['logs-server', 'server-logs', 'mod-logs', 'logs'].includes(ch.name.toLowerCase()))) || null;
             } catch (error) {
                 console.error('Log channel discovery failed:', error);
             }
