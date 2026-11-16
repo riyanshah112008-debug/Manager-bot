@@ -6,10 +6,11 @@ const model = fs.readFileSync(require.resolve('../src/models/ServerSettings'), '
 const starry = fs.readFileSync(require.resolve('../src/modules/starry'), 'utf8');
 const logs = fs.readFileSync(require.resolve('../src/modules/logs'), 'utf8');
 const commands = fs.readFileSync(require.resolve('../src/commands/bundles/systemCommands'), 'utf8');
+const aiEngine = fs.readFileSync(require.resolve('../src/utils/aiEngine'), 'utf8');
 
 test('ServerSettings persists master, category, and dedicated AI logging controls', () => {
     for (const field of ['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled', 'aiLogChannel']) {
-        assert.match(model, model.includes(field + ':'));
+        assert.ok(model.includes(field + ':'), `Missing logging setting: ${field}`);
     }
 });
 
@@ -40,14 +41,14 @@ test('unified logging command exposes master-off, category controls, and channel
 });
 
 test('AI activity telemetry is privacy-safe and uses the dedicated AI route', () => {
-    const source = read('src/modules/starry.js');
+    const source = starry;
     assert.match(source, /client\.logAIActivity = async/);
     assert.match(source, /client\.getLogChannel\(guild, 'ai'\)/);
     assert.match(source, /Prompt and response content are not stored/);
 });
 
 test('AI response pipeline emits success and failure telemetry without prompt content', () => {
-    const source = read('src/utils/aiEngine.js');
+    const source = aiEngine;
     assert.match(source, /ctx\.client\?\.logAIActivity/);
     assert.match(source, /status: 'completed'/);
     assert.match(source, /status: 'failed'/);
