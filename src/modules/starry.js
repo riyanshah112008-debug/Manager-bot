@@ -600,6 +600,26 @@ module.exports = async (client) => {
         dashboardLogCache.set(cacheKey, { channelId: channel?.id || null, expiresAt: Date.now() + 15000 });
         return channel || null;
     };
+    // Privacy-safe AI telemetry hook for AI handlers. Never records prompts or generated content.
+    client.logAIActivity = async ({ guild, user, channel, model = 'Automatic', status = 'completed', durationMs = null } = {}) => {
+        if (!guild) return false;
+        const logChannel = await client.getLogChannel(guild, 'ai');
+        if (!logChannel) return false;
+        const embed = new EmbedBuilder()
+            .setColor(status === 'completed' ? '#5865F2' : '#ED4245')
+            .setTitle(status === 'completed' ? '🧠 Starry AI Activity' : '⚠️ Starry AI Activity')
+            .addFields(
+                { name: '👤 User', value: user?.id ? '<@' + user.id + '> (\\`' + String(user.tag || user.username || user.id).slice(0, 80) + '\\`)' : 'Unknown', inline: true },
+                { name: '📍 Channel', value: channel?.id ? '<#' + channel.id + '>' : 'Direct / unavailable', inline: true },
+                { name: '🤖 Model', value: String(model).slice(0, 100), inline: true },
+                { name: '📊 Status', value: String(status).slice(0, 40), inline: true }
+            );
+        if (Number.isFinite(durationMs)) embed.addFields({ name: '⏱️ Processing time', value: Math.max(0, Math.round(durationMs)) + ' ms', inline: true });
+        embed.setFooter({ text: 'Starry AI telemetry • Prompt and response content are not stored' }).setTimestamp();
+        await logChannel.send({ embeds: [embed] }).catch(() => {});
+        return true;
+    };
+
     client.sendPremiumModDM = async (member, moderator, action, reason, duration, guild, caseId = 'N/A') => {
         if (!member || !member.user || member.user.bot) return false;
         const actionType = action.toLowerCase();
