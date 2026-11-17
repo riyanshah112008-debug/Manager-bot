@@ -16,6 +16,7 @@ const {
 } = require('discord.js');
 
 const ADMIN = PermissionFlagsBits.Administrator.toString();
+const MANAGE_GUILD = PermissionFlagsBits.ManageGuild.toString();
 const MANAGE_ROLES = PermissionFlagsBits.ManageRoles.toString();
 const MANAGE_CHANNELS = PermissionFlagsBits.ManageChannels.toString();
 const MODERATE_MEMBERS = PermissionFlagsBits.ModerateMembers.toString();
@@ -414,7 +415,7 @@ commands.push(
     {
         name: 'sussetup',
         description: '🛡️ Configure Starry suspicious-account and inactivity monitoring',
-        default_member_permissions: ADMIN,
+        default_member_permissions: MANAGE_GUILD,
         options: [
             { name: 'enabled', type: 5, required: false, description: 'Enable or disable member risk monitoring' },
             { name: 'channel', type: 7, channel_types: [0], required: false, description: 'Channel for join-risk and inactivity alerts' },
