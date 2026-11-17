@@ -116,19 +116,30 @@ module.exports = (client) => {
             for (const record of candidates) {
                 let member = guild.members.cache.get(record.userId);
                 if (!member) {
-                    try { member = await guild.members.fetch(record.userId); }
-                    catch { 
-                        await SusAccountMember.updateOne({}, {
-                            $set: { inactivityAlertedAt: new Date() }
-                        })
-                            .where('_id').equals(record._id)
-                            .where('inactivityAlertedAt').equals(null)
-                            .setOptions({ sanitizeFilter: true })
-                            .exec();
+                    try {
+                        member = await guild.members.fetch(record.userId);
+                    } catch (error) {
+                        // A confirmed Unknown Member means the user left while the bot
+                        // was offline. Remove stale tracking data. Retry transient API or
+                        // network failures on the next scheduled scan instead.
+                        if (error?.code === 10007 || error?.status === 404) {
+                            await SusAccountMember.deleteOne()
+                                .where('_id').equals(record._id)
+                                .setOptions({ sanitizeFilter: true })
+                                .exec();
+                        } else {
+                            console.warn(`[SusAccount] Could not fetch member ${record.userId} in ${guild.id}; will retry:`, error?.message || error);
+                        }
                         continue;
                     }
                 }
-                if (member.user.bot) continue;
+                if (member.user.bot) {
+                    await SusAccountMember.deleteOne()
+                        .where('_id').equals(record._id)
+                        .setOptions({ sanitizeFilter: true })
+                        .exec();
+                    continue;
+                }
 
                 const now = new Date();
                 const claim = await SusAccountMember.updateOne({}, {
