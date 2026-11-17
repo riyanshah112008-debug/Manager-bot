@@ -66,6 +66,21 @@ test('the single module handler opens the submission modal exactly once', async 
  await handler(interaction);
  assert.equal(modalCalls, 1);
 });
+test('report button opens a modal bound to the clicked confession message', async () => {
+ let modalId = '';
+ const client = { user: { id: 'bot' }, guilds: { fetch: async () => null } };
+ const handler = whisper.createInteractionHandler(client);
+ await handler({
+  guildId: '123456789012345678',
+  customId: 'whisper:report',
+  message: { id: '123456789012345678' },
+  isChatInputCommand: () => false,
+  isButton: () => true,
+  isModalSubmit: () => false,
+  showModal: async modal => { modalId = modal.toJSON().custom_id; }
+ });
+ assert.equal(modalId, 'whisper:report-submit:123456789012345678');
+});
 test('module registration is idempotent and installs one interaction listener', () => {
  let listeners = 0;
  const client = { isPrimary: false, on: (event, fn) => { if (event === 'interactionCreate') listeners += 1; } };
