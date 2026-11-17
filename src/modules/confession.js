@@ -294,6 +294,20 @@ async function nextConfessionNumber(guildId) {
     return counter.value;
 }
 
+async function releaseConfessionNumber(guildId, number) {
+    const released = await ConfessionCounter.findOneAndUpdate(
+        { guildId, value: number },
+        { $inc: { value: -1 } },
+        { new: true }
+    ).lean().exec();
+    return Boolean(released);
+}
+
+function isDefiniteDiscordRejection(error) {
+    const status = Number(error?.status);
+    return Number.isInteger(status) && status >= 400 && status < 500;
+}
+
 async function fetchTextChannel(guild, channelId) {
     if (!isDiscordSnowflake(channelId)) return null;
     const channel = guild.channels.cache.get(channelId) ||
@@ -393,11 +407,22 @@ function confessionModule(client) {
                     const topic = getTextInputValue(interaction, ['topic', 'confess_input_topic']).trim();
                     if (body.length < 3 || body.length > MAX_BODY) return await privateReply(interaction, 'Your confession must be between 3 and 1,000 characters.');
                     const number = await nextConfessionNumber(interaction.guildId);
-                    await channel.send({
-                        embeds: [buildConfessionEmbed(number, topic, body)],
-                        components: buildConfessionActions(config.repliesEnabled !== false),
-                        allowedMentions: { parse: [] }
-                    });
+                    try {
+                        await channel.send({
+                            embeds: [buildConfessionEmbed(number, topic, body)],
+                            components: buildConfessionActions(config.repliesEnabled !== false),
+                            allowedMentions: { parse: [] }
+                        });
+                    } catch (sendError) {
+                        if (isDefiniteDiscordRejection(sendError)) {
+                            try {
+                                await releaseConfessionNumber(interaction.guildId, number);
+                            } catch (releaseError) {
+                                console.error('[Starry Confessions] Failed to release unused confession number:', releaseError);
+                            }
+                        }
+                        throw sendError;
+                    }
                     publishedConfessionNumber = number;
                     return await interaction.editReply({ content: '💌 Your confession #' + number + ' has been posted anonymously in ' + channel + '.' });
                 }
@@ -486,5 +511,7 @@ confessionModule.isConfessionMessage = isConfessionMessage;
 confessionModule.getButtonSource = getButtonSource;
 confessionModule.getModalSource = getModalSource;
 confessionModule.nextConfessionNumber = nextConfessionNumber;
+confessionModule.releaseConfessionNumber = releaseConfessionNumber;
+confessionModule.isDefiniteDiscordRejection = isDefiniteDiscordRejection;
 
 module.exports = confessionModule;
