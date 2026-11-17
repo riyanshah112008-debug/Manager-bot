@@ -28,6 +28,7 @@ function textChannel({ nsfw = false, permissions = permissionSet(
 test('SFW channel guard rejects NSFW and non-text channels', () => {
     assert.equal(isSfwTextChannel(textChannel()), true);
     assert.equal(isSfwTextChannel(textChannel({ nsfw: true })), false);
+    assert.equal(isSfwTextChannel({ isTextBased: () => true, nsfw: false, parent: { nsfw: true } }), false);
     assert.equal(isSfwTextChannel({ isTextBased: () => false, nsfw: false }), false);
 });
 
