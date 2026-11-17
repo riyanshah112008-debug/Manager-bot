@@ -79,12 +79,11 @@ if (bumpModule && bumpModule.bumpPayload) {
     masterPayloads.push(bumpModule.bumpPayload);
 }
 
-// Confession Engine Payload
-const confessionModule = safeRequire(['./src/modules/confession', './modules/confession']);
-if (confessionModule) {
-    if (confessionModule.confessionSetupPayload) masterPayloads.push(confessionModule.confessionSetupPayload);
-    if (confessionModule.confessPayload) masterPayloads.push(confessionModule.confessPayload);
-    if (confessionModule.confessionPayload) masterPayloads.push(confessionModule.confessionPayload);
+// Whisper Vault commands
+const whisperModule = safeRequire(['./src/modules/confession', './modules/confession']);
+if (whisperModule) {
+    if (whisperModule.setupPayload) masterPayloads.push(whisperModule.setupPayload);
+    if (whisperModule.confessPayload) masterPayloads.push(whisperModule.confessPayload);
 }
 
 // Translator Engine Payload
