@@ -146,9 +146,9 @@ function isWhisperPost(message, botUserId) {
  return Boolean(message && message.author?.id === botUserId && /^CONFESSION\s+#\d{4,}$/i.test(title));
 }
 async function replyPrivate(interaction, content) {
- const payload = { content, flags: EPHEMERAL, allowedMentions: { parse: [] } };
+ const payload = { content, allowedMentions: { parse: [] } };
  if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(() => null);
- return interaction.reply(payload).catch(() => null);
+ return interaction.reply({ ...payload, flags: EPHEMERAL }).catch(() => null);
 }
 async function handleSetup(interaction, client) {
  await interaction.deferReply({ flags: EPHEMERAL });
