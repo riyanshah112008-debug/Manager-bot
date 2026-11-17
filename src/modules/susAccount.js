@@ -1,10 +1,13 @@
 const mongoose = require('mongoose');
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { EmbedBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCAN_INTERVAL_MS = 15 * 60 * 1000;
 const CLAIM_RECOVERY_MS = 10 * 60 * 1000;
+// Discord enforces message nonce uniqueness for up to 24 hours. Stop automatic
+// retries before that window expires if delivery remains uncertain.
+const CLAIM_DEDUPE_WINDOW_MS = 23 * 60 * 60 * 1000;
 const MEMBER_INIT_WINDOW_MS = 5 * 60 * 1000;
 const DEFAULT_INACTIVITY_DAYS = 14;
 const DEFAULT_ACCOUNT_AGE_DAYS = 7;
@@ -26,7 +29,7 @@ const memberSchema = new mongoose.Schema({
     accountCreatedAt: { type: Date, required: true },
     firstActivityAt: { type: Date, default: null },
     inactivityAlertedAt: { type: Date, default: null },
-    inactivityAlertStatus: { type: String, enum: ['pending', 'sent'], default: null },
+    inactivityAlertStatus: { type: String, enum: ['pending', 'sent', 'uncertain'], default: null },
     inactivityAlertClaimedAt: { type: Date, default: null },
     inactivityAlertClaimToken: { type: String, default: null },
     riskAlertedAt: { type: Date, default: null }
@@ -51,8 +54,16 @@ function isValidDiscordSnowflake(value) {
 
 function daysBetween(from, to = Date.now()) {
     const timestamp = new Date(from).getTime();
-    if (!Number.isFinite(timestamp) || !Number.isFinite(to)) return 0;
-    return Math.max(0, Math.floor((to - timestamp) / DAY_MS));
+    const endTimestamp = new Date(to).getTime();
+    if (!Number.isFinite(timestamp) || !Number.isFinite(endTimestamp)) return 0;
+    return Math.max(0, Math.floor((endTimestamp - timestamp) / DAY_MS));
+}
+
+function buildInactivityAlertNonce(guildId, userId, joinedAt) {
+    return createHash('sha256')
+        .update(`${guildId}:${userId}:${new Date(joinedAt).getTime()}`)
+        .digest('hex')
+        .slice(0, 24);
 }
 
 function hasReachedInactivityThreshold(joinedAt, inactivityDays, now = Date.now()) {
@@ -255,6 +266,21 @@ module.exports = (client) => {
             for (const record of candidates) {
                 const previousClaimAt = record.inactivityAlertClaimedAt || null;
                 const isPending = record.inactivityAlertStatus === 'pending';
+                if (isPending && previousClaimAt && Date.now() - new Date(previousClaimAt).getTime() >= CLAIM_DEDUPE_WINDOW_MS) {
+                    // Discord's nonce deduplication window has expired. Do not blindly
+                    // resend an alert whose prior delivery may have succeeded.
+                    await SusAccountMember.updateOne({}, {
+                        $set: { inactivityAlertStatus: 'uncertain' }
+                    })
+                        .where('_id').equals(record._id)
+                        .where('joinedAt').equals(record.joinedAt)
+                        .where('inactivityAlertStatus').equals('pending')
+                        .where('inactivityAlertClaimedAt').equals(previousClaimAt)
+                        .setOptions({ sanitizeFilter: true })
+                        .exec();
+                    console.error(`[SusAccount] Inactivity alert delivery is uncertain for ${record.userId} in ${guild.id}; automatic resend stopped to prevent duplicate staff pings.`);
+                    continue;
+                }
                 if (!isClaimRecoverable(record.inactivityAlertStatus, previousClaimAt)) continue;
 
                 let member = guild.members.cache.get(record.userId);
@@ -339,6 +365,10 @@ module.exports = (client) => {
                     await channel.send({
                         content,
                         embeds: [embed],
+                        // Discord returns the original message for a repeated nonce
+                        // within its deduplication window, closing the send/DB-write gap.
+                        nonce: buildInactivityAlertNonce(guild.id, record.userId, record.joinedAt),
+                        enforceNonce: true,
                         allowedMentions: { roles: settings.staffRoleId ? [settings.staffRoleId] : [], users: [] }
                     });
                 } catch (error) {
@@ -514,7 +544,7 @@ module.exports = (client) => {
                     { name: 'Young-account threshold', value: `${settings.accountAgeDays} days`, inline: true },
                     { name: 'Moderation policy', value: 'Alerts only. Staff review and use Wick for any moderation action. Starry never auto-punishes members.', inline: false }
                 )
-                .setFooter({ text: 'Inactivity means no observed message, command/component interaction, reaction, or voice-channel join since joining.' })
+                .setFooter({ text: 'Inactivity means no observed message, command/component interaction, or voice-channel join since joining.' })
                 .setTimestamp();
             return interaction.editReply({ embeds: [embed] });
         } catch (error) {
@@ -688,4 +718,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
-module.exports._internals = { daysBetween, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake };
+module.exports._internals = { daysBetween, buildInactivityAlertNonce, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake };
