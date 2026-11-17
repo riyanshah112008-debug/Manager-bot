@@ -159,8 +159,11 @@ module.exports = (client) => {
         const inactivityDays = interaction.options.getInteger('inactivity_days');
         const accountAgeDays = interaction.options.getInteger('account_age_days');
 
-        const guildId = guild.id;
-        const current = await SusAccountSettings.findOne({ guildId });
+        // Sanitize the filter at the MongoDB boundary as defense in depth.
+        // The value is also constrained to a Discord snowflake above.
+        const guildId = String(guild.id);
+        const settingsFilter = mongoose.sanitizeFilter({ guildId });
+        const current = await SusAccountSettings.findOne(settingsFilter);
         const patch = {
             enabled: enabled ?? current?.enabled ?? true,
             logChannelId: channelOption?.id ?? current?.logChannelId ?? interaction.channelId,
@@ -170,7 +173,7 @@ module.exports = (client) => {
             configuredBy: interaction.user.id
         };
         const settings = await SusAccountSettings.findOneAndUpdate(
-            { guildId },
+            settingsFilter,
             { $set: patch, $setOnInsert: { guildId } },
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
