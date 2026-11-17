@@ -105,6 +105,7 @@ module.exports = (client) => {
     const scanLocks = new Set();
     const memberQueues = new Map();
     const pendingActivity = new Map();
+    const observedActivity = new Set();
 
     const membershipKey = (guildId, userId, joinedAt) =>
         `${guildId}:${userId}:${new Date(joinedAt).getTime()}`;
@@ -424,19 +425,26 @@ module.exports = (client) => {
         if (member.user.bot) return;
         return queueMemberTask(member.guild.id, member.id, async () => {
             try {
-                const settings = await getSettings(member.guild.id);
-                if (!settings || !settings.enabled) return;
-
                 const joinedAt = new Date(member.joinedTimestamp || Date.now());
+                const membershipId = membershipKey(member.guild.id, member.id, joinedAt);
+                const settings = await getSettings(member.guild.id);
+                if (!settings || !settings.enabled) {
+                    pendingActivity.delete(membershipId);
+                    observedActivity.add(membershipId);
+                    return;
+                }
+
                 const existing = await SusAccountMember.findOne()
                     .where('guildId').equals(member.guild.id)
                     .where('userId').equals(member.id)
                     .setOptions({ sanitizeFilter: true })
                     .lean()
                     .exec();
-                const membershipId = membershipKey(member.guild.id, member.id, joinedAt);
                 const pendingFirstActivity = pendingActivity.get(membershipId) || null;
                 const sameMembership = existing && isSameMembership(existing.joinedAt, joinedAt);
+                const firstActivityAt = sameMembership
+                    ? (existing.firstActivityAt || pendingFirstActivity)
+                    : pendingFirstActivity;
 
                 // Preserve a first message captured while join initialization was
                 // pending for this exact join. A later rejoin starts a fresh record.
@@ -446,9 +454,7 @@ module.exports = (client) => {
                         $set: {
                             joinedAt,
                             accountCreatedAt: new Date(member.user.createdTimestamp),
-                            firstActivityAt: sameMembership
-                                ? (existing.firstActivityAt || pendingFirstActivity)
-                                : pendingFirstActivity,
+                            firstActivityAt,
                             inactivityAlertedAt: sameMembership ? (existing.inactivityAlertedAt || null) : null,
                             inactivityAlertStatus: sameMembership ? (existing.inactivityAlertStatus || null) : null,
                             inactivityAlertClaimedAt: sameMembership ? (existing.inactivityAlertClaimedAt || null) : null,
@@ -462,6 +468,8 @@ module.exports = (client) => {
                     .where('userId').equals(member.id)
                     .exec();
                 pendingActivity.delete(membershipId);
+                if (firstActivityAt) observedActivity.add(membershipId);
+                else observedActivity.delete(membershipId);
 
                 const accountAgeDays = daysBetween(member.user.createdTimestamp);
                 const channel = await safeChannel(member.guild, settings.logChannelId);
@@ -499,7 +507,10 @@ module.exports = (client) => {
     client.on('guildMemberRemove', (member) => {
         if (member.user?.bot) return;
         const joinedAt = new Date(member.joinedTimestamp || 0);
+        const membershipId = membershipKey(member.guild.id, member.id, joinedAt);
         return queueMemberTask(member.guild.id, member.id, async () => {
+            observedActivity.delete(membershipId);
+            pendingActivity.delete(membershipId);
             await SusAccountMember.deleteOne()
                 .where('guildId').equals(member.guild.id)
                 .where('userId').equals(member.id)
@@ -517,9 +528,12 @@ module.exports = (client) => {
         if (!joinedTimestamp) return;
         const joinedAt = new Date(joinedTimestamp);
         const firstActivityAt = new Date(message.createdTimestamp || Date.now());
+        const membershipId = membershipKey(message.guild.id, message.author.id, joinedAt);
+        if (observedActivity.has(membershipId)) return;
 
         return queueMemberTask(message.guild.id, message.author.id, async () => {
             try {
+                if (observedActivity.has(membershipId)) return;
                 const existing = await SusAccountMember.findOne()
                     .where('guildId').equals(message.guild.id)
                     .where('userId').equals(message.author.id)
@@ -528,9 +542,8 @@ module.exports = (client) => {
                     .exec();
 
                 if (!existing || !isSameMembership(existing.joinedAt, joinedAt)) {
-                    // Only buffer very recent join activity while the join record is
-                    // being initialized. Never create tracking rows for every ordinary
-                    // message from existing/untracked server members.
+                    // Buffer activity only during the short join-initialization window.
+                    // Existing/untracked members are cached and never create DB rows.
                     const ageSinceJoin = Date.now() - joinedAt.getTime();
                     if (ageSinceJoin >= 0 && ageSinceJoin <= MEMBER_INIT_WINDOW_MS) {
                         for (const [pendingKey, pendingAt] of pendingActivity) {
@@ -538,15 +551,20 @@ module.exports = (client) => {
                                 pendingActivity.delete(pendingKey);
                             }
                         }
-                        const key = membershipKey(message.guild.id, message.author.id, joinedAt);
-                        const pending = pendingActivity.get(key);
-                        if (!pending || firstActivityAt < pending) pendingActivity.set(key, firstActivityAt);
+                        const pending = pendingActivity.get(membershipId);
+                        if (!pending || firstActivityAt < pending) pendingActivity.set(membershipId, firstActivityAt);
+                    } else {
+                        observedActivity.add(membershipId);
                     }
                     return;
                 }
 
-                if (existing.firstActivityAt) return;
-                await SusAccountMember.updateOne({}, {
+                if (existing.firstActivityAt) {
+                    observedActivity.add(membershipId);
+                    return;
+                }
+
+                const result = await SusAccountMember.updateOne({}, {
                     $set: { firstActivityAt }
                 })
                     .where('guildId').equals(message.guild.id)
@@ -555,6 +573,20 @@ module.exports = (client) => {
                     .where('firstActivityAt').equals(null)
                     .setOptions({ sanitizeFilter: true })
                     .exec();
+                if (result.modifiedCount) {
+                    observedActivity.add(membershipId);
+                    return;
+                }
+
+                // Another event worker may have recorded activity first.
+                const latest = await SusAccountMember.findOne()
+                    .where('guildId').equals(message.guild.id)
+                    .where('userId').equals(message.author.id)
+                    .where('joinedAt').equals(joinedAt)
+                    .setOptions({ sanitizeFilter: true })
+                    .lean()
+                    .exec();
+                if (latest?.firstActivityAt) observedActivity.add(membershipId);
             } catch (error) {
                 console.error('[SusAccount] Activity tracking failed:', error.message);
             }
