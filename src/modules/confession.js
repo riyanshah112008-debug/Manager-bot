@@ -52,7 +52,7 @@ const confessionPayload = new SlashCommandBuilder()
     .setName('confession').setDescription('Open the private anonymous confession form').toJSON();
 
 function buildPanelEmbed() {
-    return new EmbedBuilder().setColor(0x8B5CF6)
+    return new EmbedBuilder().setColor('#8B5CF6')
         .setTitle('💌  Starry Confession Box')
         .setDescription([
             'A quiet place to say what you have been holding in.',
@@ -79,7 +79,7 @@ function buildPanelComponents() {
 }
 
 function buildConfessionEmbed(number, topic, body) {
-    const embed = new EmbedBuilder().setColor(0xA78BFA)
+    const embed = new EmbedBuilder().setColor('#A78BFA')
         .setAuthor({ name: 'ANONYMOUS CONFESSION  ·  #' + number, iconURL: 'https://cdn.discordapp.com/embed/avatars/0.png' })
         .setDescription('“' + body.trim() + '”')
         .addFields({ name: '🕰️ Shared', value: '<t:' + Math.floor(Date.now() / 1000) + ':R>', inline: true })
@@ -237,7 +237,7 @@ function confessionModule(client) {
                     const original = confessionChannel ? await confessionChannel.messages.fetch(messageId).catch(() => null) : null;
                     if (!original) return privateReply(interaction, 'That confession is no longer available.');
                     const reason = interaction.fields.getTextInputValue('reason').trim();
-                    const report = new EmbedBuilder().setColor(0xEF4444)
+                    const report = new EmbedBuilder().setColor('#EF4444')
                         .setTitle('🚩 Anonymous confession report')
                         .setDescription('**Reason**\n' + reason)
                         .addFields(
