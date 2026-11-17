@@ -316,7 +316,7 @@ module.exports = (client) => {
                         { name: 'Member', value: `${member.user.tag || member.user.username} (${member.id})`, inline: false },
                         { name: 'Joined', value: `<t:${Math.floor(new Date(record.joinedAt).getTime() / 1000)}:F>`, inline: true },
                         { name: 'Account age now', value: `${accountAge} day(s)`, inline: true },
-                        { name: 'Activity', value: 'No message, command/component interaction, reaction, or voice-channel join activity has been observed since joining. Online presence and activity outside this server are not counted.', inline: false },
+                        { name: 'Activity', value: 'No message, command/component interaction, or voice-channel join activity has been observed since joining. Online presence and activity outside this server are not counted.', inline: false },
                         { name: 'Staff action', value: 'Please review the member and use Wick if moderation is warranted. Starry will not kick, ban, timeout or assign roles.', inline: false }
                     )
                     .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
@@ -523,7 +523,8 @@ module.exports = (client) => {
                 const settings = await getSettings(member.guild.id);
                 if (!settings || !settings.enabled) {
                     pendingActivity.delete(membershipId);
-                    observedActivity.add(membershipId);
+                    observedActivity.delete(membershipId);
+                    untrackedActivity.set(membershipId, Date.now() + UNTRACKED_CACHE_MS);
                     return;
                 }
 
@@ -645,15 +646,6 @@ module.exports = (client) => {
             joinedTimestamp,
             interaction.createdTimestamp || Date.now()
         );
-    });
-
-    client.on('messageReactionAdd', (reaction, user) => {
-        if (!user || user.bot) return;
-        const guild = reaction.message.guild;
-        if (!guild) return;
-        const member = guild.members.cache.get(user.id);
-        if (!member?.joinedTimestamp) return;
-        return recordMemberActivity(guild, user.id, member.joinedTimestamp, Date.now());
     });
 
     client.on('voiceStateUpdate', (oldState, newState) => {
