@@ -196,6 +196,10 @@ async function handleReport(interaction, client, messageId) {
  const message = publicChannel && await publicChannel.messages.fetch(messageId).catch(() => null);
  if (!isWhisperPost(message, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for review.');
  if (!staffChannel) return replyPrivate(interaction, 'The private staff report channel is unavailable. Ask a manager to rerun /confessionsetup.');
+ const staffRole = guild.roles.cache.get(config.staffRoleId) || await guild.roles.fetch(config.staffRoleId).catch(() => null);
+ const botMember = await getBotMember(guild);
+ const privacyError = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+ if (privacyError) return replyPrivate(interaction, '⚠️ Reports are paused because the configured destinations are no longer safe: ' + privacyError + ' Ask a manager to rerun /confessionsetup.');
  const reason = interaction.fields.getTextInputValue('reason').trim();
  if (reason.length < 3 || reason.length > MAX_REPORT_REASON) return replyPrivate(interaction, 'Please provide a reason between 3 and 500 characters.');
  const number = Number((message.embeds[0].title.match(/#(\d+)/) || [])[1]);
@@ -206,6 +210,7 @@ async function handleStaffAction(interaction, client, action, messageId) {
  await interaction.deferReply({ flags: EPHEMERAL });
  const config = await getConfig(interaction.guildId);
  if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured.');
+ if (interaction.channelId !== config.staffChannelId) return replyPrivate(interaction, 'Staff review actions only work inside the configured private report channel.');
  const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
  const memberRoles = interaction.member?.roles;
  const hasStaffRole = memberRoles?.cache?.has ? memberRoles.cache.has(config.staffRoleId) : Array.isArray(memberRoles) && memberRoles.includes(config.staffRoleId);
