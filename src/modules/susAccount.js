@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { randomUUID } = require('node:crypto');
 const { EmbedBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,6 +28,7 @@ const memberSchema = new mongoose.Schema({
     inactivityAlertedAt: { type: Date, default: null },
     inactivityAlertStatus: { type: String, enum: ['pending', 'sent'], default: null },
     inactivityAlertClaimedAt: { type: Date, default: null },
+    inactivityAlertClaimToken: { type: String, default: null },
     riskAlertedAt: { type: Date, default: null }
 }, { timestamps: true });
 memberSchema.index({ guildId: 1, userId: 1 }, { unique: true });
@@ -262,10 +264,12 @@ module.exports = (client) => {
                 }
 
                 const now = new Date();
+                const claimToken = randomUUID();
                 const claimQuery = SusAccountMember.updateOne({}, {
                     $set: {
                         inactivityAlertStatus: 'pending',
-                        inactivityAlertClaimedAt: now
+                        inactivityAlertClaimedAt: now,
+                        inactivityAlertClaimToken: claimToken
                     }
                 })
                     .where('_id').equals(record._id)
@@ -274,6 +278,7 @@ module.exports = (client) => {
                     .where('inactivityAlertStatus').equals(isPending ? 'pending' : null)
                     .setOptions({ sanitizeFilter: true });
                 claimQuery.where('inactivityAlertClaimedAt').equals(previousClaimAt);
+                claimQuery.where('inactivityAlertClaimToken').equals(record.inactivityAlertClaimToken || null);
                 const claim = await claimQuery.exec();
                 if (!claim.modifiedCount) continue;
 
@@ -285,6 +290,7 @@ module.exports = (client) => {
                     .where('firstActivityAt').equals(null)
                     .where('inactivityAlertStatus').equals('pending')
                     .where('inactivityAlertClaimedAt').equals(now)
+                    .where('inactivityAlertClaimToken').equals(claimToken)
                     .setOptions({ sanitizeFilter: true })
                     .lean()
                     .exec();
@@ -319,13 +325,15 @@ module.exports = (client) => {
                         $set: {
                             inactivityAlertStatus: null,
                             inactivityAlertedAt: null,
-                            inactivityAlertClaimedAt: null
+                            inactivityAlertClaimedAt: null,
+                            inactivityAlertClaimToken: null
                         }
                     })
                         .where('_id').equals(record._id)
                         .where('joinedAt').equals(record.joinedAt)
                         .where('inactivityAlertStatus').equals('pending')
                         .where('inactivityAlertClaimedAt').equals(now)
+                        .where('inactivityAlertClaimToken').equals(claimToken)
                         .setOptions({ sanitizeFilter: true })
                         .exec()
                         .catch(() => {});
@@ -340,13 +348,15 @@ module.exports = (client) => {
                     $set: {
                         inactivityAlertStatus: 'sent',
                         inactivityAlertedAt: new Date(),
-                        inactivityAlertClaimedAt: null
+                        inactivityAlertClaimedAt: null,
+                        inactivityAlertClaimToken: null
                     }
                 })
                     .where('_id').equals(record._id)
                     .where('joinedAt').equals(record.joinedAt)
                     .where('inactivityAlertStatus').equals('pending')
                     .where('inactivityAlertClaimedAt').equals(now)
+                    .where('inactivityAlertClaimToken').equals(claimToken)
                     .setOptions({ sanitizeFilter: true })
                     .exec()
                     .catch((error) => {
@@ -530,6 +540,7 @@ module.exports = (client) => {
                             inactivityAlertedAt: sameMembership ? (existing.inactivityAlertedAt || null) : null,
                             inactivityAlertStatus: sameMembership ? (existing.inactivityAlertStatus || null) : null,
                             inactivityAlertClaimedAt: sameMembership ? (existing.inactivityAlertClaimedAt || null) : null,
+                            inactivityAlertClaimToken: sameMembership ? (existing.inactivityAlertClaimToken || null) : null,
                             riskAlertedAt: sameMembership ? (existing.riskAlertedAt || null) : null
                         },
                         $setOnInsert: { guildId: member.guild.id, userId: member.id }
