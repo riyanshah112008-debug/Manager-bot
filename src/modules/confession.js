@@ -25,6 +25,7 @@ const configSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true, index: true },
     channelId: { type: String, required: true },
     staffChannelId: { type: String, required: true },
+    staffRoleId: { type: String, required: true },
     repliesEnabled: { type: Boolean, default: true },
     reportsEnabled: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -48,6 +49,9 @@ const setupPayload = new SlashCommandBuilder()
     .addChannelOption(option => option.setName('staff_channel')
         .setDescription('Private staff channel for confession reports')
         .addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addRoleOption(option => option.setName('staff_role')
+        .setDescription('Only this role and server administrators should access reports')
+        .setRequired(true))
     .toJSON();
 
 const confessPayload = new SlashCommandBuilder()
@@ -156,7 +160,7 @@ function validatePublishChannel(guild, channel, botMember) {
     return { ok: true };
 }
 
-function validateStaffChannel(guild, confessionChannel, staffChannel, botMember) {
+function validateStaffChannel(guild, confessionChannel, staffChannel, staffRole, botMember) {
     if (!guild || !staffChannel || staffChannel.guildId !== guild.id ||
         staffChannel.type !== ChannelType.GuildText || !staffChannel.isTextBased?.()) {
         return { ok: false, reason: 'The staff report destination must be a regular text channel in this server.' };
@@ -164,19 +168,47 @@ function validateStaffChannel(guild, confessionChannel, staffChannel, botMember)
     if (staffChannel.id === confessionChannel?.id) {
         return { ok: false, reason: 'The staff report channel must be separate from the public confession channel.' };
     }
-    if (!guild.roles?.everyone || !botMember) {
-        return { ok: false, reason: 'Starry could not verify report channel privacy and permissions.' };
+    if (!guild.roles?.everyone || !staffRole || staffRole.guild.id !== guild.id || !botMember) {
+        return { ok: false, reason: 'Starry could not verify the staff role, channel privacy, and bot permissions.' };
     }
     const everyonePermissions = staffChannel.permissionsFor?.(guild.roles.everyone);
     if (!everyonePermissions || everyonePermissions.has(PermissionFlagsBits.ViewChannel)) {
         return { ok: false, reason: '@everyone must not have View Channel permission in the staff report channel.' };
     }
+
+    const staffRolePermissions = staffChannel.permissionsFor?.(staffRole);
+    if (!staffRolePermissions || !staffRolePermissions.has(PermissionFlagsBits.ViewChannel)) {
+        return { ok: false, reason: 'The selected staff role needs View Channel permission in the private report channel.' };
+    }
+
     const botPermissions = staffChannel.permissionsFor?.(botMember);
     if (!botPermissions ||
         !botPermissions.has(PermissionFlagsBits.ViewChannel) ||
         !botPermissions.has(PermissionFlagsBits.SendMessages) ||
         !botPermissions.has(PermissionFlagsBits.EmbedLinks)) {
         return { ok: false, reason: 'Starry needs View Channel, Send Messages, and Embed Links in the private report channel.' };
+    }
+
+    const roles = guild.roles.cache?.values?.() || [];
+    for (const role of roles) {
+        if (role.id === guild.roles.everyone.id || role.id === staffRole.id) continue;
+        if (role.permissions?.has(PermissionFlagsBits.Administrator)) continue;
+        const rolePermissions = staffChannel.permissionsFor?.(role);
+        if (rolePermissions?.has(PermissionFlagsBits.ViewChannel)) {
+            return { ok: false, reason: 'Another non-staff role can view the report channel. Remove its View Channel access or select a dedicated staff-only channel.' };
+        }
+    }
+
+    const overwrites = staffChannel.permissionOverwrites?.cache?.values?.() || [];
+    for (const overwrite of overwrites) {
+        const grantsView = overwrite.allow?.has?.(PermissionFlagsBits.ViewChannel);
+        if (!grantsView) continue;
+        const isEveryone = overwrite.id === guild.roles.everyone.id;
+        const isStaffRole = overwrite.id === staffRole.id;
+        const isBot = overwrite.id === botMember.id;
+        if (!isEveryone && !isStaffRole && !isBot && overwrite.type === 1) {
+            return { ok: false, reason: 'A direct member permission grants access to the report channel. Remove non-staff member access.' };
+        }
     }
     return { ok: true };
 }
@@ -276,18 +308,25 @@ function confessionModule(client) {
     client.on('interactionCreate', async interaction => {
         let publishedConfessionNumber = null;
         try {
+            if (!interaction.guild) {
+                if (interaction.isChatInputCommand?.() && ['confessionsetup', 'confess', 'confession'].includes(interaction.commandName)) {
+                    return privateReply(interaction, 'Confessions are available inside a server only.');
+                }
+                return;
+            }
             if (interaction.isChatInputCommand()) {
                 if (interaction.commandName === 'confessionsetup') {
                     await interaction.deferReply({ flags: EPHEMERAL });
                     const channel = interaction.options.getChannel('channel', true);
                     const staffChannel = interaction.options.getChannel('staff_channel', true);
-                    if (channel.guildId !== interaction.guildId || staffChannel.guildId !== interaction.guildId) {
+                    const staffRole = interaction.options.getRole('staff_role', true);
+                    if (channel.guildId !== interaction.guildId || staffChannel.guildId !== interaction.guildId || staffRole.guild.id !== interaction.guildId) {
                         return interaction.editReply({ content: 'Both channels must belong to this server.' });
                     }
                     const botMember = await getBotMember(interaction.guild);
                     const publicValidation = validatePublishChannel(interaction.guild, channel, botMember);
                     if (!publicValidation.ok) return interaction.editReply({ content: '⚠️ ' + publicValidation.reason });
-                    const staffValidation = validateStaffChannel(interaction.guild, channel, staffChannel, botMember);
+                    const staffValidation = validateStaffChannel(interaction.guild, channel, staffChannel, staffRole, botMember);
                     if (!staffValidation.ok) return interaction.editReply({ content: '⚠️ ' + staffValidation.reason });
 
                     const previousConfig = await ConfessionConfig.findOne()
@@ -295,7 +334,7 @@ function confessionModule(client) {
                     await ConfessionConfig.findOneAndUpdate(
                         { guildId: interaction.guildId },
                         {
-                            $set: { channelId: channel.id, staffChannelId: staffChannel.id },
+                            $set: { channelId: channel.id, staffChannelId: staffChannel.id, staffRoleId: staffRole.id },
                             $setOnInsert: { guildId: interaction.guildId }
                         },
                         { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -325,8 +364,9 @@ function confessionModule(client) {
                     }
                     return interaction.editReply({
                         content: '💌 Confession panel posted in ' + channel +
-                            '. Private reports will be delivered to ' + staffChannel + '.'
-                    });                }
+                            '. Reports are restricted to ' + staffRole + ' and server administrators in ' + staffChannel + '.'
+                    });
+                }
                 if (interaction.commandName === 'confess' || interaction.commandName === 'confession') {
                     if (!interaction.inGuild()) return privateReply(interaction, 'Confessions can only be submitted inside a server.');
                     return interaction.showModal(buildConfessionModal());
@@ -404,7 +444,9 @@ function confessionModule(client) {
                     if (!found) return privateReply(interaction, 'That confession is no longer available.');
                     const reviewChannel = await fetchTextChannel(interaction.guild, config.staffChannelId);
                     const botMember = await getBotMember(interaction.guild);
-                    const staffValidation = validateStaffChannel(interaction.guild, found.channel, reviewChannel, botMember);
+                    const staffRole = interaction.guild.roles.cache.get(config.staffRoleId) ||
+                        await interaction.guild.roles.fetch(config.staffRoleId).catch(() => null);
+                    const staffValidation = validateStaffChannel(interaction.guild, found.channel, reviewChannel, staffRole, botMember);
                     if (!staffValidation.ok) {
                         return privateReply(interaction, '⚠️ Staff reports are paused because the report destination is not private or Starry no longer has the required permissions. Ask a manager to rerun /confessionsetup.');
                     }
