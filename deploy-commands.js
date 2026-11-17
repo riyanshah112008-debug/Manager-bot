@@ -412,6 +412,18 @@ commands.push(
         ]
     },
     {
+        name: 'sussetup',
+        description: '🛡️ Configure Starry suspicious-account and inactivity monitoring',
+        default_member_permissions: ADMIN,
+        options: [
+            { name: 'enabled', type: 5, required: false, description: 'Enable or disable member risk monitoring' },
+            { name: 'channel', type: 7, channel_types: [0], required: false, description: 'Channel for join-risk and inactivity alerts' },
+            { name: 'staff_role', type: 8, required: false, description: 'Role to ping for young-account and inactivity reviews' },
+            { name: 'inactivity_days', type: 4, required: false, min_value: 1, max_value: 90, description: 'Days without a message before staff are alerted (default 14)' },
+            { name: 'account_age_days', type: 4, required: false, min_value: 0, max_value: 365, description: 'Flag accounts this many days old or newer (default 7)' }
+        ]
+    },
+    {
         name: 'ticketsetup',
         description: '🎫 Setup and deploy the interactive support ticket panel in your server',
         default_member_permissions: ADMIN,
