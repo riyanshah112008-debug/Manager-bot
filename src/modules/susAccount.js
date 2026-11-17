@@ -37,6 +37,16 @@ const SusAccountSettings = mongoose.models.SusAccountSettings ||
 const SusAccountMember = mongoose.models.SusAccountMember ||
     mongoose.model('SusAccountMember', memberSchema);
 
+function isValidDiscordSnowflake(value) {
+    const id = String(value ?? '');
+    if (id.length < 17 || id.length > 20) return false;
+    for (let index = 0; index < id.length; index += 1) {
+        const code = id.charCodeAt(index);
+        if (code < 48 || code > 57) return false;
+    }
+    return true;
+}
+
 function daysBetween(from, to = Date.now()) {
     const timestamp = new Date(from).getTime();
     if (!Number.isFinite(timestamp) || !Number.isFinite(to)) return 0;
@@ -569,4 +579,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
-module.exports._internals = { daysBetween, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable };
+module.exports._internals = { daysBetween, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake };
