@@ -38,3 +38,27 @@ test('locked Mongoose release includes current 8.24.x query-sanitization fixes',
         (major === 8 && (minor > 24 || (minor === 24 && patch >= 7)));
     assert.equal(isAtLeastPatched, true, `Mongoose ${mongoose.version} is below the patched 8.24.7 release`);
 });
+
+test('a rejoin starts a new membership window', () => {
+    const rejoinedAt = JOINED_AT + (30 * DAY_MS);
+    assert.equal(_internals.isSameMembership(JOINED_AT, rejoinedAt), false);
+});
+
+test('the same membership is recognized across identical join timestamps', () => {
+    assert.equal(_internals.isSameMembership(JOINED_AT, new Date(JOINED_AT)), true);
+});
+
+test('fresh pending inactivity claims are not stolen by another scanner', () => {
+    const now = JOINED_AT + (30 * DAY_MS);
+    assert.equal(_internals.isClaimRecoverable('pending', new Date(now - (5 * 60 * 1000)), now), false);
+});
+
+test('abandoned pending inactivity claims become recoverable', () => {
+    const now = JOINED_AT + (30 * DAY_MS);
+    assert.equal(_internals.isClaimRecoverable('pending', new Date(now - (11 * 60 * 1000)), now), true);
+    assert.equal(_internals.isClaimRecoverable('pending', null, now), true);
+});
+
+test('delivered inactivity alerts cannot be reclaimed', () => {
+    assert.equal(_internals.isClaimRecoverable('sent', null, JOINED_AT), true);
+});
