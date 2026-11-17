@@ -6,6 +6,7 @@ const {
     MessageFlags, ModalBuilder, PermissionFlagsBits, SlashCommandBuilder,
     TextInputBuilder, TextInputStyle
 } = require('discord.js');
+const { routeConfessionOpenButton } = require('../utils/confessionInteraction');
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 const OPEN_BUTTON = 'starry:confession:open';
@@ -88,8 +89,8 @@ function buildPanelComponents() {
 
 function escapeMassMentions(value) {
     return String(value ?? '')
-        .replace(/@everyone/gi, '@\u200Beveryone')
-        .replace(/@here/gi, '@\u200Bhere');
+        .replace(/@everyone/gi, '@\\u200Beveryone')
+        .replace(/@here/gi, '@\\u200Bhere');
 }
 
 function buildConfessionEmbed(number, topic, body) {
@@ -149,7 +150,7 @@ async function getConfig(guildId) {
 }
 
 function isDiscordSnowflake(value) {
-    return typeof value === 'string' && /^\d{17,20}$/.test(value);
+    return typeof value === 'string' && /^\\d{17,20}$/.test(value);
 }
 
 function validatePublishChannel(guild, channel, botMember) {
@@ -223,7 +224,7 @@ function validateStaffChannel(guild, confessionChannel, staffChannel, staffRole,
 function isConfessionMessage(message, botUserId) {
     if (!message || !botUserId || message.author?.id !== botUserId) return false;
     const author = message.embeds?.[0]?.author?.name || '';
-    return /^(?:ANONYMOUS CONFESSION|CONFESSION)\s*[·•]\s*#\d+/i.test(author);
+    return /^(?:ANONYMOUS CONFESSION|CONFESSION)\\s*[·•]\\s*#\\d+/i.test(author);
 }
 
 async function getBotMember(guild) {
@@ -237,29 +238,29 @@ function getButtonSource(interaction) {
     const messageId = interaction.message?.id;
     if (!isDiscordSnowflake(channelId) || !isDiscordSnowflake(messageId)) return null;
 
-    if (customId === REPLY_BUTTON || /^confess_btn_reply_\d+$/.test(customId)) {
+    if (customId === REPLY_BUTTON || /^confess_btn_reply_\\d+$/.test(customId)) {
         return { action: 'reply', channelId, messageId };
     }
-    if (customId === REPORT_BUTTON || /^confess_btn_report_\d+$/.test(customId)) {
+    if (customId === REPORT_BUTTON || /^confess_btn_report_\\d+$/.test(customId)) {
         return { action: 'report', channelId, messageId };
     }
-    const oldReply = customId.match(/^starry:confession:reply:(\d{17,20})$/);
+    const oldReply = customId.match(/^starry:confession:reply:(\\d{17,20})$/);
     if (oldReply && oldReply[1] === messageId) return { action: 'reply', channelId, messageId };
-    const oldReport = customId.match(/^starry:confession:report:(\d{17,20})$/);
+    const oldReport = customId.match(/^starry:confession:report:(\\d{17,20})$/);
     if (oldReport && oldReport[1] === messageId) return { action: 'report', channelId, messageId };
     return null;
 }
 
 function getModalSource(customId, kind, config) {
     if (kind === 'reply') {
-        const current = customId.match(/^starry:confession:reply-submit:(\d{17,20}):(\d{17,20})$/);
+        const current = customId.match(/^starry:confession:reply-submit:(\\d{17,20}):(\\d{17,20})$/);
         if (current) return { channelId: current[1], messageId: current[2] };
-        const previous = customId.match(/^starry:confession:reply:(\d{17,20})$/);
+        const previous = customId.match(/^starry:confession:reply:(\\d{17,20})$/);
         if (previous && config?.channelId) return { channelId: config.channelId, messageId: previous[1] };
     } else {
-        const current = customId.match(/^starry:confession:report-submit:(\d{17,20}):(\d{17,20})$/);
+        const current = customId.match(/^starry:confession:report-submit:(\\d{17,20}):(\\d{17,20})$/);
         if (current) return { channelId: current[1], messageId: current[2] };
-        const previous = customId.match(/^starry:confession:report:(\d{17,20})$/);
+        const previous = customId.match(/^starry:confession:report:(\\d{17,20})$/);
         if (previous && config?.channelId) return { channelId: config.channelId, messageId: previous[1] };
     }
     return null;
@@ -284,7 +285,6 @@ function getTextInputValue(interaction, candidateIds) {
     }
     return '';
 }
-
 
 async function nextConfessionNumber(guildId) {
     const counter = await ConfessionCounter.findOneAndUpdate(
@@ -345,7 +345,7 @@ function confessionModule(client) {
             }
             if (interaction.isChatInputCommand()) {
                 if (interaction.commandName === 'confessionsetup') {
-                    await interaction.deferReply({ flags: EPHEMERAL });
+                    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: EPHEMERAL });
                     guild = await resolveGuild();
                     if (!guild) return await interaction.editReply({ content: 'I could not access this server. Please try again.' });
                     const channel = interaction.options.getChannel('channel', true);
@@ -391,7 +391,7 @@ function confessionModule(client) {
 
             if (interaction.isButton()) {
                 if (interaction.customId === OPEN_BUTTON || interaction.customId === LEGACY_OPEN_BUTTON) {
-                    return await interaction.showModal(buildConfessionModal());
+                    return await routeConfessionOpenButton(interaction, buildConfessionModal);
                 }
                 const source = getButtonSource(interaction);
                 if (source) {
@@ -428,7 +428,7 @@ function confessionModule(client) {
                     return await interaction.editReply({ content: '💌 Your confession #' + number + ' has been posted anonymously in ' + channel + '.' });
                 }
 
-                if (/^confess_modal_reply_\d+$/.test(interaction.customId)) {
+                if (/^confess_modal_reply_\\d+$/.test(interaction.customId)) {
                     await interaction.deferReply({ flags: EPHEMERAL });
                     guild = await resolveGuild();
                     if (!guild) return await privateReply(interaction, 'I could not access this server. Please try again later.');
@@ -447,7 +447,7 @@ function confessionModule(client) {
                     const reply = getTextInputValue(interaction, ['reply', 'confess_input_reply']).trim();
                     if (!reply || reply.length > MAX_REPLY) return await privateReply(interaction, 'Your reply must be between 1 and 500 characters.');
                     await found.message.reply({
-                        content: '↩️ **Anonymous reply**\n' + reply.replace(/@everyone/gi, '@\u200Beveryone').replace(/@here/gi, '@\u200Bhere'),
+                        content: '↩️ **Anonymous reply**\n' + reply.replace(/@everyone/gi, '@\\u200Beveryone').replace(/@here/gi, '@\\u200Bhere'),
                         allowedMentions: { parse: [] }
                     });
                     return await interaction.editReply({ content: 'Your anonymous reply has been posted.' });
@@ -474,7 +474,7 @@ function confessionModule(client) {
                     if (reason.length < 3 || reason.length > 500) return await privateReply(interaction, 'Please provide a report reason between 3 and 500 characters.');
                     const report = new EmbedBuilder().setColor('#EF4444')
                         .setTitle('🚩 Anonymous confession report')
-                        .setDescription('**Reason**\n' + reason.replace(/@everyone/gi, '@\u200Beveryone').replace(/@here/gi, '@\u200Bhere'))
+                        .setDescription('**Reason**\n' + reason.replace(/@everyone/gi, '@\\u200Beveryone').replace(/@here/gi, '@\\u200Bhere'))
                         .addFields(
                             { name: 'Confession', value: '#' + found.message.id, inline: true },
                             { name: 'Source', value: '[Jump to confession](' + found.message.url + ')', inline: true }
