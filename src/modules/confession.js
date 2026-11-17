@@ -88,8 +88,8 @@ function buildPanelComponents() {
 
 function escapeMassMentions(value) {
     return String(value ?? '')
-        .replace(/@everyone/gi, '@\\u200Beveryone')
-        .replace(/@here/gi, '@\\u200Bhere');
+        .replace(/@everyone/gi, '@\u200Beveryone')
+        .replace(/@here/gi, '@\u200Bhere');
 }
 
 function buildConfessionEmbed(number, topic, body) {
