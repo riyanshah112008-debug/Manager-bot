@@ -62,3 +62,12 @@ test('abandoned pending inactivity claims become recoverable', () => {
 test('delivered inactivity alerts cannot be reclaimed', () => {
     assert.equal(_internals.isClaimRecoverable('sent', null, JOINED_AT), true);
 });
+
+test('server ID validation accepts Discord snowflakes only', () => {
+    assert.equal(_internals.isValidDiscordSnowflake('12345678901234567'), true);
+    assert.equal(_internals.isValidDiscordSnowflake('12345678901234567890'), true);
+    assert.equal(_internals.isValidDiscordSnowflake('1234567890123456'), false);
+    assert.equal(_internals.isValidDiscordSnowflake('123456789012345678901'), false);
+    assert.equal(_internals.isValidDiscordSnowflake('1234567890123456x'), false);
+    assert.equal(_internals.isValidDiscordSnowflake({ $ne: null }), false);
+});
