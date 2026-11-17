@@ -329,38 +329,23 @@ function confessionModule(client) {
                     const staffValidation = validateStaffChannel(interaction.guild, channel, staffChannel, staffRole, botMember);
                     if (!staffValidation.ok) return await interaction.editReply({ content: '⚠️ ' + staffValidation.reason });
 
-                    const previousConfig = await ConfessionConfig.findOne()
-                        .where('guildId').equals(interaction.guildId).exec();
-                    await ConfessionConfig.findOneAndUpdate(
-                        { guildId: interaction.guildId },
-                        {
-                            $set: { channelId: channel.id, staffChannelId: staffChannel.id, staffRoleId: staffRole.id },
-                            $setOnInsert: { guildId: interaction.guildId }
-                        },
-                        { upsert: true, new: true, setDefaultsOnInsert: true }
-                    ).exec();
-
+                    const panelMessage = await channel.send({
+                        embeds: [buildPanelEmbed()],
+                        components: buildPanelComponents(),
+                        allowedMentions: { parse: [] }
+                    });
                     try {
-                        await channel.send({
-                            embeds: [buildPanelEmbed()],
-                            components: buildPanelComponents(),
-                            allowedMentions: { parse: [] }
-                        });
-                    } catch (sendError) {
-                        try {
-                            if (previousConfig) {
-                                await ConfessionConfig.replaceOne(
-                                    { guildId: interaction.guildId },
-                                    previousConfig.toObject()
-                                ).exec();
-                            } else {
-                                await ConfessionConfig.deleteOne({ guildId: interaction.guildId }).exec();
-                            }
-                        } catch (rollbackError) {
-                            console.error('[Starry Confessions] Setup rollback failed:', rollbackError);
-                            throw new Error('The panel could not be posted and the previous configuration could not be restored. Check the database and channel permissions.');
-                        }
-                        throw sendError;
+                        await ConfessionConfig.findOneAndUpdate(
+                            { guildId: interaction.guildId },
+                            {
+                                $set: { channelId: channel.id, staffChannelId: staffChannel.id, staffRoleId: staffRole.id },
+                                $setOnInsert: { guildId: interaction.guildId }
+                            },
+                            { upsert: true, new: true, setDefaultsOnInsert: true }
+                        ).exec();
+                    } catch (saveError) {
+                        await panelMessage.delete().catch(() => null);
+                        throw saveError;
                     }
                     return await interaction.editReply({
                         content: '💌 Confession panel posted in ' + channel +
