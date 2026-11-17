@@ -325,6 +325,7 @@ function confessionModule(client) {
     client.__starryConfessionHandlerInstalled = true;
 
     client.on('interactionCreate', async interaction => {
+        if (interaction?.__starryConfessionOpenHandled) return;
         let publishedConfessionNumber = null;
         let guild = interaction.guild || null;
         const resolveGuild = async () => {
