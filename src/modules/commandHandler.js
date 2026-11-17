@@ -702,6 +702,13 @@ NaN
                 }
             }
 
+            // Confession panel submission is acknowledged centrally before the
+            // generic component watchdog. This runs on both primary and worker clients.
+            if (interaction.isButton()) {
+                const confessionRouter = require('../utils/confessionInteraction');
+                if (await confessionRouter.routeConfessionOpenButton(interaction)) return;
+            }
+
             // 3. Handle Global 1-Year Persistent Button & Select Menu Interactions
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
                 const customId = interaction.customId;
