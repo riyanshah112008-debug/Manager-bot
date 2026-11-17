@@ -9,6 +9,7 @@ const {
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 const OPEN_BUTTON = 'starry:confession:open';
+const LEGACY_OPEN_BUTTON = 'confess_btn_open';
 const SUBMIT_MODAL = 'starry:confession:submit';
 const REPORT_PREFIX = 'starry:confession:report:';
 const REPLY_PREFIX = 'starry:confession:reply:';
@@ -182,7 +183,7 @@ function confessionModule(client) {
             }
 
             if (interaction.isButton()) {
-                if (interaction.customId === OPEN_BUTTON) return interaction.showModal(buildConfessionModal());
+                if (interaction.customId === OPEN_BUTTON || interaction.customId === LEGACY_OPEN_BUTTON) return interaction.showModal(buildConfessionModal());
                 if (interaction.customId.startsWith(REPLY_PREFIX)) {
                     const messageId = interaction.customId.slice(REPLY_PREFIX.length);
                     if (!/^\d{17,20}$/.test(messageId)) return privateReply(interaction, 'This confession button is invalid. Please use the latest panel.');
