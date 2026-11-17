@@ -21,7 +21,7 @@ const memberSchema = new mongoose.Schema({
     userId: { type: String, required: true },
     joinedAt: { type: Date, required: true },
     accountCreatedAt: { type: Date, required: true },
-    lastActivityAt: { type: Date, default: null },
+    firstActivityAt: { type: Date, default: null },
     inactivityAlertedAt: { type: Date, default: null },
     riskAlertedAt: { type: Date, default: null }
 }, { timestamps: true });
@@ -103,7 +103,7 @@ module.exports = (client) => {
             // event-sourced objects or dynamic query operators reach the database).
             const unalertedMembers = await SusAccountMember.find()
                 .where('guildId').equals(guild.id)
-                .where('lastActivityAt').equals(null)
+                .where('firstActivityAt').equals(null)
                 .where('inactivityAlertedAt').equals(null)
                 .setOptions({ sanitizeFilter: true })
                 .sort({ joinedAt: 1 })
@@ -147,7 +147,7 @@ module.exports = (client) => {
                 })
                     .where('_id').equals(record._id)
                     .where('inactivityAlertedAt').equals(null)
-                    .where('lastActivityAt').equals(null)
+                    .where('firstActivityAt').equals(null)
                     .setOptions({ sanitizeFilter: true })
                     .exec();
                 if (!claim.modifiedCount) continue;
@@ -266,7 +266,7 @@ module.exports = (client) => {
                     $set: {
                         joinedAt,
                         accountCreatedAt: new Date(member.user.createdTimestamp),
-                        lastActivityAt: null,
+                        firstActivityAt: null,
                         inactivityAlertedAt: null,
                         riskAlertedAt: null
                     }
@@ -316,11 +316,11 @@ module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || message.webhookId) return;
         await SusAccountMember.updateOne({}, {
-            $set: { lastActivityAt: new Date(message.createdTimestamp || Date.now()) }
+            $set: { firstActivityAt: new Date(message.createdTimestamp || Date.now()) }
         })
             .where('guildId').equals(message.guild.id)
             .where('userId').equals(message.author.id)
-            .where('lastActivityAt').equals(null)
+            .where('firstActivityAt').equals(null)
             .setOptions({ sanitizeFilter: true })
             .exec()
             .catch((error) => console.error('[SusAccount] Activity tracking failed:', error.message));
