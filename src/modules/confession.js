@@ -9,11 +9,10 @@ const {
 const EPHEMERAL = MessageFlags.Ephemeral;
 const PANEL_BUTTON = 'whisper:open';
 const SUBMIT_MODAL = 'whisper:submit';
-const REPORT_BUTTON_PREFIX = 'whisper:report:';
 const REPORT_MODAL_PREFIX = 'whisper:report-submit:';
 const STAFF_REMOVE_PREFIX = 'whisper:staff:remove:';
 const STAFF_DISMISS_PREFIX = 'whisper:staff:dismiss:';
-const LEGACY_OPEN_IDS = new Set(['starry:confession:open', 'confess_btn_open']);
+const LEGACY_OPEN_IDS = new Set(['starry:confession:open', 'confess_btn_open', 'confess_open_modal']);
 const MAX_BODY = 1000;
 const MAX_TOPIC = 60;
 const MAX_REPORT_REASON = 500;
@@ -130,7 +129,15 @@ function validateChannels(guild, publicChannel, staffChannel, staffRole, botMemb
  const everyone = staffChannel.permissionsFor(guild.roles.everyone);
  const staff = staffChannel.permissionsFor(staffRole);
  const bot = staffChannel.permissionsFor(botMember);
- if (everyone?.has(PermissionFlagsBits.ViewChannel) || !staff?.has(PermissionFlagsBits.ViewChannel)) return 'The staff channel must be hidden from @everyone and visible to the selected staff role.';
+ if (!everyone || everyone.has(PermissionFlagsBits.ViewChannel) || !staff?.has(PermissionFlagsBits.ViewChannel)) return 'The staff channel must be hidden from @everyone and visible to the selected staff role.';
+ for (const role of guild.roles.cache.values()) {
+  if (role.id === guild.roles.everyone.id || role.id === staffRole.id || role.permissions.has(PermissionFlagsBits.Administrator)) continue;
+  const permissions = staffChannel.permissionsFor(role);
+  if (permissions?.has(PermissionFlagsBits.ViewChannel)) return 'Another non-staff role can view the report channel. Remove its View Channel access first.';
+ }
+ for (const overwrite of staffChannel.permissionOverwrites.cache.values()) {
+  if (overwrite.type === 1 && overwrite.id !== botMember.id && overwrite.allow.has(PermissionFlagsBits.ViewChannel)) return 'A direct member permission grants access to the report channel. Remove non-staff member access.';
+ }
  if (!bot?.has(PermissionFlagsBits.ViewChannel) || !bot.has(PermissionFlagsBits.SendMessages) || !bot.has(PermissionFlagsBits.EmbedLinks)) return 'Starry needs View Channel, Send Messages, and Embed Links in the staff channel.';
  return null;
 }
@@ -200,7 +207,8 @@ async function handleStaffAction(interaction, client, action, messageId) {
  const config = await getConfig(interaction.guildId);
  if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured.');
  const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
- const hasStaffRole = interaction.member?.roles?.cache?.has(config.staffRoleId);
+ const memberRoles = interaction.member?.roles;
+ const hasStaffRole = memberRoles?.cache?.has ? memberRoles.cache.has(config.staffRoleId) : Array.isArray(memberRoles) && memberRoles.includes(config.staffRoleId);
  if (!isAdmin && !hasStaffRole) return replyPrivate(interaction, 'Only the configured staff role or server administrators can use this action.');
  const guild = await getGuild(interaction, client).catch(() => null);
  const channel = guild && await getTextChannel(guild, config.channelId);
