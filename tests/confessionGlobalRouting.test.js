@@ -48,22 +48,38 @@ test('central dispatcher opens a confession modal and marks the interaction hand
     assert.equal(interaction.__starryConfessionOpenHandled, true);
 });
 
-test('module listener and central dispatcher share the in-flight acknowledgement', async () => {
+test('registered confession module listener and central dispatcher share the in-flight acknowledgement', async () => {
+    const confessionModule = require('../src/modules/confession');
+    let moduleListener;
+    const client = {
+        isPrimary: false,
+        on: (eventName, listener) => {
+            if (eventName === 'interactionCreate') moduleListener = listener;
+        }
+    };
+    confessionModule(client);
+    assert.equal(typeof moduleListener, 'function');
+
     let resolveFirst;
     let calls = 0;
     const interaction = makeButton('starry:confession:open', {
+        guildId: '123456789012345678',
         showModal: () => {
             calls += 1;
             return new Promise(resolve => { resolveFirst = resolve; });
         }
     });
-    const firstListener = routeConfessionOpenButton(interaction, () => ({ customId: 'starry:confession:submit' }));
-    const dispatcher = routeConfessionOpenButton(interaction, () => ({ customId: 'starry:confession:submit' }));
 
+    const moduleHandling = moduleListener(interaction);
+    await Promise.resolve();
+    assert.equal(calls, 1);
+
+    const dispatcher = routeConfessionOpenButton(interaction, () => ({ customId: 'starry:confession:submit' }));
     assert.equal(await dispatcher, true);
     assert.equal(calls, 1);
+
     resolveFirst();
-    assert.equal(await firstListener, true);
+    await moduleHandling;
     assert.equal(calls, 1);
 });
 
