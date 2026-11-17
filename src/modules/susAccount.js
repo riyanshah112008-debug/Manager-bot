@@ -34,7 +34,17 @@ const SusAccountMember = mongoose.models.SusAccountMember ||
     mongoose.model('SusAccountMember', memberSchema);
 
 function daysBetween(from, to = Date.now()) {
-    return Math.max(0, Math.floor((to - new Date(from).getTime()) / DAY_MS));
+    const timestamp = new Date(from).getTime();
+    if (!Number.isFinite(timestamp) || !Number.isFinite(to)) return 0;
+    return Math.max(0, Math.floor((to - timestamp) / DAY_MS));
+}
+
+function hasReachedInactivityThreshold(joinedAt, inactivityDays, now = Date.now()) {
+    const joinedTimestamp = new Date(joinedAt).getTime();
+    const days = Number(inactivityDays);
+    return Number.isFinite(joinedTimestamp) && Number.isInteger(days) &&
+        days >= 1 && days <= 90 && Number.isFinite(now) &&
+        now - joinedTimestamp >= days * DAY_MS;
 }
 
 async function safeChannel(guild, channelId) {
@@ -84,17 +94,24 @@ module.exports = (client) => {
             const settings = await getSettings(guild.id);
             if (!settings || !settings.enabled || !settings.logChannelId) return;
             const channel = await safeChannel(guild, settings.logChannelId);
-            if (!channel) return;
-
-            const cutoff = new Date(Date.now() - settings.inactivityDays * DAY_MS);
-            const candidates = await SusAccountMember.find()
+            if (!channel) {
+                console.warn(`[SusAccount] Alert channel unavailable in guild ${guild.id}.`);
+                return;
+            }
+            // Sort oldest-first, then apply the date threshold in JavaScript.
+            // This keeps MongoDB filters to scalar equality predicates (no raw
+            // event-sourced objects or dynamic query operators reach the database).
+            const unalertedMembers = await SusAccountMember.find()
                 .where('guildId').equals(guild.id)
-                .where('joinedAt').lte(cutoff)
                 .where('lastActivityAt').equals(null)
                 .where('inactivityAlertedAt').equals(null)
                 .setOptions({ sanitizeFilter: true })
+                .sort({ joinedAt: 1 })
                 .limit(100)
                 .exec();
+            const candidates = unalertedMembers.filter(record =>
+                hasReachedInactivityThreshold(record.joinedAt, settings.inactivityDays)
+            );
 
             for (const record of candidates) {
                 let member = guild.members.cache.get(record.userId);
@@ -185,9 +202,8 @@ module.exports = (client) => {
         const inactivityDays = interaction.options.getInteger('inactivity_days');
         const accountAgeDays = interaction.options.getInteger('account_age_days');
 
-        // Sanitize the filter at the MongoDB boundary as defense in depth.
-        // The value is also constrained to a Discord snowflake above.
-        const guildId = String(guild.id);
+        // Use the verified guild object and keep the MongoDB predicate scalar.
+        const guildId = guild.id;
         const current = await SusAccountSettings.findOne()
             .where('guildId').equals(guildId)
             .setOptions({ sanitizeFilter: true })
@@ -307,3 +323,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
+module.exports._internals = { daysBetween, hasReachedInactivityThreshold };
