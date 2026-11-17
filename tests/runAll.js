@@ -26,6 +26,8 @@ const suites = [
   ['Leveling control panel', '--test', 'tests/levelingControlPanel.test.js'],
   ['Leveling module syntax', '--check', 'src/modules/leveling.js'],
   ['Suspicious-account monitor syntax', '--check', 'src/modules/susAccount.js'],
+  ['Anonymous confession experience', '--test', 'tests/confessionExperience.test.js'],
+  ['Confession module syntax', '--check', 'src/modules/confession.js'],
   ['Suspicious-member monitoring policy', '--test', 'tests/susAccountMonitoring.test.js'],
   ['Slash command deployment syntax', '--check', 'deploy-commands.js']
 ];
