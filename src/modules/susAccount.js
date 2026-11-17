@@ -219,12 +219,76 @@ module.exports = (client) => {
             .where('guildId').equals(guildId)
             .setOptions({ sanitizeFilter: true })
             .exec();
+
+        const monitoringEnabled = enabled ?? current?.enabled ?? true;
+        const logChannelId = channelOption?.id ?? current?.logChannelId ?? interaction.channelId;
+        const staffRoleId = staffRole?.id ?? current?.staffRoleId ?? '';
+        const inactivityWindow = inactivityDays ?? current?.inactivityDays ?? DEFAULT_INACTIVITY_DAYS;
+        const accountAgeWindow = accountAgeDays ?? current?.accountAgeDays ?? DEFAULT_ACCOUNT_AGE_DAYS;
+
+        if (monitoringEnabled) {
+            if (!staffRoleId || staffRoleId === guild.id) {
+                return interaction.reply({
+                    content: '❌ Select a dedicated staff role. Starry needs it to notify moderators about inactivity reviews; @everyone is not accepted.',
+                    ephemeral: true
+                });
+            }
+
+            const resolvedRole = staffRole || guild.roles.cache.get(staffRoleId);
+            if (!resolvedRole) {
+                return interaction.reply({
+                    content: '❌ The saved staff role no longer exists. Select a current staff role.',
+                    ephemeral: true
+                });
+            }
+
+            const resolvedChannel = channelOption ||
+                guild.channels.cache.get(logChannelId) ||
+                await guild.channels.fetch(logChannelId).catch(() => null);
+            if (!resolvedChannel || resolvedChannel.type !== ChannelType.GuildText || !resolvedChannel.isTextBased()) {
+                return interaction.reply({
+                    content: '❌ Select a valid text channel for member risk and inactivity alerts.',
+                    ephemeral: true
+                });
+            }
+
+            const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+            if (!botMember) {
+                return interaction.reply({
+                    content: '❌ Starry could not verify its server permissions. Please try again.',
+                    ephemeral: true
+                });
+            }
+
+            const channelPermissions = resolvedChannel.permissionsFor(botMember);
+            if (!channelPermissions?.has([
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks
+            ])) {
+                return interaction.reply({
+                    content: '❌ Give Starry View Channel, Send Messages and Embed Links permissions in the alert channel.',
+                    ephemeral: true
+                });
+            }
+
+            const canMentionStaff = resolvedRole.mentionable ||
+                botMember.permissions.has(PermissionFlagsBits.MentionEveryone) ||
+                botMember.permissions.has(PermissionFlagsBits.Administrator);
+            if (!canMentionStaff) {
+                return interaction.reply({
+                    content: '❌ Make the staff role mentionable or grant Starry Mention Everyone permission so inactivity alerts can ping staff.',
+                    ephemeral: true
+                });
+            }
+        }
+
         const patch = {
-            enabled: enabled ?? current?.enabled ?? true,
-            logChannelId: channelOption?.id ?? current?.logChannelId ?? interaction.channelId,
-            staffRoleId: staffRole?.id ?? current?.staffRoleId ?? '',
-            inactivityDays: inactivityDays ?? current?.inactivityDays ?? DEFAULT_INACTIVITY_DAYS,
-            accountAgeDays: accountAgeDays ?? current?.accountAgeDays ?? DEFAULT_ACCOUNT_AGE_DAYS,
+            enabled: monitoringEnabled,
+            logChannelId,
+            staffRoleId,
+            inactivityDays: inactivityWindow,
+            accountAgeDays: accountAgeWindow,
             configuredBy: interaction.user.id
         };
         const settings = await SusAccountSettings.findOneAndUpdate(
