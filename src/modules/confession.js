@@ -308,7 +308,19 @@ async function privateReply(interaction, content) {
     return interaction.reply(payload).catch(() => null);
 }
 
+function registerWorkerInteractionHook(client, manager) {
+    if (!client || client.isPrimary === false || client.__starryConfessionWorkerHookRegistered) return false;
+    const multiBot = manager || client.multiBot || require('./multiBot');
+    if (!multiBot || typeof multiBot.registerEventHook !== 'function') return false;
+
+    client.__starryConfessionWorkerHookRegistered = true;
+    multiBot.registerEventHook(workerClient => confessionModule(workerClient));
+    return true;
+}
+
 function confessionModule(client) {
+    if (!client) return;
+    registerWorkerInteractionHook(client);
     if (client.__starryConfessionHandlerInstalled) return;
     client.__starryConfessionHandlerInstalled = true;
 
@@ -486,5 +498,6 @@ confessionModule.isConfessionMessage = isConfessionMessage;
 confessionModule.getButtonSource = getButtonSource;
 confessionModule.getModalSource = getModalSource;
 confessionModule.nextConfessionNumber = nextConfessionNumber;
+confessionModule.registerWorkerInteractionHook = registerWorkerInteractionHook;
 
 module.exports = confessionModule;
