@@ -256,126 +256,135 @@ module.exports = (client) => {
 
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'sussetup') return;
-        if (!interaction.inGuild()) return interaction.reply({ content: 'Use this setup inside a server.', ephemeral: true });
+        if (!interaction.inGuild()) {
+            return interaction.reply({ content: 'Use this setup inside a server.', ephemeral: true });
+        }
         if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
             return interaction.reply({ content: '❌ You need **Manage Server** permission.', ephemeral: true });
         }
 
-        // Discord guild IDs are snowflakes. Validate and normalize the external value
-        // before using it in any MongoDB query to prevent operator/object injection.
         const guild = interaction.guild;
-        if (!guild || !/^\d{17,20}$/.test(guild.id)) {
+        if (!guild || !/^\\d{17,20}$/.test(guild.id)) {
             return interaction.reply({ content: '❌ Could not validate this server ID.', ephemeral: true });
         }
 
-        const enabled = interaction.options.getBoolean('enabled');
-        const channelOption = interaction.options.getChannel('channel');
-        const staffRole = interaction.options.getRole('staff_role');
-        const inactivityDays = interaction.options.getInteger('inactivity_days');
-        const accountAgeDays = interaction.options.getInteger('account_age_days');
-
-        // Use the verified guild object and keep the MongoDB predicate scalar.
-        const guildId = guild.id;
-        const current = await SusAccountSettings.findOne()
-            .where('guildId').equals(guildId)
-            .setOptions({ sanitizeFilter: true })
-            .exec();
-
-        const monitoringEnabled = enabled ?? current?.enabled ?? true;
-        const logChannelId = channelOption?.id ?? current?.logChannelId ?? interaction.channelId;
-        const staffRoleId = staffRole?.id ?? current?.staffRoleId ?? '';
-        const inactivityWindow = inactivityDays ?? current?.inactivityDays ?? DEFAULT_INACTIVITY_DAYS;
-        const accountAgeWindow = accountAgeDays ?? current?.accountAgeDays ?? DEFAULT_ACCOUNT_AGE_DAYS;
-
-        if (monitoringEnabled) {
-            if (!staffRoleId || staffRoleId === guild.id) {
-                return interaction.reply({
-                    content: '❌ Select a dedicated staff role. Starry needs it to notify moderators about inactivity reviews; @everyone is not accepted.',
-                    ephemeral: true
-                });
-            }
-
-            const resolvedRole = staffRole || guild.roles.cache.get(staffRoleId);
-            if (!resolvedRole) {
-                return interaction.reply({
-                    content: '❌ The saved staff role no longer exists. Select a current staff role.',
-                    ephemeral: true
-                });
-            }
-
-            const resolvedChannel = channelOption ||
-                guild.channels.cache.get(logChannelId) ||
-                await guild.channels.fetch(logChannelId).catch(() => null);
-            if (!resolvedChannel || resolvedChannel.type !== ChannelType.GuildText || !resolvedChannel.isTextBased()) {
-                return interaction.reply({
-                    content: '❌ Select a valid text channel for member risk and inactivity alerts.',
-                    ephemeral: true
-                });
-            }
-
-            const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
-            if (!botMember) {
-                return interaction.reply({
-                    content: '❌ Starry could not verify its server permissions. Please try again.',
-                    ephemeral: true
-                });
-            }
-
-            const channelPermissions = resolvedChannel.permissionsFor(botMember);
-            if (!channelPermissions?.has([
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.EmbedLinks
-            ])) {
-                return interaction.reply({
-                    content: '❌ Give Starry View Channel, Send Messages and Embed Links permissions in the alert channel.',
-                    ephemeral: true
-                });
-            }
-
-            const canMentionStaff = resolvedRole.mentionable ||
-                botMember.permissions.has(PermissionFlagsBits.MentionEveryone) ||
-                botMember.permissions.has(PermissionFlagsBits.Administrator);
-            if (!canMentionStaff) {
-                return interaction.reply({
-                    content: '❌ Make the staff role mentionable or grant Starry Mention Everyone permission so inactivity alerts can ping staff.',
-                    ephemeral: true
-                });
-            }
+        // Defer before database/API work to stay within Discord's initial response deadline.
+        try {
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+        } catch (error) {
+            console.warn('[SusAccount] Could not defer setup interaction:', error?.message || error);
+            return;
         }
 
-        const patch = {
-            enabled: monitoringEnabled,
-            logChannelId,
-            staffRoleId,
-            inactivityDays: inactivityWindow,
-            accountAgeDays: accountAgeWindow,
-            configuredBy: interaction.user.id
-        };
-        const settings = await SusAccountSettings.findOneAndUpdate(
-            {},
-            { $set: patch, $setOnInsert: { guildId } },
-            { upsert: true, new: true, setDefaultsOnInsert: true, sanitizeFilter: true }
-        )
-            .where('guildId').equals(guildId)
-            .exec();
+        try {
+            const enabled = interaction.options.getBoolean('enabled');
+            const channelOption = interaction.options.getChannel('channel');
+            const staffRole = interaction.options.getRole('staff_role');
+            const inactivityDays = interaction.options.getInteger('inactivity_days');
+            const accountAgeDays = interaction.options.getInteger('account_age_days');
+            const guildId = guild.id;
 
-        const embed = new EmbedBuilder()
-            .setColor(settings.enabled ? 0x22C55E : 0x6B7280)
-            .setTitle('🛡️ Starry Member Risk Monitor')
-            .setDescription(settings.enabled
-                ? 'Monitoring is enabled. Starry reports account-age signals on join and alerts staff when a new member reaches the inactivity threshold.'
-                : 'Monitoring is disabled. No new risk or inactivity alerts will be sent.')
-            .addFields(
-                { name: 'Alert channel', value: `<#${settings.logChannelId}>`, inline: true },
-                { name: 'Staff role', value: settings.staffRoleId ? `<@&${settings.staffRoleId}>` : 'Not configured', inline: true },
-                { name: 'Inactivity threshold', value: `${settings.inactivityDays} days`, inline: true },
-                { name: 'Young-account threshold', value: `${settings.accountAgeDays} days`, inline: true },
-                { name: 'Moderation policy', value: 'Alerts only. Staff review and use Wick for any moderation action. Starry never auto-punishes members.', inline: false }
+            const current = await SusAccountSettings.findOne()
+                .where('guildId').equals(guildId)
+                .setOptions({ sanitizeFilter: true })
+                .exec();
+
+            const monitoringEnabled = enabled ?? current?.enabled ?? true;
+            const logChannelId = channelOption?.id ?? current?.logChannelId ?? interaction.channelId;
+            const staffRoleId = staffRole?.id ?? current?.staffRoleId ?? '';
+            const inactivityWindow = inactivityDays ?? current?.inactivityDays ?? DEFAULT_INACTIVITY_DAYS;
+            const accountAgeWindow = accountAgeDays ?? current?.accountAgeDays ?? DEFAULT_ACCOUNT_AGE_DAYS;
+
+            if (monitoringEnabled) {
+                if (!staffRoleId || staffRoleId === guild.id) {
+                    return interaction.editReply({
+                        content: '❌ Select a dedicated staff role. Starry needs it to notify moderators about inactivity reviews; @everyone is not accepted.'
+                    });
+                }
+
+                const resolvedRole = staffRole ||
+                    guild.roles.cache.get(staffRoleId) ||
+                    await guild.roles.fetch(staffRoleId).catch(() => null);
+                if (!resolvedRole || resolvedRole.id === guild.id) {
+                    return interaction.editReply({
+                        content: '❌ The saved staff role no longer exists. Select a current staff role.'
+                    });
+                }
+
+                const resolvedChannel = channelOption ||
+                    guild.channels.cache.get(logChannelId) ||
+                    await guild.channels.fetch(logChannelId).catch(() => null);
+                if (!resolvedChannel || resolvedChannel.type !== ChannelType.GuildText || !resolvedChannel.isTextBased()) {
+                    return interaction.editReply({
+                        content: '❌ Select a valid text channel for member risk and inactivity alerts.'
+                    });
+                }
+
+                const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+                if (!botMember) {
+                    return interaction.editReply({
+                        content: '❌ Starry could not verify its server permissions. Please try again.'
+                    });
+                }
+
+                const channelPermissions = resolvedChannel.permissionsFor(botMember);
+                if (!channelPermissions?.has([
+                    PermissionFlagsBits.ViewChannel,
+                    PermissionFlagsBits.SendMessages,
+                    PermissionFlagsBits.EmbedLinks
+                ])) {
+                    return interaction.editReply({
+                        content: '❌ Give Starry View Channel, Send Messages and Embed Links permissions in the alert channel.'
+                    });
+                }
+
+                const canMentionStaff = resolvedRole.mentionable ||
+                    channelPermissions.has(PermissionFlagsBits.MentionEveryone);
+                if (!canMentionStaff) {
+                    return interaction.editReply({
+                        content: '❌ Make the staff role mentionable or grant Starry Mention Everyone permission in the alert channel so inactivity alerts can ping staff.'
+                    });
+                }
+            }
+
+            const patch = {
+                enabled: monitoringEnabled,
+                logChannelId,
+                staffRoleId,
+                inactivityDays: inactivityWindow,
+                accountAgeDays: accountAgeWindow,
+                configuredBy: interaction.user.id
+            };
+            const settings = await SusAccountSettings.findOneAndUpdate(
+                {},
+                { $set: patch, $setOnInsert: { guildId } },
+                { upsert: true, new: true, setDefaultsOnInsert: true, sanitizeFilter: true }
             )
-            .setFooter({ text: 'Inactivity means no message observed in this server after joining.' })
-            .setTimestamp();
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+                .where('guildId').equals(guildId)
+                .exec();
+
+            const embed = new EmbedBuilder()
+                .setColor(settings.enabled ? 0x22C55E : 0x6B7280)
+                .setTitle('🛡️ Starry Member Risk Monitor')
+                .setDescription(settings.enabled
+                    ? 'Monitoring is enabled. Starry reports account-age signals on join and alerts staff when a new member reaches the inactivity threshold.'
+                    : 'Monitoring is disabled. No new risk or inactivity alerts will be sent.')
+                .addFields(
+                    { name: 'Alert channel', value: settings.logChannelId ? `<#${settings.logChannelId}>` : 'Not configured', inline: true },
+                    { name: 'Staff role', value: settings.staffRoleId ? `<@&${settings.staffRoleId}>` : 'Not configured', inline: true },
+                    { name: 'Inactivity threshold', value: `${settings.inactivityDays} days`, inline: true },
+                    { name: 'Young-account threshold', value: `${settings.accountAgeDays} days`, inline: true },
+                    { name: 'Moderation policy', value: 'Alerts only. Staff review and use Wick for any moderation action. Starry never auto-punishes members.', inline: false }
+                )
+                .setFooter({ text: 'Inactivity means no message observed in this server after joining.' })
+                .setTimestamp();
+            return interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+            console.error('[SusAccount] Setup failed:', error);
+            return interaction.editReply({
+                content: '❌ Could not save suspicious-member monitoring settings. Please try again.'
+            }).catch(() => {});
+        }
     });
 
     client.on('guildMemberAdd', async (member) => {
