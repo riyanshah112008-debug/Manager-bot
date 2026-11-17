@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
-const { EmbedBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { EmbedBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const SCAN_INTERVAL_MS = 15 * 60 * 1000;
+const CLAIM_RECOVERY_MS = 10 * 60 * 1000;
 const DEFAULT_INACTIVITY_DAYS = 14;
 const DEFAULT_ACCOUNT_AGE_DAYS = 7;
 
@@ -23,6 +24,8 @@ const memberSchema = new mongoose.Schema({
     accountCreatedAt: { type: Date, required: true },
     firstActivityAt: { type: Date, default: null },
     inactivityAlertedAt: { type: Date, default: null },
+    inactivityAlertStatus: { type: String, enum: ['pending', 'sent'], default: null },
+    inactivityAlertClaimedAt: { type: Date, default: null },
     riskAlertedAt: { type: Date, default: null }
 }, { timestamps: true });
 memberSchema.index({ guildId: 1, userId: 1 }, { unique: true });
@@ -76,6 +79,18 @@ function buildJoinRiskEmbed(member, accountAgeDays, threshold) {
 
 module.exports = (client) => {
     const scanLocks = new Set();
+    const memberQueues = new Map();
+
+    function queueMemberTask(guildId, userId, task) {
+        const key = `${guildId}:${userId}`;
+        const previous = memberQueues.get(key) || Promise.resolve();
+        const current = previous.catch(() => {}).then(task);
+        memberQueues.set(key, current);
+        current.finally(() => {
+            if (memberQueues.get(key) === current) memberQueues.delete(key);
+        }).catch(() => {});
+        return current;
+    }
 
     async function getSettings(guildId) {
         // Build equality predicates with Mongoose's query builder instead of
