@@ -189,6 +189,9 @@ function confessionModule(client) {
             { $inc: { reportCount: 1 } }, { new: true }).lean().exec();
           const targetChannelId = settings?.reportChannelId;
           const target = targetChannelId ? await interaction.guild.channels.fetch(targetChannelId).catch(() => null) : null;
+          if (!target?.isTextBased()) {
+            return interaction.editReply({ content: '⚠️ Staff reports are not configured yet. Please ask an admin to run /confessionsetup with a private reports channel.' });
+          }
           if (target?.isTextBased()) {
             const rolePing = settings.staffRoleId ? '<@&' + settings.staffRoleId + '> ' : '';
             const channelId = post?.channelId || interaction.channelId;
