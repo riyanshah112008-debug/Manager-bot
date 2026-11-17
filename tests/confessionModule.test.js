@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const { EventEmitter } = require('node:events');
 const assert = require('node:assert/strict');
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const confession = require('../src/modules/confession');
@@ -190,4 +191,41 @@ test('modal source validation rejects malformed or mismatched legacy sources', (
         confession.getModalSource('starry:confession:report:' + MESSAGE_ID, 'report', config),
         { channelId: PUBLIC_CHANNEL_ID, messageId: MESSAGE_ID }
     );
+});
+
+
+test('primary confession module registers its interaction handler on worker clients', async () => {
+    const hooks = [];
+    const primary = {
+        isPrimary: true,
+        on() {},
+        __starryConfessionHandlerInstalled: false
+    };
+    const manager = {
+        registerEventHook(callback) {
+            hooks.push(callback);
+        }
+    };
+
+    assert.equal(confession.registerWorkerInteractionHook(primary, manager), true);
+    assert.equal(confession.registerWorkerInteractionHook(primary, manager), false);
+    assert.equal(hooks.length, 1);
+
+    const worker = new EventEmitter();
+    worker.isPrimary = false;
+    hooks[0](worker);
+    assert.equal(worker.listenerCount('interactionCreate'), 1);
+
+    let shownModalId = null;
+    const interaction = {
+        guild: {},
+        customId: 'confess_btn_open',
+        isChatInputCommand: () => false,
+        isButton: () => true,
+        showModal: async modal => {
+            shownModalId = modal.toJSON().custom_id;
+        }
+    };
+    await worker.listeners('interactionCreate')[0](interaction);
+    assert.equal(shownModalId, 'starry:confession:submit');
 });
