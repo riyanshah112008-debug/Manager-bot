@@ -13,6 +13,9 @@ function makeButton(customId, overrides = {}) {
         replied: false,
         deferred: false,
         isButton: () => true,
+        isChatInputCommand: () => false,
+        isModalSubmit: () => false,
+        inGuild: () => Boolean(overrides.guildId),
         showModal: async modal => {
             overrides.shown?.push(modal);
         },
@@ -48,14 +51,39 @@ test('central dispatcher opens a confession modal and marks the interaction hand
     assert.equal(interaction.__starryConfessionOpenHandled, true);
 });
 
-test('duplicate dispatch does not attempt a second modal acknowledgement', async () => {
-    const shown = [];
-    const interaction = makeButton('starry:confession:open', { shown });
-    const createModal = () => ({ customId: 'starry:confession:submit' });
+test('registered confession module listener and central dispatcher share the in-flight acknowledgement', async () => {
+    const confessionModule = require('../src/modules/confession');
+    let moduleListener;
+    const client = {
+        isPrimary: false,
+        on: (eventName, listener) => {
+            if (eventName === 'interactionCreate') moduleListener = listener;
+        }
+    };
+    confessionModule(client);
+    assert.equal(typeof moduleListener, 'function');
 
-    assert.equal(await routeConfessionOpenButton(interaction, createModal), true);
-    assert.equal(await routeConfessionOpenButton(interaction, createModal), true);
-    assert.equal(shown.length, 1);
+    let resolveFirst;
+    let calls = 0;
+    const interaction = makeButton('starry:confession:open', {
+        guildId: '123456789012345678',
+        showModal: () => {
+            calls += 1;
+            return new Promise(resolve => { resolveFirst = resolve; });
+        }
+    });
+
+    const moduleHandling = moduleListener(interaction);
+    await Promise.resolve();
+    assert.equal(calls, 1);
+
+    const dispatcher = routeConfessionOpenButton(interaction, () => ({ customId: 'starry:confession:submit' }));
+    assert.equal(await dispatcher, true);
+    assert.equal(calls, 1);
+
+    resolveFirst();
+    await moduleHandling;
+    assert.equal(calls, 1);
 });
 
 test('modal opening failure receives a prompt ephemeral response instead of timeout fallback', async () => {

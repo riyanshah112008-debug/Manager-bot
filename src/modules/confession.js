@@ -6,6 +6,7 @@ const {
     MessageFlags, ModalBuilder, PermissionFlagsBits, SlashCommandBuilder,
     TextInputBuilder, TextInputStyle
 } = require('discord.js');
+const { routeConfessionOpenButton } = require('../utils/confessionInteraction');
 
 const EPHEMERAL = MessageFlags.Ephemeral;
 const OPEN_BUTTON = 'starry:confession:open';
@@ -285,7 +286,6 @@ function getTextInputValue(interaction, candidateIds) {
     return '';
 }
 
-
 async function nextConfessionNumber(guildId) {
     const counter = await ConfessionCounter.findOneAndUpdate(
         { guildId }, { $inc: { value: 1 }, $setOnInsert: { guildId } },
@@ -345,7 +345,7 @@ function confessionModule(client) {
             }
             if (interaction.isChatInputCommand()) {
                 if (interaction.commandName === 'confessionsetup') {
-                    await interaction.deferReply({ flags: EPHEMERAL });
+                    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: EPHEMERAL });
                     guild = await resolveGuild();
                     if (!guild) return await interaction.editReply({ content: 'I could not access this server. Please try again.' });
                     const channel = interaction.options.getChannel('channel', true);
@@ -391,7 +391,7 @@ function confessionModule(client) {
 
             if (interaction.isButton()) {
                 if (interaction.customId === OPEN_BUTTON || interaction.customId === LEGACY_OPEN_BUTTON) {
-                    return await interaction.showModal(buildConfessionModal());
+                    return await routeConfessionOpenButton(interaction, buildConfessionModal);
                 }
                 const source = getButtonSource(interaction);
                 if (source) {
