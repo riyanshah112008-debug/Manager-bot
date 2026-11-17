@@ -292,6 +292,16 @@ module.exports = (client) => {
         }
     });
 
+    client.on('guildMemberRemove', async (member) => {
+        if (member.user?.bot) return;
+        await SusAccountMember.deleteOne()
+            .where('guildId').equals(member.guild.id)
+            .where('userId').equals(member.id)
+            .setOptions({ sanitizeFilter: true })
+            .exec()
+            .catch((error) => console.error('[SusAccount] Member record cleanup failed:', error.message));
+    });
+
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || message.webhookId) return;
         await SusAccountMember.updateOne({}, {
