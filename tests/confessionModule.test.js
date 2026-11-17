@@ -194,7 +194,7 @@ test('modal source validation rejects malformed or mismatched legacy sources', (
 });
 
 
-test('primary confession module registers its interaction handler on worker clients', async () => {
+test('primary confession module handles legacy submit buttons on worker clients without a cached guild', async () => {
     const hooks = [];
     const primary = {
         isPrimary: true,
@@ -218,7 +218,8 @@ test('primary confession module registers its interaction handler on worker clie
 
     let shownModalId = null;
     const interaction = {
-        guild: {},
+        guild: null,
+        guildId: '123456789012345678',
         customId: 'confess_btn_open',
         isChatInputCommand: () => false,
         isButton: () => true,
