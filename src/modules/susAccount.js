@@ -149,7 +149,7 @@ module.exports = (client) => {
         // Discord guild IDs are snowflakes. Validate and normalize the external value
         // before using it in any MongoDB query to prevent operator/object injection.
         const guildId = String(interaction.guildId || '');
-        if (!/^\\d{17,20}$/.test(guildId)) {
+        if (!/^\d{17,20}$/.test(guildId)) {
             return interaction.reply({ content: '❌ Could not validate this server ID.', ephemeral: true });
         }
 
@@ -169,8 +169,8 @@ module.exports = (client) => {
             configuredBy: interaction.user.id
         };
         const settings = await SusAccountSettings.findOneAndUpdate(
-            { guildId: interaction.guildId },
-            { $set: patch, $setOnInsert: { guildId: interaction.guildId } },
+            { guildId },
+            { $set: patch, $setOnInsert: { guildId } },
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
