@@ -26,7 +26,7 @@ const memberSchema = new mongoose.Schema({
     riskAlertedAt: { type: Date, default: null }
 }, { timestamps: true });
 memberSchema.index({ guildId: 1, userId: 1 }, { unique: true });
-memberSchema.index({ guildId: 1, joinedAt: 1, inactivityAlertedAt: 1 });
+memberSchema.index({ guildId: 1, firstActivityAt: 1, inactivityAlertedAt: 1, joinedAt: 1 });
 
 const SusAccountSettings = mongoose.models.SusAccountSettings ||
     mongoose.model('SusAccountSettings', settingsSchema);
