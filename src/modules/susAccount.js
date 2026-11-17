@@ -121,6 +121,77 @@ module.exports = (client) => {
         return current;
     }
 
+    async function recordMemberActivity(guild, userId, joinedAtValue, activityAtValue = Date.now()) {
+        if (!guild || !userId || !joinedAtValue) return;
+        const joinedAt = new Date(joinedAtValue);
+        const activityAt = new Date(activityAtValue);
+        if (!Number.isFinite(joinedAt.getTime()) || !Number.isFinite(activityAt.getTime())) return;
+        const key = membershipKey(guild.id, userId, joinedAt);
+        if (observedActivity.has(key)) return;
+
+        return queueMemberTask(guild.id, userId, async () => {
+            if (observedActivity.has(key)) return;
+            try {
+                const existing = await SusAccountMember.findOne()
+                    .where('guildId').equals(guild.id)
+                    .where('userId').equals(userId)
+                    .setOptions({ sanitizeFilter: true })
+                    .lean()
+                    .exec();
+
+                if (!existing || !isSameMembership(existing.joinedAt, joinedAt)) {
+                    // Buffer only during the short join-initialization window. Never
+                    // create tracking rows for ordinary messages/interactions from
+                    // long-standing members who were not present when monitoring began.
+                    const ageSinceJoin = Date.now() - joinedAt.getTime();
+                    if (ageSinceJoin >= 0 && ageSinceJoin <= MEMBER_INIT_WINDOW_MS) {
+                        for (const [pendingKey, pendingAt] of pendingActivity) {
+                            if (Date.now() - new Date(pendingAt).getTime() > MEMBER_INIT_WINDOW_MS) {
+                                pendingActivity.delete(pendingKey);
+                            }
+                        }
+                        const pending = pendingActivity.get(key);
+                        if (!pending || activityAt < pending) pendingActivity.set(key, activityAt);
+                    } else {
+                        observedActivity.add(key);
+                    }
+                    return;
+                }
+
+                if (existing.firstActivityAt) {
+                    observedActivity.add(key);
+                    return;
+                }
+
+                const result = await SusAccountMember.updateOne({}, {
+                    $set: { firstActivityAt: activityAt }
+                })
+                    .where('guildId').equals(guild.id)
+                    .where('userId').equals(userId)
+                    .where('joinedAt').equals(joinedAt)
+                    .where('firstActivityAt').equals(null)
+                    .setOptions({ sanitizeFilter: true })
+                    .exec();
+                if (result.modifiedCount) {
+                    observedActivity.add(key);
+                    return;
+                }
+
+                // Another event worker may have recorded activity first.
+                const latest = await SusAccountMember.findOne()
+                    .where('guildId').equals(guild.id)
+                    .where('userId').equals(userId)
+                    .where('joinedAt').equals(joinedAt)
+                    .setOptions({ sanitizeFilter: true })
+                    .lean()
+                    .exec();
+                if (latest?.firstActivityAt) observedActivity.add(key);
+            } catch (error) {
+                console.error('[SusAccount] Activity tracking failed:', error.message);
+            }
+        });
+    }
+
     async function getSettings(guildId) {
         // Build equality predicates with Mongoose's query builder instead of
         // passing event/interaction-derived objects as a MongoDB filter.
@@ -227,7 +298,7 @@ module.exports = (client) => {
                         { name: 'Member', value: `${member.user.tag || member.user.username} (${member.id})`, inline: false },
                         { name: 'Joined', value: `<t:${Math.floor(new Date(record.joinedAt).getTime() / 1000)}:F>`, inline: true },
                         { name: 'Account age now', value: `${accountAge} day(s)`, inline: true },
-                        { name: 'Activity', value: 'No message activity has been observed since joining. Reactions, voice presence and activity outside this server are not counted.', inline: false },
+                        { name: 'Activity', value: 'No message, command/component interaction, reaction, or voice-channel join activity has been observed since joining. Online presence and activity outside this server are not counted.', inline: false },
                         { name: 'Staff action', value: 'Please review the member and use Wick if moderation is warranted. Starry will not kick, ban, timeout or assign roles.', inline: false }
                     )
                     .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
@@ -410,7 +481,7 @@ module.exports = (client) => {
                     { name: 'Young-account threshold', value: `${settings.accountAgeDays} days`, inline: true },
                     { name: 'Moderation policy', value: 'Alerts only. Staff review and use Wick for any moderation action. Starry never auto-punishes members.', inline: false }
                 )
-                .setFooter({ text: 'Inactivity means no message observed in this server after joining.' })
+                .setFooter({ text: 'Inactivity means no observed message, command/component interaction, reaction, or voice-channel join since joining.' })
                 .setTimestamp();
             return interaction.editReply({ embeds: [embed] });
         } catch (error) {
@@ -524,73 +595,51 @@ module.exports = (client) => {
     client.on('messageCreate', (message) => {
         if (!message.guild || message.author.bot || message.webhookId) return;
         const member = message.member || message.guild.members.cache.get(message.author.id);
-        const joinedTimestamp = member?.joinedTimestamp;
+        if (!member?.joinedTimestamp) return;
+        return recordMemberActivity(
+            message.guild,
+            message.author.id,
+            member.joinedTimestamp,
+            message.createdTimestamp || Date.now()
+        );
+    });
+
+    client.on('interactionCreate', (interaction) => {
+        if (!interaction.inGuild?.() || !interaction.isRepliable?.() || !interaction.user || interaction.user.bot) return;
+        const guild = interaction.guild || client.guilds.cache.get(interaction.guildId);
+        if (!guild) return;
+        const memberHint = interaction.member;
+        const cachedMember = guild.members.cache.get(interaction.user.id);
+        const joinedTimestamp = memberHint?.joinedTimestamp ||
+            (memberHint?.joined_at ? Date.parse(memberHint.joined_at) : null) ||
+            cachedMember?.joinedTimestamp;
         if (!joinedTimestamp) return;
-        const joinedAt = new Date(joinedTimestamp);
-        const firstActivityAt = new Date(message.createdTimestamp || Date.now());
-        const membershipId = membershipKey(message.guild.id, message.author.id, joinedAt);
-        if (observedActivity.has(membershipId)) return;
+        return recordMemberActivity(
+            guild,
+            interaction.user.id,
+            joinedTimestamp,
+            interaction.createdTimestamp || Date.now()
+        );
+    });
 
-        return queueMemberTask(message.guild.id, message.author.id, async () => {
-            try {
-                if (observedActivity.has(membershipId)) return;
-                const existing = await SusAccountMember.findOne()
-                    .where('guildId').equals(message.guild.id)
-                    .where('userId').equals(message.author.id)
-                    .setOptions({ sanitizeFilter: true })
-                    .lean()
-                    .exec();
+    client.on('messageReactionAdd', (reaction, user) => {
+        if (!user || user.bot) return;
+        const guild = reaction.message.guild;
+        if (!guild) return;
+        const member = guild.members.cache.get(user.id);
+        if (!member?.joinedTimestamp) return;
+        return recordMemberActivity(guild, user.id, member.joinedTimestamp, Date.now());
+    });
 
-                if (!existing || !isSameMembership(existing.joinedAt, joinedAt)) {
-                    // Buffer activity only during the short join-initialization window.
-                    // Existing/untracked members are cached and never create DB rows.
-                    const ageSinceJoin = Date.now() - joinedAt.getTime();
-                    if (ageSinceJoin >= 0 && ageSinceJoin <= MEMBER_INIT_WINDOW_MS) {
-                        for (const [pendingKey, pendingAt] of pendingActivity) {
-                            if (Date.now() - new Date(pendingAt).getTime() > MEMBER_INIT_WINDOW_MS) {
-                                pendingActivity.delete(pendingKey);
-                            }
-                        }
-                        const pending = pendingActivity.get(membershipId);
-                        if (!pending || firstActivityAt < pending) pendingActivity.set(membershipId, firstActivityAt);
-                    } else {
-                        observedActivity.add(membershipId);
-                    }
-                    return;
-                }
-
-                if (existing.firstActivityAt) {
-                    observedActivity.add(membershipId);
-                    return;
-                }
-
-                const result = await SusAccountMember.updateOne({}, {
-                    $set: { firstActivityAt }
-                })
-                    .where('guildId').equals(message.guild.id)
-                    .where('userId').equals(message.author.id)
-                    .where('joinedAt').equals(joinedAt)
-                    .where('firstActivityAt').equals(null)
-                    .setOptions({ sanitizeFilter: true })
-                    .exec();
-                if (result.modifiedCount) {
-                    observedActivity.add(membershipId);
-                    return;
-                }
-
-                // Another event worker may have recorded activity first.
-                const latest = await SusAccountMember.findOne()
-                    .where('guildId').equals(message.guild.id)
-                    .where('userId').equals(message.author.id)
-                    .where('joinedAt').equals(joinedAt)
-                    .setOptions({ sanitizeFilter: true })
-                    .lean()
-                    .exec();
-                if (latest?.firstActivityAt) observedActivity.add(membershipId);
-            } catch (error) {
-                console.error('[SusAccount] Activity tracking failed:', error.message);
-            }
-        });
+    client.on('voiceStateUpdate', (oldState, newState) => {
+        const member = newState.member;
+        if (!member || member.user.bot || !newState.channelId || oldState.channelId === newState.channelId) return;
+        return recordMemberActivity(
+            newState.guild,
+            member.id,
+            member.joinedTimestamp,
+            Date.now()
+        );
     });
 
     const runScan = async () => {
