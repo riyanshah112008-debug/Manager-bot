@@ -109,6 +109,8 @@ module.exports = (client) => {
     const memberQueues = new Map();
     const pendingActivity = new Map();
     const observedActivity = new Set();
+    const untrackedActivity = new Map();
+    const UNTRACKED_CACHE_MS = 6 * 60 * 60 * 1000;
 
     const membershipKey = (guildId, userId, joinedAt) =>
         `${guildId}:${userId}:${new Date(joinedAt).getTime()}`;
@@ -131,9 +133,14 @@ module.exports = (client) => {
         if (!Number.isFinite(joinedAt.getTime()) || !Number.isFinite(activityAt.getTime())) return;
         const key = membershipKey(guild.id, userId, joinedAt);
         if (observedActivity.has(key)) return;
+        const ignoredUntil = untrackedActivity.get(key);
+        if (ignoredUntil && ignoredUntil > Date.now()) return;
+        if (ignoredUntil) untrackedActivity.delete(key);
 
         return queueMemberTask(guild.id, userId, async () => {
             if (observedActivity.has(key)) return;
+            const stillIgnoredUntil = untrackedActivity.get(key);
+            if (stillIgnoredUntil && stillIgnoredUntil > Date.now()) return;
             try {
                 const existing = await SusAccountMember.findOne()
                     .where('guildId').equals(guild.id)
@@ -156,11 +163,15 @@ module.exports = (client) => {
                         const pending = pendingActivity.get(key);
                         if (!pending || activityAt < pending) pendingActivity.set(key, activityAt);
                     } else {
-                        observedActivity.add(key);
+                        untrackedActivity.set(key, Date.now() + UNTRACKED_CACHE_MS);
+                    }
+                    for (const [ignoredKey, expiry] of untrackedActivity) {
+                        if (expiry <= Date.now()) untrackedActivity.delete(ignoredKey);
                     }
                     return;
                 }
 
+                untrackedActivity.delete(key);
                 if (existing.firstActivityAt) {
                     observedActivity.add(key);
                     return;
@@ -551,6 +562,7 @@ module.exports = (client) => {
                     .where('userId').equals(member.id)
                     .exec();
                 pendingActivity.delete(membershipId);
+                untrackedActivity.delete(membershipId);
                 if (firstActivityAt) observedActivity.add(membershipId);
                 else observedActivity.delete(membershipId);
 
@@ -593,6 +605,7 @@ module.exports = (client) => {
         const membershipId = membershipKey(member.guild.id, member.id, joinedAt);
         return queueMemberTask(member.guild.id, member.id, async () => {
             observedActivity.delete(membershipId);
+            untrackedActivity.delete(membershipId);
             pendingActivity.delete(membershipId);
             await SusAccountMember.deleteOne()
                 .where('guildId').equals(member.guild.id)
