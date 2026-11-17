@@ -86,10 +86,17 @@ function buildPanelComponents() {
     )];
 }
 
+function escapeMassMentions(value) {
+    return String(value ?? '')
+        .replace(/@everyone/gi, '@\\u200Beveryone')
+        .replace(/@here/gi, '@\\u200Bhere');
+}
+
 function buildConfessionEmbed(number, topic, body) {
+    const safeBody = escapeMassMentions(body).trim();
     const embed = new EmbedBuilder().setColor('#A78BFA')
         .setAuthor({ name: 'ANONYMOUS CONFESSION  ·  #' + number, iconURL: 'https://cdn.discordapp.com/embed/avatars/0.png' })
-        .setDescription('“' + body.trim() + '”')
+        .setDescription('“' + safeBody + '”')
         .addFields({ name: '🕰️ Shared', value: '<t:' + Math.floor(Date.now() / 1000) + ':R>', inline: true })
         .setFooter({ text: 'Starry Confessions  •  Keep it kind. Keep it safe.' });
     if (topic && topic.trim()) embed.setTitle('✦ ' + topic.trim().slice(0, MAX_TOPIC));
