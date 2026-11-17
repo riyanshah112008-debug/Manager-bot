@@ -7,7 +7,8 @@ function isSfwTextChannel(channel) {
         channel &&
         typeof channel.isTextBased === 'function' &&
         channel.isTextBased() &&
-        channel.nsfw !== true
+        channel.nsfw !== true &&
+        channel.parent?.nsfw !== true
     );
 }
 
