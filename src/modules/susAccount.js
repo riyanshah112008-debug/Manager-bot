@@ -146,13 +146,20 @@ module.exports = (client) => {
             return interaction.reply({ content: '❌ You need **Manage Server** permission.', ephemeral: true });
         }
 
+        // Discord guild IDs are snowflakes. Validate and normalize the external value
+        // before using it in any MongoDB query to prevent operator/object injection.
+        const guildId = String(interaction.guildId || '');
+        if (!/^\\d{17,20}$/.test(guildId)) {
+            return interaction.reply({ content: '❌ Could not validate this server ID.', ephemeral: true });
+        }
+
         const enabled = interaction.options.getBoolean('enabled');
         const channelOption = interaction.options.getChannel('channel');
         const staffRole = interaction.options.getRole('staff_role');
         const inactivityDays = interaction.options.getInteger('inactivity_days');
         const accountAgeDays = interaction.options.getInteger('account_age_days');
 
-        const current = await SusAccountSettings.findOne({ guildId: interaction.guildId });
+        const current = await SusAccountSettings.findOne({ guildId });
         const patch = {
             enabled: enabled ?? current?.enabled ?? true,
             logChannelId: channelOption?.id ?? current?.logChannelId ?? interaction.channelId,
