@@ -7,6 +7,7 @@ const suites = [
   ['Birthday role cleanup', 'tests/birthdayRoleCleanup.test.js'],
   ['Dashboard origins', 'tests/dashboardOrigins.test.js'],
   ['Verification', 'tests/verification.test.js'],
+  ['AI channel access', '--test', 'tests/aiChannelAccess.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
   ['Music playback lifecycle', '--test', 'tests/musicPlaybackLifecycle.test.js'],
   ['AI vision', 'tests/aiVision.test.js'],
