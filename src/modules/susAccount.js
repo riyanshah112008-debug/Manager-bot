@@ -227,19 +227,30 @@ module.exports = (client) => {
                 console.warn(`[SusAccount] Alert channel unavailable in guild ${guild.id}.`);
                 return;
             }
-            // Keep delivered alerts out of the scan, but include abandoned pending
-            // claims so a process restart cannot permanently lose an alert.
-            const unalertedMembers = await SusAccountMember.find()
-                .where('guildId').equals(guild.id)
-                .where('firstActivityAt').equals(null)
-                .where('inactivityAlertStatus').ne('sent')
-                .setOptions({ sanitizeFilter: true })
-                .sort({ joinedAt: 1 })
-                .limit(200)
-                .exec();
-            const candidates = unalertedMembers.filter(record =>
-                hasReachedInactivityThreshold(record.joinedAt, settings.inactivityDays)
-            );
+            // Use scalar-equality filters only. Query new and pending deliveries
+            // separately so sanitizeFilter never has to interpret a $ne operator.
+            const fetchByDeliveryStatus = (status) => {
+                const query = SusAccountMember.find()
+                    .where('guildId').equals(guild.id)
+                    .where('firstActivityAt').equals(null)
+                    .setOptions({ sanitizeFilter: true })
+                    .sort({ joinedAt: 1 })
+                    .limit(200);
+                if (status === 'pending') query.where('inactivityAlertStatus').equals('pending');
+                else query.where('inactivityAlertStatus').equals(null);
+                return query.lean().exec();
+            };
+            const [newMembers, pendingMembers] = await Promise.all([
+                fetchByDeliveryStatus('new'),
+                fetchByDeliveryStatus('pending')
+            ]);
+            const candidateById = new Map();
+            for (const record of [...newMembers, ...pendingMembers]) {
+                candidateById.set(String(record._id), record);
+            }
+            const candidates = [...candidateById.values()]
+                .filter(record => hasReachedInactivityThreshold(record.joinedAt, settings.inactivityDays))
+                .sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
 
             for (const record of candidates) {
                 const previousClaimAt = record.inactivityAlertClaimedAt || null;
