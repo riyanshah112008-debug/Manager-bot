@@ -68,6 +68,7 @@ function isSameMembership(recordJoinedAt, currentJoinedAt) {
 }
 
 function isClaimRecoverable(status, claimedAt, now = Date.now()) {
+    if (status === 'sent') return false;
     if (status !== 'pending') return true;
     if (!claimedAt) return true;
     const claimTime = new Date(claimedAt).getTime();
@@ -293,7 +294,7 @@ module.exports = (client) => {
                 const embed = new EmbedBuilder()
                     .setColor(0xF59E0B)
                     .setTitle(`⏳ New Member — ${settings.inactivityDays}-Day Inactivity Review`)
-                    .setDescription(`<@${member.id}> has been in the server for **${settings.inactivityDays} days** without a recorded message.`)
+                    .setDescription(`<@${member.id}> has been in the server for **${settings.inactivityDays} days** without recorded server activity.`)
                     .addFields(
                         { name: 'Member', value: `${member.user.tag || member.user.username} (${member.id})`, inline: false },
                         { name: 'Joined', value: `<t:${Math.floor(new Date(record.joinedAt).getTime() / 1000)}:F>`, inline: true },
