@@ -230,22 +230,6 @@ module.exports = (client) => {
                         embeds: [embed],
                         allowedMentions: { roles: settings.staffRoleId ? [settings.staffRoleId] : [], users: [] }
                     });
-                    // Mark delivery only after Discord accepts the message. If the
-                    // process dies before this write, the stale pending claim is retried.
-                    await SusAccountMember.updateOne({}, {
-                        $set: {
-                            inactivityAlertStatus: 'sent',
-                            inactivityAlertedAt: new Date(),
-                            inactivityAlertClaimedAt: null
-                        }
-                    })
-                        .where('_id').equals(record._id)
-                        .where('joinedAt').equals(record.joinedAt)
-                        .where('firstActivityAt').equals(null)
-                        .where('inactivityAlertStatus').equals('pending')
-                        .where('inactivityAlertClaimedAt').equals(now)
-                        .setOptions({ sanitizeFilter: true })
-                        .exec();
                 } catch (error) {
                     console.error(`[SusAccount] Failed to send inactivity alert in ${guild.id}:`, error.message);
                     await SusAccountMember.updateOne({}, {
@@ -262,7 +246,29 @@ module.exports = (client) => {
                         .setOptions({ sanitizeFilter: true })
                         .exec()
                         .catch(() => {});
+                    continue;
                 }
+
+                // Mark delivered only after Discord accepts the message. Do not require
+                // firstActivityAt to remain null here: the member may speak after the
+                // alert has already gone out, and that must not leave a delivered alert
+                // in pending state for duplicate retry.
+                await SusAccountMember.updateOne({}, {
+                    $set: {
+                        inactivityAlertStatus: 'sent',
+                        inactivityAlertedAt: new Date(),
+                        inactivityAlertClaimedAt: null
+                    }
+                })
+                    .where('_id').equals(record._id)
+                    .where('joinedAt').equals(record.joinedAt)
+                    .where('inactivityAlertStatus').equals('pending')
+                    .where('inactivityAlertClaimedAt').equals(now)
+                    .setOptions({ sanitizeFilter: true })
+                    .exec()
+                    .catch((error) => {
+                        console.error(`[SusAccount] Alert was sent but its delivery marker could not be saved in ${guild.id}:`, error.message);
+                    });
             }
         } catch (error) {
             console.error(`[SusAccount] Inactivity scan failed for ${guild.id}:`, error);
@@ -433,10 +439,10 @@ module.exports = (client) => {
                             firstActivityAt: sameMembership
                                 ? (existing.firstActivityAt || pendingFirstActivity)
                                 : pendingFirstActivity,
-                            inactivityAlertedAt: null,
-                            inactivityAlertStatus: null,
-                            inactivityAlertClaimedAt: null,
-                            riskAlertedAt: null
+                            inactivityAlertedAt: sameMembership ? (existing.inactivityAlertedAt || null) : null,
+                            inactivityAlertStatus: sameMembership ? (existing.inactivityAlertStatus || null) : null,
+                            inactivityAlertClaimedAt: sameMembership ? (existing.inactivityAlertClaimedAt || null) : null,
+                            riskAlertedAt: sameMembership ? (existing.riskAlertedAt || null) : null
                         },
                         $setOnInsert: { guildId: member.guild.id, userId: member.id }
                     },
@@ -517,6 +523,11 @@ module.exports = (client) => {
                     // message from existing/untracked server members.
                     const ageSinceJoin = Date.now() - joinedAt.getTime();
                     if (ageSinceJoin >= 0 && ageSinceJoin <= MEMBER_INIT_WINDOW_MS) {
+                        for (const [pendingKey, pendingAt] of pendingActivity) {
+                            if (Date.now() - new Date(pendingAt).getTime() > MEMBER_INIT_WINDOW_MS) {
+                                pendingActivity.delete(pendingKey);
+                            }
+                        }
                         const key = membershipKey(message.guild.id, message.author.id, joinedAt);
                         const pending = pendingActivity.get(key);
                         if (!pending || firstActivityAt < pending) pendingActivity.set(key, firstActivityAt);
@@ -558,4 +569,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
-module.exports._internals = { daysBetween, hasReachedInactivityThreshold, sameMembership, isClaimRecoverable };
+module.exports._internals = { daysBetween, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable };
