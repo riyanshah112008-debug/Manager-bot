@@ -368,3 +368,33 @@ test('confession reports do not disclose the reporter identity', async () => {
     assert.equal(serialized.includes(interaction.user.username), false);
     assert.match(response.content, /sent privately/i);
 });
+
+
+test('only definite Discord 4xx send rejections permit safe number release', () => {
+    assert.equal(confession.isDefiniteDiscordRejection({ status: 403 }), true);
+    assert.equal(confession.isDefiniteDiscordRejection({ status: 429 }), true);
+    assert.equal(confession.isDefiniteDiscordRejection({ status: 500 }), false);
+    assert.equal(confession.isDefiniteDiscordRejection({ code: 'ECONNRESET' }), false);
+});
+
+test('failed-send counter release is conditional on the number still being the latest', async () => {
+    const mongoose = require('mongoose');
+    const model = mongoose.models.StarryConfessionCounter;
+    const original = model.findOneAndUpdate;
+    let captured;
+    model.findOneAndUpdate = (filter, update, options) => {
+        captured = { filter, update, options };
+        const query = {
+            lean() { return query; },
+            exec: async () => ({ value: 11 })
+        };
+        return query;
+    };
+    try {
+        assert.equal(await confession.releaseConfessionNumber(GUILD_ID, 12), true);
+        assert.deepEqual(captured.filter, { guildId: GUILD_ID, value: 12 });
+        assert.deepEqual(captured.update, { $inc: { value: -1 } });
+    } finally {
+        model.findOneAndUpdate = original;
+    }
+});
