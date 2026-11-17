@@ -4,6 +4,7 @@ const { EmbedBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCAN_INTERVAL_MS = 15 * 60 * 1000;
 const CLAIM_RECOVERY_MS = 10 * 60 * 1000;
+const MEMBER_INIT_WINDOW_MS = 5 * 60 * 1000;
 const DEFAULT_INACTIVITY_DAYS = 14;
 const DEFAULT_ACCOUNT_AGE_DAYS = 7;
 
@@ -50,6 +51,19 @@ function hasReachedInactivityThreshold(joinedAt, inactivityDays, now = Date.now(
         now - joinedTimestamp >= days * DAY_MS;
 }
 
+function sameMembership(recordJoinedAt, currentJoinedAt) {
+    const recordTime = new Date(recordJoinedAt).getTime();
+    const currentTime = new Date(currentJoinedAt).getTime();
+    return Number.isFinite(recordTime) && Number.isFinite(currentTime) && recordTime === currentTime;
+}
+
+function isClaimRecoverable(status, claimedAt, now = Date.now()) {
+    if (status !== 'pending') return true;
+    if (!claimedAt) return true;
+    const claimTime = new Date(claimedAt).getTime();
+    return !Number.isFinite(claimTime) || now - claimTime >= CLAIM_RECOVERY_MS;
+}
+
 async function safeChannel(guild, channelId) {
     let channel = guild.systemChannel;
     if (channelId) {
@@ -80,6 +94,10 @@ function buildJoinRiskEmbed(member, accountAgeDays, threshold) {
 module.exports = (client) => {
     const scanLocks = new Set();
     const memberQueues = new Map();
+    const pendingActivity = new Map();
+
+    const membershipKey = (guildId, userId, joinedAt) =>
+        `${guildId}:${userId}:${new Date(joinedAt).getTime()}`;
 
     function queueMemberTask(guildId, userId, task) {
         const key = `${guildId}:${userId}`;
@@ -130,8 +148,7 @@ module.exports = (client) => {
             for (const record of candidates) {
                 const previousClaimAt = record.inactivityAlertClaimedAt || null;
                 const isPending = record.inactivityAlertStatus === 'pending';
-                if (isPending && previousClaimAt &&
-                    Date.now() - new Date(previousClaimAt).getTime() < CLAIM_RECOVERY_MS) continue;
+                if (!isClaimRecoverable(record.inactivityAlertStatus, previousClaimAt)) continue;
 
                 let member = guild.members.cache.get(record.userId);
                 if (!member) {
@@ -401,8 +418,9 @@ module.exports = (client) => {
                     .setOptions({ sanitizeFilter: true })
                     .lean()
                     .exec();
-                const sameMembership = existing &&
-                    new Date(existing.joinedAt).getTime() === joinedAt.getTime();
+                const membershipId = membershipKey(member.guild.id, member.id, joinedAt);
+                const pendingFirstActivity = pendingActivity.get(membershipId) || null;
+                const sameMembership = existing && sameMembership(existing.joinedAt, joinedAt);
 
                 // Preserve a first message captured while join initialization was
                 // pending for this exact join. A later rejoin starts a fresh record.
@@ -412,7 +430,9 @@ module.exports = (client) => {
                         $set: {
                             joinedAt,
                             accountCreatedAt: new Date(member.user.createdTimestamp),
-                            firstActivityAt: sameMembership ? (existing.firstActivityAt || null) : null,
+                            firstActivityAt: sameMembership
+                                ? (existing.firstActivityAt || pendingFirstActivity)
+                                : pendingFirstActivity,
                             inactivityAlertedAt: null,
                             inactivityAlertStatus: null,
                             inactivityAlertClaimedAt: null,
@@ -425,6 +445,7 @@ module.exports = (client) => {
                     .where('guildId').equals(member.guild.id)
                     .where('userId').equals(member.id)
                     .exec();
+                pendingActivity.delete(membershipId);
 
                 const accountAgeDays = daysBetween(member.user.createdTimestamp);
                 const channel = await safeChannel(member.guild, settings.logChannelId);
@@ -537,4 +558,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
-module.exports._internals = { daysBetween, hasReachedInactivityThreshold };
+module.exports._internals = { daysBetween, hasReachedInactivityThreshold, sameMembership, isClaimRecoverable };
