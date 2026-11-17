@@ -48,14 +48,23 @@ test('central dispatcher opens a confession modal and marks the interaction hand
     assert.equal(interaction.__starryConfessionOpenHandled, true);
 });
 
-test('duplicate dispatch does not attempt a second modal acknowledgement', async () => {
-    const shown = [];
-    const interaction = makeButton('starry:confession:open', { shown });
-    const createModal = () => ({ customId: 'starry:confession:submit' });
+test('module listener and central dispatcher share the in-flight acknowledgement', async () => {
+    let resolveFirst;
+    let calls = 0;
+    const interaction = makeButton('starry:confession:open', {
+        showModal: () => {
+            calls += 1;
+            return new Promise(resolve => { resolveFirst = resolve; });
+        }
+    });
+    const firstListener = routeConfessionOpenButton(interaction, () => ({ customId: 'starry:confession:submit' }));
+    const dispatcher = routeConfessionOpenButton(interaction, () => ({ customId: 'starry:confession:submit' }));
 
-    assert.equal(await routeConfessionOpenButton(interaction, createModal), true);
-    assert.equal(await routeConfessionOpenButton(interaction, createModal), true);
-    assert.equal(shown.length, 1);
+    assert.equal(await dispatcher, true);
+    assert.equal(calls, 1);
+    resolveFirst();
+    assert.equal(await firstListener, true);
+    assert.equal(calls, 1);
 });
 
 test('modal opening failure receives a prompt ephemeral response instead of timeout fallback', async () => {
