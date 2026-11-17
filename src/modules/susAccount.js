@@ -387,77 +387,136 @@ module.exports = (client) => {
         }
     });
 
-    client.on('guildMemberAdd', async (member) => {
+    client.on('guildMemberAdd', (member) => {
         if (member.user.bot) return;
-        try {
-            const settings = await getSettings(member.guild.id);
-            if (!settings || !settings.enabled) return;
+        return queueMemberTask(member.guild.id, member.id, async () => {
+            try {
+                const settings = await getSettings(member.guild.id);
+                if (!settings || !settings.enabled) return;
 
-            const joinedAt = new Date(member.joinedTimestamp || Date.now());
-            await SusAccountMember.findOneAndUpdate(
-                {},
-                {
-                    $set: {
-                        joinedAt,
-                        accountCreatedAt: new Date(member.user.createdTimestamp),
-                        firstActivityAt: null,
-                        inactivityAlertedAt: null,
-                        riskAlertedAt: null
-                    }
-                },
-                { upsert: true, setDefaultsOnInsert: true, sanitizeFilter: true }
-            )
-                .where('guildId').equals(member.guild.id)
-                .where('userId').equals(member.id)
-                .exec();
-
-            const accountAgeDays = daysBetween(member.user.createdTimestamp);
-            const channel = await safeChannel(member.guild, settings.logChannelId);
-            if (!channel) return;
-            const embed = buildJoinRiskEmbed(member, accountAgeDays, settings.accountAgeDays);
-            const content = accountAgeDays <= settings.accountAgeDays && settings.staffRoleId
-                ? `<@&${settings.staffRoleId}> — new-account review`
-                : '';
-            await channel.send({
-                content,
-                embeds: [embed],
-                allowedMentions: { roles: content ? [settings.staffRoleId] : [], users: [] }
-            });
-            if (accountAgeDays <= settings.accountAgeDays) {
-                await SusAccountMember.updateOne({}, {
-                    $set: { riskAlertedAt: new Date() }
-                })
+                const joinedAt = new Date(member.joinedTimestamp || Date.now());
+                const existing = await SusAccountMember.findOne()
                     .where('guildId').equals(member.guild.id)
                     .where('userId').equals(member.id)
                     .setOptions({ sanitizeFilter: true })
+                    .lean()
                     .exec();
+                const sameMembership = existing &&
+                    new Date(existing.joinedAt).getTime() === joinedAt.getTime();
+
+                // Preserve a first message captured while join initialization was
+                // pending for this exact join. A later rejoin starts a fresh record.
+                await SusAccountMember.findOneAndUpdate(
+                    {},
+                    {
+                        $set: {
+                            joinedAt,
+                            accountCreatedAt: new Date(member.user.createdTimestamp),
+                            firstActivityAt: sameMembership ? (existing.firstActivityAt || null) : null,
+                            inactivityAlertedAt: null,
+                            inactivityAlertStatus: null,
+                            inactivityAlertClaimedAt: null,
+                            riskAlertedAt: null
+                        },
+                        $setOnInsert: { guildId: member.guild.id, userId: member.id }
+                    },
+                    { upsert: true, setDefaultsOnInsert: true, sanitizeFilter: true }
+                )
+                    .where('guildId').equals(member.guild.id)
+                    .where('userId').equals(member.id)
+                    .exec();
+
+                const accountAgeDays = daysBetween(member.user.createdTimestamp);
+                const channel = await safeChannel(member.guild, settings.logChannelId);
+                if (!channel) {
+                    console.warn(`[SusAccount] Join alert channel unavailable in guild ${member.guild.id}.`);
+                    return;
+                }
+
+                const embed = buildJoinRiskEmbed(member, accountAgeDays, settings.accountAgeDays);
+                const content = accountAgeDays <= settings.accountAgeDays && settings.staffRoleId
+                    ? `<@&${settings.staffRoleId}> — new-account review`
+                    : '';
+                await channel.send({
+                    content,
+                    embeds: [embed],
+                    allowedMentions: { roles: content ? [settings.staffRoleId] : [], users: [] }
+                });
+
+                if (accountAgeDays <= settings.accountAgeDays) {
+                    await SusAccountMember.updateOne({}, {
+                        $set: { riskAlertedAt: new Date() }
+                    })
+                        .where('guildId').equals(member.guild.id)
+                        .where('userId').equals(member.id)
+                        .where('joinedAt').equals(joinedAt)
+                        .setOptions({ sanitizeFilter: true })
+                        .exec();
+                }
+            } catch (error) {
+                console.error('[SusAccount] Join assessment failed:', error);
             }
-        } catch (error) {
-            console.error('[SusAccount] Join assessment failed:', error);
-        }
+        });
     });
 
-    client.on('guildMemberRemove', async (member) => {
+    client.on('guildMemberRemove', (member) => {
         if (member.user?.bot) return;
-        await SusAccountMember.deleteOne()
-            .where('guildId').equals(member.guild.id)
-            .where('userId').equals(member.id)
-            .setOptions({ sanitizeFilter: true })
-            .exec()
-            .catch((error) => console.error('[SusAccount] Member record cleanup failed:', error.message));
+        const joinedAt = new Date(member.joinedTimestamp || 0);
+        return queueMemberTask(member.guild.id, member.id, async () => {
+            await SusAccountMember.deleteOne()
+                .where('guildId').equals(member.guild.id)
+                .where('userId').equals(member.id)
+                .where('joinedAt').equals(joinedAt)
+                .setOptions({ sanitizeFilter: true })
+                .exec()
+                .catch((error) => console.error('[SusAccount] Member record cleanup failed:', error.message));
+        });
     });
 
-    client.on('messageCreate', async (message) => {
+    client.on('messageCreate', (message) => {
         if (!message.guild || message.author.bot || message.webhookId) return;
-        await SusAccountMember.updateOne({}, {
-            $set: { firstActivityAt: new Date(message.createdTimestamp || Date.now()) }
-        })
-            .where('guildId').equals(message.guild.id)
-            .where('userId').equals(message.author.id)
-            .where('firstActivityAt').equals(null)
-            .setOptions({ sanitizeFilter: true })
-            .exec()
-            .catch((error) => console.error('[SusAccount] Activity tracking failed:', error.message));
+        const member = message.member || message.guild.members.cache.get(message.author.id);
+        const joinedTimestamp = member?.joinedTimestamp;
+        if (!joinedTimestamp) return;
+        const joinedAt = new Date(joinedTimestamp);
+        const firstActivityAt = new Date(message.createdTimestamp || Date.now());
+
+        return queueMemberTask(message.guild.id, message.author.id, async () => {
+            try {
+                const existing = await SusAccountMember.findOne()
+                    .where('guildId').equals(message.guild.id)
+                    .where('userId').equals(message.author.id)
+                    .setOptions({ sanitizeFilter: true })
+                    .lean()
+                    .exec();
+                const sameMembership = existing &&
+                    new Date(existing.joinedAt).getTime() === joinedAt.getTime();
+
+                await SusAccountMember.findOneAndUpdate(
+                    {},
+                    {
+                        $set: {
+                            joinedAt,
+                            accountCreatedAt: new Date(message.author.createdTimestamp),
+                            firstActivityAt: sameMembership
+                                ? (existing.firstActivityAt || firstActivityAt)
+                                : firstActivityAt,
+                            inactivityAlertedAt: sameMembership ? (existing.inactivityAlertedAt || null) : null,
+                            inactivityAlertStatus: sameMembership ? (existing.inactivityAlertStatus || null) : null,
+                            inactivityAlertClaimedAt: sameMembership ? (existing.inactivityAlertClaimedAt || null) : null,
+                            riskAlertedAt: sameMembership ? (existing.riskAlertedAt || null) : null
+                        },
+                        $setOnInsert: { guildId: message.guild.id, userId: message.author.id }
+                    },
+                    { upsert: true, setDefaultsOnInsert: true, sanitizeFilter: true }
+                )
+                    .where('guildId').equals(message.guild.id)
+                    .where('userId').equals(message.author.id)
+                    .exec();
+            } catch (error) {
+                console.error('[SusAccount] Activity tracking failed:', error.message);
+            }
+        });
     });
 
     const runScan = async () => {
