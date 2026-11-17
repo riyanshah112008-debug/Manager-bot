@@ -22,7 +22,6 @@ const configSchema = new mongoose.Schema({
     staffChannelId: { type: String, required: true },
     repliesEnabled: { type: Boolean, default: true },
     reportsEnabled: { type: Boolean, default: true },
-    configuredBy: { type: String, default: '' }
 }, { timestamps: true });
 const counterSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true, index: true },
@@ -187,8 +186,6 @@ function confessionModule(client) {
                 if (interaction.customId.startsWith(REPLY_PREFIX)) {
                     const messageId = interaction.customId.slice(REPLY_PREFIX.length);
                     if (!/^\\d{17,20}$/.test(messageId)) return privateReply(interaction, 'This confession button is invalid. Please use the latest panel.');
-                    const config = await getConfig(interaction.guildId);
-                    if (!config || !config.repliesEnabled) return privateReply(interaction, 'Anonymous replies are currently unavailable.');
                     return interaction.showModal(buildReplyModal(messageId));
                 }
                 if (interaction.customId.startsWith(REPORT_PREFIX)) {
