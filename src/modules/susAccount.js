@@ -37,9 +37,12 @@ function daysBetween(from, to = Date.now()) {
     return Math.max(0, Math.floor((to - new Date(from).getTime()) / DAY_MS));
 }
 
-function safeChannel(guild, channelId) {
-    if (!channelId) return guild.systemChannel;
-    const channel = guild.channels.cache.get(channelId);
+async function safeChannel(guild, channelId) {
+    let channel = guild.systemChannel;
+    if (channelId) {
+        channel = guild.channels.cache.get(channelId) ||
+            await guild.channels.fetch(channelId).catch(() => null);
+    }
     return channel && channel.type === ChannelType.GuildText && channel.isTextBased() ? channel : null;
 }
 
@@ -65,7 +68,13 @@ module.exports = (client) => {
     const scanLocks = new Set();
 
     async function getSettings(guildId) {
-        return SusAccountSettings.findOne({ guildId }).lean();
+        // Build equality predicates with Mongoose's query builder instead of
+        // passing event/interaction-derived objects as a MongoDB filter.
+        return SusAccountSettings.findOne()
+            .where('guildId').equals(guildId)
+            .setOptions({ sanitizeFilter: true })
+            .lean()
+            .exec();
     }
 
     async function sendInactivityAlerts(guild) {
@@ -74,42 +83,51 @@ module.exports = (client) => {
         try {
             const settings = await getSettings(guild.id);
             if (!settings || !settings.enabled || !settings.logChannelId) return;
-            const channel = safeChannel(guild, settings.logChannelId);
+            const channel = await safeChannel(guild, settings.logChannelId);
             if (!channel) return;
 
             const cutoff = new Date(Date.now() - settings.inactivityDays * DAY_MS);
-            const candidates = await SusAccountMember.find({
-                guildId: guild.id,
-                joinedAt: { $lte: cutoff },
-                lastActivityAt: null,
-                inactivityAlertedAt: null
-            }).limit(100);
+            const candidates = await SusAccountMember.find()
+                .where('guildId').equals(guild.id)
+                .where('joinedAt').lte(cutoff)
+                .where('lastActivityAt').equals(null)
+                .where('inactivityAlertedAt').equals(null)
+                .setOptions({ sanitizeFilter: true })
+                .limit(100)
+                .exec();
 
             for (const record of candidates) {
                 let member = guild.members.cache.get(record.userId);
                 if (!member) {
                     try { member = await guild.members.fetch(record.userId); }
                     catch { 
-                        await SusAccountMember.updateOne(
-                            { _id: record._id, inactivityAlertedAt: null },
-                            { $set: { inactivityAlertedAt: new Date() } }
-                        );
+                        await SusAccountMember.updateOne({}, {
+                            $set: { inactivityAlertedAt: new Date() }
+                        })
+                            .where('_id').equals(record._id)
+                            .where('inactivityAlertedAt').equals(null)
+                            .setOptions({ sanitizeFilter: true })
+                            .exec();
                         continue;
                     }
                 }
                 if (member.user.bot) continue;
 
                 const now = new Date();
-                const claim = await SusAccountMember.updateOne(
-                    { _id: record._id, inactivityAlertedAt: null, lastActivityAt: null },
-                    { $set: { inactivityAlertedAt: now } }
-                );
+                const claim = await SusAccountMember.updateOne({}, {
+                    $set: { inactivityAlertedAt: now }
+                })
+                    .where('_id').equals(record._id)
+                    .where('inactivityAlertedAt').equals(null)
+                    .where('lastActivityAt').equals(null)
+                    .setOptions({ sanitizeFilter: true })
+                    .exec();
                 if (!claim.modifiedCount) continue;
 
                 const accountAge = daysBetween(record.accountCreatedAt, now);
                 const embed = new EmbedBuilder()
                     .setColor(0xF59E0B)
-                    .setTitle('⏳ New Member — 14-Day Inactivity Review')
+                    .setTitle(`⏳ New Member — ${settings.inactivityDays}-Day Inactivity Review`)
                     .setDescription(`<@${member.id}> has been in the server for **${settings.inactivityDays} days** without a recorded message.`)
                     .addFields(
                         { name: 'Member', value: `${member.user.tag || member.user.username} (${member.id})`, inline: false },
@@ -123,14 +141,22 @@ module.exports = (client) => {
                     .setTimestamp();
 
                 const content = settings.staffRoleId ? `<@&${settings.staffRoleId}> — member inactivity review` : 'Staff review requested.';
-                await channel.send({
-                    content,
-                    embeds: [embed],
-                    allowedMentions: { roles: settings.staffRoleId ? [settings.staffRoleId] : [], users: [] }
-                }).catch(async (error) => {
+                try {
+                    await channel.send({
+                        content,
+                        embeds: [embed],
+                        allowedMentions: { roles: settings.staffRoleId ? [settings.staffRoleId] : [], users: [] }
+                    });
+                } catch (error) {
                     console.error(`[SusAccount] Failed to send inactivity alert in ${guild.id}:`, error.message);
-                    await SusAccountMember.updateOne({ _id: record._id }, { $set: { inactivityAlertedAt: null } }).catch(() => {});
-                });
+                    await SusAccountMember.updateOne({}, {
+                        $set: { inactivityAlertedAt: null }
+                    })
+                        .where('_id').equals(record._id)
+                        .setOptions({ sanitizeFilter: true })
+                        .exec()
+                        .catch(() => {});
+                }
             }
         } catch (error) {
             console.error(`[SusAccount] Inactivity scan failed for ${guild.id}:`, error);
@@ -162,8 +188,10 @@ module.exports = (client) => {
         // Sanitize the filter at the MongoDB boundary as defense in depth.
         // The value is also constrained to a Discord snowflake above.
         const guildId = String(guild.id);
-        const settingsFilter = mongoose.sanitizeFilter({ guildId });
-        const current = await SusAccountSettings.findOne(settingsFilter);
+        const current = await SusAccountSettings.findOne()
+            .where('guildId').equals(guildId)
+            .setOptions({ sanitizeFilter: true })
+            .exec();
         const patch = {
             enabled: enabled ?? current?.enabled ?? true,
             logChannelId: channelOption?.id ?? current?.logChannelId ?? interaction.channelId,
@@ -173,10 +201,12 @@ module.exports = (client) => {
             configuredBy: interaction.user.id
         };
         const settings = await SusAccountSettings.findOneAndUpdate(
-            settingsFilter,
+            {},
             { $set: patch, $setOnInsert: { guildId } },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+            { upsert: true, new: true, setDefaultsOnInsert: true, sanitizeFilter: true }
+        )
+            .where('guildId').equals(guildId)
+            .exec();
 
         const embed = new EmbedBuilder()
             .setColor(settings.enabled ? 0x22C55E : 0x6B7280)
@@ -204,7 +234,7 @@ module.exports = (client) => {
 
             const joinedAt = new Date(member.joinedTimestamp || Date.now());
             await SusAccountMember.findOneAndUpdate(
-                { guildId: member.guild.id, userId: member.id },
+                {},
                 {
                     $set: {
                         joinedAt,
@@ -214,11 +244,14 @@ module.exports = (client) => {
                         riskAlertedAt: null
                     }
                 },
-                { upsert: true, setDefaultsOnInsert: true }
-            );
+                { upsert: true, setDefaultsOnInsert: true, sanitizeFilter: true }
+            )
+                .where('guildId').equals(member.guild.id)
+                .where('userId').equals(member.id)
+                .exec();
 
             const accountAgeDays = daysBetween(member.user.createdTimestamp);
-            const channel = safeChannel(member.guild, settings.logChannelId);
+            const channel = await safeChannel(member.guild, settings.logChannelId);
             if (!channel) return;
             const embed = buildJoinRiskEmbed(member, accountAgeDays, settings.accountAgeDays);
             const content = accountAgeDays <= settings.accountAgeDays && settings.staffRoleId
@@ -230,10 +263,13 @@ module.exports = (client) => {
                 allowedMentions: { roles: content ? [settings.staffRoleId] : [], users: [] }
             });
             if (accountAgeDays <= settings.accountAgeDays) {
-                await SusAccountMember.updateOne(
-                    { guildId: member.guild.id, userId: member.id },
-                    { $set: { riskAlertedAt: new Date() } }
-                );
+                await SusAccountMember.updateOne({}, {
+                    $set: { riskAlertedAt: new Date() }
+                })
+                    .where('guildId').equals(member.guild.id)
+                    .where('userId').equals(member.id)
+                    .setOptions({ sanitizeFilter: true })
+                    .exec();
             }
         } catch (error) {
             console.error('[SusAccount] Join assessment failed:', error);
@@ -242,10 +278,15 @@ module.exports = (client) => {
 
     client.on('messageCreate', async (message) => {
         if (!message.guild || message.author.bot || message.webhookId) return;
-        await SusAccountMember.updateOne(
-            { guildId: message.guild.id, userId: message.author.id, lastActivityAt: null },
-            { $set: { lastActivityAt: new Date(message.createdTimestamp || Date.now()) } }
-        ).catch((error) => console.error('[SusAccount] Activity tracking failed:', error.message));
+        await SusAccountMember.updateOne({}, {
+            $set: { lastActivityAt: new Date(message.createdTimestamp || Date.now()) }
+        })
+            .where('guildId').equals(message.guild.id)
+            .where('userId').equals(message.author.id)
+            .where('lastActivityAt').equals(null)
+            .setOptions({ sanitizeFilter: true })
+            .exec()
+            .catch((error) => console.error('[SusAccount] Activity tracking failed:', error.message));
     });
 
     const runScan = async () => {
