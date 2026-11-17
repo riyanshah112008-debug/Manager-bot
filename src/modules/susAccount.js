@@ -113,33 +113,37 @@ module.exports = (client) => {
                 console.warn(`[SusAccount] Alert channel unavailable in guild ${guild.id}.`);
                 return;
             }
-            // Sort oldest-first, then apply the date threshold in JavaScript.
-            // This keeps MongoDB filters to scalar equality predicates (no raw
-            // event-sourced objects or dynamic query operators reach the database).
+            // Keep delivered alerts out of the scan, but include abandoned pending
+            // claims so a process restart cannot permanently lose an alert.
             const unalertedMembers = await SusAccountMember.find()
                 .where('guildId').equals(guild.id)
                 .where('firstActivityAt').equals(null)
-                .where('inactivityAlertedAt').equals(null)
+                .where('inactivityAlertStatus').ne('sent')
                 .setOptions({ sanitizeFilter: true })
                 .sort({ joinedAt: 1 })
-                .limit(100)
+                .limit(200)
                 .exec();
             const candidates = unalertedMembers.filter(record =>
                 hasReachedInactivityThreshold(record.joinedAt, settings.inactivityDays)
             );
 
             for (const record of candidates) {
+                const previousClaimAt = record.inactivityAlertClaimedAt || null;
+                const isPending = record.inactivityAlertStatus === 'pending';
+                if (isPending && previousClaimAt &&
+                    Date.now() - new Date(previousClaimAt).getTime() < CLAIM_RECOVERY_MS) continue;
+
                 let member = guild.members.cache.get(record.userId);
                 if (!member) {
                     try {
                         member = await guild.members.fetch(record.userId);
                     } catch (error) {
-                        // A confirmed Unknown Member means the user left while the bot
-                        // was offline. Remove stale tracking data. Retry transient API or
-                        // network failures on the next scheduled scan instead.
-                        if (error?.code === 10007 || error?.status === 404) {
+                        // Only Discord's explicit Unknown Member response proves the
+                        // user left. Other 404/network/API errors remain retryable.
+                        if (error?.code === 10007) {
                             await SusAccountMember.deleteOne()
                                 .where('_id').equals(record._id)
+                                .where('joinedAt').equals(record.joinedAt)
                                 .setOptions({ sanitizeFilter: true })
                                 .exec();
                         } else {
@@ -151,21 +155,40 @@ module.exports = (client) => {
                 if (member.user.bot) {
                     await SusAccountMember.deleteOne()
                         .where('_id').equals(record._id)
+                        .where('joinedAt').equals(record.joinedAt)
                         .setOptions({ sanitizeFilter: true })
                         .exec();
                     continue;
                 }
 
                 const now = new Date();
-                const claim = await SusAccountMember.updateOne({}, {
-                    $set: { inactivityAlertedAt: now }
+                const claimQuery = SusAccountMember.updateOne({}, {
+                    $set: {
+                        inactivityAlertStatus: 'pending',
+                        inactivityAlertClaimedAt: now
+                    }
                 })
                     .where('_id').equals(record._id)
-                    .where('inactivityAlertedAt').equals(null)
+                    .where('joinedAt').equals(record.joinedAt)
                     .where('firstActivityAt').equals(null)
-                    .setOptions({ sanitizeFilter: true })
-                    .exec();
+                    .where('inactivityAlertStatus').equals(isPending ? 'pending' : null)
+                    .setOptions({ sanitizeFilter: true });
+                claimQuery.where('inactivityAlertClaimedAt').equals(previousClaimAt);
+                const claim = await claimQuery.exec();
                 if (!claim.modifiedCount) continue;
+
+                // Re-read the current membership after claiming. This stops an alert
+                // for a stale membership if the user spoke or rejoined during the scan.
+                const stillInactive = await SusAccountMember.findOne()
+                    .where('_id').equals(record._id)
+                    .where('joinedAt').equals(record.joinedAt)
+                    .where('firstActivityAt').equals(null)
+                    .where('inactivityAlertStatus').equals('pending')
+                    .where('inactivityAlertClaimedAt').equals(now)
+                    .setOptions({ sanitizeFilter: true })
+                    .lean()
+                    .exec();
+                if (!stillInactive) continue;
 
                 const accountAge = daysBetween(record.accountCreatedAt, now);
                 const embed = new EmbedBuilder()
@@ -190,12 +213,35 @@ module.exports = (client) => {
                         embeds: [embed],
                         allowedMentions: { roles: settings.staffRoleId ? [settings.staffRoleId] : [], users: [] }
                     });
+                    // Mark delivery only after Discord accepts the message. If the
+                    // process dies before this write, the stale pending claim is retried.
+                    await SusAccountMember.updateOne({}, {
+                        $set: {
+                            inactivityAlertStatus: 'sent',
+                            inactivityAlertedAt: new Date(),
+                            inactivityAlertClaimedAt: null
+                        }
+                    })
+                        .where('_id').equals(record._id)
+                        .where('joinedAt').equals(record.joinedAt)
+                        .where('firstActivityAt').equals(null)
+                        .where('inactivityAlertStatus').equals('pending')
+                        .where('inactivityAlertClaimedAt').equals(now)
+                        .setOptions({ sanitizeFilter: true })
+                        .exec();
                 } catch (error) {
                     console.error(`[SusAccount] Failed to send inactivity alert in ${guild.id}:`, error.message);
                     await SusAccountMember.updateOne({}, {
-                        $set: { inactivityAlertedAt: null }
+                        $set: {
+                            inactivityAlertStatus: null,
+                            inactivityAlertedAt: null,
+                            inactivityAlertClaimedAt: null
+                        }
                     })
                         .where('_id').equals(record._id)
+                        .where('joinedAt').equals(record.joinedAt)
+                        .where('inactivityAlertStatus').equals('pending')
+                        .where('inactivityAlertClaimedAt').equals(now)
                         .setOptions({ sanitizeFilter: true })
                         .exec()
                         .catch(() => {});
