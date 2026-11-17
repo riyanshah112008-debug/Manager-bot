@@ -116,6 +116,20 @@ async function getOrCreateConfig(guildId) {
   return Config.findOneAndUpdate({ guildId }, { $setOnInsert: { guildId, enabled: true, nextNumber: 1 } },
     { upsert: true, new: true, setDefaultsOnInsert: true }).exec();
 }
+async function allocateNumber(guildId) {
+  const settings = await Config.findOneAndUpdate(
+    { guildId },
+    { $setOnInsert: { guildId, enabled: true }, $inc: { nextNumber: 1 } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).exec();
+  return settings.nextNumber - 1;
+}
+function readField(interaction, names) {
+  for (const name of names) {
+    try { return interaction.fields.getTextInputValue(name); } catch (error) {}
+  }
+  return '';
+}
 function respondPrivate(interaction, content) {
   const payload = { content, flags: EPHEMERAL };
   return interaction.deferred || interaction.replied ? interaction.followUp(payload) : interaction.reply(payload);
@@ -195,8 +209,8 @@ function confessionModule(client) {
         const now = Date.now();
         const last = cooldowns.get(key) || 0;
         if (now - last < 30000) return interaction.editReply({ content: 'Please wait a little before submitting another confession.' });
-        const body = clean(interaction.fields.getTextInputValue('body') || interaction.fields.getTextInputValue('confess_input_text'), MAX_BODY);
-        const topic = clean(interaction.fields.getTextInputValue('topic') || '', 50);
+        const body = clean(readField(interaction, ['body', 'confess_input_text']), MAX_BODY);
+        const topic = clean(readField(interaction, ['topic', 'confess_input_topic']), 50);
         if (body.length < 3) return interaction.editReply({ content: 'Your confession needs at least 3 characters.' });
         const settings = await getConfig(interaction.guildId);
         if (settings?.enabled === false) return interaction.editReply({ content: 'The confession room is currently paused.' });
@@ -204,14 +218,8 @@ function confessionModule(client) {
         if (!channel?.isTextBased()) return interaction.editReply({ content: 'The confession channel is unavailable. Ask an admin to run /confessionsetup again.' });
 
         let number;
-        if (mongoose.connection.readyState === 1) {
-          const counter = await getOrCreateConfig(interaction.guildId);
-          number = counter.nextNumber;
-          counter.nextNumber += 1;
-          await counter.save();
-        } else {
-          number = Math.floor(now / 1000);
-        }
+        if (mongoose.connection.readyState === 1) number = await allocateNumber(interaction.guildId);
+        else number = Math.floor(now / 1000);
         const message = await channel.send({
           embeds: [confessionEmbed(number, topic, body)], components: [postRow(number)],
           allowedMentions: { parse: [] }
@@ -227,7 +235,7 @@ function confessionModule(client) {
       const replyMatch = modal && id.match(/^(?:starry_confess:reply-submit:|confess_modal_reply_)(\d+)$/);
       if (replyMatch) {
         await interaction.deferReply({ flags: EPHEMERAL });
-        const reply = clean(interaction.fields.getTextInputValue('reply') || interaction.fields.getTextInputValue('confess_input_reply'), MAX_REPLY);
+        const reply = clean(readField(interaction, ['reply', 'confess_input_reply']), MAX_REPLY);
         if (!reply) return interaction.editReply({ content: 'Your reply cannot be empty.' });
         const post = await Post.findOne({ guildId: interaction.guildId, number: Number(replyMatch[1]), status: 'published' }).lean().exec();
         if (!post) return interaction.editReply({ content: 'That confession is unavailable for replies. Please use a current confession card.' });
