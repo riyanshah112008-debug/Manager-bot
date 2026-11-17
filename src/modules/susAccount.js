@@ -30,7 +30,7 @@ const memberSchema = new mongoose.Schema({
     riskAlertedAt: { type: Date, default: null }
 }, { timestamps: true });
 memberSchema.index({ guildId: 1, userId: 1 }, { unique: true });
-memberSchema.index({ guildId: 1, firstActivityAt: 1, inactivityAlertedAt: 1, joinedAt: 1 });
+memberSchema.index({ guildId: 1, firstActivityAt: 1, inactivityAlertStatus: 1, joinedAt: 1 });
 
 const SusAccountSettings = mongoose.models.SusAccountSettings ||
     mongoose.model('SusAccountSettings', settingsSchema);
@@ -297,7 +297,7 @@ module.exports = (client) => {
         }
 
         const guild = interaction.guild;
-        if (!guild || !/^\\d{17,20}$/.test(guild.id)) {
+        if (!guild || !isValidDiscordSnowflake(guild.id)) {
             return interaction.reply({ content: '❌ Could not validate this server ID.', ephemeral: true });
         }
 
