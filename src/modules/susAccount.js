@@ -159,7 +159,8 @@ module.exports = (client) => {
         const inactivityDays = interaction.options.getInteger('inactivity_days');
         const accountAgeDays = interaction.options.getInteger('account_age_days');
 
-        const guildId = guild.id;\n        const current = await SusAccountSettings.findOne({ guildId });
+        const guildId = guild.id;
+        const current = await SusAccountSettings.findOne({ guildId });
         const patch = {
             enabled: enabled ?? current?.enabled ?? true,
             logChannelId: channelOption?.id ?? current?.logChannelId ?? interaction.channelId,
