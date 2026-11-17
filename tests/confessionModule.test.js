@@ -271,7 +271,8 @@ test('disabled anonymous replies return a private notice instead of leaving a mo
         isChatInputCommand: () => false,
         isButton: () => false,
         isModalSubmit: () => true,
-        deferReply: async () => { deferred = true; },
+        deferred: false,
+        deferReply: async function () { deferred = true; this.deferred = true; },
         fields: { getTextInputValue: () => 'A reply' },
         editReply: async payload => { response = payload; }
     };
@@ -350,7 +351,8 @@ test('confession reports do not disclose the reporter identity', async () => {
         isChatInputCommand: () => false,
         isButton: () => false,
         isModalSubmit: () => true,
-        deferReply: async () => {},
+        deferred: false,
+        deferReply: async function () { this.deferred = true; },
         fields: { getTextInputValue: () => 'This contains private information.' },
         editReply: async payload => { response = payload; }
     };
