@@ -60,7 +60,7 @@ test('abandoned pending inactivity claims become recoverable', () => {
 });
 
 test('delivered inactivity alerts cannot be reclaimed', () => {
-    assert.equal(_internals.isClaimRecoverable('sent', null, JOINED_AT), true);
+    assert.equal(_internals.isClaimRecoverable('sent', null, JOINED_AT), false);
 });
 
 test('server ID validation accepts Discord snowflakes only', () => {
