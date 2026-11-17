@@ -13,6 +13,9 @@ function makeButton(customId, overrides = {}) {
         replied: false,
         deferred: false,
         isButton: () => true,
+        isChatInputCommand: () => false,
+        isModalSubmit: () => false,
+        inGuild: () => Boolean(overrides.guildId),
         showModal: async modal => {
             overrides.shown?.push(modal);
         },
