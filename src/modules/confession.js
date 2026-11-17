@@ -168,7 +168,7 @@ function confessionModule(client) {
                     }
                     await ConfessionConfig.findOneAndUpdate(
                         { guildId: interaction.guildId },
-                        { $set: { channelId: channel.id, staffChannelId: staffChannel.id, configuredBy: interaction.user.id },
+                        { $set: { channelId: channel.id, staffChannelId: staffChannel.id },
                           $setOnInsert: { guildId: interaction.guildId } },
                         { upsert: true, new: true, setDefaultsOnInsert: true }
                     ).exec();
@@ -185,12 +185,12 @@ function confessionModule(client) {
                 if (interaction.customId === OPEN_BUTTON) return interaction.showModal(buildConfessionModal());
                 if (interaction.customId.startsWith(REPLY_PREFIX)) {
                     const messageId = interaction.customId.slice(REPLY_PREFIX.length);
-                    if (!/^\\d{17,20}$/.test(messageId)) return privateReply(interaction, 'This confession button is invalid. Please use the latest panel.');
+                    if (!/^\d{17,20}$/.test(messageId)) return privateReply(interaction, 'This confession button is invalid. Please use the latest panel.');
                     return interaction.showModal(buildReplyModal(messageId));
                 }
                 if (interaction.customId.startsWith(REPORT_PREFIX)) {
                     const messageId = interaction.customId.slice(REPORT_PREFIX.length);
-                    if (!/^\\d{17,20}$/.test(messageId)) return privateReply(interaction, 'This report button is invalid.');
+                    if (!/^\d{17,20}$/.test(messageId)) return privateReply(interaction, 'This report button is invalid.');
                     return interaction.showModal(buildReportModal(messageId));
                 }
             }
@@ -222,7 +222,7 @@ function confessionModule(client) {
                     if (!original) return privateReply(interaction, 'That confession is no longer available.');
                     const reply = interaction.fields.getTextInputValue('reply').trim();
                     if (!reply || reply.length > MAX_REPLY) return privateReply(interaction, 'Your reply must be between 1 and 500 characters.');
-                    await original.reply({ content: '↩️ **Anonymous reply**\\n' + reply, allowedMentions: { parse: [] } });
+                    await original.reply({ content: '↩️ **Anonymous reply**\n' + reply, allowedMentions: { parse: [] } });
                     return interaction.editReply({ content: 'Your anonymous reply has been posted.' });
                 }
                 if (interaction.customId.startsWith(REPORT_PREFIX)) {
@@ -238,7 +238,7 @@ function confessionModule(client) {
                     const reason = interaction.fields.getTextInputValue('reason').trim();
                     const report = new EmbedBuilder().setColor(0xEF4444)
                         .setTitle('🚩 Anonymous confession report')
-                        .setDescription('**Reason**\\n' + reason)
+                        .setDescription('**Reason**\n' + reason)
                         .addFields(
                             { name: 'Confession', value: '#' + original.id, inline: true },
                             { name: 'Source', value: '[Jump to confession](' + original.url + ')', inline: true }
