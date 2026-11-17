@@ -99,8 +99,8 @@ function buildReportEmbed(number, reason, messageUrl) {
    { name: 'SOURCE', value: '[Open published confession](' + messageUrl + ')' }
   ).setFooter({ text: 'Private staff notice  •  Reporter identity is not displayed or stored' }).setTimestamp();
 }
-function buildConfessionComponents(messageId) {
- return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(REPORT_BUTTON_PREFIX + messageId).setLabel('Report to staff').setEmoji('🚩').setStyle(ButtonStyle.Secondary))];
+function buildConfessionComponents() {
+ return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('whisper:report').setLabel('Report to staff').setEmoji('🚩').setStyle(ButtonStyle.Secondary))];
 }
 function buildStaffComponents(messageId) {
  return [new ActionRowBuilder().addComponents(
@@ -174,8 +174,7 @@ async function handleSubmission(interaction) {
  const topic = interaction.fields.getTextInputValue('topic').trim();
  if (body.length < 3 || body.length > MAX_BODY) return replyPrivate(interaction, 'Your confession must contain between 3 and 1,000 characters.');
  const number = await nextNumber(guild.id);
- const message = await channel.send({ embeds: [buildConfessionEmbed(number, topic, body)], allowedMentions: { parse: [] } });
- await message.edit({ components: buildConfessionComponents(message.id) });
+ await channel.send({ embeds: [buildConfessionEmbed(number, topic, body)], components: buildConfessionComponents(), allowedMentions: { parse: [] } });
  return replyPrivate(interaction, 'Your confession **#' + String(number).padStart(4, '0') + '** has been published anonymously in ' + channel.toString() + '.');
 }
 async function handleReport(interaction, client, messageId) {
@@ -197,12 +196,12 @@ async function handleReport(interaction, client, messageId) {
  return replyPrivate(interaction, 'Your report has been delivered privately to the staff team. Thank you.');
 }
 async function handleStaffAction(interaction, client, action, messageId) {
+ await interaction.deferReply({ flags: EPHEMERAL });
  const config = await getConfig(interaction.guildId);
  if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured.');
  const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
  const hasStaffRole = interaction.member?.roles?.cache?.has(config.staffRoleId);
  if (!isAdmin && !hasStaffRole) return replyPrivate(interaction, 'Only the configured staff role or server administrators can use this action.');
- await interaction.deferReply({ flags: EPHEMERAL });
  const guild = await getGuild(interaction, client).catch(() => null);
  const channel = guild && await getTextChannel(guild, config.channelId);
  const confession = channel && await channel.messages.fetch(messageId).catch(() => null);
@@ -227,7 +226,7 @@ function createInteractionHandler(client) {
    if (interaction.isButton()) {
     const id = interaction.customId;
     if (id === PANEL_BUTTON || LEGACY_OPEN_IDS.has(id)) return await interaction.showModal(buildSubmissionModal());
-    if (id.startsWith(REPORT_BUTTON_PREFIX)) return await interaction.showModal(buildReportModal(id.slice(REPORT_BUTTON_PREFIX.length)));
+    if (id === 'whisper:report') return await interaction.showModal(buildReportModal(interaction.message?.id));
     if (id.startsWith(STAFF_REMOVE_PREFIX)) return await handleStaffAction(interaction, client, 'remove', id.slice(STAFF_REMOVE_PREFIX.length));
     if (id.startsWith(STAFF_DISMISS_PREFIX)) return await handleStaffAction(interaction, client, 'dismiss', id.slice(STAFF_DISMISS_PREFIX.length));
     return;
