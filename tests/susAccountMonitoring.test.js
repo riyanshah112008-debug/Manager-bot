@@ -6,6 +6,19 @@ const { _internals } = require('../src/modules/susAccount');
 const DAY_MS = 24 * 60 * 60 * 1000;
 const JOINED_AT = Date.parse('2026-01-01T00:00:00.000Z');
 
+test('account age accepts Date-valued scanner timestamps', () => {
+    assert.equal(_internals.daysBetween(JOINED_AT, new Date(JOINED_AT + (3 * DAY_MS))), 3);
+});
+
+test('inactivity alert nonce is stable for one membership and changes after rejoin', () => {
+    const first = _internals.buildInactivityAlertNonce('12345678901234567', '12345678901234568', JOINED_AT);
+    const retry = _internals.buildInactivityAlertNonce('12345678901234567', '12345678901234568', JOINED_AT);
+    const rejoin = _internals.buildInactivityAlertNonce('12345678901234567', '12345678901234568', JOINED_AT + DAY_MS);
+    assert.equal(first, retry);
+    assert.notEqual(first, rejoin);
+    assert.equal(first.length, 24);
+});
+
 test('inactivity threshold is not reached one millisecond early', () => {
     assert.equal(_internals.hasReachedInactivityThreshold(JOINED_AT, 14, JOINED_AT + (14 * DAY_MS) - 1), false);
 });
