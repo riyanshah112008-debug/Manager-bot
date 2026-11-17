@@ -51,7 +51,7 @@ function hasReachedInactivityThreshold(joinedAt, inactivityDays, now = Date.now(
         now - joinedTimestamp >= days * DAY_MS;
 }
 
-function sameMembership(recordJoinedAt, currentJoinedAt) {
+function isSameMembership(recordJoinedAt, currentJoinedAt) {
     const recordTime = new Date(recordJoinedAt).getTime();
     const currentTime = new Date(currentJoinedAt).getTime();
     return Number.isFinite(recordTime) && Number.isFinite(currentTime) && recordTime === currentTime;
@@ -420,7 +420,7 @@ module.exports = (client) => {
                     .exec();
                 const membershipId = membershipKey(member.guild.id, member.id, joinedAt);
                 const pendingFirstActivity = pendingActivity.get(membershipId) || null;
-                const sameMembership = existing && sameMembership(existing.joinedAt, joinedAt);
+                const sameMembership = existing && isSameMembership(existing.joinedAt, joinedAt);
 
                 // Preserve a first message captured while join initialization was
                 // pending for this exact join. A later rejoin starts a fresh record.
@@ -510,29 +510,29 @@ module.exports = (client) => {
                     .setOptions({ sanitizeFilter: true })
                     .lean()
                     .exec();
-                const sameMembership = existing &&
-                    new Date(existing.joinedAt).getTime() === joinedAt.getTime();
 
-                await SusAccountMember.findOneAndUpdate(
-                    {},
-                    {
-                        $set: {
-                            joinedAt,
-                            accountCreatedAt: new Date(message.author.createdTimestamp),
-                            firstActivityAt: sameMembership
-                                ? (existing.firstActivityAt || firstActivityAt)
-                                : firstActivityAt,
-                            inactivityAlertedAt: sameMembership ? (existing.inactivityAlertedAt || null) : null,
-                            inactivityAlertStatus: sameMembership ? (existing.inactivityAlertStatus || null) : null,
-                            inactivityAlertClaimedAt: sameMembership ? (existing.inactivityAlertClaimedAt || null) : null,
-                            riskAlertedAt: sameMembership ? (existing.riskAlertedAt || null) : null
-                        },
-                        $setOnInsert: { guildId: message.guild.id, userId: message.author.id }
-                    },
-                    { upsert: true, setDefaultsOnInsert: true, sanitizeFilter: true }
-                )
+                if (!existing || !isSameMembership(existing.joinedAt, joinedAt)) {
+                    // Only buffer very recent join activity while the join record is
+                    // being initialized. Never create tracking rows for every ordinary
+                    // message from existing/untracked server members.
+                    const ageSinceJoin = Date.now() - joinedAt.getTime();
+                    if (ageSinceJoin >= 0 && ageSinceJoin <= MEMBER_INIT_WINDOW_MS) {
+                        const key = membershipKey(message.guild.id, message.author.id, joinedAt);
+                        const pending = pendingActivity.get(key);
+                        if (!pending || firstActivityAt < pending) pendingActivity.set(key, firstActivityAt);
+                    }
+                    return;
+                }
+
+                if (existing.firstActivityAt) return;
+                await SusAccountMember.updateOne({}, {
+                    $set: { firstActivityAt }
+                })
                     .where('guildId').equals(message.guild.id)
                     .where('userId').equals(message.author.id)
+                    .where('joinedAt').equals(joinedAt)
+                    .where('firstActivityAt').equals(null)
+                    .setOptions({ sanitizeFilter: true })
                     .exec();
             } catch (error) {
                 console.error('[SusAccount] Activity tracking failed:', error.message);
