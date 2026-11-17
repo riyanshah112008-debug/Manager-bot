@@ -310,7 +310,7 @@ function confessionModule(client) {
         try {
             if (!interaction.guild) {
                 if (interaction.isChatInputCommand?.() && ['confessionsetup', 'confess', 'confession'].includes(interaction.commandName)) {
-                    return privateReply(interaction, 'Confessions are available inside a server only.');
+                    return await privateReply(interaction, 'Confessions are available inside a server only.');
                 }
                 return;
             }
@@ -321,13 +321,13 @@ function confessionModule(client) {
                     const staffChannel = interaction.options.getChannel('staff_channel', true);
                     const staffRole = interaction.options.getRole('staff_role', true);
                     if (channel.guildId !== interaction.guildId || staffChannel.guildId !== interaction.guildId || staffRole.guild.id !== interaction.guildId) {
-                        return interaction.editReply({ content: 'Both channels must belong to this server.' });
+                        return await interaction.editReply({ content: 'Both channels must belong to this server.' });
                     }
                     const botMember = await getBotMember(interaction.guild);
                     const publicValidation = validatePublishChannel(interaction.guild, channel, botMember);
-                    if (!publicValidation.ok) return interaction.editReply({ content: '⚠️ ' + publicValidation.reason });
+                    if (!publicValidation.ok) return await interaction.editReply({ content: '⚠️ ' + publicValidation.reason });
                     const staffValidation = validateStaffChannel(interaction.guild, channel, staffChannel, staffRole, botMember);
-                    if (!staffValidation.ok) return interaction.editReply({ content: '⚠️ ' + staffValidation.reason });
+                    if (!staffValidation.ok) return await interaction.editReply({ content: '⚠️ ' + staffValidation.reason });
 
                     const previousConfig = await ConfessionConfig.findOne()
                         .where('guildId').equals(interaction.guildId).exec();
@@ -362,31 +362,31 @@ function confessionModule(client) {
                         }
                         throw sendError;
                     }
-                    return interaction.editReply({
+                    return await interaction.editReply({
                         content: '💌 Confession panel posted in ' + channel +
                             '. Reports are restricted to ' + staffRole + ' and server administrators in ' + staffChannel + '.'
                     });
                 }
                 if (interaction.commandName === 'confess' || interaction.commandName === 'confession') {
-                    if (!interaction.inGuild()) return privateReply(interaction, 'Confessions can only be submitted inside a server.');
-                    return interaction.showModal(buildConfessionModal());
+                    if (!interaction.inGuild()) return await privateReply(interaction, 'Confessions can only be submitted inside a server.');
+                    return await interaction.showModal(buildConfessionModal());
                 }
             }
 
             if (interaction.isButton()) {
                 if (interaction.customId === OPEN_BUTTON || interaction.customId === LEGACY_OPEN_BUTTON) {
-                    return interaction.showModal(buildConfessionModal());
+                    return await interaction.showModal(buildConfessionModal());
                 }
                 const source = getButtonSource(interaction);
                 if (source) {
-                    if (source.action === 'reply') return interaction.showModal(buildReplyModal(source.channelId, source.messageId));
-                    return interaction.showModal(buildReportModal(source.channelId, source.messageId));
+                    if (source.action === 'reply') return await interaction.showModal(buildReplyModal(source.channelId, source.messageId));
+                    return await interaction.showModal(buildReportModal(source.channelId, source.messageId));
                 }
                 if (interaction.customId.startsWith(REPLY_BUTTON) ||
                     interaction.customId.startsWith(REPORT_BUTTON) ||
                     interaction.customId.startsWith('confess_btn_reply_') ||
                     interaction.customId.startsWith('confess_btn_report_')) {
-                    return privateReply(interaction, 'This older confession action is no longer valid. Open the latest confession card and try again.');
+                    return await privateReply(interaction, 'This older confession action is no longer valid. Open the latest confession card and try again.');
                 }
             }
 
@@ -394,12 +394,12 @@ function confessionModule(client) {
                 if (interaction.customId === SUBMIT_MODAL || interaction.customId === 'confess_modal_submit') {
                     await interaction.deferReply({ flags: EPHEMERAL });
                     const config = await getConfig(interaction.guildId);
-                    if (!config) return privateReply(interaction, 'The confession box is not configured yet. Ask a server manager to run /confessionsetup.');
+                    if (!config) return await privateReply(interaction, 'The confession box is not configured yet. Ask a server manager to run /confessionsetup.');
                     const channel = await fetchTextChannel(interaction.guild, config.channelId);
-                    if (!channel) return privateReply(interaction, 'The confession channel is unavailable. Ask a server manager to run /confessionsetup again.');
+                    if (!channel) return await privateReply(interaction, 'The confession channel is unavailable. Ask a server manager to run /confessionsetup again.');
                     const body = getTextInputValue(interaction, ['body', 'confess_input_text']).trim();
                     const topic = getTextInputValue(interaction, ['topic', 'confess_input_topic']).trim();
-                    if (body.length < 3 || body.length > MAX_BODY) return privateReply(interaction, 'Your confession must be between 3 and 1,000 characters.');
+                    if (body.length < 3 || body.length > MAX_BODY) return await privateReply(interaction, 'Your confession must be between 3 and 1,000 characters.');
                     const number = await nextConfessionNumber(interaction.guildId);
                     await channel.send({
                         embeds: [buildConfessionEmbed(number, topic, body)],
@@ -407,51 +407,51 @@ function confessionModule(client) {
                         allowedMentions: { parse: [] }
                     });
                     publishedConfessionNumber = number;
-                    return interaction.editReply({ content: '💌 Your confession #' + number + ' has been posted anonymously in ' + channel + '.' });
+                    return await interaction.editReply({ content: '💌 Your confession #' + number + ' has been posted anonymously in ' + channel + '.' });
                 }
 
                 if (/^confess_modal_reply_\d+$/.test(interaction.customId)) {
                     await interaction.deferReply({ flags: EPHEMERAL });
-                    return privateReply(interaction, 'This older reply form is no longer linked to its confession. Tap **Reply anonymously** on the latest confession card.');
+                    return await privateReply(interaction, 'This older reply form is no longer linked to its confession. Tap **Reply anonymously** on the latest confession card.');
                 }
 
                 if (interaction.customId.startsWith(REPLY_SUBMIT_PREFIX) ||
                     interaction.customId.startsWith(REPLY_PREFIX)) {
                     await interaction.deferReply({ flags: EPHEMERAL });
                     const config = await getConfig(interaction.guildId);
-                    if (!config || !config.repliesEnabled) return privateReply(interaction, 'Anonymous replies are currently unavailable.');
+                    if (!config || !config.repliesEnabled) return await privateReply(interaction, 'Anonymous replies are currently unavailable.');
                     const source = getModalSource(interaction.customId, 'reply', config);
-                    if (!source) return privateReply(interaction, 'This reply form is invalid. Open the reply button on the confession again.');
+                    if (!source) return await privateReply(interaction, 'This reply form is invalid. Open the reply button on the confession again.');
                     const found = await fetchConfessionMessage(interaction.guild, config, source.channelId, source.messageId);
-                    if (!found) return privateReply(interaction, 'That confession is no longer available for replies.');
+                    if (!found) return await privateReply(interaction, 'That confession is no longer available for replies.');
                     const reply = getTextInputValue(interaction, ['reply', 'confess_input_reply']).trim();
-                    if (!reply || reply.length > MAX_REPLY) return privateReply(interaction, 'Your reply must be between 1 and 500 characters.');
+                    if (!reply || reply.length > MAX_REPLY) return await privateReply(interaction, 'Your reply must be between 1 and 500 characters.');
                     await found.message.reply({
                         content: '↩️ **Anonymous reply**\n' + reply.replace(/@everyone/gi, '@\u200Beveryone').replace(/@here/gi, '@\u200Bhere'),
                         allowedMentions: { parse: [] }
                     });
-                    return interaction.editReply({ content: 'Your anonymous reply has been posted.' });
+                    return await interaction.editReply({ content: 'Your anonymous reply has been posted.' });
                 }
 
                 if (interaction.customId.startsWith(REPORT_SUBMIT_PREFIX) ||
                     interaction.customId.startsWith(REPORT_PREFIX)) {
                     await interaction.deferReply({ flags: EPHEMERAL });
                     const config = await getConfig(interaction.guildId);
-                    if (!config || !config.reportsEnabled) return privateReply(interaction, 'Confession reporting is currently unavailable.');
+                    if (!config || !config.reportsEnabled) return await privateReply(interaction, 'Confession reporting is currently unavailable.');
                     const source = getModalSource(interaction.customId, 'report', config);
-                    if (!source) return privateReply(interaction, 'This report form is invalid. Open Report on the confession again.');
+                    if (!source) return await privateReply(interaction, 'This report form is invalid. Open Report on the confession again.');
                     const found = await fetchConfessionMessage(interaction.guild, config, source.channelId, source.messageId);
-                    if (!found) return privateReply(interaction, 'That confession is no longer available.');
+                    if (!found) return await privateReply(interaction, 'That confession is no longer available.');
                     const reviewChannel = await fetchTextChannel(interaction.guild, config.staffChannelId);
                     const botMember = await getBotMember(interaction.guild);
                     const staffRole = interaction.guild.roles.cache.get(config.staffRoleId) ||
                         await interaction.guild.roles.fetch(config.staffRoleId).catch(() => null);
                     const staffValidation = validateStaffChannel(interaction.guild, found.channel, reviewChannel, staffRole, botMember);
                     if (!staffValidation.ok) {
-                        return privateReply(interaction, '⚠️ Staff reports are paused because the report destination is not private or Starry no longer has the required permissions. Ask a manager to rerun /confessionsetup.');
+                        return await privateReply(interaction, '⚠️ Staff reports are paused because the report destination is not private or Starry no longer has the required permissions. Ask a manager to rerun /confessionsetup.');
                     }
                     const reason = getTextInputValue(interaction, ['reason']).trim();
-                    if (reason.length < 3 || reason.length > 500) return privateReply(interaction, 'Please provide a report reason between 3 and 500 characters.');
+                    if (reason.length < 3 || reason.length > 500) return await privateReply(interaction, 'Please provide a report reason between 3 and 500 characters.');
                     const report = new EmbedBuilder().setColor('#EF4444')
                         .setTitle('🚩 Anonymous confession report')
                         .setDescription('**Reason**\n' + reason.replace(/@everyone/gi, '@\u200Beveryone').replace(/@here/gi, '@\u200Bhere'))
@@ -460,7 +460,7 @@ function confessionModule(client) {
                             { name: 'Source', value: '[Jump to confession](' + found.message.url + ')', inline: true }
                         ).setFooter({ text: 'Reporter identity is not included in this report.' }).setTimestamp();
                     await reviewChannel.send({ embeds: [report], allowedMentions: { parse: [] } });
-                    return interaction.editReply({ content: 'Thank you. Your report has been sent privately to the staff team.' });
+                    return await interaction.editReply({ content: 'Thank you. Your report has been sent privately to the staff team.' });
                 }
             }
         } catch (error) {
