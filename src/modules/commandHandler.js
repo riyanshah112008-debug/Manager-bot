@@ -710,7 +710,11 @@ NaN
                 // If a button or menu has no active collector or global handler,
                 // acknowledge gracefully before Discord's strict 3-second limit.
                 setTimeout(() => {
-                    if (!interaction.replied && !interaction.deferred) {
+                    const isWhisperAction = customId.startsWith('whisper:') ||
+                        customId === 'starry:confession:open' ||
+                        customId === 'confess_btn_open' ||
+                        customId === 'confess_open_modal';
+                    if (!isWhisperAction && !interaction.replied && !interaction.deferred) {
                         interaction.reply({
                             content: '⚠️ This button or menu interaction has expired. Please run the command again.',
                             flags: EPHEMERAL_FLAG
