@@ -191,3 +191,212 @@ test('modal source validation rejects malformed or mismatched legacy sources', (
         { channelId: PUBLIC_CHANNEL_ID, messageId: MESSAGE_ID }
     );
 });
+
+
+test('legacy confession panel submit buttons still open the modal', async () => {
+    const { EventEmitter } = require('node:events');
+    const client = new EventEmitter();
+    client.user = { id: BOT_ID };
+    confession(client);
+    const handler = client.listeners('interactionCreate')[0];
+    let shownModal;
+    const interaction = {
+        guild: { id: GUILD_ID },
+        guildId: GUILD_ID,
+        customId: 'confess_btn_open',
+        isChatInputCommand: () => false,
+        isButton: () => true,
+        isModalSubmit: () => false,
+        showModal: async modal => { shownModal = modal.toJSON(); }
+    };
+    await handler(interaction);
+    assert.equal(shownModal.custom_id, 'starry:confession:submit');
+});
+
+test('malformed confession action source receives a private response', async () => {
+    const { EventEmitter } = require('node:events');
+    const client = new EventEmitter();
+    client.user = { id: BOT_ID };
+    confession(client);
+    const handler = client.listeners('interactionCreate')[0];
+    let reply;
+    const interaction = {
+        guild: { id: GUILD_ID },
+        guildId: GUILD_ID,
+        channelId: 'bad-channel',
+        message: { id: 'bad-message' },
+        customId: 'starry:confession:reply',
+        isChatInputCommand: () => false,
+        isButton: () => true,
+        isModalSubmit: () => false,
+        reply: async payload => { reply = payload; }
+    };
+    await handler(interaction);
+    assert.match(reply.content, /older confession action|latest confession/i);
+    assert.ok(reply.flags);
+});
+
+async function withConfessionConfig(config, run) {
+    const mongoose = require('mongoose');
+    const model = mongoose.models.StarryConfessionConfig;
+    const originalFindOne = model.findOne;
+    model.findOne = () => {
+        const query = {
+            where() { return query; },
+            equals() { return query; },
+            lean() { return query; },
+            exec: async () => config
+        };
+        return query;
+    };
+    try {
+        await run();
+    } finally {
+        model.findOne = originalFindOne;
+    }
+}
+
+test('disabled anonymous replies return a private notice instead of leaving a modal pending', async () => {
+    const { EventEmitter } = require('node:events');
+    const client = new EventEmitter();
+    client.user = { id: BOT_ID };
+    confession(client);
+    const handler = client.listeners('interactionCreate')[0];
+    let response;
+    let deferred = false;
+    const interaction = {
+        guild: { id: GUILD_ID },
+        guildId: GUILD_ID,
+        customId: 'starry:confession:reply-submit:' + PUBLIC_CHANNEL_ID + ':' + MESSAGE_ID,
+        isChatInputCommand: () => false,
+        isButton: () => false,
+        isModalSubmit: () => true,
+        deferred: false,
+        deferReply: async function () { deferred = true; this.deferred = true; },
+        fields: { getTextInputValue: () => 'A reply' },
+        editReply: async payload => { response = payload; }
+    };
+    await withConfessionConfig({
+        channelId: PUBLIC_CHANNEL_ID,
+        staffChannelId: STAFF_CHANNEL_ID,
+        staffRoleId: STAFF_ROLE_ID,
+        repliesEnabled: false,
+        reportsEnabled: true
+    }, () => handler(interaction));
+    assert.equal(deferred, true);
+    assert.match(response.content, /currently unavailable/i);
+});
+
+test('confession reports do not disclose the reporter identity', async () => {
+    const { EventEmitter } = require('node:events');
+    const client = new EventEmitter();
+    client.user = { id: BOT_ID };
+    confession(client);
+    const handler = client.listeners('interactionCreate')[0];
+
+    let sentReport;
+    let response;
+    const everyone = { id: GUILD_ID, permissions: permissionSet() };
+    const staffRole = { id: STAFF_ROLE_ID, guild: { id: GUILD_ID }, permissions: permissionSet() };
+    const botMember = { id: BOT_ID };
+    const original = {
+        id: MESSAGE_ID,
+        url: 'https://discord.com/channels/' + GUILD_ID + '/' + PUBLIC_CHANNEL_ID + '/' + MESSAGE_ID,
+        author: { id: BOT_ID },
+        embeds: [{ author: { name: 'ANONYMOUS CONFESSION  ·  #42' } }]
+    };
+    const publicChannel = {
+        id: PUBLIC_CHANNEL_ID,
+        guildId: GUILD_ID,
+        type: ChannelType.GuildText,
+        isTextBased: () => true,
+        messages: { fetch: async messageId => messageId === MESSAGE_ID ? original : null }
+    };
+    const staffChannel = {
+        id: STAFF_CHANNEL_ID,
+        guildId: GUILD_ID,
+        type: ChannelType.GuildText,
+        isTextBased: () => true,
+        permissionOverwrites: { cache: new Map() },
+        permissionsFor: member => {
+            if (member.id === GUILD_ID) return permissionSet();
+            if (member.id === STAFF_ROLE_ID) return permissionSet(PermissionFlagsBits.ViewChannel);
+            if (member.id === BOT_ID) return permissionSet(
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks
+            );
+            return permissionSet();
+        },
+        send: async payload => { sentReport = payload; }
+    };
+    const guild = {
+        id: GUILD_ID,
+        client,
+        members: { me: botMember },
+        roles: {
+            everyone,
+            cache: new Map([[GUILD_ID, everyone], [STAFF_ROLE_ID, staffRole]])
+        },
+        channels: {
+            cache: new Map([[PUBLIC_CHANNEL_ID, publicChannel], [STAFF_CHANNEL_ID, staffChannel]]),
+            fetch: async id => id === PUBLIC_CHANNEL_ID ? publicChannel : id === STAFF_CHANNEL_ID ? staffChannel : null
+        }
+    };
+    const interaction = {
+        guild,
+        guildId: GUILD_ID,
+        user: { id: '12345678901234574', username: 'private-reporter-name' },
+        customId: 'starry:confession:report-submit:' + PUBLIC_CHANNEL_ID + ':' + MESSAGE_ID,
+        isChatInputCommand: () => false,
+        isButton: () => false,
+        isModalSubmit: () => true,
+        deferred: false,
+        deferReply: async function () { this.deferred = true; },
+        fields: { getTextInputValue: () => 'This contains private information.' },
+        editReply: async payload => { response = payload; }
+    };
+    await withConfessionConfig({
+        channelId: PUBLIC_CHANNEL_ID,
+        staffChannelId: STAFF_CHANNEL_ID,
+        staffRoleId: STAFF_ROLE_ID,
+        repliesEnabled: true,
+        reportsEnabled: true
+    }, () => handler(interaction));
+
+    const serialized = JSON.stringify(sentReport);
+    assert.ok(sentReport.embeds?.length);
+    assert.equal(serialized.includes(interaction.user.id), false);
+    assert.equal(serialized.includes(interaction.user.username), false);
+    assert.match(response.content, /sent privately/i);
+});
+
+
+test('only definite Discord 4xx send rejections permit safe number release', () => {
+    assert.equal(confession.isDefiniteDiscordRejection({ status: 403 }), true);
+    assert.equal(confession.isDefiniteDiscordRejection({ status: 429 }), true);
+    assert.equal(confession.isDefiniteDiscordRejection({ status: 500 }), false);
+    assert.equal(confession.isDefiniteDiscordRejection({ code: 'ECONNRESET' }), false);
+});
+
+test('failed-send counter release is conditional on the number still being the latest', async () => {
+    const mongoose = require('mongoose');
+    const model = mongoose.models.StarryConfessionCounter;
+    const original = model.findOneAndUpdate;
+    let captured;
+    model.findOneAndUpdate = (filter, update, options) => {
+        captured = { filter, update, options };
+        const query = {
+            lean() { return query; },
+            exec: async () => ({ value: 11 })
+        };
+        return query;
+    };
+    try {
+        assert.equal(await confession.releaseConfessionNumber(GUILD_ID, 12), true);
+        assert.deepEqual(captured.filter, { guildId: GUILD_ID, value: 12 });
+        assert.deepEqual(captured.update, { $inc: { value: -1 } });
+    } finally {
+        model.findOneAndUpdate = original;
+    }
+});
