@@ -30,3 +30,11 @@ test('invalid account-created timestamps do not produce a negative or NaN age', 
     assert.equal(_internals.daysBetween('not-a-date', JOINED_AT), 0);
     assert.equal(_internals.daysBetween(JOINED_AT, JOINED_AT - DAY_MS), 0);
 });
+
+test('locked Mongoose release includes current 8.24.x query-sanitization fixes', () => {
+    const mongoose = require('mongoose');
+    const [major, minor, patch] = mongoose.version.split('.').map(Number);
+    const isAtLeastPatched = major > 8 ||
+        (major === 8 && (minor > 24 || (minor === 24 && patch >= 7)));
+    assert.equal(isAtLeastPatched, true, `Mongoose ${mongoose.version} is below the patched 8.24.7 release`);
+});
