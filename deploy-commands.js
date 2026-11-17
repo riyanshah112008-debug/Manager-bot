@@ -83,6 +83,8 @@ if (bumpModule && bumpModule.bumpPayload) {
 const confessionModule = safeRequire(['./src/modules/confession', './modules/confession']);
 if (confessionModule && confessionModule.confessionSetupPayload) {
     masterPayloads.push(confessionModule.confessionSetupPayload);
+    if (confessionModule.confessPayload) masterPayloads.push(confessionModule.confessPayload);
+    if (confessionModule.confessionPayload) masterPayloads.push(confessionModule.confessionPayload);
 }
 
 // Translator Engine Payload
