@@ -217,7 +217,12 @@ async function handleStaffAction(interaction, client, action, messageId) {
  if (!isAdmin && !hasStaffRole) return replyPrivate(interaction, 'Only the configured staff role or server administrators can use this action.');
  const guild = await getGuild(interaction, client).catch(() => null);
  const channel = guild && await getTextChannel(guild, config.channelId);
- const confession = channel && await channel.messages.fetch(messageId).catch(() => null);
+ const staffChannel = guild && await getTextChannel(guild, config.staffChannelId);
+ const staffRole = guild && (guild.roles.cache.get(config.staffRoleId) || await guild.roles.fetch(config.staffRoleId).catch(() => null));
+ const botMember = guild && await getBotMember(guild);
+ const privacyError = guild && channel && staffChannel && validateChannels(guild, channel, staffChannel, staffRole, botMember);
+ if (!guild || !channel || !staffChannel || privacyError) return replyPrivate(interaction, 'Staff actions are paused because the configured channels are unavailable or no longer private. Ask a manager to rerun /confessionsetup.');
+ const confession = await channel.messages.fetch(messageId).catch(() => null);
  if (!isWhisperPost(confession, client.user.id)) return replyPrivate(interaction, 'The original confession is already unavailable.');
  if (action === 'remove') {
   const botMember = await getBotMember(guild);
