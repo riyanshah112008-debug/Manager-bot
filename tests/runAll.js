@@ -3,10 +3,8 @@
 const { spawnSync } = require('node:child_process');
 
 const suites = [
-  ['Anonymous confession module', '--test', 'tests/confessionModule.test.js'],
-  ['Anonymous confession module syntax', '--check', 'src/modules/confession.js'],
-  ['Confession global interaction routing', '--test', 'tests/confessionGlobalRouting.test.js'],
-  ['Confession global interaction router syntax', '--check', 'src/utils/confessionInteraction.js'],
+  ['Whisper Vault module', '--test', 'tests/whisperVault.test.js'],
+  ['Whisper Vault module syntax', '--check', 'src/modules/confession.js'],
   ['Discord snowflake validation', 'tests/discordSnowflake.test.js'],
   ['Birthday role cleanup', 'tests/birthdayRoleCleanup.test.js'],
   ['Dashboard origins', 'tests/dashboardOrigins.test.js'],
