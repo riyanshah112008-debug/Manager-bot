@@ -50,7 +50,10 @@ async function sendFailureResponse(interaction, error) {
 }
 
 async function dispatch(state, interaction) {
-    for (const [key, entry] of state.handlers) {
+    const orderedHandlers = Array.from(state.handlers.entries()).sort((a, b) =>
+        (b[1].priority - a[1].priority) || (a[1].sequence - b[1].sequence)
+    );
+    for (const [key, entry] of orderedHandlers) {
         try {
             await entry.handler(interaction);
         } catch (error) {
@@ -72,14 +75,19 @@ function registerInteractionHandler(client, key, handler, options = {}) {
 
     let state = clients.get(client);
     if (!state) {
-        state = { handlers: new Map(), listener: null };
+        state = { handlers: new Map(), listener: null, nextSequence: 0 };
         state.listener = interaction => { void dispatch(state, interaction); };
         clients.set(client, state);
         client.on(Events.InteractionCreate, state.listener);
     }
     if (state.handlers.has(key)) return state.handlers.get(key).dispose;
 
-    const entry = { handler, logger: options.logger || console };
+    const entry = {
+        handler,
+        logger: options.logger || console,
+        priority: Number.isFinite(options.priority) ? options.priority : 0,
+        sequence: state.nextSequence++
+    };
     const dispose = () => {
         if (state.handlers.get(key) !== entry) return;
         state.handlers.delete(key);
