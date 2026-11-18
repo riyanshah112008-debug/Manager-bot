@@ -120,3 +120,10 @@ test('module registration is idempotent and uses the shared client listener', ()
  whisper(client);
  assert.equal(client.listenerCount('interactionCreate'), 1);
 });
+
+test('unsafe selected staff-channel permissions trigger secure-channel fallback instead of blocking panel setup', () => {
+ assert.equal(whisper.isStaffChannelPermissionIssue('Another non-staff role can view the report channel. Remove its View Channel access first.'), true);
+ assert.equal(whisper.isStaffChannelPermissionIssue('A direct member permission grants access to the report channel.'), true);
+ assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, and Embed Links in the staff channel.'), true);
+ assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, Embed Links, and Read Message History in the public channel.'), false);
+});
