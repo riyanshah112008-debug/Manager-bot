@@ -3,6 +3,9 @@
 const { spawnSync } = require('node:child_process');
 
 const suites = [
+  ['Persistent component collector policy', '--test', 'tests/persistentComponentPolicy.test.js'],
+  ['Global interaction guard', '--test', 'tests/interactionHandler.test.js'],
+  ['Global interaction guard syntax', '--check', 'src/utils/interactionHandler.js'],
   ['Whisper Vault module', '--test', 'tests/whisperVault.test.js'],
   ['Whisper Vault module syntax', '--check', 'src/modules/confession.js'],
   ['Discord snowflake validation', 'tests/discordSnowflake.test.js'],
