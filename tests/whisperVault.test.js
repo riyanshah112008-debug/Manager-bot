@@ -74,11 +74,11 @@ test('public channel validation requires Read Message History for persistent rev
  assert.match(whisper.validateChannels(guild, publicChannel, staffChannel, staffRole, botMember), /Read Message History/);
 });
 test('staff embed has a structured red review layout and escapes mentions', () => {
- const json = whisper.buildReportEmbed(12, 'Threats @here', 'https://discord.com/channels/1/2/3').toJSON();
+ const json = whisper.buildReportEmbed(12, 'Threats @here', 'https://discord.com/channels/123456789012345678/234567890123456789/345678901234567890').toJSON();
  assert.equal(json.color, 0xD64545);
- assert.equal(json.title, 'ANONYMOUS CONFESSIONS  /  STAFF REVIEW');
+ assert.equal(json.title, 'ANONYMOUS CONFESSIONS / STAFF REVIEW');
  assert.match(json.fields.find(field => field.name === 'REASON').value, /@\u200Bhere/);
- assert.match(json.fields.find(field => field.name === 'SOURCE').value, /Open published confession/);
+ assert.match(json.fields.find(field => field.name === 'SOURCE').value, /https:\/\/discord\.com\/channels\//);
 });
 test('only bot-authored Confessions entries are recognized', () => {
  const message = { author: { id: 'bot' }, embeds: [{ title: 'CONFESSION  #0001' }] };
@@ -138,6 +138,15 @@ test('unsafe selected staff-channel permissions trigger secure-channel fallback 
  assert.equal(whisper.isStaffChannelPermissionIssue('A direct member permission grants access to the report channel.'), true);
  assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, and Embed Links in the staff channel.'), true);
  assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, Embed Links, and Read Message History in the public channel.'), false);
+});
+
+test('report embed sanitizes unsafe text and accepts only canonical Discord message links', () => {
+ const url = 'https://discord.com/channels/123456789012345678/234567890123456789/345678901234567890';
+ const embed = whisper.buildReportEmbed(7, 'Bad\u0000 text @everyone', url).toJSON();
+ assert.match(embed.fields.find(field => field.name === 'REASON').value, /Bad text @\u200Beveryone/);
+ assert.equal(embed.fields.find(field => field.name === 'SOURCE').value, url);
+ assert.throws(() => whisper.buildReportEmbed(7, 'reason', 'not-a-url'), /Invalid URL|valid Discord message URL/);
+ assert.throws(() => whisper.buildReportEmbed(7, 'reason', 'https://example.com/channels/123456789012345678/234567890123456789/345678901234567890'), /valid Discord message URL/);
 });
 
 test('report delivery distinguishes permission, access, and invalid-payload failures', () => {

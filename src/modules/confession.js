@@ -97,14 +97,24 @@ function buildConfessionEmbed(number, topic, body) {
  if (topic && topic.trim()) embed.addFields({ name: 'SUBJECT', value: escapeMentions(topic.trim()).slice(0, MAX_TOPIC), inline: true });
  return embed;
 }
+function sanitizeReportText(value, maxLength = MAX_REPORT_REASON) {
+ const text = String(value ?? '');
+ const wellFormed = typeof text.toWellFormed === 'function' ? text.toWellFormed() : text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
+ return escapeMentions(wellFormed.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim()).slice(0, maxLength) || 'No reason provided.';
+}
 function buildReportEmbed(number, reason, messageUrl) {
- return new EmbedBuilder().setColor('#D64545').setTitle('ANONYMOUS CONFESSIONS  /  STAFF REVIEW')
+ const parsedUrl = new URL(String(messageUrl));
+ if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'discord.com' || !/^\/channels\/\d{17,20}\/\d{17,20}\/\d{17,20}$/.test(parsedUrl.pathname)) {
+  throw new TypeError('Report source must be a valid Discord message URL.');
+ }
+ const confessionNumber = Number.isSafeInteger(Number(number)) && Number(number) >= 0 ? Number(number) : 0;
+ return new EmbedBuilder().setColor(0xD64545).setTitle('ANONYMOUS CONFESSIONS / STAFF REVIEW')
   .setDescription('A community member flagged a published confession for review.')
   .addFields(
-   { name: 'CONFESSION', value: '#' + String(number).padStart(4, '0'), inline: true },
-   { name: 'REASON', value: escapeMentions(reason).slice(0, MAX_REPORT_REASON) },
-   { name: 'SOURCE', value: '[Open published confession](' + messageUrl + ')' }
-  ).setFooter({ text: 'Private staff notice  •  Reporter identity is not displayed or stored' }).setTimestamp();
+   { name: 'CONFESSION', value: '#' + String(confessionNumber).padStart(4, '0'), inline: true },
+   { name: 'REASON', value: sanitizeReportText(reason) },
+   { name: 'SOURCE', value: parsedUrl.href }
+  ).setFooter({ text: 'Private staff notice • Reporter identity is not displayed or stored' }).setTimestamp();
 }
 function buildConfessionComponents() {
  return [new ActionRowBuilder().addComponents(
@@ -384,7 +394,7 @@ async function handleReport(interaction, client, messageId) {
  if (reason.length < 3 || reason.length > MAX_REPORT_REASON) return replyPrivate(interaction, 'Please provide a reason between 3 and 500 characters.');
  const number = Number((message.embeds[0].title.match(/#(\d+)/) || [])[1]);
  const reportPayload = {
-  embeds: [buildReportEmbed(number, reason, message.url)],
+  embeds: [buildReportEmbed(number, reason, 'https://discord.com/channels/' + guild.id + '/' + publicChannel.id + '/' + message.id)],
   components: buildStaffComponents(message.id),
   allowedMentions: { parse: [] }
  };
@@ -519,6 +529,7 @@ whisperModule.buildReportModal = buildReportModal;
 whisperModule.buildReplyModal = buildReplyModal;
 whisperModule.buildConfessionEmbed = buildConfessionEmbed;
 whisperModule.buildReportEmbed = buildReportEmbed;
+whisperModule.sanitizeReportText = sanitizeReportText;
 whisperModule.buildConfessionComponents = buildConfessionComponents;
 whisperModule.buildReplyEmbed = buildReplyEmbed;
 whisperModule.buildStaffComponents = buildStaffComponents;
