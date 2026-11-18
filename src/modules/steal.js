@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 📥 GLOBAL EMOJI & STICKER STEALER MODULE (PART 1 OF 2)
 // File Path: modules/steal.js
@@ -130,7 +131,7 @@ module.exports = (client) => {
     });
 
     // Interaction Listener (Slash Command & Context Menu) - Works EVERYWHERE via User App!
-    client.on('interactionCreate', async interaction => {
+    registerInteractionHandler(client, 'steal:1', async interaction => {
         // Message Context Menu: Long press message -> Apps -> "Steal Emojis"
         if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Steal Emojis') {
             await runStealUI(
