@@ -12,6 +12,18 @@ test('registration is idempotent per client and key', async () => {
  await new Promise(resolve => setImmediate(resolve));
  assert.equal(calls, 1);
 });
+
+test('all modules share exactly one client interaction listener', async () => {
+ const client = new EventEmitter(); const seen = [];
+ guard.registerInteractionHandler(client, 'first', async () => { seen.push('first'); });
+ guard.registerInteractionHandler(client, 'second', async () => { seen.push('second'); });
+ guard.registerInteractionHandler(client, 'third', async () => { seen.push('third'); });
+ assert.equal(client.listenerCount('interactionCreate'), 1);
+ client.emit('interactionCreate', {});
+ await new Promise(resolve => setImmediate(resolve));
+ assert.deepEqual(seen.sort(), ['first', 'second', 'third']);
+});
+
 test('dispose permits clean re-registration', async () => {
  const client = new EventEmitter(); let calls = 0;
  const dispose = guard.registerInteractionHandler(client, 'test', async () => { calls++; });
