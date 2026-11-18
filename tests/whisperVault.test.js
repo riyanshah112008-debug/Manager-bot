@@ -142,8 +142,8 @@ test('unsafe selected staff-channel permissions trigger secure-channel fallback 
 
 test('report embed sanitizes unsafe text and accepts only canonical Discord message links', () => {
  const url = 'https://discord.com/channels/123456789012345678/234567890123456789/345678901234567890';
- const embed = whisper.buildReportEmbed(7, 'Bad\\u0000 text @everyone', url).toJSON();
- assert.match(embed.fields.find(field => field.name === 'REASON').value, /Bad text @\\u200Beveryone/);
+ const embed = whisper.buildReportEmbed(7, 'Bad\u0000 text @everyone', url).toJSON();
+ assert.match(embed.fields.find(field => field.name === 'REASON').value, /Bad text @\u200Beveryone/);
  assert.equal(embed.fields.find(field => field.name === 'SOURCE').value, url);
  assert.throws(() => whisper.buildReportEmbed(7, 'reason', 'not-a-url'), /Invalid URL|valid Discord message URL/);
  assert.throws(() => whisper.buildReportEmbed(7, 'reason', 'https://example.com/channels/123456789012345678/234567890123456789/345678901234567890'), /valid Discord message URL/);
