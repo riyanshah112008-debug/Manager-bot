@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { PermissionsBitField, SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
 const mongoose = require('mongoose');
 
@@ -103,7 +104,7 @@ module.exports = (client) => {
     // ==========================================
     // 1. SLASH COMMAND ROUTER (/setupcount & /countstats)
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'count:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
         if (interaction.commandName === 'setupcount') {

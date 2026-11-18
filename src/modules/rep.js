@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 1. IMPORTS & MONGOOSE SCHEMAS
 // ==========================================
@@ -165,7 +166,7 @@ const repModule = (client) => {
     }
 
     // --- Interaction Event Router ---
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'rep:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'rep') await handleRepCommand(interaction);
         if (interaction.commandName === 'checkrep') await handleCheckRepCommand(interaction);

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -14,7 +15,7 @@ module.exports = (client) => {
         fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
     }
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'modApply:1', async (interaction) => {
         // ==========================================
         // 1. SETUP COMMAND (/applysetup)
         // ==========================================

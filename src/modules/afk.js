@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { 
     EmbedBuilder, 
     SlashCommandBuilder, 
@@ -66,7 +67,7 @@ module.exports = (client) => {
     // ==========================================
     // 1. DYNAMIC SLASH COMMAND EXECUTION
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'afk:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'afk') return;
 
         const guildId = interaction.guildId;
@@ -373,7 +374,7 @@ module.exports = (client) => {
     // ==========================================
     // 3. HANDLE AFK BUTTONS & MODALS
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'afk:2', async (interaction) => {
         if (interaction.isButton()) {
             if (interaction.customId.startsWith('afk_msg_')) {
                 const targetId = interaction.customId.split('_')[2];

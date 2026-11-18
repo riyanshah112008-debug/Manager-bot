@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🧠 STARRY SUPREME MASTER AI ENGINE (PART 1 OF 7)
 // File Path: modules/starry.js
@@ -655,7 +656,7 @@ module.exports = async (client) => {
     });
 
     // Single unified interaction router preventing double event binding & timeout errors
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'starry:1', async (interaction) => {
         if (!interaction.guild) return;
 
         // ==========================================

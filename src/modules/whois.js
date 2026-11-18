@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🔍 WHOIS USER LOOKUP & INVITE TRACKER MODULE
 // File Path: modules/whois.js
@@ -99,7 +100,7 @@ module.exports = (client) => {
     });
 
     // 3. /WHOIS SLASH COMMAND INTERACTION
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'whois:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'whois') return;
 
         const user = interaction.options.getUser('target') || interaction.user;

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🎭 STARRY SUPREME AUTOROLE & STICKY ROLES MODULE
 // File Path: modules/autorole.js
@@ -108,7 +109,7 @@ module.exports = (client) => {
     // ==========================================
     // 3. ADMIN SETUP COMMAND & DASHBOARD
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'autorole:1', async (interaction) => {
         if (!interaction.guild || !interaction.isChatInputCommand() || interaction.commandName !== 'autorole') return;
 
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {

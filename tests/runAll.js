@@ -3,6 +3,8 @@
 const { spawnSync } = require('node:child_process');
 
 const suites = [
+  ['Global interaction guard', '--test', 'tests/interactionHandler.test.js'],
+  ['Global interaction guard syntax', '--check', 'src/utils/interactionHandler.js'],
   ['Anonymous confession module', '--test', 'tests/confessionModule.test.js'],
   ['Anonymous confession module syntax', '--check', 'src/modules/confession.js'],
   ['Confession global interaction routing', '--test', 'tests/confessionGlobalRouting.test.js'],

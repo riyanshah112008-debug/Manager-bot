@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 
 module.exports = (client) => {
@@ -7,7 +8,7 @@ module.exports = (client) => {
     const standardTruths = ["What is your biggest fear?", "Who is your secret crush?"];
     const standardDares = ["Bark in VC.", "Ping a random person."];
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'truthOrDare:1', async (interaction) => {
         // Handle Button Clicks (Next Player)
         if (interaction.isButton() && interaction.customId.startsWith('tod_')) {
             const choice = interaction.customId.split('_')[1]; // truth or dare

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🥀 AESTHETIC GOODBYE MODULE & EMBED VISUALITY SUITE
 // File Path: src/modules/goodbye.js
@@ -209,7 +210,7 @@ const goodbyeModule = (client) => {
     // ==========================================
     // 🔘 INTERACTIVE EMBED MANAGER BUTTON & MODAL HANDLERS
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'goodbye:1', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setupgoodbye') await handleSetupGoodbye(interaction);
             if (interaction.commandName === 'customizegoodbye') await handleCustomizeGoodbye(interaction);

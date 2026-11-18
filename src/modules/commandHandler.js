@@ -23,6 +23,7 @@ const { usesNativeInteraction } = require('../utils/commandExecutionContract');
 const { buildCategoryEmbed, createHelpComponents } = require('../utils/helpHelper');
 const User = require('../models/User');
 const { buildBirthdayFilter } = require('../utils/discordSnowflake');
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 
 // Guild Prefix In-Memory Cache
 const guildPrefixCache = new Map();
@@ -523,7 +524,7 @@ NaN
         if (!client || client._starryInteractionDispatcherAttached) return;
         client._starryInteractionDispatcherAttached = true;
 
-        client.on(Events.InteractionCreate, async (interaction) => {
+        registerInteractionHandler(client, 'command-registry', async (interaction) => {
             if (!interaction) return;
 
             // 🛡️ Interaction Deduplication Guard (Ultra-Fast 0ms In-Memory Guard)
@@ -713,18 +714,7 @@ NaN
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
                 const customId = interaction.customId;
 
-                // 🛡️ Interaction Timeout Safety Net
-                // If a button or menu has no active collector or global handler,
-                // acknowledge gracefully before Discord's strict 3-second limit.
-                setTimeout(() => {
-                    if (!interaction.replied && !interaction.deferred) {
-                        interaction.reply({
-                            content: '⚠️ This button or menu interaction has expired. Please run the command again.',
-                            flags: EPHEMERAL_FLAG
-                        }).catch(() => {});
-                    }
-                }, 2400);
-
+                // Persistent components must not be rejected by an artificial timer.
                 // 🖥️ Starry Autonomous Bot Studio: Code in Local Termux Workspace Button
                 if (customId.startsWith('botstudio_local_')) {
                     const sessionId = customId.replace('botstudio_local_', '');

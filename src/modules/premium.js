@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 1. IMPORTS & MONGOOSE SCHEMA WITH EXPIRATION
 // ==========================================
@@ -198,7 +199,7 @@ const premiumModule = (client) => {
     // =====================================================================
     // 🎛️ 3. PREMIUM SLASH COMMAND INTERACTION HANDLERS
     // =====================================================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'premium:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
         const { commandName, options, guildId, user } = interaction;

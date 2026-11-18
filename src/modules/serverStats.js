@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { ChannelType, PermissionsBitField } = require('discord.js');
 
 module.exports = (client) => {
@@ -64,7 +65,7 @@ module.exports = (client) => {
     // ==========================================
     // 1. SLASH COMMAND (/setupstats)
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'serverStats:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setupstats') return;
 
         // 🛑 Admin Only

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🛡️ STARRY SUPREME AUTOMOD PRO ENGINE
 // File Path: src/modules/automod.js
@@ -65,7 +66,7 @@ module.exports = (client) => {
     // ==========================================
     // 1. SLASH COMMANDS INTERACTION LISTENER
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'automod:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (!interaction.guild || !interaction.member) return;
 

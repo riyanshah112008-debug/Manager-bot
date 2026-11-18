@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -170,7 +171,7 @@ module.exports = (client) => {
     // ==========================================
     // 💬 LISTENERS (Slash & Prefix)
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'giveaway:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
         // ⏱️ INSTANT ACKNOWLEDGMENT (Prevents "Application Did Not Respond" error)

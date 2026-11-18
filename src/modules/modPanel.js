@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 1. IMPORTS & SLASH COMMAND SCHEMA
 // ==========================================
@@ -89,7 +90,7 @@ const modPanelModule = (client) => {
     }
 
     // --- Interactive Button & Modal Handlers ---
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'modPanel:1', async (interaction) => {
         if (interaction.isChatInputCommand() && interaction.commandName === 'modpanel') {
             return handleModPanelCommand(interaction);
         }

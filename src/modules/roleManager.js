@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { PermissionsBitField, EmbedBuilder } = require('discord.js');
 
 module.exports = (client) => {
@@ -24,7 +25,7 @@ module.exports = (client) => {
     // ==========================================
     // 1. SLASH COMMANDS (/role)
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'roleManager:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'role') return;
 
         const hasPerms = interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles);
