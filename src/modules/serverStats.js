@@ -1,7 +1,11 @@
 const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { ChannelType, PermissionsBitField } = require('discord.js');
 
+const initializedClients = new WeakSet();
+
 module.exports = (client) => {
+    if (!client || initializedClients.has(client)) return;
+    initializedClients.add(client);
     // ==========================================
     // SMART RATE-LIMIT MANAGER
     // ==========================================
