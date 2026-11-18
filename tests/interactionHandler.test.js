@@ -41,11 +41,17 @@ test('handler failures receive one ephemeral fallback only when unacknowledged',
  assert.equal(replies.length, 1);
  assert.equal(replies[0].flags, 64);
 });
-test('already acknowledged interactions are not replied to twice', async () => {
- const client = new EventEmitter(); let replies = 0;
+test('already deferred interactions are edited instead of receiving a second initial reply', async () => {
+ const client = new EventEmitter(); let replies = 0; let edits = 0;
  guard.registerInteractionHandler(client, 'test', async () => { throw new Error('failure'); }, { logger: { error() {} } });
- client.emit('interactionCreate', { deferred: true, replied: false, isRepliable: () => true, reply: async () => replies++ });
+ client.emit('interactionCreate', {
+  deferred: true, replied: false,
+  isRepliable: () => true,
+  editReply: async () => { edits++; },
+  reply: async () => { replies++; }
+ });
  await new Promise(resolve => setImmediate(resolve));
+ assert.equal(edits, 1);
  assert.equal(replies, 0);
 });
 test('Discord expired and duplicate acknowledgement errors are classified', () => {
