@@ -99,12 +99,12 @@ function buildConfessionEmbed(number, topic, body) {
 }
 function sanitizeReportText(value, maxLength = MAX_REPORT_REASON) {
  const text = String(value ?? '');
- const wellFormed = typeof text.toWellFormed === 'function' ? text.toWellFormed() : text.replace(/[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]/g, '\\uFFFD');
- return escapeMentions(wellFormed.replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, '').trim()).slice(0, maxLength) || 'No reason provided.';
+ const wellFormed = typeof text.toWellFormed === 'function' ? text.toWellFormed() : text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
+ return escapeMentions(wellFormed.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim()).slice(0, maxLength) || 'No reason provided.';
 }
 function buildReportEmbed(number, reason, messageUrl) {
  const parsedUrl = new URL(String(messageUrl));
- if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'discord.com' || !/^\\/channels\\/\\d{17,20}\\/\\d{17,20}\\/\\d{17,20}$/.test(parsedUrl.pathname)) {
+ if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'discord.com' || !/^\/channels\/\d{17,20}\/\d{17,20}\/\d{17,20}$/.test(parsedUrl.pathname)) {
   throw new TypeError('Report source must be a valid Discord message URL.');
  }
  const confessionNumber = Number.isSafeInteger(Number(number)) && Number(number) >= 0 ? Number(number) : 0;
