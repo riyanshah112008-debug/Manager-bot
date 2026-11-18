@@ -139,3 +139,13 @@ test('unsafe selected staff-channel permissions trigger secure-channel fallback 
  assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, and Embed Links in the staff channel.'), true);
  assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, Embed Links, and Read Message History in the public channel.'), false);
 });
+
+test('report modal is bound to the exact confession and enforces a bounded reason', () => {
+ const modal = whisper.buildReportModal('123456789012345678').toJSON();
+ assert.equal(modal.custom_id, 'whisper:report-submit:123456789012345678');
+ assert.equal(modal.components.length, 1);
+ const reason = modal.components[0].components[0];
+ assert.equal(reason.custom_id, 'reason');
+ assert.equal(reason.min_length, 3);
+ assert.equal(reason.max_length, 500);
+});
