@@ -331,7 +331,7 @@ async function handleReport(interaction, client, messageId) {
  const guild = await getGuild(interaction, client).catch(() => null);
  if (!guild) return replyPrivate(interaction, 'I could not access this server.');
  const publicChannel = await getTextChannel(guild, config.channelId);
- const staffChannel = await getTextChannel(guild, config.staffChannelId);
+ let staffChannel = await getTextChannel(guild, config.staffChannelId);
  if (!publicChannel) return replyPrivate(interaction, 'The public confession channel is unavailable. Ask a manager to rerun /confessionsetup.');
  if (!staffChannel) return replyPrivate(interaction, 'The private staff report channel is unavailable. Ask a manager to rerun /confessionsetup.');
  const staffRole = guild.roles.cache.get(config.staffRoleId) || await guild.roles.fetch(config.staffRoleId).catch(() => null);
@@ -363,7 +363,7 @@ async function handleReport(interaction, client, messageId) {
  if (!isWhisperPost(message, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for review.');
  const reason = interaction.fields.getTextInputValue('reason').trim();
  if (reason.length < 3 || reason.length > MAX_REPORT_REASON) return replyPrivate(interaction, 'Please provide a reason between 3 and 500 characters.');
- const number = Number((message.embeds[0].title.match(/#(\\d+)/) || [])[1]);
+ const number = Number((message.embeds[0].title.match(/#(\d+)/) || [])[1]);
  const reportPayload = {
   embeds: [buildReportEmbed(number, reason, message.url)],
   components: buildStaffComponents(message.id),
