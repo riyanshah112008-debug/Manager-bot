@@ -331,19 +331,50 @@ async function handleReport(interaction, client, messageId) {
  const guild = await getGuild(interaction, client).catch(() => null);
  if (!guild) return replyPrivate(interaction, 'I could not access this server.');
  const publicChannel = await getTextChannel(guild, config.channelId);
- const staffChannel = await getTextChannel(guild, config.staffChannelId);
+ let staffChannel = await getTextChannel(guild, config.staffChannelId);
  if (!publicChannel) return replyPrivate(interaction, 'The public confession channel is unavailable. Ask a manager to rerun /confessionsetup.');
  if (!staffChannel) return replyPrivate(interaction, 'The private staff report channel is unavailable. Ask a manager to rerun /confessionsetup.');
  const staffRole = guild.roles.cache.get(config.staffRoleId) || await guild.roles.fetch(config.staffRoleId).catch(() => null);
  const botMember = await getBotMember(guild);
- const privacyError = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+ let privacyError = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+ // Repair a staff destination whose privacy overwrites or bot access changed after setup.
+ if (privacyError && isStaffChannelPermissionIssue(privacyError)) {
+  try {
+   const replacement = await createPrivateStaffChannel(guild, publicChannel, staffRole, botMember);
+   const replacementError = validateChannels(guild, publicChannel, replacement, staffRole, botMember);
+   if (replacementError) {
+    await replacement.delete().catch(() => null);
+    return replyPrivate(interaction, '⚠️ Reports are paused: the replacement staff channel did not pass the privacy check. Ask a manager to review Starry\'s channel permissions.');
+   }
+   await WhisperConfig.findOneAndUpdate(
+    { guildId: guild.id },
+    { $set: { staffChannelId: replacement.id } },
+    { new: true }
+   ).exec();
+   staffChannel = replacement;
+   privacyError = null;
+  } catch (error) {
+   console.error('[Confessions] Could not repair private report channel:', error?.code || error?.message || error);
+   return replyPrivate(interaction, '⚠️ The report channel is unavailable or no longer private. Starry needs Manage Channels to create a replacement private staff channel. Ask a manager to grant that permission or rerun /confessionsetup.');
+  }
+ }
  if (privacyError) return replyPrivate(interaction, '⚠️ Reports are paused because the configured destinations are no longer safe: ' + privacyError + ' Ask a manager to rerun /confessionsetup.');
  const message = await publicChannel.messages.fetch(messageId).catch(() => null);
  if (!isWhisperPost(message, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for review.');
  const reason = interaction.fields.getTextInputValue('reason').trim();
  if (reason.length < 3 || reason.length > MAX_REPORT_REASON) return replyPrivate(interaction, 'Please provide a reason between 3 and 500 characters.');
  const number = Number((message.embeds[0].title.match(/#(\d+)/) || [])[1]);
- await staffChannel.send({ embeds: [buildReportEmbed(number, reason, message.url)], components: buildStaffComponents(message.id), allowedMentions: { parse: [] } });
+ const reportPayload = {
+  embeds: [buildReportEmbed(number, reason, message.url)],
+  components: buildStaffComponents(message.id),
+  allowedMentions: { parse: [] }
+ };
+ try {
+  await staffChannel.send(reportPayload);
+ } catch (error) {
+  console.error('[Confessions] Report delivery failed:', error?.code || error?.message || error);
+  return replyPrivate(interaction, 'Starry could not post the report in the private staff channel. Check Starry\'s View Channel, Send Messages, Embed Links, and Read Message History permissions, then rerun /confessionsetup.');
+ }
  return replyPrivate(interaction, 'Your report has been delivered privately to the staff team. Thank you.');
 }
 async function handleStaffAction(interaction, client, action, messageId) {
