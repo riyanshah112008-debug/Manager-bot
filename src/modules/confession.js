@@ -142,6 +142,14 @@ function validateChannels(guild, publicChannel, staffChannel, staffRole, botMemb
  if (!bot?.has(PermissionFlagsBits.ViewChannel) || !bot.has(PermissionFlagsBits.SendMessages) || !bot.has(PermissionFlagsBits.EmbedLinks)) return 'Starry needs View Channel, Send Messages, and Embed Links in the staff channel.';
  return null;
 }
+function isStaffChannelPermissionIssue(message) {
+ return typeof message === 'string' && (
+  message.includes('staff channel must be hidden') ||
+  message.includes('Another non-staff role can view') ||
+  message.includes('direct member permission grants access') ||
+  message.includes('Starry needs View Channel, Send Messages, and Embed Links in the staff channel')
+ );
+}
 function isWhisperPost(message, botUserId) {
  const title = message?.embeds?.[0]?.title || '';
  return Boolean(message && message.author?.id === botUserId && /^CONFESSION\s+#\d{4,}$/i.test(title));
@@ -221,7 +229,20 @@ async function handleSetup(interaction, client) {
   }
  }
 
- const validation = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+ let validation = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+ // Never let unsafe report-channel overwrites block the public panel. Create a separate locked staff channel instead.
+ if (validation && isStaffChannelPermissionIssue(validation)) {
+  try {
+   const replacement = await createPrivateStaffChannel(guild, publicChannel, staffRole, botMember);
+   if (createdStaffChannel && staffChannel.id !== replacement.id) await staffChannel.delete().catch(() => null);
+   staffChannel = replacement;
+   createdStaffChannel = true;
+   validation = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+  } catch (error) {
+   if (createdStaffChannel) await staffChannel.delete().catch(() => null);
+   return replyPrivate(interaction, '⚠️ The selected report channel has unsafe permissions. Starry could not create a separate locked staff channel: ' + (error?.message || 'unknown error') + '. Grant Starry Manage Channels or select a private report channel.');
+  }
+ }
  if (validation) {
   if (createdStaffChannel) await staffChannel.delete().catch(() => null);
   return replyPrivate(interaction, '⚠️ ' + validation);
@@ -391,6 +412,7 @@ whisperModule.buildConfessionComponents = buildConfessionComponents;
 whisperModule.buildStaffComponents = buildStaffComponents;
 whisperModule.isWhisperPost = isWhisperPost;
 whisperModule.validateChannels = validateChannels;
+whisperModule.isStaffChannelPermissionIssue = isStaffChannelPermissionIssue;
 whisperModule.createInteractionHandler = createInteractionHandler;
 whisperModule.registerWorkerHook = registerWorkerHook;
 module.exports = whisperModule;
