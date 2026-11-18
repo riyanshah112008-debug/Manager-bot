@@ -10,6 +10,12 @@ test('Whisper Vault panel has one persistent open action', () => {
  assert.equal(rows[0].components.length, 1);
  assert.equal(rows[0].components[0].data.custom_id, 'whisper:open');
 });
+test('setup options remain optional for existing no-argument /confessionsetup commands', () => {
+ const payload = whisper.setupPayload;
+ assert.equal(payload.name, 'confessionsetup');
+ assert.equal(payload.options.every(option => option.required !== true), true);
+});
+
 test('submission modal bounds topic and body lengths', () => {
  const modal = whisper.buildSubmissionModal().toJSON();
  assert.equal(modal.custom_id, 'whisper:submit');
