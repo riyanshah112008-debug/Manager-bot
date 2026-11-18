@@ -16,7 +16,6 @@ const {
 } = require('discord.js');
 const os = require('os');
 const config = require('../../config');
-const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const { requirePremium } = require('../../utils/premiumHelper');
 
 // Channel message snipe memory cache
@@ -157,8 +156,7 @@ async function generateAndSendImage(ctx, prompt) {
     if (!sentMsg) return;
 
     const collector = sentMsg.createMessageComponentCollector({
-        time: ONE_YEAR_MS
-    });
+        });
 
     collector.on('collect', async (i) => {
         if (i.user.id !== ctx.user.id && !config.BOT_OWNERS?.includes(i.user.id)) {
@@ -201,7 +199,7 @@ const components = createHelpComponents();
             const replyMsg = await ctx.reply({ embeds: [buildCategoryEmbed('home', prefix)], components });
 
             if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
-                const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
+                const collector = replyMsg.createMessageComponentCollector({ });
                 collector.on('collect', async (i) => {
                     let targetCat = 'home';
                     if (i.isStringSelectMenu()) {

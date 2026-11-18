@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 1. IMPORTS & MONGOOSE SCHEMAS
 // ==========================================
@@ -473,7 +474,7 @@ const bumpEngineModule = (client, expressApp) => {
         });
     }
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'bumpEngine:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'set-listing') await handleSetListing(interaction);
         if (interaction.commandName === 'bump-setup') await handleBumpSetup(interaction);

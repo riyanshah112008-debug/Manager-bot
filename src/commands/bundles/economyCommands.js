@@ -12,7 +12,6 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 const config = require('../../config');
-const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const levelingModule = require('../../modules/leveling');
 
 // Economy schema definition / model loader
@@ -586,7 +585,7 @@ const commands = [
             const replyMsg = await ctx.reply({ embeds: [embed], components: [row] });
 
             // 1-Year Component Collector
-            const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
+            const collector = replyMsg.createMessageComponentCollector({ });
             collector.on('collect', async (i) => {
                 const buyer = await getOrCreateEcoUser(i.user.id, ctx.guild.id);
                 let price = 5000;

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 📊 SUPREME LEVELING ENGINE (PART 1 OF 2)
 // File Path: modules/leveling.js
@@ -772,7 +773,7 @@ const levelingModule = (client) => {
     // ==========================================
     // 3. SLASH COMMAND SETUP WITH LIVE PREVIEW & VISUALITY STUDIO
     // ==========================================
-    client.on('interactionCreate', async interaction => {
+    registerInteractionHandler(client, 'leveling:1', async interaction => {
         // Leaderboard Tab Switching Buttons
         if (interaction.isButton() && interaction.customId.startsWith('lb_')) {
             const type = interaction.customId.split('_')[1]; 

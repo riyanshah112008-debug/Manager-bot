@@ -497,8 +497,7 @@ async function sendPaginatedAIResponse(ctx, prompt, imageInput = null) {
 
     // 1-Year Message Component Collector
     const collector = sentMsg.createMessageComponentCollector({
-        time: config.ONE_YEAR_MS || 2147483647
-    });
+        });
 
     collector.on('collect', async (i) => {
         if (i.user.id !== ctx.user.id && !config.BOT_OWNERS?.includes(i.user.id)) {

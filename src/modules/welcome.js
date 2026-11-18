@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🌸 INTERACTIVE WELCOME SUITE - SCHEMA & MANAGER SUITE
 // File Path: welcome.js (Part 1 of 2)
@@ -234,7 +235,7 @@ const welcomeModule = (client) => {
 // File Path: welcome.js (Part 2 of 2)
 // ==========================================
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'welcome:1', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             if (interaction.commandName === 'setupwelcome') await handleSetupWelcome(interaction);
             return;

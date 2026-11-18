@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🛡️ STARRY TRACKER ENGINE (PART 1 OF 2)
 // ==========================================
@@ -247,7 +248,7 @@ const universalTrackerModule = (client) => {
     });
 
     // --- ACTION PANEL BUTTON LISTENERS ---
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'tracker:1', async (interaction) => {
         if (!interaction.isButton()) return;
         const id = interaction.customId;
 
@@ -342,10 +343,7 @@ const universalTrackerModule = (client) => {
         }
     }
 
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
-        await handleCommand(interaction);
-    });
+    // /tracker is dispatched through client.commands above.
 };
 
 universalTrackerModule.data = trackerCommandSchema;

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { ChannelType, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -16,7 +17,7 @@ module.exports = (client) => {
     // ==========================================
     // 1. SLASH COMMANDS
     // ==========================================
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'voiceManager:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'setupvc') return;
         
         // 🛑 Premium Lock

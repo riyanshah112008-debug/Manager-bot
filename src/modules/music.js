@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🎵 STARRY SUPREME MUSIC ENGINE MODULE
 const { EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
@@ -9,7 +10,7 @@ module.exports = (client) => {
         return permissions?.has(PermissionsBitField.Flags.Connect) && permissions?.has(PermissionsBitField.Flags.Speak);
     };
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'music:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
 
         const command = interaction.commandName;

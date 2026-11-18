@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 1. IMPORTS & MONGOOSE SCHEMAS
 // ==========================================
@@ -164,13 +165,7 @@ const repModule = (client) => {
         return interaction.editReply({ embeds: [embed] });
     }
 
-    // --- Interaction Event Router ---
-    client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
-        if (interaction.commandName === 'rep') await handleRepCommand(interaction);
-        if (interaction.commandName === 'checkrep') await handleCheckRepCommand(interaction);
-        if (interaction.commandName === 'leaderboard') await handleLeaderboardCommand(interaction);
-    });
+    // Slash commands are dispatched through client.commands above.
 };
 
 repModule.UserRep = UserRep;

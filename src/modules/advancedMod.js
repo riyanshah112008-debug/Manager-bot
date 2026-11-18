@@ -1,9 +1,10 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { PermissionsBitField } = require('discord.js');
 
 module.exports = (client) => {
     // /warn, /warnings and /delwarn are handled exclusively by warnings.js.
     // Keeping a second warning handler here caused duplicate replies and mismatched option names.
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'advancedMod:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'lockdown') return;
 
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {

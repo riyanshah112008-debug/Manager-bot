@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { 
     EmbedBuilder, 
     ActionRowBuilder, 
@@ -413,7 +414,7 @@ async function generateTranscript({ channel, guild, user }) {
 }
 
 function initTickets(client) {
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'tickets:1', async (interaction) => {
         // ==========================================
         // 1. SLASH COMMANDS FALLBACK (/ticketsetup & /applysetup)
         // If already acknowledged by commandHandler, return to avoid collision

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🛡️ STARRY MASTER CHANNEL SYSTEM (PART 1 OF 3)
 // ==========================================
@@ -415,7 +416,7 @@ function initModule(client) {
     // 🛑 STRICTLY ZERO messageCreate LISTENERS HERE TO PREVENT DOUBLE-REPLYING!
 
     // ⚡ LISTEN TO SYSTEM INTERACTION SLASH COMMANDS ONLY
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'masterChannelSystems:1', async (interaction) => {
         if (interaction.isChatInputCommand()) {
             const cmd = interaction.commandName;
 

@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 'use strict';
 
 const {
@@ -191,7 +192,7 @@ async function handleReaction(reaction, user, adding) {
 }
 
 module.exports = client => {
-  client.on('interactionCreate', async i => {
+  registerInteractionHandler(client, 'reactionRoles:1', async i => {
     if (!i.guild) return;
     if (i.isChatInputCommand() && i.commandName === 'reactionroles') {
       const allowed = i.memberPermissions?.has(PermissionsBitField.Flags.ManageRoles)

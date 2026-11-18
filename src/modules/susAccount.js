@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 const mongoose = require('mongoose');
 const { createHash, randomUUID } = require('node:crypto');
 const { EmbedBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
@@ -422,7 +423,7 @@ module.exports = (client) => {
         }
     }
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'susAccount:1', async (interaction) => {
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'sussetup') return;
         if (!interaction.inGuild()) {
             return interaction.reply({ content: 'Use this setup inside a server.', ephemeral: true });
@@ -671,7 +672,7 @@ module.exports = (client) => {
         );
     });
 
-    client.on('interactionCreate', (interaction) => {
+    registerInteractionHandler(client, 'susAccount:2', (interaction) => {
         if (!interaction.inGuild?.() || !interaction.isRepliable?.() || !interaction.user || interaction.user.bot) return;
         const guild = interaction.guild || client.guilds.cache.get(interaction.guildId);
         if (!guild) return;

@@ -15,7 +15,7 @@ const {
 } = require('discord.js');
 const { engine: mediaPermsEngine } = require('../../modules/mediaPermsEngine');
 const config = require('../../config');
-const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../../utils/contextHelper');
+const { EPHEMERAL_FLAG } = require('../../utils/contextHelper');
 
 /**
  * Generate the interactive dashboard embed and action row for Pic & GIF Perms
@@ -339,8 +339,7 @@ module.exports = [
             if (!collectorMessage) return;
 
             const collector = collectorMessage.createMessageComponentCollector({
-                time: ONE_YEAR_MS
-            });
+                });
 
             collector.on('collect', async (interaction) => {
                 try {

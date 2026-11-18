@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 📜 AUDIT LOG SUITE - MEMBER, VOICE & EVENT LISTENERS
 // File Path: logs.js (Part 1 of 2)
@@ -172,7 +173,7 @@ module.exports = (client) => {
         return interaction.editReply({ embeds: [embed] });
     }
 
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'logs:1', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
         if (interaction.commandName === 'setlogs') await handleSetLogs(interaction);
     });

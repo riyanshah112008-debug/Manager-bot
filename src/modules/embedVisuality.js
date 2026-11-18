@@ -1,3 +1,4 @@
+const { registerInteractionHandler } = require('../utils/interactionHandler');
 // ==========================================
 // 🎨 STARRY EMBED VISUALITY STUDIO & MASTER CUSTOMIZER
 // File Path: src/modules/embedVisuality.js
@@ -185,7 +186,7 @@ async function getThemeControlPanel(guildId, client) {
 // 3. MASTER INTERACTION & DISPATCH ENGINE
 // ==========================================
 const embedVisualityModule = (client) => {
-    client.on('interactionCreate', async (interaction) => {
+    registerInteractionHandler(client, 'embedVisuality:1', async (interaction) => {
         // --- 1. Master Studio Dropdown & Quick Action Buttons ---
         if (interaction.isStringSelectMenu() && interaction.customId === 'visuality_select_feature') {
             if (!interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild) && !interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
