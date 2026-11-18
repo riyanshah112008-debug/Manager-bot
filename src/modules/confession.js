@@ -35,9 +35,9 @@ const setupPayload = new SlashCommandBuilder()
  .setName('confessionsetup')
  .setDescription('Create or replace the anonymous Whisper Vault panel')
  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
- .addChannelOption(o => o.setName('channel').setDescription('Public channel for confessions').addChannelTypes(ChannelType.GuildText).setRequired(true))
- .addChannelOption(o => o.setName('staff_channel').setDescription('Private channel for staff reports').addChannelTypes(ChannelType.GuildText).setRequired(true))
- .addRoleOption(o => o.setName('staff_role').setDescription('Role allowed to review reports').setRequired(true))
+ .addChannelOption(o => o.setName('channel').setDescription('Public channel for confessions').addChannelTypes(ChannelType.GuildText).setRequired(false))
+ .addChannelOption(o => o.setName('staff_channel').setDescription('Private channel for staff reports (auto-created if omitted)').addChannelTypes(ChannelType.GuildText).setRequired(false))
+ .addRoleOption(o => o.setName('staff_role').setDescription('Role allowed to review reports (defaults to your Manage Server/Admin role)').setRequired(false))
  .toJSON();
 const confessPayload = new SlashCommandBuilder()
  .setName('confess').setDescription('Open the private Whisper Vault submission form').toJSON();
@@ -151,24 +151,104 @@ async function replyPrivate(interaction, content) {
  if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(() => null);
  return interaction.reply({ ...payload, flags: EPHEMERAL }).catch(() => null);
 }
+function chooseFallbackStaffRole(guild, member) {
+ const memberRoles = member?.roles?.cache;
+ if (!memberRoles) return null;
+ const candidates = Array.from(memberRoles.values()).filter(role =>
+  role.id !== guild.roles.everyone.id &&
+  (role.permissions.has(PermissionFlagsBits.Administrator) || role.permissions.has(PermissionFlagsBits.ManageGuild))
+ );
+ candidates.sort((a, b) => {
+  const adminDifference = Number(b.permissions.has(PermissionFlagsBits.Administrator)) -
+   Number(a.permissions.has(PermissionFlagsBits.Administrator));
+  return adminDifference || b.position - a.position;
+ });
+ return candidates[0] || null;
+}
+
+async function createPrivateStaffChannel(guild, publicChannel, staffRole, botMember) {
+ if (!botMember.permissions?.has(PermissionFlagsBits.ManageChannels)) {
+  throw new Error('Starry needs Manage Channels to create the private staff report channel. Select an existing staff_channel option instead.');
+ }
+ return guild.channels.create({
+  name: 'whisper-vault-staff',
+  type: ChannelType.GuildText,
+  parent: publicChannel.parentId || undefined,
+  topic: 'Private staff-only reports for Starry Whisper Vault',
+  permissionOverwrites: [
+   { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+   { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] },
+   { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] }
+  ],
+  reason: 'Create private staff review channel for Starry Whisper Vault'
+ });
+}
+
 async function handleSetup(interaction, client) {
  await interaction.deferReply({ flags: EPHEMERAL });
  const guild = await getGuild(interaction, client).catch(() => null);
  if (!guild) return replyPrivate(interaction, 'I could not access this server. Please try again.');
- const publicChannel = interaction.options.getChannel('channel', true);
- const staffChannel = interaction.options.getChannel('staff_channel', true);
- const staffRole = interaction.options.getRole('staff_role', true);
+
+ const currentConfig = await getConfig(guild.id).catch(() => null);
+ const publicChannel = interaction.options.getChannel('channel') || interaction.channel;
+ if (!publicChannel || publicChannel.guildId !== guild.id || publicChannel.type !== ChannelType.GuildText) {
+  return replyPrivate(interaction, 'Choose a regular text channel for public confessions, or run /confessionsetup inside a text channel.');
+ }
+
  const botMember = await getBotMember(guild);
- const error = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
- if (error) return replyPrivate(interaction, '⚠️ ' + error);
- const panel = await publicChannel.send({ embeds: [buildPanelEmbed()], components: buildPanelComponents(), allowedMentions: { parse: [] } });
+ const staffRole = interaction.options.getRole('staff_role') ||
+  (currentConfig?.staffRoleId ? guild.roles.cache.get(currentConfig.staffRoleId) : null) ||
+  chooseFallbackStaffRole(guild, interaction.member);
+ if (!staffRole) {
+  return replyPrivate(interaction, 'Select a staff_role with Manage Server or Administrator permission. Starry could not safely choose a staff role automatically.');
+ }
+
+ let staffChannel = interaction.options.getChannel('staff_channel') || null;
+ if (!staffChannel && currentConfig?.staffChannelId) {
+  staffChannel = await getTextChannel(guild, currentConfig.staffChannelId);
+ }
+
+ let createdStaffChannel = false;
+ if (!staffChannel) {
+  try {
+   staffChannel = await createPrivateStaffChannel(guild, publicChannel, staffRole, botMember);
+   createdStaffChannel = true;
+  } catch (error) {
+   return replyPrivate(interaction, '⚠️ ' + (error?.message || 'Starry could not create the private staff channel.'));
+  }
+ }
+
+ const validation = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
+ if (validation) {
+  if (createdStaffChannel) await staffChannel.delete().catch(() => null);
+  return replyPrivate(interaction, '⚠️ ' + validation);
+ }
+
+ let panel;
  try {
-  await WhisperConfig.findOneAndUpdate({ guildId: guild.id }, { $set: { channelId: publicChannel.id, staffChannelId: staffChannel.id, staffRoleId: staffRole.id }, $setOnInsert: { guildId: guild.id } }, { upsert: true, new: true, setDefaultsOnInsert: true }).exec();
+  panel = await publicChannel.send({
+   embeds: [buildPanelEmbed()],
+   components: buildPanelComponents(),
+   allowedMentions: { parse: [] }
+  });
+  await WhisperConfig.findOneAndUpdate(
+   { guildId: guild.id },
+   {
+    $set: { channelId: publicChannel.id, staffChannelId: staffChannel.id, staffRoleId: staffRole.id },
+    $setOnInsert: { guildId: guild.id }
+   },
+   { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).exec();
  } catch (error) {
-  await panel.delete().catch(() => null);
+  if (panel) await panel.delete().catch(() => null);
+  if (createdStaffChannel) await staffChannel.delete().catch(() => null);
   throw error;
  }
- return replyPrivate(interaction, 'Whisper Vault is ready in ' + publicChannel.toString() + '. Private reports will be delivered to ' + staffChannel.toString() + '.');
+
+ return replyPrivate(interaction,
+  'Whisper Vault is ready in ' + publicChannel.toString() +
+  '. Private staff reports will be delivered to ' + staffChannel.toString() +
+  ' for ' + staffRole.toString() + '.');
 }
 async function handleSubmission(interaction) {
  await interaction.deferReply({ flags: EPHEMERAL });
