@@ -52,20 +52,22 @@ test('only bot-authored Whisper Vault entries are recognized', () => {
  assert.equal(whisper.isWhisperPost(message, 'other'), false);
  assert.equal(whisper.isWhisperPost({ ...message, embeds: [{ title: 'Other message' }] }, 'bot'), false);
 });
-test('the single module handler opens the submission modal exactly once', async () => {
- let modalCalls = 0;
+test('current and legacy confession panel buttons open the new submission modal', async () => {
  const client = { user: { id: 'bot' }, guilds: { fetch: async () => null } };
  const handler = whisper.createInteractionHandler(client);
- const interaction = {
-  guildId: '123456789012345678',
-  customId: 'whisper:open',
-  isChatInputCommand: () => false,
-  isButton: () => true,
-  isModalSubmit: () => false,
-  showModal: async modal => { modalCalls += 1; assert.equal(modal.toJSON().custom_id, 'whisper:submit'); }
- };
- await handler(interaction);
- assert.equal(modalCalls, 1);
+ for (const customId of ['whisper:open', 'starry:confession:open', 'confess_btn_open', 'confess_open_modal']) {
+  let modalCalls = 0;
+  const interaction = {
+   guildId: '123456789012345678',
+   customId,
+   isChatInputCommand: () => false,
+   isButton: () => true,
+   isModalSubmit: () => false,
+   showModal: async modal => { modalCalls += 1; assert.equal(modal.toJSON().custom_id, 'whisper:submit'); }
+  };
+  await handler(interaction);
+  assert.equal(modalCalls, 1, customId + ' should open the modal exactly once');
+ }
 });
 test('report button opens a modal bound to the clicked confession message', async () => {
  let modalId = '';
