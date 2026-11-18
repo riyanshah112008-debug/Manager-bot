@@ -73,6 +73,13 @@ test('public channel validation requires Read Message History for persistent rev
  const botMember = { id: '5', roles: { cache: new Map() } };
  assert.match(whisper.validateChannels(guild, publicChannel, staffChannel, staffRole, botMember), /Read Message History/);
 });
+test('report failures explain missing staff-channel permissions and inaccessible channels', () => {
+ assert.match(whisper.getActionFailureMessage({ code: 50013 }, 'report'), /private staff channel/i);
+ assert.match(whisper.getActionFailureMessage({ code: 50001 }, 'report'), /cannot access the private staff report channel/i);
+ assert.match(whisper.getActionFailureMessage({ code: 10003 }, 'report'), /channel no longer exists/i);
+ assert.match(whisper.getActionFailureMessage(new Error('unexpected failure'), 'report'), /failure has been logged/i);
+});
+
 test('staff embed has a structured red review layout and escapes mentions', () => {
  const json = whisper.buildReportEmbed(12, 'Threats @here', 'https://discord.com/channels/1/2/3').toJSON();
  assert.equal(json.color, 0xD64545);
