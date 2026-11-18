@@ -31,7 +31,7 @@ test('public confession embed contains no author identity and escapes mass menti
  const json = whisper.buildConfessionEmbed(7, 'A thought', 'Hello @everyone').toJSON();
  assert.equal(json.title, 'CONFESSION  #0007');
  assert.match(json.description, /@\u200Beveryone/);
- assert.equal(json.author.name, 'ANONYMOUS CONFESSIONS  /  ANONYMOUS ENTRY');
+ assert.equal(json.author.name, 'ANONYMOUS CONFESSION');
  assert.equal(json.fields.some(field => /user|author|member/i.test(field.name)), false);
 });
 test('every confession has reply, new confession, and report buttons', () => {
