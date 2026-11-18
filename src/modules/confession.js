@@ -176,6 +176,19 @@ async function replyPrivate(interaction, content) {
  if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(() => null);
  return interaction.reply({ ...payload, flags: EPHEMERAL }).catch(() => null);
 }
+function getActionFailureMessage(error, action = 'action') {
+ const code = Number(error?.code);
+ if (code === 50013) return action === 'report'
+  ? 'Starry could not post this report because it is missing a permission in the private staff channel. Ask a manager to rerun /confessionsetup and verify Starry has View Channel, Send Messages, and Embed Links there.'
+  : 'Starry is missing a required Discord permission. Ask a server manager to check its role and channel permissions.';
+ if (code === 50001) return 'Starry cannot access the private staff report channel. Ask a manager to check the channel permissions and rerun /confessionsetup.';
+ if (code === 10003) return 'The configured confession or staff channel no longer exists. Ask a manager to rerun /confessionsetup.';
+ if (code === 10008) return 'That confession is no longer available. Reports can only be submitted for a published confession.';
+ if (/Mongo|Mongoose|ServerSelection/i.test(String(error?.name || ''))) return 'Confessions storage is temporarily unavailable. Please try again in a moment and contact a manager if it continues.';
+ return action === 'report'
+  ? 'Starry could not deliver this report. The failure has been logged; please try again or contact a server manager.'
+  : 'Confessions could not complete that action. Please try again or contact a server manager.';
+}
 function chooseFallbackStaffRole(guild, member) {
  const memberRoles = member?.roles?.cache;
  if (!memberRoles) return null;
@@ -416,8 +429,19 @@ function createInteractionHandler(client) {
     if (interaction.customId.startsWith(REPLY_MODAL_PREFIX)) return await handleReply(interaction, client, interaction.customId.slice(REPLY_MODAL_PREFIX.length));
    }
   } catch (error) {
-   console.error('[Confessions] Action failed:', error?.message || error);
-   if (interaction.isRepliable?.()) await replyPrivate(interaction, 'Confessions could not complete that action. Please try again or contact a server manager.');
+   const isReport = String(interaction.customId || '').startsWith(REPORT_MODAL_PREFIX);
+   console.error('[Confessions] Action failed:', {
+    action: isReport ? 'report' : 'interaction',
+    guildId: interaction.guildId || null,
+    customId: String(interaction.customId || '').slice(0, 100),
+    name: error?.name || 'Error',
+    code: error?.code ?? null,
+    message: error?.message || String(error),
+    stack: error?.stack || null
+   });
+   if (interaction.isRepliable?.()) {
+    await replyPrivate(interaction, getActionFailureMessage(error, isReport ? 'report' : 'action'));
+   }
   }
  };
 }
@@ -451,6 +475,7 @@ whisperModule.buildStaffComponents = buildStaffComponents;
 whisperModule.isWhisperPost = isWhisperPost;
 whisperModule.validateChannels = validateChannels;
 whisperModule.isStaffChannelPermissionIssue = isStaffChannelPermissionIssue;
+whisperModule.getActionFailureMessage = getActionFailureMessage;
 whisperModule.createInteractionHandler = createInteractionHandler;
 whisperModule.registerWorkerHook = registerWorkerHook;
 module.exports = whisperModule;
