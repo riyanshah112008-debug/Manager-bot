@@ -140,6 +140,18 @@ test('unsafe selected staff-channel permissions trigger secure-channel fallback 
  assert.equal(whisper.isStaffChannelPermissionIssue('Starry needs View Channel, Send Messages, Embed Links, and Read Message History in the public channel.'), false);
 });
 
+test('report delivery distinguishes permission, access, and invalid-payload failures', () => {
+ const { PermissionFlagsBits } = require('discord.js');
+ const allRequired = { has: () => true, toArray: () => ['ViewChannel', 'SendMessages', 'EmbedLinks'] };
+ const channel = { permissionsFor: () => allRequired };
+ const bot = { id: '123456789012345678' };
+ assert.match(whisper.getReportDeliveryFailure({ code: 50013 }, channel, bot), /cached channel permissions show the required access/i);
+ assert.match(whisper.getReportDeliveryFailure({ code: 50001 }, channel, bot), /denied Starry access/i);
+ assert.match(whisper.getReportDeliveryFailure({ code: 50035 }, channel, bot), /not a channel-permission problem/i);
+ const missingChannel = { permissionsFor: () => ({ has: flag => flag !== PermissionFlagsBits.EmbedLinks }) };
+ assert.match(whisper.getReportDeliveryFailure({ code: 50013 }, missingChannel, bot), /Embed Links/);
+});
+
 test('report modal is bound to the exact confession and enforces a bounded reason', () => {
  const modal = whisper.buildReportModal('123456789012345678').toJSON();
  assert.equal(modal.custom_id, 'whisper:report-submit:123456789012345678');
