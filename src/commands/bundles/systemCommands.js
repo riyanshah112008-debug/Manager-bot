@@ -930,34 +930,7 @@ const commands = [
         }
     },
 
-    // 12. CONFESSIONSETUP
-    {
-        name: 'confessionsetup',
-        category: 'Systems',
-        description: 'Spawn the anonymous confession portal in this channel.',
-        usage: ',confessionsetup',
-        permissions: [PermissionFlagsBits.Administrator],
-        async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
-            }
-
-            const embed = new EmbedBuilder()
-                .setColor('#9B59B6')
-                .setTitle('💌 Anonymous Confession Box')
-                .setDescription('Submit anonymous confessions safely! Your identity is kept 100% confidential.')
-                .setFooter({ text: 'Confession Box • Prefix: ,' });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('confess_open_modal').setLabel('Submit Confession').setEmoji('📝').setStyle(ButtonStyle.Primary)
-            );
-
-            await ctx.channel.send({ embeds: [embed], components: [row] });
-            if (ctx.isSlash) ctx.reply({ content: '✅ Confession panel spawned!', ephemeral: true });
-        }
-    },
-
-    // 13. SETUPCOUNT
+    // 12. SETUPCOUNT
     {
         name: 'setupcount',
         category: 'Systems',

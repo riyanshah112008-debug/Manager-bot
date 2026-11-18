@@ -120,3 +120,17 @@ test('a throwing logger cannot break dispatch and logs contain no raw error text
  await new Promise(resolve => setImmediate(resolve));
  assert.equal(replies.length, 1);
 });
+
+test('higher-priority handlers run first and stop after acknowledgement', async () => {
+ const client = new EventEmitter(); const order = [];
+ guard.registerInteractionHandler(client, 'low', async () => { order.push('low'); }, { priority: 0 });
+ guard.registerInteractionHandler(client, 'high', async interaction => {
+  order.push('high');
+  interaction.replied = true;
+ }, { priority: 100 });
+ guard.registerInteractionHandler(client, 'middle', async () => { order.push('middle'); }, { priority: 50 });
+ const interaction = { deferred: false, replied: false };
+ client.emit('interactionCreate', interaction);
+ await new Promise(resolve => setImmediate(resolve));
+ assert.deepEqual(order, ['high']);
+});
