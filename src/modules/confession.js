@@ -169,7 +169,7 @@ function isStaffChannelPermissionIssue(message) {
 }
 function isWhisperPost(message, botUserId) {
  const title = message?.embeds?.[0]?.title || '';
- return Boolean(message && message.author?.id === botUserId && /^CONFESSION\s+#\d{4,}$/i.test(title));
+ return Boolean(message && message.author?.id === botUserId && /^CONFESSION\s+#\d{4,}(?:\s+•\s+ANONYMOUS REPLY)?$/i.test(title));
 }
 async function replyPrivate(interaction, content) {
  const payload = { content, allowedMentions: { parse: [] } };
@@ -319,7 +319,7 @@ async function handleReply(interaction, client, messageId) {
  if (!isWhisperPost(source, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for replies.');
  const body = interaction.fields.getTextInputValue('body').trim();
  if (body.length < 2 || body.length > MAX_BODY) return replyPrivate(interaction, 'Your reply must contain between 2 and 1,000 characters.');
- const number = Number((source.embeds[0].title.match(/#(\\d+)/) || [])[1]);
+ const number = Number((source.embeds[0].title.match(/#(\d+)/) || [])[1]);
  await channel.send({ embeds: [buildReplyEmbed(number, body)], components: buildConfessionComponents(), allowedMentions: { parse: [] } });
  return replyPrivate(interaction, 'Your anonymous reply has been published.');
 }
