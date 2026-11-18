@@ -55,7 +55,8 @@ module.exports = (client) => {
                 });
 
                 embed.setColor(hexColor).setDescription(`✅ Successfully created the role <@&${newRole.id}>!`);
-                return interaction.reply({ embeds: [embed] });
+                await interaction.reply({ embeds: [embed] }).catch(() => null);
+                return;
             }
 
             // --- DELETE ROLE ---
