@@ -196,9 +196,12 @@ async function handleSetup(interaction, client) {
  }
 
  const botMember = await getBotMember(guild);
+ if (!botMember) return replyPrivate(interaction, 'Starry could not resolve its own server member. Please try again after the bot reconnects.');
+ const invokingMember = guild.members.cache.get(interaction.user.id) ||
+  await guild.members.fetch(interaction.user.id).catch(() => null);
  const staffRole = interaction.options.getRole('staff_role') ||
   (currentConfig?.staffRoleId ? guild.roles.cache.get(currentConfig.staffRoleId) : null) ||
-  chooseFallbackStaffRole(guild, interaction.member);
+  chooseFallbackStaffRole(guild, invokingMember);
  if (!staffRole) {
   return replyPrivate(interaction, 'Select a staff_role with Manage Server or Administrator permission. Starry could not safely choose a staff role automatically.');
  }
