@@ -165,13 +165,7 @@ const repModule = (client) => {
         return interaction.editReply({ embeds: [embed] });
     }
 
-    // --- Interaction Event Router ---
-    registerInteractionHandler(client, 'rep:1', async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
-        if (interaction.commandName === 'rep') await handleRepCommand(interaction);
-        if (interaction.commandName === 'checkrep') await handleCheckRepCommand(interaction);
-        if (interaction.commandName === 'leaderboard') await handleLeaderboardCommand(interaction);
-    });
+    // Slash commands are dispatched through client.commands above.
 };
 
 repModule.UserRep = UserRep;
