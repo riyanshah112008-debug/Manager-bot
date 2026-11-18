@@ -15,7 +15,6 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 const config = require('../config');
-const { ONE_YEAR_MS } = require('../utils/contextHelper');
 const { getSocialGif, ANIME_GIFS } = require('../utils/animeGifs');
 const { incrementSocialCount, getSocialCount } = require('../models/SocialStats');
 
@@ -242,7 +241,7 @@ async function sendSocialHelpMenu(context) {
     const replyMsg = await context.reply({ embeds: [embed], components: [row] });
     
     if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
-        const collector = replyMsg.createMessageComponentCollector({ time: ONE_YEAR_MS });
+        const collector = replyMsg.createMessageComponentCollector({ });
         collector.on('collect', async (i) => {
             if (i.customId === 'social_select_action') {
                 const selectedAction = i.values[0];

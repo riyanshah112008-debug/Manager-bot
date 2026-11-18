@@ -16,7 +16,6 @@ const {
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
 const config = require('../config');
-const { ONE_YEAR_MS } = require('../utils/contextHelper');
 
 module.exports = (client) => {
     const PREFIX = config.DEFAULT_PREFIX || ',';
@@ -92,7 +91,7 @@ module.exports = (client) => {
 
         const activeUser = member?.user || user;
         const replyMsg = await replyFunction({ embeds: [generateEmbed(0)], components: [generateButtons(0)], fetchReply: true });
-        const collector = replyMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: ONE_YEAR_MS });
+        const collector = replyMsg.createMessageComponentCollector({ componentType: ComponentType.Button, });
 
         collector.on('collect', async (i) => {
             if (i.user.id !== activeUser.id) {

@@ -266,7 +266,7 @@ class CommandContext {
         if (!target || typeof target.createMessageComponentCollector !== 'function') return null;
 
         const collectorOptions = {
-            time: ONE_YEAR_MS,
+            
             ...options
         };
 

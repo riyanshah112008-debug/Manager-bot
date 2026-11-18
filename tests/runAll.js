@@ -3,6 +3,7 @@
 const { spawnSync } = require('node:child_process');
 
 const suites = [
+  ['Persistent component collector policy', '--test', 'tests/persistentComponentPolicy.test.js'],
   ['Global interaction guard', '--test', 'tests/interactionHandler.test.js'],
   ['Global interaction guard syntax', '--check', 'src/utils/interactionHandler.js'],
   ['Anonymous confession module', '--test', 'tests/confessionModule.test.js'],
