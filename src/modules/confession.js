@@ -132,7 +132,7 @@ function buildReplyEmbed(number, body) {
 function buildStaffComponents(messageId) {
  return [new ActionRowBuilder().addComponents(
   new ButtonBuilder().setCustomId(STAFF_REMOVE_PREFIX + messageId).setLabel('Remove confession').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
-  new ButtonBuilder().setCustomId(STAFF_DISMISS_PREFIX + messageId).setLabel('Dismiss report').setEmoji('✓').setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(STAFF_DISMISS_PREFIX + messageId).setLabel('Dismiss report').setStyle(ButtonStyle.Secondary)
  )];
 }
 function isSnowflake(value) { return typeof value === 'string' && /^\d{17,20}$/.test(value); }
