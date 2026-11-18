@@ -1,8 +1,7 @@
 'use strict';
 
 const { Events, MessageFlags } = require('discord.js');
-
-const registrations = new WeakMap();
+const clients = new WeakMap();
 
 function isAcknowledged(interaction) {
     return Boolean(interaction && (interaction.deferred || interaction.replied));
@@ -14,51 +13,70 @@ function isExpiredInteractionError(error) {
         /unknown interaction|already been acknowledged/i.test(message);
 }
 
+function report(logger, key, error) {
+    if (!isExpiredInteractionError(error) && logger && typeof logger.error === 'function') {
+        logger.error('[Interaction:' + key + '] Handler failed', error);
+    }
+}
+
+async function dispatch(state, interaction) {
+    const tasks = [];
+    for (const [key, entry] of state.handlers) {
+        try {
+            tasks.push(Promise.resolve(entry.handler(interaction)).catch(error => {
+                report(entry.logger, key, error);
+                return error;
+            }));
+        } catch (error) {
+            report(entry.logger, key, error);
+            tasks.push(Promise.resolve(error));
+        }
+    }
+
+    const outcomes = await Promise.all(tasks);
+    const failed = outcomes.find(value => value instanceof Error);
+    if (failed && !isAcknowledged(interaction) && interaction &&
+        typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
+        try {
+            await interaction.reply({
+                content: isExpiredInteractionError(failed)
+                    ? 'This interaction is no longer valid. Please open a fresh panel and try again.'
+                    : 'The action could not be completed. Please try again.',
+                flags: MessageFlags.Ephemeral
+            });
+        } catch (replyError) {
+            if (!isExpiredInteractionError(replyError)) {
+                report(console, 'dispatcher:fallback', replyError);
+            }
+        }
+    }
+}
+
 function registerInteractionHandler(client, key, handler, options = {}) {
     if (!client || typeof client.on !== 'function') throw new TypeError('A Discord client is required.');
     if (typeof key !== 'string' || !key.trim()) throw new TypeError('An interaction handler key is required.');
     if (typeof handler !== 'function') throw new TypeError('An interaction handler callback is required.');
 
-    let clientRegistrations = registrations.get(client);
-    if (!clientRegistrations) {
-        clientRegistrations = new Map();
-        registrations.set(client, clientRegistrations);
+    let state = clients.get(client);
+    if (!state) {
+        state = { handlers: new Map(), listener: null };
+        state.listener = interaction => { void dispatch(state, interaction); };
+        clients.set(client, state);
+        client.on(Events.InteractionCreate, state.listener);
     }
-    if (clientRegistrations.has(key)) return clientRegistrations.get(key).dispose;
+    if (state.handlers.has(key)) return state.handlers.get(key).dispose;
 
-    const logger = options.logger || console;
-    const listener = async interaction => {
-        try {
-            await handler(interaction);
-        } catch (error) {
-            if (!isExpiredInteractionError(error)) {
-                if (logger && typeof logger.error === 'function') logger.error('[Interaction:' + key + '] Handler failed', error);
-            }
-            if (!isAcknowledged(interaction) && interaction &&
-                typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
-                const payload = {
-                    content: isExpiredInteractionError(error)
-                        ? 'This interaction is no longer valid. Please open a fresh panel and try again.'
-                        : 'The action could not be completed. Please try again.',
-                    flags: MessageFlags.Ephemeral
-                };
-                try {
-                    await interaction.reply(payload);
-                } catch (replyError) {
-                    if (!isExpiredInteractionError(replyError) && logger && typeof logger.error === 'function') {
-                        logger.error('[Interaction:' + key + '] Could not send fallback', replyError);
-                    }
-                }
-            }
+    const entry = { handler, logger: options.logger || console };
+    const dispose = () => {
+        if (state.handlers.get(key) !== entry) return;
+        state.handlers.delete(key);
+        if (state.handlers.size === 0) {
+            if (typeof client.off === 'function') client.off(Events.InteractionCreate, state.listener);
+            clients.delete(client);
         }
     };
-
-    client.on(Events.InteractionCreate, listener);
-    const dispose = () => {
-        if (typeof client.off === 'function') client.off(Events.InteractionCreate, listener);
-        clientRegistrations.delete(key);
-    };
-    clientRegistrations.set(key, { listener, dispose });
+    entry.dispose = dispose;
+    state.handlers.set(key, entry);
     return dispose;
 }
 
