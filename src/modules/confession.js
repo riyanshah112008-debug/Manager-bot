@@ -125,13 +125,13 @@ function validateChannels(guild, publicChannel, staffChannel, staffRole, botMemb
  if (!staffChannel || staffChannel.guildId !== guild.id || staffChannel.type !== ChannelType.GuildText || staffChannel.id === publicChannel.id) return 'The private staff channel must be a different text channel in this server.';
  if (!staffRole || staffRole.guild.id !== guild.id || !botMember) return 'Starry could not verify the staff role or its own server permissions.';
  const pub = publicChannel.permissionsFor(botMember);
- if (!pub?.has(PermissionFlagsBits.ViewChannel) || !pub.has(PermissionFlagsBits.SendMessages) || !pub.has(PermissionFlagsBits.EmbedLinks)) return 'Starry needs View Channel, Send Messages, and Embed Links in the public channel.';
+ if (!pub?.has(PermissionFlagsBits.ViewChannel) || !pub.has(PermissionFlagsBits.SendMessages) || !pub.has(PermissionFlagsBits.EmbedLinks) || !pub.has(PermissionFlagsBits.ReadMessageHistory)) return 'Starry needs View Channel, Send Messages, Embed Links, and Read Message History in the public channel.';
  const everyone = staffChannel.permissionsFor(guild.roles.everyone);
  const staff = staffChannel.permissionsFor(staffRole);
  const bot = staffChannel.permissionsFor(botMember);
  if (!everyone || everyone.has(PermissionFlagsBits.ViewChannel) || !staff?.has(PermissionFlagsBits.ViewChannel)) return 'The staff channel must be hidden from @everyone and visible to the selected staff role.';
  for (const role of guild.roles.cache.values()) {
-  if (role.id === guild.roles.everyone.id || role.id === staffRole.id || role.permissions.has(PermissionFlagsBits.Administrator)) continue;
+  if (role.id === guild.roles.everyone.id || role.id === staffRole.id || role.permissions.has(PermissionFlagsBits.Administrator) || (role.managed && botMember.roles?.cache?.has(role.id))) continue;
   const permissions = staffChannel.permissionsFor(role);
   if (permissions?.has(PermissionFlagsBits.ViewChannel)) return 'Another non-staff role can view the report channel. Remove its View Channel access first.';
  }
@@ -193,7 +193,8 @@ async function handleReport(interaction, client, messageId) {
  if (!guild) return replyPrivate(interaction, 'I could not access this server.');
  const publicChannel = await getTextChannel(guild, config.channelId);
  const staffChannel = await getTextChannel(guild, config.staffChannelId);
- const message = publicChannel && await publicChannel.messages.fetch(messageId).catch(() => null);
+ if (!publicChannel || !publicChannel.permissionsFor(await getBotMember(guild))?.has(PermissionFlagsBits.ReadMessageHistory)) return replyPrivate(interaction, 'Starry needs Read Message History in the public confession channel to verify the report source.');
+ const message = await publicChannel.messages.fetch(messageId).catch(() => null);
  if (!isWhisperPost(message, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for review.');
  if (!staffChannel) return replyPrivate(interaction, 'The private staff report channel is unavailable. Ask a manager to rerun /confessionsetup.');
  const staffRole = guild.roles.cache.get(config.staffRoleId) || await guild.roles.fetch(config.staffRoleId).catch(() => null);
@@ -222,15 +223,22 @@ async function handleStaffAction(interaction, client, action, messageId) {
  const botMember = guild && await getBotMember(guild);
  const privacyError = guild && channel && staffChannel && validateChannels(guild, channel, staffChannel, staffRole, botMember);
  if (!guild || !channel || !staffChannel || privacyError) return replyPrivate(interaction, 'Staff actions are paused because the configured channels are unavailable or no longer private. Ask a manager to rerun /confessionsetup.');
+ if (action === 'dismiss') {
+  if (interaction.message) await interaction.message.edit({ content: '✓ Report reviewed and dismissed.', embeds: [], components: [] });
+  return replyPrivate(interaction, 'The report has been dismissed.');
+ }
  const confession = await channel.messages.fetch(messageId).catch(() => null);
  if (!isWhisperPost(confession, client.user.id)) return replyPrivate(interaction, 'The original confession is already unavailable.');
- if (action === 'remove') {
-  const botMember = await getBotMember(guild);
-  if (!channel.permissionsFor(botMember)?.has(PermissionFlagsBits.ManageMessages)) return replyPrivate(interaction, 'Starry needs Manage Messages in the public confession channel to remove posts.');
-  await confession.delete();
+ await confession.delete();
+ if (interaction.message) {
+  try {
+   await interaction.message.edit({ content: '🗑️ Confession removed by staff.', embeds: [], components: [] });
+  } catch (error) {
+   console.error('[Whisper Vault] Confession was removed but report card update failed:', error?.message || error);
+   return replyPrivate(interaction, 'The confession was removed, but the staff report card could not be updated. Please refresh or remove that report manually.');
+  }
  }
- if (interaction.message) await interaction.message.edit({ content: action === 'remove' ? '🗑️ Confession removed by staff.' : '✓ Report reviewed and dismissed.', embeds: [], components: [] }).catch(() => null);
- return replyPrivate(interaction, action === 'remove' ? 'The confession has been removed.' : 'The report has been dismissed.');
+ return replyPrivate(interaction, 'The confession has been removed.');
 }
 function createInteractionHandler(client) {
  return async interaction => {
