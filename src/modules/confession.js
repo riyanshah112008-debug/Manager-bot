@@ -11,6 +11,7 @@ const EPHEMERAL = MessageFlags.Ephemeral;
 const PANEL_BUTTON = 'whisper:open';
 const SUBMIT_MODAL = 'whisper:submit';
 const REPORT_MODAL_PREFIX = 'whisper:report-submit:';
+const REPLY_MODAL_PREFIX = 'confession:reply-submit:';
 const STAFF_REMOVE_PREFIX = 'whisper:staff:remove:';
 const STAFF_DISMISS_PREFIX = 'whisper:staff:dismiss:';
 const LEGACY_OPEN_IDS = new Set(['starry:confession:open', 'confess_btn_open', 'confess_open_modal']);
@@ -33,26 +34,26 @@ const WhisperCounter = mongoose.models.StarryConfessionCounter || mongoose.model
 
 const setupPayload = new SlashCommandBuilder()
  .setName('confessionsetup')
- .setDescription('Create or replace the anonymous Whisper Vault panel')
+ .setDescription('Create or replace the anonymous confession panel')
  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
  .addChannelOption(o => o.setName('channel').setDescription('Public channel for confessions').addChannelTypes(ChannelType.GuildText).setRequired(false))
  .addChannelOption(o => o.setName('staff_channel').setDescription('Private channel for staff reports (auto-created if omitted)').addChannelTypes(ChannelType.GuildText).setRequired(false))
  .addRoleOption(o => o.setName('staff_role').setDescription('Role allowed to review reports (defaults to your Manage Server/Admin role)').setRequired(false))
  .toJSON();
 const confessPayload = new SlashCommandBuilder()
- .setName('confess').setDescription('Open the private Whisper Vault submission form').toJSON();
+ .setName('confess').setDescription('Submit an anonymous confession').toJSON();
 
 function escapeMentions(value) {
  return String(value ?? '').replace(/@everyone/gi, '@\u200Beveryone').replace(/@here/gi, '@\u200Bhere');
 }
 function buildPanelEmbed() {
- return new EmbedBuilder().setColor('#C83E4D').setTitle('WHISPER VAULT')
+ return new EmbedBuilder().setColor('#C83E4D').setTitle('ANONYMOUS CONFESSIONS')
   .setDescription([
-   '**A place for the things you never say out loud.**',
-   'Leave a thought, a secret, a confession, or a weight you need to put down.',
+   '**A place to say what you cannot say out loud.**',
+   'Share a thought, a secret, or a confession anonymously.',
    '',
-   'Your post appears without your username, avatar, or profile link.',
-   'Submissions are private to you until published.',
+   'Your confession is published without your username, avatar, or profile link.',
+   'Staff can review reports privately.',
    '',
    '+ Speak honestly',
    '+ Respect other people',
@@ -62,16 +63,22 @@ function buildPanelEmbed() {
   .addFields(
    { name: '01  /  PRIVATE SUBMISSION', value: 'The form is visible only to you. Your account is not shown on the published post.', inline: true },
    { name: '02  /  COMMUNITY SAFETY', value: 'Every confession can be reported. Reports go to a private staff channel.', inline: true }
-  ).setFooter({ text: 'STARRY  •  WHISPER VAULT  •  Anonymous words, responsible community' }).setTimestamp();
+  ).setFooter({ text: 'STARRY  •  ANONYMOUS CONFESSIONS  •  Keep it kind' }).setTimestamp();
 }
 function buildPanelComponents() {
- return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(PANEL_BUTTON).setLabel('Open Whisper Vault').setEmoji('✉️').setStyle(ButtonStyle.Danger))];
+ return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(PANEL_BUTTON).setLabel('Submit Confession').setEmoji('✉️').setStyle(ButtonStyle.Danger))];
 }
 function buildSubmissionModal() {
- const modal = new ModalBuilder().setCustomId(SUBMIT_MODAL).setTitle('Whisper to the Vault');
+ const modal = new ModalBuilder().setCustomId(SUBMIT_MODAL).setTitle('Submit a Confession');
  const topic = new TextInputBuilder().setCustomId('topic').setLabel('A short title (optional)').setPlaceholder('A thought, a memory, a confession…').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(MAX_TOPIC);
  const body = new TextInputBuilder().setCustomId('body').setLabel('What would you like to say?').setPlaceholder('Write your words here. Do not include private identifying details.').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(3).setMaxLength(MAX_BODY);
  modal.addComponents(new ActionRowBuilder().addComponents(topic), new ActionRowBuilder().addComponents(body));
+ return modal;
+}
+function buildReplyModal(messageId) {
+ const modal = new ModalBuilder().setCustomId(REPLY_MODAL_PREFIX + messageId).setTitle('Reply anonymously');
+ const body = new TextInputBuilder().setCustomId('body').setLabel('Your anonymous reply').setPlaceholder('Write a thoughtful, respectful reply…').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(MAX_BODY);
+ modal.addComponents(new ActionRowBuilder().addComponents(body));
  return modal;
 }
 function buildReportModal(messageId) {
@@ -82,16 +89,16 @@ function buildReportModal(messageId) {
 }
 function buildConfessionEmbed(number, topic, body) {
  const embed = new EmbedBuilder().setColor('#C83E4D')
-  .setAuthor({ name: 'WHISPER VAULT  /  ANONYMOUS ENTRY' })
+  .setAuthor({ name: 'ANONYMOUS CONFESSION' })
   .setTitle('CONFESSION  #' + String(number).padStart(4, '0'))
   .setDescription('> ' + escapeMentions(body).trim().replace(/\n/g, '\n> '))
   .addFields({ name: 'STATUS', value: 'Published anonymously', inline: true })
-  .setFooter({ text: 'STARRY  •  WHISPER VAULT  •  Keep it human. Keep it kind.' }).setTimestamp();
+  .setFooter({ text: 'STARRY  •  ANONYMOUS CONFESSIONS' }).setTimestamp();
  if (topic && topic.trim()) embed.addFields({ name: 'SUBJECT', value: escapeMentions(topic.trim()).slice(0, MAX_TOPIC), inline: true });
  return embed;
 }
 function buildReportEmbed(number, reason, messageUrl) {
- return new EmbedBuilder().setColor('#D64545').setTitle('WHISPER VAULT  /  STAFF REVIEW')
+ return new EmbedBuilder().setColor('#D64545').setTitle('ANONYMOUS CONFESSIONS  /  STAFF REVIEW')
   .setDescription('A community member flagged a published confession for review.')
   .addFields(
    { name: 'CONFESSION', value: '#' + String(number).padStart(4, '0'), inline: true },
@@ -100,7 +107,17 @@ function buildReportEmbed(number, reason, messageUrl) {
   ).setFooter({ text: 'Private staff notice  •  Reporter identity is not displayed or stored' }).setTimestamp();
 }
 function buildConfessionComponents() {
- return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('whisper:report').setLabel('Report to staff').setEmoji('🚩').setStyle(ButtonStyle.Secondary))];
+ return [new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId('confession:reply').setLabel('Reply').setEmoji('💬').setStyle(ButtonStyle.Primary),
+  new ButtonBuilder().setCustomId(PANEL_BUTTON).setLabel('New Confession').setEmoji('✍️').setStyle(ButtonStyle.Success),
+  new ButtonBuilder().setCustomId('whisper:report').setLabel('Report').setEmoji('🚩').setStyle(ButtonStyle.Secondary)
+ )];
+}
+function buildReplyEmbed(number, body) {
+ return new EmbedBuilder().setColor('#5865F2').setAuthor({ name: 'ANONYMOUS REPLY' })
+  .setTitle('CONFESSION  #' + String(number).padStart(4, '0') + '  •  ANONYMOUS REPLY')
+  .setDescription('> ' + escapeMentions(body).trim().replace(/\n/g, '\n> '))
+  .setFooter({ text: 'STARRY  •  ANONYMOUS CONFESSIONS' }).setTimestamp();
 }
 function buildStaffComponents(messageId) {
  return [new ActionRowBuilder().addComponents(
@@ -152,7 +169,7 @@ function isStaffChannelPermissionIssue(message) {
 }
 function isWhisperPost(message, botUserId) {
  const title = message?.embeds?.[0]?.title || '';
- return Boolean(message && message.author?.id === botUserId && /^CONFESSION\s+#\d{4,}$/i.test(title));
+ return Boolean(message && message.author?.id === botUserId && /^CONFESSION\s+#\d{4,}(?:\s+•\s+ANONYMOUS REPLY)?$/i.test(title));
 }
 async function replyPrivate(interaction, content) {
  const payload = { content, allowedMentions: { parse: [] } };
@@ -179,16 +196,16 @@ async function createPrivateStaffChannel(guild, publicChannel, staffRole, botMem
   throw new Error('Starry needs Manage Channels to create the private staff report channel. Select an existing staff_channel option instead.');
  }
  return guild.channels.create({
-  name: 'whisper-vault-staff',
+  name: 'anonymous-confessions-staff',
   type: ChannelType.GuildText,
   parent: publicChannel.parentId || undefined,
-  topic: 'Private staff-only reports for Starry Whisper Vault',
+  topic: 'Private staff-only reports for Starry Confessions',
   permissionOverwrites: [
    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
    { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] },
    { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] }
   ],
-  reason: 'Create private staff review channel for Starry Whisper Vault'
+  reason: 'Create private staff review channel for Starry Confessions'
  });
 }
 
@@ -270,14 +287,14 @@ async function handleSetup(interaction, client) {
  }
 
  return replyPrivate(interaction,
-  'Whisper Vault is ready in ' + publicChannel.toString() +
+  'Confessions is ready in ' + publicChannel.toString() +
   '. Private staff reports will be delivered to ' + staffChannel.toString() +
   ' for ' + staffRole.toString() + '.');
 }
 async function handleSubmission(interaction) {
  await interaction.deferReply({ flags: EPHEMERAL });
  const config = await getConfig(interaction.guildId);
- if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured. Ask a manager to run /confessionsetup.');
+ if (!config) return replyPrivate(interaction, 'Confessions are not configured. Ask a manager to run /confessionsetup.');
  const guild = await getGuild(interaction, interaction.client).catch(() => null);
  if (!guild) return replyPrivate(interaction, 'I could not access this server. Please try again later.');
  const channel = await getTextChannel(guild, config.channelId);
@@ -289,11 +306,28 @@ async function handleSubmission(interaction) {
  await channel.send({ embeds: [buildConfessionEmbed(number, topic, body)], components: buildConfessionComponents(), allowedMentions: { parse: [] } });
  return replyPrivate(interaction, 'Your confession **#' + String(number).padStart(4, '0') + '** has been published anonymously in ' + channel.toString() + '.');
 }
+async function handleReply(interaction, client, messageId) {
+ await interaction.deferReply({ flags: EPHEMERAL });
+ if (!isSnowflake(messageId)) return replyPrivate(interaction, 'This reply button is invalid. Open it from a current confession.');
+ const config = await getConfig(interaction.guildId);
+ if (!config) return replyPrivate(interaction, 'Confessions are not configured.');
+ const guild = await getGuild(interaction, client).catch(() => null);
+ if (!guild) return replyPrivate(interaction, 'I could not access this server.');
+ const channel = await getTextChannel(guild, config.channelId);
+ if (!channel) return replyPrivate(interaction, 'The confession channel is unavailable. Ask a manager to run /confessionsetup again.');
+ const source = await channel.messages.fetch(messageId).catch(() => null);
+ if (!isWhisperPost(source, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for replies.');
+ const body = interaction.fields.getTextInputValue('body').trim();
+ if (body.length < 2 || body.length > MAX_BODY) return replyPrivate(interaction, 'Your reply must contain between 2 and 1,000 characters.');
+ const number = Number((source.embeds[0].title.match(/#(\d+)/) || [])[1]);
+ await channel.send({ embeds: [buildReplyEmbed(number, body)], components: buildConfessionComponents(), allowedMentions: { parse: [] } });
+ return replyPrivate(interaction, 'Your anonymous reply has been published.');
+}
 async function handleReport(interaction, client, messageId) {
  await interaction.deferReply({ flags: EPHEMERAL });
  if (!isSnowflake(messageId)) return replyPrivate(interaction, 'This report button is invalid. Use the button on a current confession.');
  const config = await getConfig(interaction.guildId);
- if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured.');
+ if (!config) return replyPrivate(interaction, 'Confessions are not configured.');
  const guild = await getGuild(interaction, client).catch(() => null);
  if (!guild) return replyPrivate(interaction, 'I could not access this server.');
  const publicChannel = await getTextChannel(guild, config.channelId);
@@ -315,7 +349,7 @@ async function handleReport(interaction, client, messageId) {
 async function handleStaffAction(interaction, client, action, messageId) {
  await interaction.deferReply({ flags: EPHEMERAL });
  const config = await getConfig(interaction.guildId);
- if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured.');
+ if (!config) return replyPrivate(interaction, 'Confessions is not configured.');
  if (interaction.channelId !== config.staffChannelId) return replyPrivate(interaction, 'Staff review actions only work inside the configured private report channel.');
 
  const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
@@ -370,6 +404,7 @@ function createInteractionHandler(client) {
    if (interaction.isButton()) {
     const id = interaction.customId;
     if (id === PANEL_BUTTON || LEGACY_OPEN_IDS.has(id)) return await interaction.showModal(buildSubmissionModal());
+    if (id === 'confession:reply') return await interaction.showModal(buildReplyModal(interaction.message?.id));
     if (id === 'whisper:report') return await interaction.showModal(buildReportModal(interaction.message?.id));
     if (id.startsWith(STAFF_REMOVE_PREFIX)) return await handleStaffAction(interaction, client, 'remove', id.slice(STAFF_REMOVE_PREFIX.length));
     if (id.startsWith(STAFF_DISMISS_PREFIX)) return await handleStaffAction(interaction, client, 'dismiss', id.slice(STAFF_DISMISS_PREFIX.length));
@@ -378,10 +413,11 @@ function createInteractionHandler(client) {
    if (interaction.isModalSubmit()) {
     if (interaction.customId === SUBMIT_MODAL) return await handleSubmission(interaction);
     if (interaction.customId.startsWith(REPORT_MODAL_PREFIX)) return await handleReport(interaction, client, interaction.customId.slice(REPORT_MODAL_PREFIX.length));
+    if (interaction.customId.startsWith(REPLY_MODAL_PREFIX)) return await handleReply(interaction, client, interaction.customId.slice(REPLY_MODAL_PREFIX.length));
    }
   } catch (error) {
-   console.error('[Whisper Vault] Action failed:', error?.message || error);
-   if (interaction.isRepliable?.()) await replyPrivate(interaction, 'Whisper Vault could not complete that action. Please try again or contact a server manager.');
+   console.error('[Confessions] Action failed:', error?.message || error);
+   if (interaction.isRepliable?.()) await replyPrivate(interaction, 'Confessions could not complete that action. Please try again or contact a server manager.');
   }
  };
 }
@@ -396,9 +432,9 @@ function registerWorkerHook(client, manager) {
 function whisperModule(client) {
  if (!client || client.__starryWhisperHandlerInstalled) return;
  registerWorkerHook(client);
- registerInteractionHandler(client, 'whisper-vault', createInteractionHandler(client), { priority: 1000 });
+ registerInteractionHandler(client, 'anonymous-confessions', createInteractionHandler(client), { priority: 1000 });
  client.__starryWhisperHandlerInstalled = true;
- console.log('✉️ Starry Whisper Vault initialized.');
+ console.log('✉️ Starry Anonymous Confessions initialized.');
 }
 whisperModule.setupPayload = setupPayload;
 whisperModule.confessPayload = confessPayload;
@@ -406,9 +442,11 @@ whisperModule.buildPanelEmbed = buildPanelEmbed;
 whisperModule.buildPanelComponents = buildPanelComponents;
 whisperModule.buildSubmissionModal = buildSubmissionModal;
 whisperModule.buildReportModal = buildReportModal;
+whisperModule.buildReplyModal = buildReplyModal;
 whisperModule.buildConfessionEmbed = buildConfessionEmbed;
 whisperModule.buildReportEmbed = buildReportEmbed;
 whisperModule.buildConfessionComponents = buildConfessionComponents;
+whisperModule.buildReplyEmbed = buildReplyEmbed;
 whisperModule.buildStaffComponents = buildStaffComponents;
 whisperModule.isWhisperPost = isWhisperPost;
 whisperModule.validateChannels = validateChannels;

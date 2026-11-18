@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const whisper = require('../src/modules/confession');
 
-test('Whisper Vault panel has one persistent open action', () => {
+test('Confessions panel has one persistent open action', () => {
  const rows = whisper.buildPanelComponents();
  assert.equal(rows.length, 1);
  assert.equal(rows[0].components.length, 1);
@@ -31,12 +31,24 @@ test('public confession embed contains no author identity and escapes mass menti
  const json = whisper.buildConfessionEmbed(7, 'A thought', 'Hello @everyone').toJSON();
  assert.equal(json.title, 'CONFESSION  #0007');
  assert.match(json.description, /@\u200Beveryone/);
- assert.equal(json.author.name, 'WHISPER VAULT  /  ANONYMOUS ENTRY');
+ assert.equal(json.author.name, 'ANONYMOUS CONFESSION');
  assert.equal(json.fields.some(field => /user|author|member/i.test(field.name)), false);
 });
-test('report action uses a stable custom ID and reads source from the clicked message', () => {
+test('every confession has reply, new confession, and report buttons', () => {
  const rows = whisper.buildConfessionComponents();
- assert.equal(rows[0].components[0].data.custom_id, 'whisper:report');
+ assert.deepEqual(rows[0].components.map(button => button.data.custom_id), ['confession:reply', 'whisper:open', 'whisper:report']);
+ assert.deepEqual(rows[0].components.map(button => button.data.label), ['Reply', 'New Confession', 'Report']);
+});
+test('reply modal is bound to the exact source confession', () => {
+ const modal = whisper.buildReplyModal('123456789012345678').toJSON();
+ assert.equal(modal.custom_id, 'confession:reply-submit:123456789012345678');
+ assert.equal(modal.components[0].components[0].max_length, 1000);
+});
+test('anonymous replies keep the source confession number and are valid confession posts', () => {
+ const embed = whisper.buildReplyEmbed(42, 'A thoughtful reply').toJSON();
+ assert.match(embed.title, /^CONFESSION  #0042/);
+ assert.equal(embed.author.name, 'ANONYMOUS REPLY');
+ assert.equal(whisper.isWhisperPost({author:{id:'bot'},embeds:[embed]},'bot'), true);
 });
 test('staff report provides remove and dismiss actions bound to the confession message', () => {
  const rows = whisper.buildStaffComponents('123456789012345678');
@@ -64,11 +76,11 @@ test('public channel validation requires Read Message History for persistent rev
 test('staff embed has a structured red review layout and escapes mentions', () => {
  const json = whisper.buildReportEmbed(12, 'Threats @here', 'https://discord.com/channels/1/2/3').toJSON();
  assert.equal(json.color, 0xD64545);
- assert.equal(json.title, 'WHISPER VAULT  /  STAFF REVIEW');
+ assert.equal(json.title, 'ANONYMOUS CONFESSIONS  /  STAFF REVIEW');
  assert.match(json.fields.find(field => field.name === 'REASON').value, /@\u200Bhere/);
  assert.match(json.fields.find(field => field.name === 'SOURCE').value, /Open published confession/);
 });
-test('only bot-authored Whisper Vault entries are recognized', () => {
+test('only bot-authored Confessions entries are recognized', () => {
  const message = { author: { id: 'bot' }, embeds: [{ title: 'CONFESSION  #0001' }] };
  assert.equal(whisper.isWhisperPost(message, 'bot'), true);
  assert.equal(whisper.isWhisperPost(message, 'other'), false);
