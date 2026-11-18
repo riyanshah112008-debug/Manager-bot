@@ -193,12 +193,12 @@ async function handleReport(interaction, client, messageId) {
  if (!guild) return replyPrivate(interaction, 'I could not access this server.');
  const publicChannel = await getTextChannel(guild, config.channelId);
  const staffChannel = await getTextChannel(guild, config.staffChannelId);
- if (!publicChannel || !publicChannel.permissionsFor(await getBotMember(guild))?.has(PermissionFlagsBits.ReadMessageHistory)) return replyPrivate(interaction, 'Starry needs Read Message History in the public confession channel to verify the report source.');
+ const botMember = await getBotMember(guild);
+ if (!publicChannel || !botMember || !publicChannel.permissionsFor(botMember)?.has(PermissionFlagsBits.ReadMessageHistory)) return replyPrivate(interaction, 'Starry needs Read Message History in the public confession channel to verify the report source.');
  const message = await publicChannel.messages.fetch(messageId).catch(() => null);
  if (!isWhisperPost(message, client.user.id)) return replyPrivate(interaction, 'That confession is no longer available for review.');
  if (!staffChannel) return replyPrivate(interaction, 'The private staff report channel is unavailable. Ask a manager to rerun /confessionsetup.');
  const staffRole = guild.roles.cache.get(config.staffRoleId) || await guild.roles.fetch(config.staffRoleId).catch(() => null);
- const botMember = await getBotMember(guild);
  const privacyError = validateChannels(guild, publicChannel, staffChannel, staffRole, botMember);
  if (privacyError) return replyPrivate(interaction, '⚠️ Reports are paused because the configured destinations are no longer safe: ' + privacyError + ' Ask a manager to rerun /confessionsetup.');
  const reason = interaction.fields.getTextInputValue('reason').trim();
