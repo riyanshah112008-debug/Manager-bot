@@ -138,7 +138,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• \`${prefix}multibot\` — Inspect active worker bots, voice delegate states, and cluster health\n` +
                 `• \`${prefix}telemetry\` — Real-time performance, cluster latency & sharding analytics\n\n` +
                 `**Automated Giveaways & Tickets:**\n` +
-                `\`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}confessionsetup\`, \`${prefix}setupcount\`\n\n` +
+                `\`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}setupcount\`\n\n` +
                 `**Backups & Visual Branding:**\n` +
                 `\`${prefix}backup\`, \`${prefix}restore\`, \`${prefix}embedtheme\`, \`${prefix}customizewelcome\`, \`${prefix}customizegoodbye\`, \`${prefix}customizelevels\``
             );

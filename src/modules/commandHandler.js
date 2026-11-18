@@ -103,7 +103,6 @@ function setCachedPrefix(guildId, prefix) {
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
-const prefixNoticeCooldowns = new Set();
 const mongoose = require('mongoose');
 
 function isPrimaryBotClient(client) {
@@ -454,37 +453,6 @@ NaN
 
             const isPrefixInvocation = matchedPrefix !== '@' && matchedPrefix !== '';
 
-            // 👑 OWNER-ONLY PREFIX RESTRICTION (Starry Policy)
-            if (isPrefixInvocation) {
-                const isOwner = typeof config.isBotOwner === 'function' 
-                    ? config.isBotOwner(message.author.id, client) 
-                    : (config.BOT_OWNERS || []).includes(message.author.id);
-
-                if (!isOwner) {
-                    if (!prefixNoticeCooldowns.has(message.author.id)) {
-                        prefixNoticeCooldowns.add(message.author.id);
-                        setTimeout(() => prefixNoticeCooldowns.delete(message.author.id), 8000);
-
-                        const prefixChar = matchedPrefix || ',';
-                        const migrationEmbed = new EmbedBuilder()
-                            .setColor('#F1C40F')
-                            .setTitle('✨ Commands have migrated to Slash Commands (/)')
-                            .setDescription(
-                                `Prefix commands (\`${prefixChar}${resolvedName}\`) are reserved exclusively for **Bot Owners**.\n\n` +
-                                `👉 **Please use Slash Commands instead:** \`/${resolvedName}\`\n` +
-                                `Type \`/\` in the chat to explore all **Starry** commands!`
-                            )
-                            .setFooter({ text: 'Starry Master System • Fast & Fluid' });
-
-                        const noticeMsg = await message.reply({ embeds: [migrationEmbed] }).catch(() => null);
-                        if (noticeMsg) {
-                            setTimeout(() => noticeMsg.delete().catch(() => null), 12000);
-                        }
-                    }
-                    return; // Reject execution for non-owners
-                }
-            }
-
             const logTag = isPrefixInvocation ? 'Prefix' : 'Command';
             console.log(`⚡ [${logTag}] Executing ${matchedPrefix || ''}${resolvedName} for ${message.author.tag} in ${message.guild?.name || 'DM'}`);
             const ctx = new CommandContext(message, client, args);
@@ -703,12 +671,6 @@ NaN
                 }
             }
 
-            // Confession panel submission is acknowledged centrally before the
-            // generic component watchdog. This runs on both primary and worker clients.
-            if (interaction.isButton()) {
-                const confessionRouter = require('../utils/confessionInteraction');
-                if (await confessionRouter.routeConfessionOpenButton(interaction)) return;
-            }
 
             // 3. Handle Global 1-Year Persistent Button & Select Menu Interactions
             if (interaction.isButton() || interaction.isStringSelectMenu()) {
