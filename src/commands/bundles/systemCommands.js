@@ -16,7 +16,6 @@ const {
     ChannelSelectMenuBuilder
 } = require('discord.js');
 const config = require('../../config');
-const { ONE_YEAR_MS } = require('../../utils/contextHelper');
 const { requirePremium } = require('../../utils/premiumHelper');
 const embedVisualityModule = require('../../modules/embedVisuality');
 const welcomeModule = require('../../modules/welcome');
@@ -423,7 +422,7 @@ const commands = [
             const participants = new Set();
 
             // 1-Year Component Collector
-            const collector = msg.createMessageComponentCollector({ time: ONE_YEAR_MS });
+            const collector = msg.createMessageComponentCollector();
             collector.on('collect', async (i) => {
                 if (participants.has(i.user.id)) {
                     participants.delete(i.user.id);
