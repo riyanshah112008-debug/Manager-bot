@@ -98,7 +98,7 @@ function buildConfessionEmbed(number, topic, body) {
  return embed;
 }
 function buildReportEmbed(number, reason, messageUrl) {
- return new EmbedBuilder().setColor('#D64545').setTitle('WHISPER VAULT  /  STAFF REVIEW')
+ return new EmbedBuilder().setColor('#D64545').setTitle('ANONYMOUS CONFESSIONS  /  STAFF REVIEW')
   .setDescription('A community member flagged a published confession for review.')
   .addFields(
    { name: 'CONFESSION', value: '#' + String(number).padStart(4, '0'), inline: true },
@@ -115,7 +115,7 @@ function buildConfessionComponents() {
 }
 function buildReplyEmbed(number, body) {
  return new EmbedBuilder().setColor('#5865F2').setAuthor({ name: 'ANONYMOUS REPLY' })
-  .setTitle('REPLY TO CONFESSION  #' + String(number).padStart(4, '0'))
+  .setTitle('CONFESSION  #' + String(number).padStart(4, '0') + '  •  ANONYMOUS REPLY')
   .setDescription('> ' + escapeMentions(body).trim().replace(/\n/g, '\n> '))
   .setFooter({ text: 'STARRY  •  ANONYMOUS CONFESSIONS' }).setTimestamp();
 }
@@ -196,16 +196,16 @@ async function createPrivateStaffChannel(guild, publicChannel, staffRole, botMem
   throw new Error('Starry needs Manage Channels to create the private staff report channel. Select an existing staff_channel option instead.');
  }
  return guild.channels.create({
-  name: 'whisper-vault-staff',
+  name: 'anonymous-confessions-staff',
   type: ChannelType.GuildText,
   parent: publicChannel.parentId || undefined,
-  topic: 'Private staff-only reports for Starry Whisper Vault',
+  topic: 'Private staff-only reports for Starry Confessions',
   permissionOverwrites: [
    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
    { id: staffRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] },
    { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] }
   ],
-  reason: 'Create private staff review channel for Starry Whisper Vault'
+  reason: 'Create private staff review channel for Starry Confessions'
  });
 }
 
@@ -287,7 +287,7 @@ async function handleSetup(interaction, client) {
  }
 
  return replyPrivate(interaction,
-  'Whisper Vault is ready in ' + publicChannel.toString() +
+  'Confessions is ready in ' + publicChannel.toString() +
   '. Private staff reports will be delivered to ' + staffChannel.toString() +
   ' for ' + staffRole.toString() + '.');
 }
@@ -349,7 +349,7 @@ async function handleReport(interaction, client, messageId) {
 async function handleStaffAction(interaction, client, action, messageId) {
  await interaction.deferReply({ flags: EPHEMERAL });
  const config = await getConfig(interaction.guildId);
- if (!config) return replyPrivate(interaction, 'Whisper Vault is not configured.');
+ if (!config) return replyPrivate(interaction, 'Confessions is not configured.');
  if (interaction.channelId !== config.staffChannelId) return replyPrivate(interaction, 'Staff review actions only work inside the configured private report channel.');
 
  const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
