@@ -1187,17 +1187,19 @@ NaN
                 // C0-E. AI Channel Catch-Up Buttons
                 if (customId.startsWith('catchup_')) {
                     if (customId === 'catchup_dm') {
+                        await interaction.deferReply({ flags: EPHEMERAL_FLAG });
+                        const originalEmbed = interaction.message?.embeds?.[0];
+                        if (!originalEmbed) {
+                            return interaction.editReply({ content: '❌ The catch-up summary is no longer available.' });
+                        }
                         try {
-                            const originalEmbed = interaction.message?.embeds?.[0];
-                            if (originalEmbed) {
-                                await interaction.user.send({
-                                    content: `📬 **Here is your personal copy of the channel catch-up from ${interaction.guild.name}:**`,
-                                    embeds: [originalEmbed]
-                                });
-                                return interaction.reply({ content: '📬 Catch-Up summary sent directly to your DMs!', ephemeral: true });
-                            }
+                            await interaction.user.send({
+                                content: `📬 **Here is your personal copy of the channel catch-up from ${interaction.guild.name}:**`,
+                                embeds: [originalEmbed]
+                            });
+                            return interaction.editReply({ content: '📬 Catch-Up summary sent directly to your DMs!' });
                         } catch (dmErr) {
-                            return interaction.reply({ content: '❌ Could not send DM! Please ensure your direct messages are open.', ephemeral: true });
+                            return interaction.editReply({ content: '❌ Could not send DM! Please ensure your direct messages are open.' });
                         }
                     } else if (customId.startsWith('catchup_refresh_')) {
                         const hours = parseInt(customId.replace('catchup_refresh_', ''), 10) || 6;
