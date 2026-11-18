@@ -343,10 +343,7 @@ const universalTrackerModule = (client) => {
         }
     }
 
-    registerInteractionHandler(client, 'tracker:2', async (interaction) => {
-        if (!interaction.isChatInputCommand() || interaction.commandName !== 'tracker') return;
-        await handleCommand(interaction);
-    });
+    // /tracker is dispatched through client.commands above.
 };
 
 universalTrackerModule.data = trackerCommandSchema;
