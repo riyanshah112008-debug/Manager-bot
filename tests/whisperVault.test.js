@@ -56,6 +56,7 @@ test('staff report provides remove and dismiss actions bound to the confession m
   'whisper:staff:remove:123456789012345678',
   'whisper:staff:dismiss:123456789012345678'
  ]);
+ assert.equal(rows[0].components[1].data.emoji, undefined, 'dismiss button must not send an invalid Unicode emoji');
 });
 test('public channel validation requires Read Message History for persistent review', () => {
  const { PermissionFlagsBits } = require('discord.js');
