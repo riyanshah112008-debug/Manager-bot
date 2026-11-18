@@ -68,3 +68,49 @@ test('safe acknowledgement helpers are idempotent and never throw', async () => 
  assert.equal(calls, 1);
  assert.equal(guard.isAcknowledged(interaction), true);
 });
+
+test('the first handler that acknowledges owns the interaction', async () => {
+ const client = new EventEmitter(); const calls = [];
+ guard.registerInteractionHandler(client, 'owner', async interaction => {
+  calls.push('owner');
+  await interaction.deferUpdate();
+ });
+ guard.registerInteractionHandler(client, 'duplicate', async () => { calls.push('duplicate'); });
+ const interaction = {
+  deferred: false, replied: false,
+  deferUpdate: async () => { interaction.deferred = true; }
+ };
+ client.emit('interactionCreate', interaction);
+ await new Promise(resolve => setImmediate(resolve));
+ assert.deepEqual(calls, ['owner']);
+});
+
+test('a failure after defer edits the deferred reply instead of replying twice', async () => {
+ const client = new EventEmitter(); let edits = 0; let replies = 0;
+ guard.registerInteractionHandler(client, 'deferred-failure', async () => {
+  throw new Error('database unavailable');
+ }, { logger: { error() {} } });
+ client.emit('interactionCreate', {
+  deferred: true, replied: false,
+  isRepliable: () => true,
+  editReply: async payload => { edits++; assert.match(payload.content, /could not be completed/i); },
+  reply: async () => { replies++; }
+ });
+ await new Promise(resolve => setImmediate(resolve));
+ assert.equal(edits, 1);
+ assert.equal(replies, 0);
+});
+
+test('a throwing logger cannot break dispatch and logs contain no raw error text', async () => {
+ const client = new EventEmitter(); const replies = [];
+ guard.registerInteractionHandler(client, 'safe-log', async () => {
+  throw Object.assign(new Error('interaction token: secret-token'), { code: 500 });
+ }, { logger: { error() { throw new Error('logger failed'); } } });
+ client.emit('interactionCreate', {
+  deferred: false, replied: false,
+  isRepliable: () => true,
+  reply: async payload => replies.push(payload)
+ });
+ await new Promise(resolve => setImmediate(resolve));
+ assert.equal(replies.length, 1);
+});
