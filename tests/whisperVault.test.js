@@ -76,9 +76,9 @@ test('public channel validation requires Read Message History for persistent rev
 test('staff embed has a structured red review layout and escapes mentions', () => {
  const json = whisper.buildReportEmbed(12, 'Threats @here', 'https://discord.com/channels/123456789012345678/234567890123456789/345678901234567890').toJSON();
  assert.equal(json.color, 0xD64545);
- assert.equal(json.title, 'ANONYMOUS CONFESSIONS  /  STAFF REVIEW');
+ assert.equal(json.title, 'ANONYMOUS CONFESSIONS / STAFF REVIEW');
  assert.match(json.fields.find(field => field.name === 'REASON').value, /@\u200Bhere/);
- assert.match(json.fields.find(field => field.name === 'SOURCE').value, /Open published confession/);
+ assert.match(json.fields.find(field => field.name === 'SOURCE').value, /https:\/\/discord\.com\/channels\//);
 });
 test('only bot-authored Confessions entries are recognized', () => {
  const message = { author: { id: 'bot' }, embeds: [{ title: 'CONFESSION  #0001' }] };
