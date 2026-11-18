@@ -176,6 +176,25 @@ async function replyPrivate(interaction, content) {
  if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(() => null);
  return interaction.reply({ ...payload, flags: EPHEMERAL }).catch(() => null);
 }
+function getReportDeliveryFailure(error, staffChannel, botMember) {
+ const required = [
+  [PermissionFlagsBits.ViewChannel, 'View Channel'],
+  [PermissionFlagsBits.SendMessages, 'Send Messages'],
+  [PermissionFlagsBits.EmbedLinks, 'Embed Links']
+ ];
+ let permissions = null;
+ try { permissions = staffChannel?.permissionsFor(botMember); } catch {}
+ const missing = permissions ? required.filter(([flag]) => !permissions.has(flag)).map(([, name]) => name) : [];
+ const code = Number(error?.code);
+ if (code === 50013) {
+  return missing.length
+   ? 'Discord rejected the report because Starry is missing: ' + missing.join(', ') + '.'
+   : 'Discord rejected the report with Missing Permissions (50013), although Starry\'s cached channel permissions show the required access. The failure has been logged for diagnosis; a manager should check the bot role and channel overwrites.';
+ }
+ if (code === 50001) return 'Discord denied Starry access to the configured staff report channel (50001). The failure has been logged; verify the channel is visible to the Starry bot member.';
+ if (code === 50035) return 'Discord rejected the report message format (50035). This is not a channel-permission problem; the failure has been logged.';
+ return 'Discord could not accept the staff report' + (Number.isFinite(code) ? ' (error ' + code + ')' : '') + '. The failure has been logged; please try again later.';
+}
 function chooseFallbackStaffRole(guild, member) {
  const memberRoles = member?.roles?.cache;
  if (!memberRoles) return null;
@@ -372,8 +391,32 @@ async function handleReport(interaction, client, messageId) {
  try {
   await staffChannel.send(reportPayload);
  } catch (error) {
-  console.error('[Confessions] Report delivery failed:', error?.code || error?.message || error);
-  return replyPrivate(interaction, 'Starry could not post the report in the private staff channel. Check Starry\'s View Channel, Send Messages, Embed Links, and Read Message History permissions, then rerun /confessionsetup.');
+  let permissionSnapshot = null;
+  try {
+   const resolved = staffChannel.permissionsFor(botMember);
+   permissionSnapshot = {
+    channelId: staffChannel.id,
+    botUserId: botMember.id,
+    allowed: resolved?.toArray?.() || [],
+    missing: [
+     [PermissionFlagsBits.ViewChannel, 'View Channel'],
+     [PermissionFlagsBits.SendMessages, 'Send Messages'],
+     [PermissionFlagsBits.EmbedLinks, 'Embed Links']
+    ].filter(([flag]) => !resolved?.has(flag)).map(([, name]) => name)
+   };
+  } catch (permissionError) {
+   permissionSnapshot = { channelId: staffChannel.id, snapshotError: permissionError?.message || String(permissionError) };
+  }
+  console.error('[Confessions] Report delivery failed:', {
+   code: error?.code ?? null,
+   status: error?.status ?? null,
+   name: error?.name || 'Error',
+   message: error?.message || String(error),
+   rawError: error?.rawError || null,
+   permissionSnapshot,
+   stack: error?.stack || null
+  });
+  return replyPrivate(interaction, getReportDeliveryFailure(error, staffChannel, botMember));
  }
  return replyPrivate(interaction, 'Your report has been delivered privately to the staff team. Thank you.');
 }
@@ -482,6 +525,7 @@ whisperModule.buildStaffComponents = buildStaffComponents;
 whisperModule.isWhisperPost = isWhisperPost;
 whisperModule.validateChannels = validateChannels;
 whisperModule.isStaffChannelPermissionIssue = isStaffChannelPermissionIssue;
+whisperModule.getReportDeliveryFailure = getReportDeliveryFailure;
 whisperModule.createInteractionHandler = createInteractionHandler;
 whisperModule.registerWorkerHook = registerWorkerHook;
 module.exports = whisperModule;
