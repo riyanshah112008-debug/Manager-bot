@@ -14,41 +14,54 @@ function isExpiredInteractionError(error) {
 }
 
 function report(logger, key, error) {
-    if (!isExpiredInteractionError(error) && logger && typeof logger.error === 'function') {
-        logger.error('[Interaction:' + key + '] Handler failed', error);
+    if (isExpiredInteractionError(error) || !logger || typeof logger.error !== 'function') return;
+    const safeDetails = {
+        handler: key,
+        name: typeof error?.name === 'string' ? error.name.slice(0, 80) : 'Error',
+        code: typeof error?.code === 'string' || typeof error?.code === 'number'
+            ? String(error.code).slice(0, 40)
+            : undefined,
+        status: Number.isInteger(error?.status) ? error.status : undefined
+    };
+    try {
+        logger.error('[Interaction] Handler failed', safeDetails);
+    } catch (_) {
+        // A custom logger must never prevent interaction dispatch or crash the process.
+    }
+}
+
+async function sendFailureResponse(interaction, error) {
+    if (!interaction || typeof interaction.isRepliable !== 'function' || !interaction.isRepliable()) return;
+    const payload = {
+        content: isExpiredInteractionError(error)
+            ? 'This interaction is no longer valid. Please open a fresh panel and try again.'
+            : 'The action could not be completed. Please try again.',
+        flags: MessageFlags.Ephemeral
+    };
+    try {
+        if (interaction.deferred && !interaction.replied && typeof interaction.editReply === 'function') {
+            await interaction.editReply(payload);
+        } else if (!interaction.replied && typeof interaction.reply === 'function') {
+            await interaction.reply(payload);
+        }
+    } catch (replyError) {
+        report(console, 'dispatcher:fallback', replyError);
     }
 }
 
 async function dispatch(state, interaction) {
-    const tasks = [];
     for (const [key, entry] of state.handlers) {
         try {
-            tasks.push(Promise.resolve(entry.handler(interaction)).catch(error => {
-                report(entry.logger, key, error);
-                return error;
-            }));
+            await entry.handler(interaction);
         } catch (error) {
             report(entry.logger, key, error);
-            tasks.push(Promise.resolve(error));
+            await sendFailureResponse(interaction, error);
+            return;
         }
-    }
 
-    const outcomes = await Promise.all(tasks);
-    const failed = outcomes.find(value => value instanceof Error);
-    if (failed && !isAcknowledged(interaction) && interaction &&
-        typeof interaction.isRepliable === 'function' && interaction.isRepliable()) {
-        try {
-            await interaction.reply({
-                content: isExpiredInteractionError(failed)
-                    ? 'This interaction is no longer valid. Please open a fresh panel and try again.'
-                    : 'The action could not be completed. Please try again.',
-                flags: MessageFlags.Ephemeral
-            });
-        } catch (replyError) {
-            if (!isExpiredInteractionError(replyError)) {
-                report(console, 'dispatcher:fallback', replyError);
-            }
-        }
+        // First handler to acknowledge owns this interaction. Do not let other
+        // modules race a second reply, modal, or deferred update.
+        if (isAcknowledged(interaction)) return;
     }
 }
 
