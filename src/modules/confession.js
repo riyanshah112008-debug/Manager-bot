@@ -279,7 +279,8 @@ function whisperModule(client) {
  if (!client || client.__starryWhisperHandlerInstalled) return;
  registerWorkerHook(client);
  client.__starryWhisperHandlerInstalled = true;
- client.on('interactionCreate', createInteractionHandler(client));
+ const { registerInteractionHandler } = require('../utils/interactionHandler');
+ registerInteractionHandler(client, 'whisper-vault', createInteractionHandler(client), { logger: console });
  console.log('✉️ Starry Whisper Vault initialized.');
 }
 whisperModule.setupPayload = setupPayload;
