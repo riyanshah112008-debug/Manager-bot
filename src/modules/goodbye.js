@@ -211,12 +211,6 @@ const goodbyeModule = (client) => {
     // 🔘 INTERACTIVE EMBED MANAGER BUTTON & MODAL HANDLERS
     // ==========================================
     registerInteractionHandler(client, 'goodbye:1', async (interaction) => {
-        if (interaction.isChatInputCommand()) {
-            if (interaction.commandName === 'setupgoodbye') await handleSetupGoodbye(interaction);
-            if (interaction.commandName === 'customizegoodbye') await handleCustomizeGoodbye(interaction);
-            return;
-        }
-
         if (interaction.isButton() && interaction.customId.startsWith('goodbye_btn_')) {
             if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                 return interaction.reply({ content: '❌ You need **Manage Server** permissions.', ephemeral: true });
