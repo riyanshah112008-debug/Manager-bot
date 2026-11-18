@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const whisper = require('../src/modules/confession');
+const { ChannelType, PermissionFlagsBits } = require('discord.js');
 
 test('Whisper Vault panel has one persistent open action', () => {
  const rows = whisper.buildPanelComponents();
@@ -87,4 +88,29 @@ test('module registration is idempotent and installs one interaction listener', 
  whisper(client);
  whisper(client);
  assert.equal(listeners, 1);
+});
+
+test('setup requires public-channel Read Message History for persistent staff review', () => {
+ const everyoneRole = { id: 'everyone', permissions: { has: () => false } };
+ const staffRole = { id: 'staff', guild: { id: 'guild' }, permissions: { has: () => false } };
+ const botRole = { id: 'bot-role', managed: true, permissions: { has: () => false } };
+ const botMember = { id: 'bot', roles: { cache: new Map([[botRole.id, botRole]]) } };
+ const permissionSet = new Set([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks]);
+ const makePerms = values => ({ has: permission => values.has(permission) });
+ const publicChannel = {
+  id: 'public', guildId: 'guild', type: ChannelType.GuildText,
+  permissionsFor: () => makePerms(new Set([...permissionSet, PermissionFlagsBits.ReadMessageHistory]))
+ };
+ const staffChannel = {
+  id: 'staff-channel', guildId: 'guild', type: ChannelType.GuildText,
+  permissionsFor: target => target === everyoneRole ? makePerms(new Set()) : makePerms(new Set([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])),
+  permissionOverwrites: { cache: new Map() }
+ };
+ const guild = {
+  id: 'guild',
+  roles: { everyone: everyoneRole, cache: new Map([[everyoneRole.id, everyoneRole], [staffRole.id, staffRole], [botRole.id, botRole]]) }
+ };
+ assert.equal(whisper.validateChannels(guild, publicChannel, staffChannel, staffRole, botMember), null);
+ publicChannel.permissionsFor = () => makePerms(permissionSet);
+ assert.match(whisper.validateChannels(guild, publicChannel, staffChannel, staffRole, botMember), /Read Message History/);
 });
