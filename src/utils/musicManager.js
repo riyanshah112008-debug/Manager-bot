@@ -405,8 +405,8 @@ async function applyKazagumoFilter(player, filterName) {
             }));
             // EQ boosts can create peaks above the original source level.
             // Apply automatic preamp headroom before the signal reaches the voice encoder.
-            const maxBoostDb = equalizer.reduce((max, band) => Math.max(max, band.gain), 0);
-            const peakHeadroomDb = maxBoostDb > 0 ? maxBoostDb + 1.5 : 0;
+            const combinedPositiveBoostDb = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
+            const peakHeadroomDb = combinedPositiveBoostDb > 0 ? combinedPositiveBoostDb + 1.5 : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const requestedVolume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
             const safe = {
