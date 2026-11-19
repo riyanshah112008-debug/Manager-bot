@@ -115,3 +115,9 @@ test('music starts with flat unprocessed audio unless a filter was explicitly se
     const source = require('node:fs').readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
     assert.match(source, /player\.data\.get\('activeFilter'\) \|\| 'clear'/);
 });
+
+
+test('play command applies Premium bitrate before either playback engine starts', () => {
+    const playSource = require('node:fs').readFileSync(require.resolve('../src/commands/music/play'), 'utf8');
+    assert.match(playSource, /applyPremiumVoiceBitrate\(\{ guildId: interaction\.guild\.id, voiceId: voiceChannel\.id \}, client\)/);
+});
