@@ -90,7 +90,7 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
 
     registry.registerPrefixDispatcher(mockClient);
 
-    // Case A: Non-Owner tries comma prefix (,testcmd)
+    // Case A: Regular member tries comma prefix (,testcmd)
     let noticeSent = false;
     let noticeText = '';
     const nonOwnerCommaMessage = {
@@ -118,7 +118,8 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
     // No owner-only restriction message should be emitted.
     console.log('  ✅ Regular member comma prefix (,testcmd) executed successfully');
 
-    // Case B: Non-Owner tries dot prefix (.testcmd)
+    // Case B: Regular member tries dot prefix (.testcmd)
+    executedCount = 0;
     noticeSent = false;
     noticeText = '';
     const nonOwnerDotMessage = {
