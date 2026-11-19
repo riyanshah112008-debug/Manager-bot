@@ -69,7 +69,7 @@ function createSocialCommand(key, configData) {
 
             if (configData.requiresTarget) {
                 if (!target) {
-                    return ctx.reply(`❌ Please mention someone or reply to their message to ${key} them!\n*Usage: \`,${key} @user\`*`);
+                    return ctx.reply({ content: `❌ Please mention someone or reply to their message to ${key} them!\n*Usage: \`,${key} @user\`*`, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
                 }
 
                 if (String(target.id) === authorIdStr) {
