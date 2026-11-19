@@ -20,6 +20,18 @@ test('Starry advances each failed track only once', () => {
   assert.match(native, /handleTrackEnd\(expectedTrack = this\.currentTrack\)/);
 });
 
+test('multi-source search does not wait for SoundCloud token refresh and bounds provider fan-out', () => {
+ assert.match(native, /refreshSoundCloudToken\(\)\.catch\(\(\) => \{\}\)/);
+ assert.match(native, /timeoutMs = 2600/);
+ assert.match(native, /Promise\.all\(\[/);
+});
+test('multi-source text search caches successful results for repeat queries', () => {
+ assert.match(native, /MUSIC_SEARCH_CACHE_TTL_MS = 45_000/);
+ assert.match(native, /getCachedMusicSearch\(query\)/);
+ assert.match(native, /setCachedMusicSearch\(query,/);
+ assert.match(native, /tracks: cachedSearch\.tracks\.map\(track => \(\{ \.\.\.track, requester \}\)\)/);
+});
+
 test('Starry searches Spotify, YouTube, SoundCloud, Deezer and Apple Music', () => {
   for (const marker of [
     'spotifyEngine.searchTracks(query, 5)',
