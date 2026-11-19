@@ -131,6 +131,7 @@ test('bass EQ automatically reduces preamp to preserve clipping headroom', async
         'bass boost must reduce the preamp below its requested base volume');
     assert.ok(filters.equalizer.some(band => band.gain > 0),
         'bass profile should retain its controlled low-frequency boost');
-    assert.ok(filters.volume <= 0.70 * Math.pow(10, -1.5 / 20),
-        'at least 1.5 dB of extra headroom must be reserved beyond the maximum EQ boost');
+    const combinedBoost = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
+    assert.ok(filters.volume <= 0.70 * Math.pow(10, -(combinedBoost + 1.5) / 20),
+        'preamp must account for cumulative positive EQ gain plus 1.5 dB of extra headroom');
 });
