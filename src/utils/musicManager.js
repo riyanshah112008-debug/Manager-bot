@@ -410,8 +410,6 @@ async function applyKazagumoFilter(player, filterName) {
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const requestedVolume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
             const safe = {
-                volume: Math.max(0, Math.min(1, requestedVolume * peakSafePreamp)),
-                equalizer,
                 timescale: null,
                 karaoke: null,
                 rotation: null,
@@ -420,13 +418,11 @@ async function applyKazagumoFilter(player, filterName) {
                 lowPass: null,
                 channelMix: null,
                 distortion: null,
-                ...filters
+                ...filters,
+                // Keep computed safety values AFTER the caller's profile so they cannot be overwritten.
+                volume: Math.max(0, Math.min(1, requestedVolume * peakSafePreamp)),
+                equalizer
             };
-            safe.volume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
-            safe.equalizer = (filters.equalizer || []).map(band => ({
-                band: band.band,
-                gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
-            }));
             await shoukakuPlayer.setFilters(safe);
         };
 
