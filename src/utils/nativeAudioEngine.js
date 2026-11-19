@@ -252,6 +252,26 @@ class SpotifyEngine {
 }
 
 const spotifyEngine = new SpotifyEngine();
+const MUSIC_SEARCH_CACHE_TTL_MS = 45_000;
+const musicSearchCache = new Map();
+function getCachedMusicSearch(query) {
+    const entry = musicSearchCache.get(String(query || '').trim().toLowerCase());
+    if (!entry) return null;
+    if (Date.now() - entry.createdAt > MUSIC_SEARCH_CACHE_TTL_MS) {
+        musicSearchCache.delete(String(query || '').trim().toLowerCase());
+        return null;
+    }
+    return entry.result;
+}
+function setCachedMusicSearch(query, result) {
+    const key = String(query || '').trim().toLowerCase();
+    if (!key || !result?.tracks?.length) return;
+    musicSearchCache.set(key, { createdAt: Date.now(), result });
+    if (musicSearchCache.size > 250) {
+        const oldestKey = musicSearchCache.keys().next().value;
+        if (oldestKey) musicSearchCache.delete(oldestKey);
+    }
+}
 
 function scoreTrackMatch(candidate, targetDurationMs, queryTitle, targetArtist) {
     let score = 100;
@@ -1223,8 +1243,13 @@ class StarryAudioEngine {
 
     static async search(rawQuery, requester) {
         const tracks = [];
-        await refreshSoundCloudToken();
-        let query = rawQuery.trim();
+        let query = String(rawQuery || '').trim();
+        const cachedSearch = !/^https?:\/\//i.test(query) ? getCachedMusicSearch(query) : null;
+        if (cachedSearch) {
+            return { ...cachedSearch, tracks: cachedSearch.tracks.map(track => ({ ...track, requester })) };
+        }
+        // Refresh SoundCloud credentials in the background; never block the initial search on token refresh.
+        refreshSoundCloudToken().catch(() => {});
 
         // 0. Resolve shortlinks / redirects (youtu.be, on.soundcloud.com, spotify.link, deezer.page.link)
         if (query.startsWith('http://') || query.startsWith('https://')) {
@@ -1613,7 +1638,7 @@ class StarryAudioEngine {
         // 7. MULTI-PROVIDER TEXT SEARCH
         // Spotify, YouTube, SoundCloud, Deezer and Apple Music are metadata/search
         // providers. Playback is resolved separately to a playable YouTube/SoundCloud stream.
-        const safeSearch = async (task, timeoutMs = 5000) => {
+        const safeSearch = async (task, timeoutMs = 2600) => {
             let timer;
             try {
                 return await Promise.race([
@@ -1722,7 +1747,9 @@ class StarryAudioEngine {
             return true;
         });
 
-        return { type: mergedTracks.length > 1 ? 'SEARCH' : 'TRACK', tracks: mergedTracks.slice(0, 25) };
+        const result = { type: mergedTracks.length > 1 ? 'SEARCH' : 'TRACK', tracks: mergedTracks.slice(0, 25) };
+        setCachedMusicSearch(query, { ...result, tracks: result.tracks.map(track => ({ ...track, requester: null })) });
+        return result;
     }
 
     static async getAutoplayRecommendation(currentTrack, history = []) {
