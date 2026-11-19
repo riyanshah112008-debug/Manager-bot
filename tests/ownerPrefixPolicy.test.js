@@ -1,9 +1,11 @@
 const assert = require('assert');
 const config = require('../src/config');
 const { CommandRegistry } = require('../src/modules/commandHandler');
+const { buildCategoryEmbed } = require('../src/utils/helpHelper');
 const { EventEmitter } = require('events');
+const { PermissionFlagsBits } = require('discord.js');
 
-console.log('🧪 Starting Comprehensive Starry Owner-Only Prefix Policy Test Suite...\n');
+console.log('🧪 Starting Starry Public Prefix Command Access Test Suite...\n');
 
 // -------------------------------------------------------------
 // Test 1: config.isBotOwner Verification (Static & Dynamic Env)
@@ -56,10 +58,17 @@ assert.strictEqual(config.isBotOwner('333333333333333333', mockAppClientTeam), t
 assert.strictEqual(config.isBotOwner(nonOwner, mockAppClientTeam), false, 'Non-team member should NOT be recognized');
 console.log('  ✅ config.isBotOwner and BOT_OWNERS accurately detect static, env, and Discord application owners');
 
+// The user-facing help menu must describe the new public prefix policy accurately.
+const prefixHelp = buildCategoryEmbed('home', ',').data;
+assert.ok(!prefixHelp.footer.text.includes('Owner-Only'), 'Help footer must not label all prefix commands owner-only');
+assert.ok(prefixHelp.description.includes('Available to all members'), 'Help menu must say prefix commands are available to all members');
+assert.ok(prefixHelp.description.includes('server permissions'), 'Help menu must explain restricted commands still require permissions');
+console.log('  ✅ Help menu reflects public prefix access and per-command permission requirements');
+
 // -------------------------------------------------------------
 // Test 2: Unified Command Dispatcher Prefix Policy
 // -------------------------------------------------------------
-console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Owner Blocked & Guided)');
+console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and bot owners');
 (async () => {
     const registry = new CommandRegistry();
     let executedCount = 0;
@@ -83,6 +92,16 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
         }
     });
 
+    // This command represents a moderation operation: it must remain permission-gated.
+    registry.commands.set('restrictedcmd', {
+        name: 'restrictedcmd',
+        category: 'Moderation',
+        permissions: [PermissionFlagsBits.ManageGuild],
+        async execute(ctx) {
+            executedCount++;
+        }
+    });
+
     const mockClient = new EventEmitter();
     mockClient.isPrimary = true;
     mockClient.user = { id: '111111111111111111', displayAvatarURL: () => 'https://example.com/avatar.png' };
@@ -90,7 +109,7 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
 
     registry.registerPrefixDispatcher(mockClient);
 
-    // Case A: Non-Owner tries comma prefix (,testcmd)
+    // Case A: Regular member tries comma prefix (,testcmd)
     let noticeSent = false;
     let noticeText = '';
     const nonOwnerCommaMessage = {
@@ -112,13 +131,14 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     mockClient.emit('messageCreate', nonOwnerCommaMessage);
     await new Promise(r => setTimeout(r, 60));
 
-    assert.strictEqual(executedCount, 0, 'Non-owner must NOT execute comma prefix command');
-    assert.strictEqual(noticeSent, true, 'Non-owner must receive slash command migration notice');
-    assert.ok(noticeText.includes('Slash Commands'), 'Migration notice must reference Slash Commands');
-    assert.ok(noticeText.includes('Bot Owners'), 'Migration notice must state prefix commands are owner-only');
-    console.log('  ✅ Non-owner comma prefix (,testcmd) was blocked and migration notice was delivered');
+    assert.strictEqual(executedCount, 1, 'Regular members must be able to execute comma prefix commands');
+    assert.strictEqual(noticeSent, false, 'Regular members must not receive an owner-only migration notice');
+    assert.ok(!noticeText.includes('Bot Owners'), 'Regular member should not receive an owner-only restriction notice');
+    // No owner-only restriction message should be emitted.
+    console.log('  ✅ Regular member comma prefix (,testcmd) executed successfully');
 
-    // Case B: Non-Owner tries dot prefix (.testcmd)
+    // Case B: Regular member tries dot prefix (.testcmd)
+    executedCount = 0;
     noticeSent = false;
     noticeText = '';
     const nonOwnerDotMessage = {
@@ -140,9 +160,9 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     mockClient.emit('messageCreate', nonOwnerDotMessage);
     await new Promise(r => setTimeout(r, 60));
 
-    assert.strictEqual(executedCount, 0, 'Non-owner must NOT execute dot prefix command');
-    assert.strictEqual(noticeSent, true, 'Non-owner must receive slash migration notice for dot prefix');
-    console.log('  ✅ Non-owner dot prefix (.testcmd) was blocked and migration notice was delivered');
+    assert.strictEqual(executedCount, 1, 'Regular members must be able to execute dot prefix commands');
+    assert.strictEqual(noticeSent, false, 'Regular members must not receive migration notices for dot prefix commands');
+    console.log('  ✅ Regular member dot prefix (.testcmd) executed successfully');
 
     // Case C: Bot Owner runs comma prefix (,testcmd)
     noticeSent = false;
@@ -182,7 +202,65 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     assert.strictEqual(executedCount, 1, 'Bot owner MUST be able to execute dot prefix command');
     console.log('  ✅ Bot owner executed dot prefix (.testcmd) with full unrestricted access');
 
-    // Case E: Regular user mentions bot (<@111111111111111111> ask what is 2+2)
+    // Case E: Regular users can access prefix commands, but moderation permissions remain enforced.
+    executedCount = 0;
+    noticeSent = false;
+    const deniedRestrictedMessage = {
+        id: 'msg_regular_restricted_denied',
+        content: ',restrictedcmd',
+        author: { id: '999999999999999997', tag: 'RegularMember#0003', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: () => false } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', deniedRestrictedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 0, 'Regular members without ManageGuild must not execute restricted commands');
+    assert.strictEqual(noticeSent, true, 'A member without the required permission must receive a denial');
+
+    executedCount = 0;
+    noticeSent = false;
+    const permittedRestrictedMessage = {
+        id: 'msg_regular_restricted_allowed',
+        content: ',restrictedcmd',
+        author: { id: '999999999999999996', tag: 'ServerStaff#0004', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: permission => permission === PermissionFlagsBits.ManageGuild } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', permittedRestrictedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 1, 'A member with ManageGuild must execute the restricted command');
+    assert.strictEqual(noticeSent, false, 'A permitted member must not receive a denial');
+
+    executedCount = 0;
+    noticeSent = false;
+    const ownerRestrictedMessage = {
+        id: 'msg_owner_restricted_allowed',
+        content: ',restrictedcmd',
+        author: { id: defaultOwner1, tag: 'StarryOwner#0001', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: () => false } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', ownerRestrictedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 1, 'Bot owners retain the existing owner override for restricted commands');
+    assert.strictEqual(noticeSent, false, 'Bot owners must not receive a permission denial');
+
+    // Case F: Regular user mentions bot (<@111111111111111111> ask what is 2+2)
     // Mentions are NOT prefix commands and must NOT be blocked by owner-only prefix policy!
     executedCount = 0;
     noticeSent = false;
@@ -203,7 +281,7 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     assert.strictEqual(noticeSent, false, 'Mentioning bot must NOT trigger prefix owner block notice');
     console.log('  ✅ Regular user mentioning bot (<@BOT_ID> ask ...) executed without prefix block');
 
-    // Case F: Regular user in DMs talking to Starry AI naturally (without prefix)
+    // Case G: Regular user in DMs talking to Starry AI naturally (without prefix)
     executedCount = 0;
     noticeSent = false;
     const dmMessage = {
@@ -222,6 +300,6 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     assert.strictEqual(noticeSent, false, 'DM natural conversation must NOT trigger prefix owner block notice');
     console.log('  ✅ Regular user natural AI conversation in DMs executed without prefix block');
 
-    console.log('\n✨ ALL OWNER-ONLY PREFIX POLICY TESTS PASSED (100% Pass Rate)!');
+    console.log('\n✨ ALL PUBLIC PREFIX ACCESS TESTS PASSED (100% Pass Rate)!');
     process.exit(0);
 })();

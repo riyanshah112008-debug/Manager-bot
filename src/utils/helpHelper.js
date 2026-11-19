@@ -18,7 +18,7 @@ function buildCategoryEmbed(catId, customPrefix) {
     const prefix = customPrefix || config.DEFAULT_PREFIX || ',';
     const embed = new EmbedBuilder()
         .setColor(config.EMBED_COLORS.PRIMARY)
-        .setFooter({ text: `Starry Master Bot • Slash Commands (/) • Prefix (${prefix}) Owner-Only` })
+        .setFooter({ text: `Starry Master Bot • Slash Commands (/) • Prefix (${prefix}) for all members` })
         .setTimestamp();
 
     if (catId === 'music') {
@@ -148,7 +148,7 @@ function buildCategoryEmbed(catId, customPrefix) {
             .setDescription(
                 `Welcome to the ultimate Discord multi-feature bot!\n` +
                 `• **Primary Interface:** **Slash Commands (\`/\`)** *(Type \`/\` to view autocomplete list)*\n` +
-                `• **Prefix Commands (\`${prefix}\`):** Reserved exclusively for **Bot Owners**\n` +
+                `• **Prefix Commands (\`${prefix}\`):** Available to all members; restricted commands still require the appropriate server permissions\n` +
                 `• **Total Commands:** \`${totalCommands}\` across 8 specialized categories\n` +
                 `• **Multi-Bot Clustering:** Active and synchronized\n` +
                 `• **Embed Buttons Lifetime:** High persistence up to **1 Year**\n\n` +
