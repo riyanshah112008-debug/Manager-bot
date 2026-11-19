@@ -103,7 +103,6 @@ function setCachedPrefix(guildId, prefix) {
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
-const prefixNoticeCooldowns = new Set();
 const mongoose = require('mongoose');
 
 function isPrimaryBotClient(client) {
