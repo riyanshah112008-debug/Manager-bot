@@ -401,12 +401,14 @@ async function applyKazagumoFilter(player, filterName) {
         const setFilters = async (filters) => {
             const equalizer = (filters.equalizer || []).map(band => ({
                 band: band.band,
-                gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
+                gain: Math.max(-0.5, Math.min(0.65, Number(band.gain) || 0))
             }));
             // EQ boosts can create peaks above the original source level.
             // Apply automatic preamp headroom before the signal reaches the voice encoder.
-            const combinedPositiveBoostDb = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-            const peakHeadroomDb = combinedPositiveBoostDb > 0 ? combinedPositiveBoostDb + 1.5 : 0;
+            const maximumPositiveBoost = equalizer.reduce((maximum, band) => Math.max(maximum, band.gain), 0);
+            // Lavalink EQ gain is a bounded filter value, not a sum of independent dB gains.
+            // Reserve headroom for the strongest band without crushing the whole mix.
+            const peakHeadroomDb = maximumPositiveBoost > 0 ? (maximumPositiveBoost * 3) + 1.0 : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const requestedVolume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
             const safe = {
@@ -439,14 +441,14 @@ async function applyKazagumoFilter(player, filterName) {
                 // Volume pre-attenuated to 0.70 to provide +3.5dB of clean headroom, completely eliminating
                 // digital clipping, square-wave distortion, and voice crackling!
                 await setFilters({
-                    volume: 0.70,
+                    volume: 0.95,
                     equalizer: [
-                        { band: 0, gain: 0.28 },  // 25 Hz - Clean sub-rumble
-                        { band: 1, gain: 0.38 },  // 40 Hz - Tactile physical vibration
-                        { band: 2, gain: 0.32 },  // 63 Hz - Headphone diaphragm vibration
-                        { band: 3, gain: 0.14 },  // 100 Hz - Tight, punchy 808/kick
-                        { band: 4, gain: -0.04 }, // 160 Hz - Transition slope
-                        { band: 5, gain: -0.12 }, // 250 Hz - Mud scoop to protect vocals
+                        { band: 0, gain: 0.58 },  // 25 Hz - Deep sub-rumble
+                        { band: 1, gain: 0.65 },  // 40 Hz - Strong low-bass foundation
+                        { band: 2, gain: 0.55 },  // 63 Hz - Punch and tactile bass
+                        { band: 3, gain: 0.30 },  // 100 Hz - Kick impact
+                        { band: 4, gain: -0.06 }, // 160 Hz - Keep low mids controlled
+                        { band: 5, gain: -0.10 }, // 250 Hz - Reduce mud without thinning bass
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
                         { band: 7, gain: 0.00 },  // 630 Hz - Flat
                         { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
