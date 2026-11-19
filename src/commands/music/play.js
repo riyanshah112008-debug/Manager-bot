@@ -5,6 +5,7 @@
 // ==========================================
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
+const { applyPremiumVoiceBitrate } = require('../../utils/musicManager');
 const config = require('../../config');
 
 const MUSIC_BASE_URL = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`).replace(/\/+$/, '');
@@ -66,6 +67,10 @@ module.exports = {
         flags: [EPHEMERAL_FLAG] 
       });
     }
+
+    // Apply the Premium Level 3 channel bitrate for both Lavalink and native playback paths.
+    // This is non-blocking and Discord remains authoritative over accepted bitrate/codec.
+    applyPremiumVoiceBitrate({ guildId: interaction.guild.id, voiceId: voiceChannel.id }, client).catch(() => {});
 
     const permissions = voiceChannel.permissionsFor(botMember);
     if (!permissions?.has(PermissionFlagsBits.Connect) || !permissions?.has(PermissionFlagsBits.Speak)) {

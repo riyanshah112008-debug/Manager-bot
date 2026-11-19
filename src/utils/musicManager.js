@@ -1030,6 +1030,46 @@ async function triggerAutoplayBuffer(player, playImmediately = false) {
     }
 }
 
+const PREMIUM_VOICE_BITRATE = 384000;
+
+/**
+ * Request Discord's maximum Level 3 voice-channel bitrate for Premium servers.
+ * Discord remains the authority: this never bypasses its tier, permissions, or voice codec.
+ */
+async function applyPremiumVoiceBitrate(player, client) {
+    const guildId = player?.guildId;
+    const guild = guildId ? client?.guilds?.cache?.get(guildId) : null;
+    if (!guild || typeof client?.isPremium !== 'function' || !client.isPremium(guild.id)) {
+        return { applied: false, reason: 'not-premium' };
+    }
+    if (Number(guild.premiumTier) !== 3) {
+        return { applied: false, reason: 'server-not-level-3' };
+    }
+
+    const channel = guild.channels?.cache?.get(player.voiceId);
+    if (!channel || typeof channel.edit !== 'function' || typeof channel.bitrate !== 'number') {
+        return { applied: false, reason: 'voice-channel-unavailable' };
+    }
+    if (channel.bitrate >= PREMIUM_VOICE_BITRATE) {
+        return { applied: true, reason: 'already-at-target', bitrate: channel.bitrate };
+    }
+
+    const botMember = guild.members?.me;
+    if (!botMember?.permissionsIn?.(channel)?.has?.('ManageChannels')) {
+        return { applied: false, reason: 'missing-manage-channels' };
+    }
+
+    try {
+        await channel.edit({
+            bitrate: PREMIUM_VOICE_BITRATE,
+            reason: 'Starry Premium Level 3 high-fidelity music audio'
+        });
+        return { applied: true, reason: 'updated', bitrate: PREMIUM_VOICE_BITRATE };
+    } catch (error) {
+        return { applied: false, reason: 'discord-rejected-bitrate', error };
+    }
+}
+
 function createMusicManager(client) {
     if (client.manager) return client.manager;
 
@@ -1130,10 +1170,13 @@ function createMusicManager(client) {
     // Player Start Event
     manager.on('playerStart', async (player, track) => {
         player.data.set('previousTrack', track);
+        // Premium Level 3 servers may request Discord's full 384 kbps channel bitrate.
+        // The channel setting is independent of DSP; keep the default playback path flat.
+        applyPremiumVoiceBitrate(player, client).catch(() => {});
         recordTrackHistory(player, track);
 
         // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
-        const activeFilter = player.data.get('activeFilter') || 'empowering';
+        const activeFilter = player.data.get('activeFilter') || 'clear';
         player.data.set('activeFilter', activeFilter);
         await applyKazagumoFilter(player, activeFilter).catch(() => {});
 
@@ -1186,7 +1229,7 @@ function createMusicManager(client) {
             ? track.thumbnail
             : (client.user?.displayAvatarURL({ dynamic: true }) || fallbackThumb);
 
-        const currentActiveFilter = player.data.get('activeFilter') || 'empowering';
+        const currentActiveFilter = player.data.get('activeFilter') || 'clear';
         const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
 
         const embed = new EmbedBuilder()
@@ -1323,5 +1366,7 @@ module.exports = {
     rankAndFilterCanonicalTracks,
     triggerAutoplayBuffer,
     recordTrackHistory,
-    formatTime
+    formatTime,
+    applyPremiumVoiceBitrate,
+    PREMIUM_VOICE_BITRATE
 };
