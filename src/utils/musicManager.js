@@ -553,7 +553,6 @@ async function applyKazagumoFilter(player, filterName) {
                     vibrato: null,
                     karaoke: null,
                     channelMix: null,
-                    lowPass: null,
                     distortion: null
                 });
                 break;
