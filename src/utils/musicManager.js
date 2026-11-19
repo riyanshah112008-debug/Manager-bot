@@ -399,12 +399,19 @@ async function applyKazagumoFilter(player, filterName) {
         const shoukakuPlayer = player.shoukaku;
         const normalized = (filterName || 'clear').toLowerCase().trim();
         const setFilters = async (filters) => {
+            const equalizer = (filters.equalizer || []).map(band => ({
+                band: band.band,
+                gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
+            }));
+            // EQ boosts can create peaks above the original source level.
+            // Apply automatic preamp headroom before the signal reaches the voice encoder.
+            const maxBoostDb = equalizer.reduce((max, band) => Math.max(max, band.gain), 0);
+            const peakHeadroomDb = maxBoostDb > 0 ? maxBoostDb + 1.5 : 0;
+            const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
+            const requestedVolume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
             const safe = {
-                volume: Math.max(0, Math.min(1, Number(filters.volume ?? 1))),
-                equalizer: (filters.equalizer || []).map(band => ({
-                    band: band.band,
-                    gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
-                })),
+                volume: Math.max(0, Math.min(1, requestedVolume * peakSafePreamp)),
+                equalizer,
                 timescale: null,
                 karaoke: null,
                 rotation: null,
