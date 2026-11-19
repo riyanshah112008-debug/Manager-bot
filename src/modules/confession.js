@@ -136,6 +136,14 @@ function buildStaffComponents(messageId) {
  )];
 }
 function isSnowflake(value) { return typeof value === 'string' && /^\d{17,20}$/.test(value); }
+function isSfwGuildTextChannel(channel) {
+ return Boolean(
+  channel &&
+  channel.type === ChannelType.GuildText &&
+  channel.nsfw !== true &&
+  channel.parent?.nsfw !== true
+ );
+}
 async function getConfig(guildId) { return WhisperConfig.findOne({ guildId }).lean().exec(); }
 async function nextNumber(guildId) {
  const record = await WhisperCounter.findOneAndUpdate({ guildId }, { $inc: { value: 1 }, $setOnInsert: { guildId } }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean().exec();
@@ -145,12 +153,12 @@ async function getGuild(interaction, client) { return interaction.guild || clien
 async function getTextChannel(guild, channelId) {
  if (!isSnowflake(channelId)) return null;
  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
- return channel && channel.guildId === guild.id && channel.type === ChannelType.GuildText && channel.isTextBased() ? channel : null;
+ return channel && channel.guildId === guild.id && isSfwGuildTextChannel(channel) && channel.isTextBased() ? channel : null;
 }
 async function getBotMember(guild) { return guild.members.me || guild.members.fetchMe().catch(() => null); }
 function validateChannels(guild, publicChannel, staffChannel, staffRole, botMember) {
- if (!publicChannel || publicChannel.guildId !== guild.id || publicChannel.type !== ChannelType.GuildText) return 'Choose a regular text channel in this server for public confessions.';
- if (!staffChannel || staffChannel.guildId !== guild.id || staffChannel.type !== ChannelType.GuildText || staffChannel.id === publicChannel.id) return 'The private staff channel must be a different text channel in this server.';
+ if (!publicChannel || publicChannel.guildId !== guild.id || !isSfwGuildTextChannel(publicChannel)) return 'Choose a regular SFW text channel in this server for public confessions.';
+ if (!staffChannel || staffChannel.guildId !== guild.id || !isSfwGuildTextChannel(staffChannel) || staffChannel.id === publicChannel.id) return 'The private staff report channel must be a different SFW text channel in this server.';
  if (!staffRole || staffRole.guild.id !== guild.id || !botMember) return 'Starry could not verify the staff role or its own server permissions.';
  const pub = publicChannel.permissionsFor(botMember);
  if (!pub?.has(PermissionFlagsBits.ViewChannel) || !pub.has(PermissionFlagsBits.SendMessages) || !pub.has(PermissionFlagsBits.EmbedLinks) || !pub.has(PermissionFlagsBits.ReadMessageHistory)) return 'Starry needs View Channel, Send Messages, Embed Links, and Read Message History in the public channel.';
@@ -245,8 +253,8 @@ async function handleSetup(interaction, client) {
 
  const currentConfig = await getConfig(guild.id).catch(() => null);
  const publicChannel = interaction.options.getChannel('channel') || interaction.channel;
- if (!publicChannel || publicChannel.guildId !== guild.id || publicChannel.type !== ChannelType.GuildText) {
-  return replyPrivate(interaction, 'Choose a regular text channel for public confessions, or run /confessionsetup inside a text channel.');
+ if (!publicChannel || publicChannel.guildId !== guild.id || !isSfwGuildTextChannel(publicChannel)) {
+  return replyPrivate(interaction, 'Choose a regular SFW text channel for public confessions, or run /confessionsetup inside an SFW text channel.');
  }
 
  const botMember = await getBotMember(guild);
@@ -535,6 +543,7 @@ whisperModule.buildReplyEmbed = buildReplyEmbed;
 whisperModule.buildStaffComponents = buildStaffComponents;
 whisperModule.isWhisperPost = isWhisperPost;
 whisperModule.validateChannels = validateChannels;
+whisperModule.isSfwGuildTextChannel = isSfwGuildTextChannel;
 whisperModule.isStaffChannelPermissionIssue = isStaffChannelPermissionIssue;
 whisperModule.getReportDeliveryFailure = getReportDeliveryFailure;
 whisperModule.createInteractionHandler = createInteractionHandler;
