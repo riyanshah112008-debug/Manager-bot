@@ -117,6 +117,7 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (regular members and own
     console.log('  ✅ Regular member executed comma prefix (,testcmd)');
 
     // Case B: Non-Owner tries dot prefix (.testcmd)
+    executedCount = 0;
     noticeSent = false;
     noticeText = '';
     const nonOwnerDotMessage = {
