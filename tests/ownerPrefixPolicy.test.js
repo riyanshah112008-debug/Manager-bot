@@ -3,6 +3,7 @@ const config = require('../src/config');
 const { CommandRegistry } = require('../src/modules/commandHandler');
 const { buildCategoryEmbed } = require('../src/utils/helpHelper');
 const { EventEmitter } = require('events');
+const { PermissionFlagsBits } = require('discord.js');
 
 console.log('🧪 Starting Starry Public Prefix Command Access Test Suite...\n');
 
@@ -86,6 +87,16 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
         name: 'ask',
         category: 'AI',
         description: 'Starry AI Ask Command',
+        async execute(ctx) {
+            executedCount++;
+        }
+    });
+
+    // This command represents a moderation operation: it must remain permission-gated.
+    registry.commands.set('restrictedcmd', {
+        name: 'restrictedcmd',
+        category: 'Moderation',
+        permissions: [PermissionFlagsBits.ManageGuild],
         async execute(ctx) {
             executedCount++;
         }
@@ -191,7 +202,65 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
     assert.strictEqual(executedCount, 1, 'Bot owner MUST be able to execute dot prefix command');
     console.log('  ✅ Bot owner executed dot prefix (.testcmd) with full unrestricted access');
 
-    // Case E: Regular user mentions bot (<@111111111111111111> ask what is 2+2)
+    // Case E: Regular users can access prefix commands, but moderation permissions remain enforced.
+    executedCount = 0;
+    noticeSent = false;
+    const deniedRestrictedMessage = {
+        id: 'msg_regular_restricted_denied',
+        content: ',restrictedcmd',
+        author: { id: '999999999999999997', tag: 'RegularMember#0003', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: () => false } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', deniedRestrictedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 0, 'Regular members without ManageGuild must not execute restricted commands');
+    assert.strictEqual(noticeSent, true, 'A member without the required permission must receive a denial');
+
+    executedCount = 0;
+    noticeSent = false;
+    const permittedRestrictedMessage = {
+        id: 'msg_regular_restricted_allowed',
+        content: ',restrictedcmd',
+        author: { id: '999999999999999996', tag: 'ServerStaff#0004', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: permission => permission === PermissionFlagsBits.ManageGuild } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', permittedRestrictedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 1, 'A member with ManageGuild must execute the restricted command');
+    assert.strictEqual(noticeSent, false, 'A permitted member must not receive a denial');
+
+    executedCount = 0;
+    noticeSent = false;
+    const ownerRestrictedMessage = {
+        id: 'msg_owner_restricted_allowed',
+        content: ',restrictedcmd',
+        author: { id: defaultOwner1, tag: 'StarryOwner#0001', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: () => false } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', ownerRestrictedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 1, 'Bot owners retain the existing owner override for restricted commands');
+    assert.strictEqual(noticeSent, false, 'Bot owners must not receive a permission denial');
+
+    // Case F: Regular user mentions bot (<@111111111111111111> ask what is 2+2)
     // Mentions are NOT prefix commands and must NOT be blocked by owner-only prefix policy!
     executedCount = 0;
     noticeSent = false;
@@ -212,7 +281,7 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
     assert.strictEqual(noticeSent, false, 'Mentioning bot must NOT trigger prefix owner block notice');
     console.log('  ✅ Regular user mentioning bot (<@BOT_ID> ask ...) executed without prefix block');
 
-    // Case F: Regular user in DMs talking to Starry AI naturally (without prefix)
+    // Case G: Regular user in DMs talking to Starry AI naturally (without prefix)
     executedCount = 0;
     noticeSent = false;
     const dmMessage = {
