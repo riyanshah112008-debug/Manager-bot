@@ -17,6 +17,7 @@ const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
 const { getPublicUrl } = require('../utils/tunnelManager');
+const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const config = require('../config');
@@ -1796,8 +1797,8 @@ function setupDashboardRoutes(app, client) {
         const userId = req.query.userId;
         if (!userId) return res.status(400).send('<h1>❌ Missing userId parameter</h1>');
         const spotifyManager = require('./spotifyManager');
-        const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://${req.headers.host}`;
-        const redirectUri = `${publicUrl}/api/spotify/callback`;
+        const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
+        const redirectUri = getSpotifyRedirectUri(publicUrl);
         const authUrl = spotifyManager.getOAuthUrl(userId, redirectUri);
         res.redirect(authUrl);
     });
@@ -1821,8 +1822,8 @@ function setupDashboardRoutes(app, client) {
 
         try {
             const spotifyManager = require('./spotifyManager');
-            const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://${req.headers.host}`;
-            const redirectUri = `${publicUrl}/api/spotify/callback`;
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
+            const redirectUri = getSpotifyRedirectUri(publicUrl);
             const { profile } = await spotifyManager.handleOAuthCallback(code, redirectUri, state);
 
             res.send(`

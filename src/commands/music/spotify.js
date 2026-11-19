@@ -14,6 +14,7 @@ const {
 } = require('discord.js');
 const spotifyManager = require('../../modules/spotifyManager');
 const { getPublicUrl } = require('../../utils/tunnelManager');
+const { getSpotifyRedirectUri } = require('../../utils/spotifyOAuth');
 const config = require('../../config');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -276,8 +277,8 @@ module.exports = {
         // 5. CONNECT SPOTIFY ACCOUNT (OAuth2)
         if (sub === 'connect' || sub === 'login' || sub === 'link') {
             const port = process.env.PORT || 10000;
-            const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-            const redirectUri = `${publicUrl}/api/spotify/callback`;
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://localhost:${port}`;
+            const redirectUri = getSpotifyRedirectUri(publicUrl);
             const authUrl = spotifyManager.getOAuthUrl(ctx.user.id, redirectUri);
 
             const row = new ActionRowBuilder().addComponents(
