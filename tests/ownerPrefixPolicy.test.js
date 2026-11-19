@@ -3,7 +3,7 @@ const config = require('../src/config');
 const { CommandRegistry } = require('../src/modules/commandHandler');
 const { EventEmitter } = require('events');
 
-console.log('🧪 Starting Comprehensive Starry Owner-Only Prefix Policy Test Suite...\n');
+console.log('🧪 Starting Starry Public Prefix Command Access Test Suite...\n');
 
 // -------------------------------------------------------------
 // Test 1: config.isBotOwner Verification (Static & Dynamic Env)
@@ -59,7 +59,7 @@ console.log('  ✅ config.isBotOwner and BOT_OWNERS accurately detect static, en
 // -------------------------------------------------------------
 // Test 2: Unified Command Dispatcher Prefix Policy
 // -------------------------------------------------------------
-console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Owner Blocked & Guided)');
+console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and bot owners');
 (async () => {
     const registry = new CommandRegistry();
     let executedCount = 0;
@@ -112,11 +112,11 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     mockClient.emit('messageCreate', nonOwnerCommaMessage);
     await new Promise(r => setTimeout(r, 60));
 
-    assert.strictEqual(executedCount, 0, 'Non-owner must NOT execute comma prefix command');
-    assert.strictEqual(noticeSent, true, 'Non-owner must receive slash command migration notice');
-    assert.ok(noticeText.includes('Slash Commands'), 'Migration notice must reference Slash Commands');
-    assert.ok(noticeText.includes('Bot Owners'), 'Migration notice must state prefix commands are owner-only');
-    console.log('  ✅ Non-owner comma prefix (,testcmd) was blocked and migration notice was delivered');
+    assert.strictEqual(executedCount, 1, 'Regular members must be able to execute comma prefix commands');
+    assert.strictEqual(noticeSent, false, 'Regular members must not receive an owner-only migration notice');
+    assert.ok(!noticeText.includes('Bot Owners'), 'Regular member should not receive an owner-only restriction notice');
+    // No owner-only restriction message should be emitted.
+    console.log('  ✅ Regular member comma prefix (,testcmd) executed successfully');
 
     // Case B: Non-Owner tries dot prefix (.testcmd)
     noticeSent = false;
@@ -140,9 +140,9 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     mockClient.emit('messageCreate', nonOwnerDotMessage);
     await new Promise(r => setTimeout(r, 60));
 
-    assert.strictEqual(executedCount, 0, 'Non-owner must NOT execute dot prefix command');
-    assert.strictEqual(noticeSent, true, 'Non-owner must receive slash migration notice for dot prefix');
-    console.log('  ✅ Non-owner dot prefix (.testcmd) was blocked and migration notice was delivered');
+    assert.strictEqual(executedCount, 1, 'Regular members must be able to execute dot prefix commands');
+    assert.strictEqual(noticeSent, false, 'Regular members must not receive migration notices for dot prefix commands');
+    console.log('  ✅ Regular member dot prefix (.testcmd) executed successfully');
 
     // Case C: Bot Owner runs comma prefix (,testcmd)
     noticeSent = false;
@@ -222,6 +222,6 @@ console.log('\n▶ Test 2: Verifying prefix dispatching (Owner Allowed vs Non-Ow
     assert.strictEqual(noticeSent, false, 'DM natural conversation must NOT trigger prefix owner block notice');
     console.log('  ✅ Regular user natural AI conversation in DMs executed without prefix block');
 
-    console.log('\n✨ ALL OWNER-ONLY PREFIX POLICY TESTS PASSED (100% Pass Rate)!');
+    console.log('\n✨ ALL PUBLIC PREFIX ACCESS TESTS PASSED (100% Pass Rate)!');
     process.exit(0);
 })();
