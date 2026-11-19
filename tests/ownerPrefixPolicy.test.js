@@ -1,6 +1,7 @@
 const assert = require('assert');
 const config = require('../src/config');
 const { CommandRegistry } = require('../src/modules/commandHandler');
+const { buildCategoryEmbed } = require('../src/utils/helpHelper');
 const { EventEmitter } = require('events');
 
 console.log('🧪 Starting Starry Public Prefix Command Access Test Suite...\n');
@@ -55,6 +56,13 @@ assert.strictEqual(config.isBotOwner('444444444444444444', mockAppClientTeam), t
 assert.strictEqual(config.isBotOwner('333333333333333333', mockAppClientTeam), true, 'Discord Team Member 2 should be recognized');
 assert.strictEqual(config.isBotOwner(nonOwner, mockAppClientTeam), false, 'Non-team member should NOT be recognized');
 console.log('  ✅ config.isBotOwner and BOT_OWNERS accurately detect static, env, and Discord application owners');
+
+// The user-facing help menu must describe the new public prefix policy accurately.
+const prefixHelp = buildCategoryEmbed('home', ',').data;
+assert.ok(!prefixHelp.footer.text.includes('Owner-Only'), 'Help footer must not label all prefix commands owner-only');
+assert.ok(prefixHelp.description.includes('Available to all members'), 'Help menu must say prefix commands are available to all members');
+assert.ok(prefixHelp.description.includes('server permissions'), 'Help menu must explain restricted commands still require permissions');
+console.log('  ✅ Help menu reflects public prefix access and per-command permission requirements');
 
 // -------------------------------------------------------------
 // Test 2: Unified Command Dispatcher Prefix Policy
