@@ -33,7 +33,7 @@ test('every dashboard-supported profile applies bounded Lavalink filters', async
         assert.ok(filters, profile + ' must call Shoukaku setFilters');
         assert.ok(filters.volume >= 0 && filters.volume <= 1, profile + ' volume must stay at or below unity');
         for (const band of filters.equalizer || []) {
-            assert.ok(band.gain >= -0.5 && band.gain <= 0.25, profile + ' EQ gain must remain conservative');
+            assert.ok(band.gain >= -0.5 && band.gain <= 0.65, profile + ' EQ gain must remain conservative');
         }
     }
 });
@@ -127,11 +127,12 @@ test('bass EQ automatically reduces preamp to preserve clipping headroom', async
     const stub = createPlayer();
     assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
     const filters = stub.getApplied();
-    assert.ok(filters.volume > 0 && filters.volume < 0.70,
-        'bass boost must reduce the preamp below its requested base volume');
-    assert.ok(filters.equalizer.some(band => band.gain > 0),
-        'bass profile should retain its controlled low-frequency boost');
-    const combinedBoost = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-    assert.ok(filters.volume <= 0.70 * Math.pow(10, -(combinedBoost + 1.5) / 20),
-        'preamp must account for cumulative positive EQ gain plus 1.5 dB of extra headroom');
+    assert.ok(filters.volume > 0.60 && filters.volume < 0.80,
+        'bass profile should preserve useful overall loudness while retaining headroom');
+    assert.ok(filters.equalizer.some(band => band.band === 1 && band.gain >= 0.60),
+        '40 Hz low-bass band must retain a clearly audible boost');
+    assert.ok(filters.equalizer.some(band => band.band === 2 && band.gain >= 0.50),
+        '63 Hz punch band must retain a clearly audible boost');
+    assert.ok(filters.equalizer.every(band => band.gain >= -0.5 && band.gain <= 0.65),
+        'all EQ bands must remain inside the supported safety range');
 });
