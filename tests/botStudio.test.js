@@ -35,9 +35,33 @@ console.log('  ✅ Intent detection tests passed with 100% accuracy!');
 console.log('\n▶ Test 2: Session Creation & Choice Payload');
 const testUser = { id: '1234567890', username: 'TestWizard' };
 const session = botStudio.createBotStudioSession(testUser.id, '--dev code code a complex discord bot for me');
-assert.ok(session.id, 'Session should have unique ID');
+assert.match(session.id, /^[a-f0-9]{32}$/i, 'Session ID must use cryptographically random 128-bit hex');
 assert.strictEqual(session.userId, testUser.id);
 assert.ok(botStudio.botStudioSessions.has(session.id), 'Session must be cached');
+assert.strictEqual(botStudio.getAuthorizedBotStudioSession(session.id, testUser.id, null), session);
+assert.strictEqual(botStudio.getAuthorizedBotStudioSession(session.id, '999999999999999999', null), null,
+    'A different Discord user must not use this session');
+assert.strictEqual(botStudio.getAuthorizedBotStudioSession(session.id, testUser.id, '123456789012345678'), null,
+    'A session created in a DM must not be used from a server');
+
+const guildSession = botStudio.createBotStudioSession(testUser.id, 'build a test bot', '123456789012345678');
+assert.strictEqual(botStudio.getAuthorizedBotStudioSession(guildSession.id, testUser.id, '123456789012345678'), guildSession);
+assert.strictEqual(botStudio.getAuthorizedBotStudioSession(guildSession.id, testUser.id, '223456789012345678'), null,
+    'A session must remain bound to its originating server');
+
+const expiredSession = botStudio.createBotStudioSession(testUser.id, 'build an expired test bot');
+expiredSession.createdAt = Date.now() - (30 * 60 * 1000 + 1);
+assert.strictEqual(botStudio.getAuthorizedBotStudioSession(expiredSession.id, testUser.id, null), null,
+    'Expired sessions must be rejected');
+assert.strictEqual(botStudio.botStudioSessions.has(expiredSession.id), false,
+    'Expired sessions must be removed from the cache');
+
+const commandHandlerSource = fs.readFileSync(path.join(__dirname, '../src/modules/commandHandler.js'), 'utf8');
+const guardedBotStudioPaths = commandHandlerSource.match(
+    /getAuthorizedBotStudioSession\(sessionId,\s*interaction\.user\?\.id,\s*interaction\.guildId\)/g
+) || [];
+assert.strictEqual(guardedBotStudioPaths.length, 4,
+    'Every Bot Studio button/modal action must validate session owner, guild, and expiry');
 
 const payload = botStudio.buildBotStudioChoicePayload(session);
 assert.ok(payload.embeds && payload.embeds.length === 1, 'Should have 1 embed');
