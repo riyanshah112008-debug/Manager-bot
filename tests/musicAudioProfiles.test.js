@@ -73,6 +73,7 @@ test('384 kbps voice bitrate is restricted to Premium Level 3 servers', async ()
         edit: async payload => {
             edits += 1;
             assert.equal(payload.bitrate, PREMIUM_VOICE_BITRATE);
+            channel.bitrate = payload.bitrate;
         }
     };
     const guild = {
