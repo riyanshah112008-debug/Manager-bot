@@ -708,8 +708,8 @@ async function applyKazagumoFilter(player, filterName) {
                         { band: 2, gain: 0.08 },
                         { band: 10, gain: -0.15 },
                         { band: 11, gain: -0.22 },
-                        { band: 12, gain: -0.28 },
-                        { band: 13, gain: -0.32 }
+                        { band: 12, gain: -0.20 },
+                        { band: 13, gain: -0.25 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -809,12 +809,10 @@ async function applyKazagumoFilter(player, filterName) {
             case 'master':
             case 'studio':
                 // ⭐ BALANCED STUDIO-STYLE EQ (headroom-preserving; source quality varies)
-                // - Deep, clean sub-bass (40Hz: +0.14, 63Hz: +0.10, 25Hz: +0.06)
-                // - Tight punch at 100Hz (+0.04)
-                // - Subtractive mud-scoop at 250Hz (-0.12) and 160Hz (-0.04) to cleanly de-mask vocals without artificial gain
-                // - Natural vocal clarity & presence: 1.0kHz (+0.02), 1.6kHz (+0.04), 2.5kHz (+0.05), 4.0kHz (+0.03)
-                // - Silky airy highs: 10kHz (+0.06), 16kHz (+0.04)
-                // - Master volume set to 0.80 (~2.0dB digital headroom) to reduce clipping risk in the encoded Discord Opus output
+                // - Gentle low-end support and a small 250 Hz cut keep the mix balanced.
+                // - Modest 1.0-4.0 kHz presence preserves vocal intelligibility without a harsh treble shelf.
+                // - Subtle 10-16 kHz lift adds air while leaving the overall profile close to neutral.
+                // - Requested profile volume is 0.94; setFilters adds bounded headroom based on the strongest EQ boost.
                 // - In-phase stereo (channelMix: null) for crystal-clear centered vocals and zero comb-filtering
                 await setFilters({
                     volume: 0.94,
