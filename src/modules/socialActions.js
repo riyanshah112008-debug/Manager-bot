@@ -19,6 +19,8 @@ const { getSocialGif, ANIME_GIFS } = require('../utils/animeGifs');
 const { incrementSocialCount, getSocialCount } = require('../models/SocialStats');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
+// Social actions must never ping the command author or any mentioned member.
+const SOCIAL_ALLOWED_MENTIONS = Object.freeze({ parse: [], users: [], roles: [], repliedUser: false });
 
 // Cache of used reciprocation buttons to prevent duplicate clicks
 const usedActionButtons = new Set();
@@ -126,8 +128,8 @@ async function executeSocialAction(actionKey, context, isSlash) {
         const remaining = ((COOLDOWN_MS - (now - lastUsed)) / 1000).toFixed(1);
         const coolMsg = `⏳ Please wait **${remaining}s** before using another social action!`;
         return isSlash 
-            ? context.reply({ content: coolMsg, flags: [EPHEMERAL_FLAG] }) 
-            : context.reply(coolMsg);
+            ? context.reply({ content: coolMsg, flags: [EPHEMERAL_FLAG], allowedMentions: SOCIAL_ALLOWED_MENTIONS }) 
+            : context.reply({ content: coolMsg, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
     }
     userSocialCooldowns.set(authorIdStr, now);
 
@@ -150,15 +152,15 @@ async function executeSocialAction(actionKey, context, isSlash) {
         if (!target) {
             const reqMsg = `❌ Please mention a user or reply to a message to ${actionKey} them!\n*Example: \`,${actionKey} @user\`*`;
             return isSlash 
-                ? context.reply({ content: reqMsg, flags: [EPHEMERAL_FLAG] }) 
-                : context.reply(reqMsg);
+                ? context.reply({ content: reqMsg, flags: [EPHEMERAL_FLAG], allowedMentions: SOCIAL_ALLOWED_MENTIONS }) 
+                : context.reply({ content: reqMsg, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
         }
 
         if (String(target.id) === authorIdStr) {
             const errReply = `❌ You can't ${actionKey} yourself! Mention someone else.`;
             return isSlash 
-                ? context.reply({ content: errReply, flags: [EPHEMERAL_FLAG] }) 
-                : context.reply(errReply);
+                ? context.reply({ content: errReply, flags: [EPHEMERAL_FLAG], allowedMentions: SOCIAL_ALLOWED_MENTIONS }) 
+                : context.reply({ content: errReply, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
         }
     }
 
@@ -197,9 +199,9 @@ async function executeSocialAction(actionKey, context, isSlash) {
     }
 
     if (isSlash && (context.deferred || context.replied)) {
-        await context.editReply({ embeds: [embed], components }).catch(() => {});
+        await context.editReply({ embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(() => {});
     } else {
-        await context.reply({ embeds: [embed], components }).catch(() => {});
+        await context.reply({ embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(() => {});
     }
 }
 
@@ -238,7 +240,7 @@ async function sendSocialHelpMenu(context) {
         .setFooter({ text: 'Starry Social Suite • Prefix: ,' })
         .setTimestamp();
 
-    const replyMsg = await context.reply({ embeds: [embed], components: [row] });
+    const replyMsg = await context.reply({ embeds: [embed], components: [row], allowedMentions: SOCIAL_ALLOWED_MENTIONS });
     
     if (replyMsg && typeof replyMsg.createMessageComponentCollector === 'function') {
         const collector = replyMsg.createMessageComponentCollector({ });
@@ -254,7 +256,7 @@ async function sendSocialHelpMenu(context) {
                         .setDescription(`**Usage:** \`${prefix}${selectedAction} ${conf.requiresTarget ? '@user' : ''}\`\n**Verb:** \`${conf.verb}\`\n**Action Type:** ${conf.group === 'action' ? '👥 Targeted Member Action' : '🎭 Solo Expression'}\n\n*Shared interactions are counted and stored in MongoDB!*`)
                         .setImage(sampleGif)
                         .setFooter({ text: `Prefix: ${prefix} • Starry Social Engine` });
-                    await i.reply({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG] });
+                    await i.reply({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG], allowedMentions: SOCIAL_ALLOWED_MENTIONS });
                 }
             }
         });
@@ -279,7 +281,8 @@ async function handleSocialBackButton(interaction) {
     if (interaction.user.id !== allowedTargetId) {
         return interaction.reply({
             content: `❌ Only <@${allowedTargetId}> can use this button to action back!`,
-            flags: [EPHEMERAL_FLAG]
+            flags: [EPHEMERAL_FLAG],
+            allowedMentions: SOCIAL_ALLOWED_MENTIONS
         }).catch(() => {});
     }
 
@@ -340,8 +343,8 @@ async function handleSocialBackButton(interaction) {
         .setTimestamp();
 
     // Do NOT attach another button on the reply (keeps strictly: 1 action + 1 action back, no infinite loop!)
-    return interaction.editReply({ embeds: [backEmbed], components: [] }).catch(async () => {
-        return interaction.followUp({ embeds: [backEmbed], components: [] }).catch(() => {});
+    return interaction.editReply({ embeds: [backEmbed], components: [], allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(async () => {
+        return interaction.followUp({ embeds: [backEmbed], components: [], allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(() => {});
     });
 }
 
@@ -361,8 +364,8 @@ async function handleSocialSelectMenu(interaction) {
         .setImage(sampleGif)
         .setFooter({ text: `Prefix: ${prefix} • Starry Social Engine` });
 
-    return interaction.reply({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG] }).catch(async () => {
-        return interaction.followUp({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+    return interaction.reply({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG], allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(async () => {
+        return interaction.followUp({ embeds: [previewEmbed], flags: [EPHEMERAL_FLAG], allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(() => {});
     });
 }
 
@@ -387,6 +390,7 @@ socialModule.handleSocialBackButton = handleSocialBackButton;
 socialModule.handleSocialSelectMenu = handleSocialSelectMenu;
 socialModule.getSocialNoun = getSocialNoun;
 socialModule.ACTION_CONFIG = ACTION_CONFIG;
+socialModule.SOCIAL_ALLOWED_MENTIONS = SOCIAL_ALLOWED_MENTIONS;
 socialModule.socialCommandPayload = socialCommandBuilder.toJSON();
 
 module.exports = socialModule;
