@@ -9,8 +9,8 @@ const {
 } = require('../src/utils/musicManager');
 
 const PROFILES = [
-    'clear', 'flat', 'empowering', 'bass', 'bassboost', '8d', 'nightcore',
-    'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround',
+    'clear', 'empowering', 'bass', '8d', 'nightcore', 'daycore',
+    'vaporwave', 'lofi', 'slowwide', 'karaoke', 'stereo',
     'electronic', 'soft', 'radio', 'treble', 'pop'
 ];
 
@@ -33,7 +33,7 @@ test('every dashboard-supported profile applies bounded Lavalink filters', async
         assert.ok(filters, profile + ' must call Shoukaku setFilters');
         assert.ok(filters.volume >= 0 && filters.volume <= 1, profile + ' volume must stay at or below unity');
         for (const band of filters.equalizer || []) {
-            assert.ok(band.gain >= -0.5 && band.gain <= 0.65, profile + ' EQ gain must remain conservative');
+            assert.ok(band.gain >= -0.25 && band.gain <= 0.65, profile + ' EQ gain must remain within Lavalink limits');
         }
     }
 });
@@ -123,16 +123,54 @@ test('play command applies Premium bitrate before either playback engine starts'
 });
 
 
-test('bass EQ automatically reduces preamp to preserve clipping headroom', async () => {
+test('bass EQ retains strong low-frequency energy with controlled preamp headroom', async () => {
     const stub = createPlayer();
     assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
     const filters = stub.getApplied();
-    assert.ok(filters.volume > 0.60 && filters.volume < 0.80,
+    const volumePercent = Math.round(filters.volume * 100);
+    assert.ok(volumePercent > 60 && volumePercent < 80,
         'bass profile should preserve useful overall loudness while retaining headroom');
-    assert.ok(filters.equalizer.some(band => band.band === 1 && band.gain >= 0.60),
+    assert.ok(filters.equalizer.some(band => band.band === 1 && Math.round(band.gain * 100) >= 60),
         '40 Hz low-bass band must retain a clearly audible boost');
-    assert.ok(filters.equalizer.some(band => band.band === 2 && band.gain >= 0.50),
+    assert.ok(filters.equalizer.some(band => band.band === 2 && Math.round(band.gain * 100) >= 50),
         '63 Hz punch band must retain a clearly audible boost');
-    assert.ok(filters.equalizer.every(band => band.gain >= -0.5 && band.gain <= 0.65),
+    assert.ok(filters.equalizer.every(band => band.gain >= -0.25 && band.gain <= 0.65),
         'all EQ bands must remain inside the supported safety range');
+});
+
+
+test('each selectable audio mode applies its defining DSP effect', async () => {
+    const expected = {
+        '8d': filters => Boolean(filters.rotation && filters.rotation.rotationHz > 0),
+        nightcore: filters => Boolean(filters.timescale && filters.timescale.speed > 1 && filters.timescale.pitch > 1),
+        daycore: filters => Boolean(filters.timescale && filters.timescale.speed < 1 && filters.timescale.pitch < 1),
+        vaporwave: filters => Boolean(filters.timescale && filters.tremolo && filters.lowPass),
+        lofi: filters => Boolean(filters.lowPass && filters.vibrato),
+        slowwide: filters => Boolean(filters.timescale && filters.channelMix),
+        karaoke: filters => Boolean(filters.karaoke && filters.equalizer.length === 0),
+        stereo: filters => Boolean(filters.channelMix && !filters.rotation),
+        electronic: filters => filters.equalizer.some(band => band.band === 1 && band.gain > 0),
+        soft: filters => Boolean(filters.lowPass && filters.equalizer.some(band => band.band === 13 && band.gain < 0)),
+        radio: filters => filters.equalizer.some(band => band.band === 8 && band.gain > 0),
+        treble: filters => filters.equalizer.some(band => band.band === 13 && band.gain > 0),
+        pop: filters => filters.equalizer.some(band => band.band === 9 && band.gain > 0),
+        empowering: filters => filters.equalizer.some(band => band.band === 5 && band.gain < 0),
+        bass: filters => filters.equalizer.some(band => band.band === 1 && band.gain > 0)
+    };
+    for (const [profile, hasSignature] of Object.entries(expected)) {
+        const stub = createPlayer();
+        assert.equal(await applyKazagumoFilter(stub.player, profile), true, profile);
+        assert.ok(hasSignature(stub.getApplied()), profile + ' must apply its defining sound effect');
+    }
+});
+
+test('all selectable audio modes have distinct filter signatures', async () => {
+    const signatures = new Map();
+    for (const profile of PROFILES) {
+        const stub = createPlayer();
+        assert.equal(await applyKazagumoFilter(stub.player, profile), true, profile);
+        const signature = JSON.stringify(stub.getApplied());
+        assert.equal(signatures.has(signature), false, profile + ' must not duplicate another mode');
+        signatures.set(signature, profile);
+    }
 });
