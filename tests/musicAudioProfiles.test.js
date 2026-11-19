@@ -121,3 +121,17 @@ test('play command applies Premium bitrate before either playback engine starts'
     const playSource = require('node:fs').readFileSync(require.resolve('../src/commands/music/play'), 'utf8');
     assert.match(playSource, /applyPremiumVoiceBitrate\(\{ guildId: interaction\.guild\.id, voiceId: voiceChannel\.id \}, client\)/);
 });
+
+
+test('bass EQ automatically reduces preamp to preserve clipping headroom', async () => {
+    const stub = createPlayer();
+    assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
+    const filters = stub.getApplied();
+    assert.ok(filters.volume > 0 && filters.volume < 0.70,
+        'bass boost must reduce the preamp below its requested base volume');
+    assert.ok(filters.equalizer.some(band => band.gain > 0),
+        'bass profile should retain its controlled low-frequency boost');
+    const combinedBoost = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
+    assert.ok(filters.volume <= 0.70 * Math.pow(10, -(combinedBoost + 1.5) / 20),
+        'preamp must account for cumulative positive EQ gain plus 1.5 dB of extra headroom');
+});
