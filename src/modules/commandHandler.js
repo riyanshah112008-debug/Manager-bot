@@ -664,8 +664,15 @@ NaN
                 if (interaction.customId.startsWith('modal_botstudio_gh_')) {
                     const sessionId = interaction.customId.replace('modal_botstudio_gh_', '');
                     const botStudio = require('./botStudio');
-                    const session = botStudio.botStudioSessions.get(sessionId);
-                    const prompt = session?.prompt || 'Custom Discord Bot';
+                    const session = botStudio.getAuthorizedBotStudioSession(sessionId, interaction.user?.id, interaction.guildId);
+                    if (!session) {
+                        await interaction.reply({
+                            content: 'This Bot Studio session has expired or belongs to another member or server. Start a new session with ,codebot.',
+                            flags: [MessageFlags.Ephemeral]
+                        }).catch(() => {});
+                        return;
+                    }
+                    const prompt = session.prompt;
 
                     const repoUrl = interaction.fields.getTextInputValue('gh_repo_url');
                     const pat = interaction.fields.getTextInputValue('gh_pat');
@@ -712,8 +719,15 @@ NaN
                 if (customId.startsWith('botstudio_local_')) {
                     const sessionId = customId.replace('botstudio_local_', '');
                     const botStudio = require('./botStudio');
-                    const session = botStudio.botStudioSessions.get(sessionId);
-                    const prompt = session?.prompt || 'Complex Discord Bot';
+                    const session = botStudio.getAuthorizedBotStudioSession(sessionId, interaction.user?.id, interaction.guildId);
+                    if (!session) {
+                        await interaction.reply({
+                            content: 'This Bot Studio session has expired or belongs to another member or server. Start a new session with ,codebot.',
+                            flags: [MessageFlags.Ephemeral]
+                        }).catch(() => {});
+                        return;
+                    }
+                    const prompt = session.prompt;
 
                     await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
@@ -757,6 +771,15 @@ NaN
                 // 🚀 Starry Autonomous Bot Studio: Push to GitHub Button
                 if (customId.startsWith('botstudio_gh_')) {
                     const sessionId = customId.replace('botstudio_gh_', '');
+                    const botStudio = require('./botStudio');
+                    const session = botStudio.getAuthorizedBotStudioSession(sessionId, interaction.user?.id, interaction.guildId);
+                    if (!session) {
+                        await interaction.reply({
+                            content: 'This Bot Studio session has expired or belongs to another member or server. Start a new session with ,codebot.',
+                            flags: [MessageFlags.Ephemeral]
+                        }).catch(() => {});
+                        return;
+                    }
                     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
                     const modal = new ModalBuilder()
                         .setCustomId(`modal_botstudio_gh_${sessionId}`)
@@ -794,8 +817,15 @@ NaN
                 if (customId.startsWith('botstudio_zip_')) {
                     const sessionId = customId.replace('botstudio_zip_', '');
                     const botStudio = require('./botStudio');
-                    const session = botStudio.botStudioSessions.get(sessionId);
-                    const prompt = session?.prompt || 'Custom Discord bot with moderation and utilities';
+                    const session = botStudio.getAuthorizedBotStudioSession(sessionId, interaction.user?.id, interaction.guildId);
+                    if (!session) {
+                        await interaction.reply({
+                            content: 'This Bot Studio session has expired or belongs to another member or server. Start a new session with ,codebot.',
+                            flags: [MessageFlags.Ephemeral]
+                        }).catch(() => {});
+                        return;
+                    }
+                    const prompt = session.prompt;
 
                     await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
