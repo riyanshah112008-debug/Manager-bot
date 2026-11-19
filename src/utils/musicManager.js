@@ -374,14 +374,14 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
             { label: '⭐ Studio master', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
             { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
-            { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
+            { label: '8D Rotating Pan', description: 'Slow left-to-right stereo rotation', value: '8d', emoji: '🌀' },
             { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
             { label: 'Daycore / Slowed', description: 'Slowed down tempo + deeper tone', value: 'daycore', emoji: '🌅' },
-            { label: 'Vaporwave', description: 'Slowed reverb + retro cassette feel', value: 'vaporwave', emoji: '🪩' },
+            { label: 'Vaporwave', description: 'Lower pitch, softened highs and gentle volume pulse', value: 'vaporwave', emoji: '🪩' },
             { label: 'Lo-Fi Chill', description: 'Warm vinyl tape flutter & mellow acoustic tone', value: 'lofi', emoji: '☕' },
-            { label: 'Slowed & Reverb', description: 'Immersive stadium & cathedral concert reverb', value: 'reverb', emoji: '🌌' },
+            { label: 'Slowed Stereo', description: 'Lower pitch with a subtle left/right stereo blend', value: 'slowwide', emoji: '🌌' },
             { label: 'Karaoke', description: 'Attenuates center vocals for sing-along', value: 'karaoke', emoji: '🎤' },
-            { label: '3D Surround', description: 'Wide immersive cinematic surround soundstage', value: 'surround', emoji: '🎧' },
+            { label: 'Stereo Crossfeed', description: 'Gentle left/right channel blending', value: 'stereo', emoji: '🎧' },
             { label: 'EDM & Club', description: 'High-energy dance punch & crisp sizzling hats', value: 'electronic', emoji: '⚡' },
             { label: 'Soft & Mellow', description: 'Non-fatiguing smooth sound for late night chill', value: 'soft', emoji: '🍃' },
             { label: 'Retro Radio', description: 'Vintage 1950s AM telephone receiver sound', value: 'radio', emoji: '📻' },
@@ -399,16 +399,22 @@ async function applyKazagumoFilter(player, filterName) {
         const shoukakuPlayer = player.shoukaku;
         const normalized = (filterName || 'clear').toLowerCase().trim();
         const setFilters = async (filters) => {
-            const equalizer = (filters.equalizer || []).map(band => ({
-                band: band.band,
-                gain: Math.max(-0.5, Math.min(0.25, Number(band.gain) || 0))
-            }));
-            // EQ boosts can create peaks above the original source level.
-            // Apply automatic preamp headroom before the signal reaches the voice encoder.
-            const combinedPositiveBoostDb = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-            const peakHeadroomDb = combinedPositiveBoostDb > 0 ? combinedPositiveBoostDb + 1.5 : 0;
+            const equalizer = (Array.isArray(filters.equalizer) ? filters.equalizer : [])
+                .filter(band => Number.isInteger(band.band) && band.band >= 0 && band.band <= 14)
+                .map(band => {
+                    const gain = Number(band.gain);
+                    return {
+                        band: band.band,
+                        // Lavalink v4 accepts -0.25 to 1.0; keep boosts conservative.
+                        gain: Math.max(-0.25, Math.min(0.65, Number.isFinite(gain) ? gain : 0))
+                    };
+                });
+            // EQ boosts can raise peaks. Use a conservative, bounded preamp reserve.
+            const maximumPositiveBoost = equalizer.reduce((maximum, band) => Math.max(maximum, band.gain), 0);
+            const peakHeadroomDb = maximumPositiveBoost > 0 ? Math.min(4, 1 + (maximumPositiveBoost * 3)) : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
-            const requestedVolume = Math.max(0, Math.min(1, Number(filters.volume ?? 1)));
+            const rawVolume = Number(filters.volume ?? 1);
+            const requestedVolume = Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 1;
             const safe = {
                 timescale: null,
                 karaoke: null,
@@ -433,20 +439,17 @@ async function applyKazagumoFilter(player, filterName) {
             case 'vibration':
             case 'deepbass':
             case 'subwoofer':
-                // 🔊 TRUE CLEAN SUB-BASS VIBRATION (Zero Clipping • Crystal-Clear Vocals):
-                // Focused resonant energy at 40Hz & 63Hz (the headphone driver vibration sweet-spot).
-                // Band 5 (250Hz) is gently dipped to keep the low-end separated from male/female vocals.
-                // Volume pre-attenuated to 0.70 to provide +3.5dB of clean headroom, completely eliminating
-                // digital clipping, square-wave distortion, and voice crackling!
+                // Deep 25-100 Hz emphasis with a restrained low-mid cut to preserve vocal body.
+                // Headroom is applied centrally by setFilters; source or device distortion can still occur.
                 await setFilters({
-                    volume: 0.70,
+                    volume: 0.95,
                     equalizer: [
-                        { band: 0, gain: 0.28 },  // 25 Hz - Clean sub-rumble
-                        { band: 1, gain: 0.38 },  // 40 Hz - Tactile physical vibration
-                        { band: 2, gain: 0.32 },  // 63 Hz - Headphone diaphragm vibration
-                        { band: 3, gain: 0.14 },  // 100 Hz - Tight, punchy 808/kick
-                        { band: 4, gain: -0.04 }, // 160 Hz - Transition slope
-                        { band: 5, gain: -0.12 }, // 250 Hz - Mud scoop to protect vocals
+                        { band: 0, gain: 0.58 },  // 25 Hz - Deep sub-rumble
+                        { band: 1, gain: 0.65 },  // 40 Hz - Strong low-bass foundation
+                        { band: 2, gain: 0.55 },  // 63 Hz - Punch and tactile bass
+                        { band: 3, gain: 0.30 },  // 100 Hz - Kick impact
+                        { band: 4, gain: -0.06 }, // 160 Hz - Keep low mids controlled
+                        { band: 5, gain: -0.10 }, // 250 Hz - Reduce mud without thinning bass
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
                         { band: 7, gain: 0.00 },  // 630 Hz - Flat
                         { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
@@ -538,6 +541,7 @@ async function applyKazagumoFilter(player, filterName) {
                     volume: 0.86,
                     timescale: { speed: 0.80, pitch: 0.80, rate: 1.0 },
                     tremolo: { frequency: 2.2, depth: 0.16 },
+                    lowPass: { smoothing: 8.0 },
                     equalizer: [
                         { band: 0, gain: 0.18 },
                         { band: 1, gain: 0.15 },
@@ -549,7 +553,6 @@ async function applyKazagumoFilter(player, filterName) {
                     vibrato: null,
                     karaoke: null,
                     channelMix: null,
-                    lowPass: null,
                     distortion: null
                 });
                 break;
@@ -562,16 +565,16 @@ async function applyKazagumoFilter(player, filterName) {
                     volume: 0.92,
                     lowPass: { smoothing: 16.0 },
                     timescale: { speed: 0.96, pitch: 0.96, rate: 1.0 },
-                    vibrato: { frequency: 1.8, depth: 0.12 },
+                    vibrato: { frequency: 0.8, depth: 0.04 },
                     equalizer: [
-                        { band: 0, gain: 0.20 },
-                        { band: 1, gain: 0.25 },
-                        { band: 2, gain: 0.20 },
-                        { band: 3, gain: 0.15 },
-                        { band: 10, gain: -0.25 },
-                        { band: 11, gain: -0.35 },
-                        { band: 12, gain: -0.40 },
-                        { band: 13, gain: -0.45 }
+                        { band: 0, gain: 0.18 },
+                        { band: 1, gain: 0.18 },
+                        { band: 2, gain: 0.12 },
+                        { band: 3, gain: 0.06 },
+                        { band: 10, gain: -0.10 },
+                        { band: 11, gain: -0.18 },
+                        { band: 12, gain: -0.22 },
+                        { band: 13, gain: -0.25 }
                     ],
                     rotation: null,
                     tremolo: null,
@@ -581,24 +584,25 @@ async function applyKazagumoFilter(player, filterName) {
                 });
                 break;
 
+            case 'slowwide':
             case 'reverb':
             case 'slowreverb':
             case 'hall':
             case 'echo':
-                // 🌌 Massive concert hall / arena spatial reverberation
+                // Lavalink has no native reverb filter. This is an honest slowed stereo-blend alternative.
                 await setFilters({
                     volume: 0.92,
                     timescale: { speed: 0.88, pitch: 0.88, rate: 1.0 },
-                    tremolo: { frequency: 1.6, depth: 0.14 },
-                    channelMix: { leftToLeft: 0.82, leftToRight: 0.28, rightToLeft: 0.28, rightToRight: 0.82 },
+                    channelMix: { leftToLeft: 0.92, leftToRight: 0.08, rightToLeft: 0.08, rightToRight: 0.92 },
                     equalizer: [
-                        { band: 0, gain: 0.25 },
-                        { band: 1, gain: 0.20 },
-                        { band: 8, gain: 0.10 },
-                        { band: 9, gain: 0.15 },
-                        { band: 10, gain: 0.18 }
+                        { band: 0, gain: 0.18 },
+                        { band: 1, gain: 0.14 },
+                        { band: 2, gain: 0.08 },
+                        { band: 10, gain: -0.04 },
+                        { band: 11, gain: -0.08 }
                     ],
                     rotation: null,
+                    tremolo: null,
                     vibrato: null,
                     karaoke: null,
                     lowPass: null,
@@ -630,24 +634,25 @@ async function applyKazagumoFilter(player, filterName) {
                 });
                 break;
 
+            case 'stereo':
             case 'surround':
             case '3d':
             case 'spatial':
-                // 🎧 Wide 3D soundstage with panoramic channel crossfeed
+                // Gentle crossfeed blend; it does not synthesize multi-channel surround audio.
                 await setFilters({
                     volume: 0.94,
                     channelMix: {
-                        leftToLeft: 0.85,
-                        leftToRight: 0.28,
-                        rightToLeft: 0.28,
-                        rightToRight: 0.85
+                        leftToLeft: 0.94,
+                        leftToRight: 0.10,
+                        rightToLeft: 0.10,
+                        rightToRight: 0.94
                     },
                     equalizer: [
-                        { band: 0, gain: 0.15 },
-                        { band: 1, gain: 0.12 },
-                        { band: 10, gain: 0.15 },
-                        { band: 11, gain: 0.20 },
-                        { band: 12, gain: 0.22 }
+                        { band: 0, gain: 0.06 },
+                        { band: 1, gain: 0.04 },
+                        { band: 10, gain: 0.08 },
+                        { band: 11, gain: 0.10 },
+                        { band: 12, gain: 0.08 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -702,8 +707,8 @@ async function applyKazagumoFilter(player, filterName) {
                         { band: 2, gain: 0.08 },
                         { band: 10, gain: -0.15 },
                         { band: 11, gain: -0.22 },
-                        { band: 12, gain: -0.28 },
-                        { band: 13, gain: -0.32 }
+                        { band: 12, gain: -0.20 },
+                        { band: 13, gain: -0.25 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -750,14 +755,13 @@ async function applyKazagumoFilter(player, filterName) {
                 await setFilters({
                     volume: 0.88,
                     equalizer: [
-                        { band: 0, gain: -0.10 },
-                        { band: 1, gain: -0.08 },
-                        { band: 2, gain: -0.04 },
+                        { band: 8, gain: 0.06 },
                         { band: 9, gain: 0.12 },
                         { band: 10, gain: 0.18 },
                         { band: 11, gain: 0.22 },
                         { band: 12, gain: 0.24 },
-                        { band: 13, gain: 0.25 }
+                        { band: 13, gain: 0.28 },
+                        { band: 14, gain: 0.28 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -775,15 +779,17 @@ async function applyKazagumoFilter(player, filterName) {
                 await setFilters({
                     volume: 0.82,
                     equalizer: [
-                        { band: 0, gain: 0.08 },
+                        { band: 0, gain: 0.12 },
                         { band: 1, gain: 0.10 },
-                        { band: 4, gain: -0.06 },
-                        { band: 5, gain: -0.12 },
-                        { band: 7, gain: 0.04 },
-                        { band: 8, gain: 0.06 },
-                        { band: 9, gain: 0.08 },
-                        { band: 10, gain: 0.06 },
-                        { band: 11, gain: 0.04 }
+                        { band: 2, gain: 0.06 },
+                        { band: 4, gain: -0.04 },
+                        { band: 5, gain: -0.08 },
+                        { band: 7, gain: 0.05 },
+                        { band: 8, gain: 0.08 },
+                        { band: 9, gain: 0.12 },
+                        { band: 10, gain: 0.10 },
+                        { band: 11, gain: 0.06 },
+                        { band: 12, gain: 0.03 }
                     ],
                     timescale: null,
                     rotation: null,
@@ -802,12 +808,10 @@ async function applyKazagumoFilter(player, filterName) {
             case 'master':
             case 'studio':
                 // ⭐ BALANCED STUDIO-STYLE EQ (headroom-preserving; source quality varies)
-                // - Deep, clean sub-bass (40Hz: +0.14, 63Hz: +0.10, 25Hz: +0.06)
-                // - Tight punch at 100Hz (+0.04)
-                // - Subtractive mud-scoop at 250Hz (-0.12) and 160Hz (-0.04) to cleanly de-mask vocals without artificial gain
-                // - Natural vocal clarity & presence: 1.0kHz (+0.02), 1.6kHz (+0.04), 2.5kHz (+0.05), 4.0kHz (+0.03)
-                // - Silky airy highs: 10kHz (+0.06), 16kHz (+0.04)
-                // - Master volume set to 0.80 (~2.0dB digital headroom) to reduce clipping risk in the encoded Discord Opus output
+                // - Gentle low-end support and a small 250 Hz cut keep the mix balanced.
+                // - Modest 1.0-4.0 kHz presence preserves vocal intelligibility without a harsh treble shelf.
+                // - Subtle 10-16 kHz lift adds air while leaving the overall profile close to neutral.
+                // - Requested profile volume is 0.94; setFilters adds bounded headroom based on the strongest EQ boost.
                 // - In-phase stereo (channelMix: null) for crystal-clear centered vocals and zero comb-filtering
                 await setFilters({
                     volume: 0.94,
@@ -857,7 +861,13 @@ async function applyKazagumoFilter(player, filterName) {
                 break;
         }
 
-        const canonicalFilter = ['bassboost', 'vibrate', 'vibration', 'deepbass', 'subwoofer'].includes(normalized) ? 'bass' : (['empowering', 'hifi', 'studio', 'master', 'audiophile'].includes(normalized) ? 'empowering' : normalized);
+        const canonicalFilter = ['bassboost', 'vibrate', 'vibration', 'deepbass', 'subwoofer'].includes(normalized)
+            ? 'bass'
+            : (['empowering', 'hifi', 'studio', 'master', 'audiophile'].includes(normalized)
+                ? 'empowering'
+                : (['surround', '3d', 'spatial'].includes(normalized)
+                    ? 'stereo'
+                    : (['reverb', 'slowreverb', 'hall', 'echo'].includes(normalized) ? 'slowwide' : normalized)));
         player.data.set('activeFilter', canonicalFilter);
 
         // Keep Music Controller request channel synced
