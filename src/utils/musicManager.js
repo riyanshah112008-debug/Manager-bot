@@ -442,14 +442,16 @@ async function applyKazagumoFilter(player, filterName) {
                 // Deep 25-100 Hz emphasis with a restrained low-mid cut to preserve vocal body.
                 // Headroom is applied centrally by setFilters; source or device distortion can still occur.
                 await setFilters({
-                    volume: 0.95,
+                    // Keep the bass profile punchy, not extreme: overlapping low bands can
+                    // accumulate and clip even when each individual EQ value looks safe.
+                    volume: 0.86,
                     equalizer: [
-                        { band: 0, gain: 0.58 },  // 25 Hz - Deep sub-rumble
-                        { band: 1, gain: 0.65 },  // 40 Hz - Strong low-bass foundation
-                        { band: 2, gain: 0.55 },  // 63 Hz - Punch and tactile bass
-                        { band: 3, gain: 0.30 },  // 100 Hz - Kick impact
-                        { band: 4, gain: -0.06 }, // 160 Hz - Keep low mids controlled
-                        { band: 5, gain: -0.10 }, // 250 Hz - Reduce mud without thinning bass
+                        { band: 0, gain: 0.12 },  // 25 Hz - Gentle sub-bass support
+                        { band: 1, gain: 0.22 },  // 40 Hz - Main low-bass weight
+                        { band: 2, gain: 0.18 },  // 63 Hz - Controlled punch
+                        { band: 3, gain: 0.10 },  // 100 Hz - Tight kick impact
+                        { band: 4, gain: -0.02 }, // 160 Hz - Minimal low-mid trim
+                        { band: 5, gain: -0.04 }, // 250 Hz - Light mud control
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
                         { band: 7, gain: 0.00 },  // 630 Hz - Flat
                         { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
