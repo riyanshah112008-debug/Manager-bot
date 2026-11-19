@@ -32,6 +32,8 @@ try {
 // Anti-spam cooldown cache: userId -> timestamp
 const userSocialCooldowns = new Map();
 const COOLDOWN_MS = 3000;
+// Do not ping the command author or targeted user from social-action replies.
+const SOCIAL_ALLOWED_MENTIONS = Object.freeze({ parse: [], users: [], roles: [], repliedUser: false });
 
 function createSocialCommand(key, configData) {
     return {
@@ -49,7 +51,7 @@ function createSocialCommand(key, configData) {
             const lastUsed = userSocialCooldowns.get(authorIdStr) || 0;
             if (now - lastUsed < COOLDOWN_MS) {
                 const remaining = ((COOLDOWN_MS - (now - lastUsed)) / 1000).toFixed(1);
-                return ctx.reply(`⏳ Please wait **${remaining}s** before using another social action!`);
+                return ctx.reply({ content: `⏳ Please wait **${remaining}s** before using another social action!`, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
             }
             userSocialCooldowns.set(authorIdStr, now);
 
@@ -67,11 +69,11 @@ function createSocialCommand(key, configData) {
 
             if (configData.requiresTarget) {
                 if (!target) {
-                    return ctx.reply(`❌ Please mention someone or reply to their message to ${key} them!\n*Usage: \`,${key} @user\`*`);
+                    return ctx.reply({ content: `❌ Please mention someone or reply to their message to ${key} them!\n*Usage: \`,${key} @user\`*`, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
                 }
 
                 if (String(target.id) === authorIdStr) {
-                    return ctx.reply(`❌ You cannot ${key} yourself! Please mention someone else.`);
+                    return ctx.reply({ content: `❌ You cannot ${key} yourself! Please mention someone else.`, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
                 }
             } else if (target && String(target.id) === authorIdStr) {
                 target = null;
@@ -112,7 +114,10 @@ function createSocialCommand(key, configData) {
                 components.push(row);
             }
 
-            return ctx.reply({ embeds: [embed], components });
+            const payload = { embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS };
+            // Avoid quoting the original command (which may contain a target @mention).
+            if (ctx.channel?.send) return ctx.channel.send(payload);
+            return ctx.reply(payload);
         }
     };
 }
