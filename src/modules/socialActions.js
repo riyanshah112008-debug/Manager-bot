@@ -201,7 +201,10 @@ async function executeSocialAction(actionKey, context, isSlash) {
     if (isSlash && (context.deferred || context.replied)) {
         await context.editReply({ embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(() => {});
     } else {
-        await context.reply({ embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS }).catch(() => {});
+        const payload = { embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS };
+        // Send as a normal channel message, not a reply quoting the command's @mention.
+        if (context.channel?.send) await context.channel.send(payload).catch(() => {});
+        else await context.reply(payload).catch(() => {});
     }
 }
 
@@ -335,9 +338,11 @@ async function handleSocialBackButton(interaction) {
     const countWord = getSocialNoun(actionKey, totalCount, configData);
     const backGif = await getSocialGif(actionKey);
 
+    const originalAuthor = await interaction.client.users.fetch(originalAuthorId).catch(() => null);
+    const originalAuthorName = originalAuthor?.username || 'their friend';
     const backEmbed = new EmbedBuilder()
         .setColor(configData.color || '#FF79C6')
-        .setDescription(`**${interaction.user.username}** ${configData.verb} **<@${originalAuthorId}>** back!\n\n✨ That's **${totalCount}** ${countWord} shared together! ${configData.emoji}`)
+        .setDescription(`**${interaction.user.username}** ${configData.verb} **${originalAuthorName}** back!\n\n✨ That's **${totalCount}** ${countWord} shared together! ${configData.emoji}`)
         .setImage(backGif)
         .setFooter({ text: `Social Actions Engine • Total: ${totalCount} • Prefix: ,` })
         .setTimestamp();
