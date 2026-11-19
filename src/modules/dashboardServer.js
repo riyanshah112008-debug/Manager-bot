@@ -22,6 +22,7 @@ const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const config = require('../config');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
+const { isDiscordSnowflake, validateLevelRewardConfiguration } = require('../utils/levelRewardSecurity');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
@@ -1076,7 +1077,7 @@ function setupDashboardRoutes(app, client) {
             }
             for (const key of ['ignoredChannelIds', 'ignoredRoleIds']) {
                 if (body[key] === undefined) continue;
-                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value))) {
+                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !isDiscordSnowflake(value))) {
                     return res.status(400).json({ success: false, error: 'Invalid ' + key + ' selection.' });
                 }
                 const collection = key === 'ignoredChannelIds' ? guild.channels.cache : guild.roles.cache;
@@ -1085,14 +1086,15 @@ function setupDashboardRoutes(app, client) {
             }
             if (body.roleRewards !== undefined) {
                 if (!Array.isArray(body.roleRewards) || body.roleRewards.length > 50) return res.status(400).json({ success: false, error: 'Configure up to 50 level rewards.' });
-                const rewards = [];
-                for (const item of body.roleRewards) {
-                    const level = Number(item?.level), roleId = String(item?.roleId || '');
-                    const role = guild.roles.cache.get(roleId);
-                    if (!Number.isInteger(level) || level < 1 || level > 10000 || !role || role.managed || role.position >= guild.members.me.roles.highest.position) {
-                        return res.status(400).json({ success: false, error: 'Each reward needs a valid level and a role below Starry’s highest role.' });
-                    }
-                    rewards.push({ level, roleId });
+                const rewards = body.roleRewards.map(item => ({
+                    level: Number(item?.level),
+                    roleId: typeof item?.roleId === 'string' ? item.roleId : ''
+                }));
+                if (rewards.length) {
+                    const actor = await guild.members.fetch({ user: req.session?.user?.id, force: true }).catch(() => null);
+                    const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+                    const validation = validateLevelRewardConfiguration({ guild, actor, botMember, rewards });
+                    if (!validation.ok) return res.status(validation.status || 400).json({ success: false, error: validation.error });
                 }
                 updates.roleRewards = rewards.sort((a, b) => a.level - b.level);
             }

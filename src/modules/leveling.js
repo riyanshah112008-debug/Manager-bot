@@ -18,6 +18,7 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 const { randomInt } = require('node:crypto');
+const { validateLevelRewardConfiguration, isSafeLevelRewardRole } = require('../utils/levelRewardSecurity');
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
@@ -494,11 +495,10 @@ const levelingModule = (client) => {
                                 if (claimed) {
                                 const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
                                 const reward = rewards.filter(item => Number(item.level) <= reachedLevel).sort((a, b) => Number(b.level) - Number(a.level))[0];
-                                if (reward && newState.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
-                                    const role = newState.guild.roles.cache.get(reward.roleId);
-                                    if (role && !role.managed && role.position < newState.guild.members.me.roles.highest.position) {
-                                        await newState.member.roles.add(role, `Reached level ${reachedLevel} (voice XP reward)`).catch(() => {});
-                                    }
+                                const botMember = newState.guild.members.me;
+                                const rewardRole = reward ? newState.guild.roles.cache.get(reward.roleId) : null;
+                                if (isSafeLevelRewardRole(rewardRole, botMember)) {
+                                    await newState.member.roles.add(rewardRole, `Reached level ${reachedLevel} (voice XP reward)`).catch(() => {});
                                 }
                                 await sendLevelUpAnnouncement(newState.guild, guildSettings, newState.member.user, reachedLevel, voiceUser.xp, newState.guild.systemChannel);
                                 }
@@ -750,12 +750,12 @@ const levelingModule = (client) => {
             const rewards = Array.isArray(guildSettings.roleRewards) ? guildSettings.roleRewards : [];
             const eligibleReward = rewards.filter(reward => Number(reward.level) <= newLevel)
                 .sort((a, b) => Number(b.level) - Number(a.level))[0];
-            if (eligibleReward && message.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            if (eligibleReward) {
                 try {
                     const member = await message.guild.members.fetch(userId);
                     const rewardRole = message.guild.roles.cache.get(eligibleReward.roleId);
-                    const botTop = message.guild.members.me.roles.highest;
-                    if (rewardRole && !rewardRole.managed && rewardRole.position < botTop.position) {
+                    const botMember = message.guild.members.me;
+                    if (isSafeLevelRewardRole(rewardRole, botMember)) {
                         if (!member.roles.cache.has(rewardRole.id)) await member.roles.add(rewardRole, `Reached level ${newLevel} (level reward)`);
                         const otherRewardRoleIds = rewards.map(reward => reward.roleId).filter(roleId => roleId && roleId !== rewardRole.id && member.roles.cache.has(roleId));
                         if (otherRewardRoleIds.length) await member.roles.remove(otherRewardRoleIds, `Replaced by level ${newLevel} reward`);
@@ -1070,12 +1070,13 @@ const levelingModule = (client) => {
                 }
                 if (rewards.length > 20) return interaction.reply({ content: 'You can configure up to 20 level rewards.', flags: [EPHEMERAL_FLAG] });
                 if (new Set(rewards.map(item => item.level)).size !== rewards.length) return interaction.reply({ content: 'Each level can have only one reward role.', flags: [EPHEMERAL_FLAG] });
-                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
-                if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply({ content: 'Starry needs Manage Roles permission before reward roles can be configured.', flags: [EPHEMERAL_FLAG] });
                 for (const reward of rewards) {
-                    const role = await interaction.guild.roles.fetch(reward.roleId).catch(() => null);
-                    if (!role || role.managed || role.position >= botMember.roles.highest.position) return interaction.reply({ content: 'One or more reward roles are missing, managed, or above Starry highest role.', flags: [EPHEMERAL_FLAG] });
+                    await interaction.guild.roles.fetch(reward.roleId).catch(() => null);
                 }
+                const actorMember = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                const validation = validateLevelRewardConfiguration({ guild: interaction.guild, actor: actorMember, botMember, rewards });
+                if (!validation.ok) return interaction.reply({ content: validation.error, flags: [EPHEMERAL_FLAG] });
                 await saveLevelSettings(guildId, { roleRewards: rewards });
             }
 
