@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
     applyKazagumoFilter,
+    applyPremiumVoiceBitrate,
+    PREMIUM_VOICE_BITRATE,
     rankAndFilterCanonicalTracks
 } = require('../src/utils/musicManager');
 
@@ -61,4 +63,54 @@ test('official artist/topic audio ranks above lyric-video and fan uploads', () =
     const lyric = { title: 'Song Name Lyrics Video', author: 'Fan Upload', length: 210000 };
     const ranked = rankAndFilterCanonicalTracks([lyric, official], 'Song Name Artist');
     assert.equal(ranked[0], official);
+});
+
+
+test('384 kbps voice bitrate is restricted to Premium Level 3 servers', async () => {
+    let edits = 0;
+    const channel = {
+        bitrate: 128000,
+        edit: async payload => {
+            edits += 1;
+            assert.equal(payload.bitrate, PREMIUM_VOICE_BITRATE);
+        }
+    };
+    const guild = {
+        id: 'guild-premium',
+        premiumTier: 3,
+        channels: { cache: new Map([['voice-1', channel]]) },
+        members: { me: { permissionsIn: () => ({ has: permission => permission === 'ManageChannels' }) } }
+    };
+    const client = {
+        guilds: { cache: new Map([[guild.id, guild]]) },
+        isPremium: guildId => guildId === guild.id
+    };
+    const result = await applyPremiumVoiceBitrate({ guildId: guild.id, voiceId: 'voice-1' }, client);
+    assert.equal(result.applied, true);
+    assert.equal(channel.bitrate, 128000);
+    assert.equal(edits, 1);
+});
+
+test('non-Premium and non-Level-3 servers never receive the 384 kbps request', async () => {
+    let edits = 0;
+    const channel = { bitrate: 96000, edit: async () => { edits += 1; } };
+    const guild = {
+        id: 'guild-basic',
+        premiumTier: 3,
+        channels: { cache: new Map([['voice-1', channel]]) },
+        members: { me: { permissionsIn: () => ({ has: () => true }) } }
+    };
+    const client = { guilds: { cache: new Map([[guild.id, guild]]) }, isPremium: () => false };
+    const basic = await applyPremiumVoiceBitrate({ guildId: guild.id, voiceId: 'voice-1' }, client);
+    assert.equal(basic.reason, 'not-premium');
+    client.isPremium = () => true;
+    guild.premiumTier = 2;
+    const lowerTier = await applyPremiumVoiceBitrate({ guildId: guild.id, voiceId: 'voice-1' }, client);
+    assert.equal(lowerTier.reason, 'server-not-level-3');
+    assert.equal(edits, 0);
+});
+
+test('music starts with flat unprocessed audio unless a filter was explicitly selected', async () => {
+    const { content } = require('node:fs').readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
+    assert.match(content, /player\.data\.get\('activeFilter'\) \|\| 'clear'/);
 });
