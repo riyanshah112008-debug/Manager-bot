@@ -88,7 +88,7 @@ test('384 kbps voice bitrate is restricted to Premium Level 3 servers', async ()
     };
     const result = await applyPremiumVoiceBitrate({ guildId: guild.id, voiceId: 'voice-1' }, client);
     assert.equal(result.applied, true);
-    assert.equal(channel.bitrate, 128000);
+    assert.equal(channel.bitrate, PREMIUM_VOICE_BITRATE);
     assert.equal(edits, 1);
 });
 
@@ -112,6 +112,6 @@ test('non-Premium and non-Level-3 servers never receive the 384 kbps request', a
 });
 
 test('music starts with flat unprocessed audio unless a filter was explicitly selected', async () => {
-    const { content } = require('node:fs').readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
+    const source = require('node:fs').readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
     assert.match(content, /player\.data\.get\('activeFilter'\) \|\| 'clear'/);
 });
