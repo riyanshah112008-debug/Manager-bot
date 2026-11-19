@@ -130,10 +130,15 @@ test('bass EQ retains strong low-frequency energy with controlled preamp headroo
     const volumePercent = Math.round(filters.volume * 100);
     assert.ok(volumePercent > 60 && volumePercent < 80,
         'bass profile should preserve useful overall loudness while retaining headroom');
-    assert.ok(filters.equalizer.some(band => band.band === 1 && Math.round(band.gain * 100) >= 60),
-        '40 Hz low-bass band must retain a clearly audible boost');
-    assert.ok(filters.equalizer.some(band => band.band === 2 && Math.round(band.gain * 100) >= 50),
-        '63 Hz punch band must retain a clearly audible boost');
+    assert.ok(filters.equalizer.some(band => band.band === 1 && Math.round(band.gain * 100) >= 20),
+        '40 Hz low-bass band must retain a controlled audible boost');
+    assert.ok(filters.equalizer.some(band => band.band === 2 && Math.round(band.gain * 100) >= 15),
+        '63 Hz punch band must retain a controlled audible boost');
+    const lowBandBoost = filters.equalizer
+        .filter(band => band.band <= 3)
+        .reduce((total, band) => total + band.gain, 0);
+    assert.ok(lowBandBoost <= 0.65,
+        'combined sub-bass and kick boosts must stay below the saturation guardrail');
     assert.ok(filters.equalizer.every(band => band.gain >= -0.25 && band.gain <= 0.65),
         'all EQ bands must remain inside the supported safety range');
 });
