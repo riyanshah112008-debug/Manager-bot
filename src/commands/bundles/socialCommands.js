@@ -114,7 +114,10 @@ function createSocialCommand(key, configData) {
                 components.push(row);
             }
 
-            return ctx.reply({ embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS });
+            const payload = { embeds: [embed], components, allowedMentions: SOCIAL_ALLOWED_MENTIONS };
+            // Avoid quoting the original command (which may contain a target @mention).
+            if (ctx.channel?.send) return ctx.channel.send(payload);
+            return ctx.reply(payload);
         }
     };
 }
