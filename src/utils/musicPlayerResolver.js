@@ -43,19 +43,8 @@ function getActiveMusicPlayer(guildId, client) {
         if (player) candidates.push({ player, botClient });
     };
 
-    try { add(client?.multiBot?.getPlayerForGuild?.(guildId)); } catch (_) {}
     try { add(StarryAudioEngine.getPlayer(guildId, client)); } catch (_) {}
     try { add(client?.manager?.getPlayer?.(guildId)); } catch (_) {}
-
-    const workers = client?.multiBot?.instances;
-    if (workers && typeof workers.values === 'function') {
-        for (const info of workers.values()) {
-            const workerClient = info?.client;
-            if (!workerClient) continue;
-            try { add(workerClient.manager?.getPlayer?.(guildId), workerClient); } catch (_) {}
-            try { add(StarryAudioEngine.getPlayer(guildId, workerClient), workerClient); } catch (_) {}
-        }
-    }
 
     const primaryGuild = client?.guilds?.cache?.get(guildId);
     const guildVoiceId = primaryGuild?.members?.me?.voice?.channelId || null;
