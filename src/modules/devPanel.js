@@ -43,8 +43,6 @@ function buildDevPanelEmbed(client, user) {
     const totalUsers = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
     const totalChannels = client.channels.cache.size;
 
-    const multiBot = client.multiBot;
-    const clusterInstances = multiBot ? multiBot.instances.size : 1;
 
     const embed = new EmbedBuilder()
         .setColor('#5865F2') // Blurple / Dev Color
@@ -107,9 +105,6 @@ function buildDevPanelComponents() {
             .setLabel('📂 Server List')
             .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
-            .setCustomId('dev_multibot')
-            .setLabel('🤖 Cluster Nodes')
-            .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId('dev_restart')
             .setLabel('⚡ Restart Node')
@@ -219,30 +214,6 @@ module.exports = (client) => {
                     .setTitle(`📂 Connected Guilds Network (${guilds.length} Total)`)
                     .setDescription(serverList + (guilds.length > 25 ? `\n\n*...and ${guilds.length - 25} more servers.*` : ''))
                     .setFooter({ text: 'Starry Developer Control Suite' })
-                    .setTimestamp();
-
-                await interaction.followUp({ embeds: [embed], flags: [64] }).catch(() => {});
-                return;
-            }
-
-            // D. Cluster Workers
-            if (id === 'dev_multibot') {
-                await interaction.deferUpdate().catch(() => {});
-                const multiBot = client.multiBot;
-                const instances = multiBot ? Array.from(multiBot.instances.values()) : [];
-
-                const workerList = instances.map((w, idx) => {
-                    const tag = w.client?.user?.tag || `Bot #${idx + 1}`;
-                    const ping = w.client?.ws?.ping || 0;
-                    return `• **${w.isPrimary ? '👑 Primary Node' : `🤖 Worker Node #${idx}`}**: \`${tag}\`\n` +
-                           `  > Ping: \`${ping}ms\` | Role: \`${w.role || 'all'}\` | Status: \`${w.status || 'Active'}\``;
-                }).join('\n\n') || '• 👑 **Primary Node**: Only primary bot active.';
-
-                const embed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setTitle('🤖 Multi-Bot Cluster & Audio Nodes')
-                    .setDescription(workerList)
-                    .setFooter({ text: 'Multi-Bot Distributed Architecture' })
                     .setTimestamp();
 
                 await interaction.followUp({ embeds: [embed], flags: [64] }).catch(() => {});
