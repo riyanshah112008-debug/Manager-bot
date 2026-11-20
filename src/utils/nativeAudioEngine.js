@@ -40,7 +40,11 @@ const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.E
 
 // Audio DSP Filter FFmpeg argument definitions (Studio Mastering with Dynamic Limiter - ZERO Crackling & 100% Intact Vocals)
 const FILTER_ARGS = {
-    clear: ['-af', 'volume=1.0'],
+    // Normal is the everyday listening profile: a restrained 1.1 dB output lift,
+    // gentle +1.4 dB low-end warmth, and a true-peak safety limiter. This avoids
+    // the heavy bass boosts that previously caused distortion/crackling.
+    clear: ['-af', 'volume=1.14,bass=g=1.4:f=85:w=0.7,equalizer=f=220:width_type=q:w=1.0:g=-0.4,alimiter=limit=0.97:attack=5:release=180:level=false'],
+    // Keep Flat genuinely flat for users who want the untouched tonal balance.
     flat: ['-af', 'volume=1.0'],
     // Matches the gentle Lavalink Studio master: restrained low lift, vocal presence, smooth air.
     empowering: ['-af', 'volume=0.94,equalizer=f=63:width_type=q:w=1.0:g=1.0,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.6,equalizer=f=2500:width_type=q:w=1.0:g=0.8,equalizer=f=10000:width_type=q:w=0.8:g=0.5,alimiter=limit=0.98:attack=5:release=120:level=false'],
