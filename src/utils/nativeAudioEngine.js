@@ -1606,7 +1606,7 @@ class StarryAudioEngine {
         // 7. MULTI-PROVIDER TEXT SEARCH
         // Spotify, YouTube, SoundCloud, Deezer and Apple Music are metadata/search
         // providers. Playback is resolved separately to a playable YouTube/SoundCloud stream.
-        const safeSearch = async (task, timeoutMs = 2600) => {
+        const safeSearch = async (task, timeoutMs = 2000) => {
             let timer;
             try {
                 return await Promise.race([
@@ -1621,9 +1621,9 @@ class StarryAudioEngine {
         };
 
         const [spotifyResults, youtubeResults, soundCloudResults, deezerResults, appleResults] = await Promise.all([
-            safeSearch(() => spotifyEngine.searchTracks(query, 5)),
-            safeSearch(() => play.search(query, { limit: 5 })),
-            safeSearch(() => play.search(query, { source: { soundcloud: 'tracks' }, limit: 5 })),
+            safeSearch(() => spotifyEngine.searchTracks(query, 5), 2300),
+            safeSearch(() => play.search(query, { limit: 5 }), 2100),
+            safeSearch(() => play.search(query, { source: { soundcloud: 'tracks' }, limit: 5 }), 1900),
             safeSearch(async () => {
                 const response = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=5`, { signal: AbortSignal.timeout(5000) });
                 if (!response.ok) return [];
@@ -1635,7 +1635,7 @@ class StarryAudioEngine {
                 if (!response.ok) return [];
                 const body = await response.json();
                 return body.results || [];
-            })
+            }, 2000)
         ]);
 
         for (const t of (Array.isArray(spotifyResults) ? spotifyResults : [])) {
@@ -1715,6 +1715,8 @@ class StarryAudioEngine {
             return true;
         });
 
+        const providerPriority = { YouTube: 0, SoundCloud: 1, Spotify: 2, Deezer: 3, 'Apple Music': 4 };
+        mergedTracks.sort((a, b) => (providerPriority[a.source] ?? 5) - (providerPriority[b.source] ?? 5));
         const result = { type: mergedTracks.length > 1 ? 'SEARCH' : 'TRACK', tracks: mergedTracks.slice(0, 25) };
         setCachedMusicSearch(query, { ...result, tracks: result.tracks.map(track => ({ ...track, requester: null })) });
         return result;
