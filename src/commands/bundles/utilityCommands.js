@@ -615,7 +615,7 @@ const components = createHelpComponents();
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.ECONOMY)
                 .setTitle('⭐ Support Starry Bot Development')
-                .setDescription('Thank you for considering supporting Starry! Your contributions keep our 24/7 high-fidelity music nodes, AI servers, and low-latency clusters running smoothly.')
+                .setDescription('Thank you for considering supporting Starry! Your contributions keep our music playback, AI services, and reliable bot hosting running smoothly.')
                 .addFields(
                     { name: '👑 Starry Premium', value: 'Unlock 24/7 voice persistence, studio DSP audio filters, cloud backups, and music and community features with `,premium`!', inline: false },
                     { name: '🌐 Web Store', value: 'Check out our official dashboard at https://starry-bot.loca.lt', inline: false }
