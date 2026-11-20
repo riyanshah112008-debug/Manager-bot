@@ -105,16 +105,6 @@ const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
 const mongoose = require('mongoose');
 
-function isPrimaryBotClient(client) {
-    if (client.isPrimary === false) return false;
-    if (client.isPrimary === true) return true;
-    const multiBot = client.multiBot || require('./multiBot');
-    if (multiBot?.primaryClient) {
-        return client === multiBot.primaryClient || (client.user?.id && client.user.id === multiBot.primaryClient.user?.id);
-    }
-    return true;
-}
-
 // Load Master Bundles
 const musicCommands = require('../commands/bundles/musicCommands');
 const moderationCommands = require('../commands/bundles/moderationCommands');
@@ -285,14 +275,7 @@ class CommandRegistry {
             musicController.init(client);
         } catch (e) {}
 
-        // Connect multi-bot worker nodes if cluster is enabled
-        const multiBot = require('./multiBot');
-        if (multiBot && typeof multiBot.registerEventHook === 'function') {
-            multiBot.registerEventHook((workerClient) => {
-                this.registerPrefixDispatcher(workerClient);
-                this.registerInteractionDispatcher(workerClient);
-            });
-        }
+
     }
 
     registerPrefixDispatcher(client) {
@@ -305,13 +288,11 @@ class CommandRegistry {
             // Instant in-memory check to discard rapid re-delivery within the same process
             if (executedMessageIds.has(message.id)) return;
 
-            const isPrimary = isPrimaryBotClient(client);
 
             // Intercept Dedicated Music Controller Request Channel
             if (message.guild) {
                 const musicController = require('./musicController');
                 if (musicController.isRequestChannel(message.guild.id, message.channel.id)) {
-                    if (!isPrimary) return;
                     const activePrefix = await getGuildPrefix(message.guild.id);
                     const raw = message.content.trim();
                     if (!raw.startsWith(activePrefix)) {
@@ -335,64 +316,44 @@ class CommandRegistry {
                 commandBody = mentionMatch[2].trim();
                 matchedPrefix = '@';
             }
-            // B. Check Multi-Bot Cluster Prefixes (s1,, s2,, s3,, 1,, 2,, 3,, ,s1, ,s2, etc.)
+            // B. Single-bot prefix matching (guild prefix or DM fallback).
             else {
-                const clusterMatch = content.match(/^(?:s|S)?(\d+)[,](.*)$/i) || content.match(/^[,](\d+)(.*)$/i) || content.match(/^[,](?:s|S)(\d+)(.*)$/i);
-                if (clusterMatch) {
-                    const botIndex = parseInt(clusterMatch[1], 10);
-                    const botArray = multiBot?.instances ? Array.from(multiBot.instances.values()) : [];
-                    let targetId = null;
+                if (content.startsWith('<@')) return;
 
-                    if (botIndex === 1) targetId = primaryId;
-                    else if (botIndex === 2) targetId = '1543515940069572628' || botArray[1]?.client?.user?.id;
-                    else if (botIndex === 3) targetId = '1543519236586999928' || botArray[2]?.client?.user?.id;
-                    else if (botArray[botIndex - 1]) targetId = botArray[botIndex - 1].client?.user?.id;
-
-                    if (client.user?.id !== targetId) return;
-                    commandBody = clusterMatch[2].trim();
-                    matchedPrefix = 's' + botIndex;
-                } 
-                // C. Single Prefix Matching (Guild Prefix or DM Fallback)
-                else {
-                    if (content.startsWith('<@')) return;
-                    if (!isPrimary) return; // Standard prefix handled EXCLUSIVELY by primary bot! Secondary worker bots never respond here!
-
-                    if (message.guild) {
-                        const guildId = message.guild.id;
-                        if (content.startsWith(',')) {
-                            matchedPrefix = ',';
-                            commandBody = content.slice(1).trim();
-                        } else if (content.startsWith('.')) {
-                            matchedPrefix = '.';
-                            commandBody = content.slice(1).trim();
-                        } else {
-                            const activePrefix = guildPrefixCache.has(guildId) 
-                                ? guildPrefixCache.get(guildId) 
-                                : await getGuildPrefix(guildId);
-
-                            if (activePrefix && activePrefix !== ',' && activePrefix !== '.' && content.startsWith(activePrefix)) {
-                                matchedPrefix = activePrefix;
-                                commandBody = content.slice(activePrefix.length).trim();
-                            } else {
-                                return; // Strictly ignore: Not a command for Starry!
-                            }
-                        }
+                if (message.guild) {
+                    const guildId = message.guild.id;
+                    if (content.startsWith(',')) {
+                        matchedPrefix = ',';
+                        commandBody = content.slice(1).trim();
+                    } else if (content.startsWith('.')) {
+                        matchedPrefix = '.';
+                        commandBody = content.slice(1).trim();
                     } else {
-                        const defaultPrefix = config.DEFAULT_PREFIX || ',';
-                        if (content.startsWith(defaultPrefix)) {
-                            matchedPrefix = defaultPrefix;
-                            commandBody = content.slice(defaultPrefix.length).trim();
+                        const activePrefix = guildPrefixCache.has(guildId)
+                            ? guildPrefixCache.get(guildId)
+                            : await getGuildPrefix(guildId);
+
+                        if (activePrefix && activePrefix !== ',' && activePrefix !== '.' && content.startsWith(activePrefix)) {
+                            matchedPrefix = activePrefix;
+                            commandBody = content.slice(activePrefix.length).trim();
                         } else {
-                            const firstWord = content.toLowerCase().split(/\s+/)[0];
-                            const isCmd = this.commands.has(firstWord) || this.aliases.has(firstWord);
-                            if (isCmd) {
-                                matchedPrefix = '';
-                                commandBody = content;
-                            } else {
-                                // In DMs, talk directly with Starry AI without needing a prefix
-                                matchedPrefix = '';
-                                commandBody = 'ask ' + content;
-                            }
+                            return;
+                        }
+                    }
+                } else {
+                    const defaultPrefix = config.DEFAULT_PREFIX || ',';
+                    if (content.startsWith(defaultPrefix)) {
+                        matchedPrefix = defaultPrefix;
+                        commandBody = content.slice(defaultPrefix.length).trim();
+                    } else {
+                        const firstWord = content.toLowerCase().split(/\\s+/)[0];
+                        const isCmd = this.commands.has(firstWord) || this.aliases.has(firstWord);
+                        if (isCmd) {
+                            matchedPrefix = '';
+                            commandBody = content;
+                        } else {
+                            matchedPrefix = '';
+                            commandBody = 'ask ' + content;
                         }
                     }
                 }
@@ -1533,14 +1494,6 @@ NaN
                     const { applyKazagumoFilter } = require('../utils/musicManager');
 
                     let kPlayer = (interaction.client.manager ? interaction.client.manager.getPlayer(interaction.guild.id) : null) || (client.manager ? client.manager.getPlayer(interaction.guild.id) : null);
-                    if (!kPlayer && client.multiBot?.instances) {
-                        for (const inst of client.multiBot.instances.values()) {
-                            if (inst.client?.manager) {
-                                const p = inst.client.manager.getPlayer(interaction.guild.id);
-                                if (p) { kPlayer = p; break; }
-                            }
-                        }
-                    }
                     const nPlayer = StarryAudioEngine.getPlayer(interaction.guild.id, client);
                     const voiceChannel = interaction.member?.voice?.channel;
 
