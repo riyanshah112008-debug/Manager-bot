@@ -1434,7 +1434,7 @@ function setupDashboardRoutes(app, client) {
             const firstTrack = tracksToQueue[0];
             return res.json({
                 success: true,
-                message: 'Queued ' + tracksToQueue.length + ' track(s), starting with "' + String(firstTrack.title || query).slice(0, 160) + '" via ' + (assignment?.name || musicClient.user?.username || 'Starry') + '.',
+                message: 'Queued ' + tracksToQueue.length + ' track(s), starting with "' + String(firstTrack.title || query).slice(0, 160) + '" via ' + (musicClient.user?.username || 'Starry') + '.',
                 track: { title: firstTrack.title, author: firstTrack.author, duration: firstTrack.length },
                 queued: tracksToQueue.length
             });
