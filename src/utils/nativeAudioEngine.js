@@ -1613,7 +1613,7 @@ class StarryAudioEngine {
         const safeSearch = async (task, timeoutMs = 2000) => {
         // Fast path for ordinary song names: return a playable YouTube track as soon
         // as it is found instead of waiting for slower catalogue-only metadata APIs.
-        if (!/^https?:\\/\\//i.test(query)) {
+        if (!/^https?:\/\//i.test(query)) {
             const fastYoutubeResults = await safeSearch(() => play.search(query, { limit: 5 }), 1200);
             if (Array.isArray(fastYoutubeResults) && fastYoutubeResults.length > 0) {
                 const fastTracks = fastYoutubeResults.filter(item => item?.url).map(item => ({
