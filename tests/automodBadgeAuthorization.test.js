@@ -119,6 +119,23 @@ test('unauthorized prefix invocation is rejected before reading cluster-wide Aut
     }
 });
 
+test('AutoMod invite requests only Manage Server permission', () => {
+    const payload = buildBadgeEmbed(progress, fakeClient(), fakeClient().user, {
+        isBotOwner: false,
+        canManageGuild: true
+    });
+    const inviteButton = payload.components[0].components.find(component =>
+        typeof component.data.url === 'string'
+    );
+    assert.ok(inviteButton, 'invite link must be present');
+    const invite = new URL(inviteButton.data.url);
+    assert.equal(
+        invite.searchParams.get('permissions'),
+        String(PermissionFlagsBits.ManageGuild),
+        'AutoMod only needs Manage Server; never request Administrator or unrelated permissions'
+    );
+});
+
 test('prefix command metadata declares Manage Server for the shared dispatcher', () => {
     assert.ok(command.permissions.includes(PermissionFlagsBits.ManageGuild));
 });
