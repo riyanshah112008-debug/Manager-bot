@@ -47,14 +47,6 @@ const ALL_PREMIUM_FEATURES = [
         description: 'Instantaneous server-wide lockdown across all public text channels to neutralize raids and unauthorized permissions changes.'
     },
     {
-        id: 'multibot_custom_nodes',
-        name: 'Multi-Bot Worker Node Summoning',
-        category: 'Multi-Bot Cluster',
-        tier: 'Pro Cluster / Platinum / Lifetime',
-        commands: [',multibot add <token> <role>', ',multibot setrole'],
-        description: 'Connect custom secondary bot tokens to your server cluster for simultaneous multi-channel audio playback and specialized worker task partitioning.'
-    },
-    {
         id: 'emoji_stealer',
         name: 'Bulk Emoji & Animated Sticker Stealer',
         category: 'Utility & Customization',
@@ -224,7 +216,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
         .setTitle(`👑 Starry Premium Required`)
         .setDescription(
             `**${featureName}** is an exclusive **Starry Premium** feature!\n\n` +
-            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and multi-bot cluster power across your entire community.`
+            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and expanded premium capacity across your community.`
         )
         .addFields(
             {
@@ -234,7 +226,6 @@ function createPremiumLockPayload(featureName, prefix = ',') {
                     '• **🎧 Studio DSP Hi-Fi Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave\n' +
                     '• **💾 Cloud Backups & Restore** — Full server layout & permissions snapshot\n' +
                     '• **🚨 Emergency Lockdown Shield** — 1-click server-wide raid isolation\n' +
-                    '• **🤖 Multi-Bot Worker Nodes** — Custom bot tokens for multi-room audio\n' +
                     '• **📥 Unlimited Emoji/Sticker Steal** — Direct 1-click upload\n' +
                     '• **💰 2x Economy XP & Rewards** — Double credits and faster leveling',
                 inline: false
@@ -268,7 +259,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
 }
 
 /**
- * Constructs the detailed perks breakdown embed for all 12 premium features.
+ * Constructs the detailed perks breakdown embed for all 11 premium features.
  * @param {string} prefix Server prefix
  * @returns {{ embeds: EmbedBuilder[], components: ActionRowBuilder[] }}
  */
@@ -281,7 +272,7 @@ function createPremiumPerksPayload(prefix = ',') {
         })
         .setTitle('👑 All Starry Premium Features & Perks')
         .setDescription(
-            `Unlock maximum performance, continuous 24/7 audio, server backup vaults, and autonomous worker node clustering for your server.\n\n` +
+            `Unlock maximum performance, continuous 24/7 audio, server backup vaults, and reliable single-bot audio and management for your server.\n\n` +
             `To activate, run \`${prefix}redeem <license_key>\` or contact our bot developers.`
         );
 
