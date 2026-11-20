@@ -1,6 +1,8 @@
 process.env.STARRY_DISABLE_STREAM_RESOLVER = '1';
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const LAVALINK_MIN_GAIN = -1 / 4;
+const LAVALINK_HALF_GAIN = 1 / 2;
 const {
     applyKazagumoFilter,
     applyKazagumoEqualizer,
@@ -185,14 +187,14 @@ test('custom five-band EQ maps bounded dB values to safe Lavalink bands',async()
  const stub=createPlayer(),g={subBass:6,bass:4,mids:0,presence:-2,treble:-6};
  assert.equal(await applyKazagumoEqualizer(stub.player,g),true);
  const f=stub.getApplied();assert.ok(f.volume>0&&f.volume<1);assert.equal(f.equalizer.length,15);
- assert.ok(f.equalizer.every(b=>b.gain>=-.25&&b.gain<=.5));
- assert.equal(f.equalizer[0].gain,.5);assert.equal(f.equalizer[2].gain,4/12);
- assert.equal(f.equalizer[9].gain,-2/24);assert.equal(f.equalizer[14].gain,-6/24);
+ assert.ok(f.equalizer.every(b=>b.gain >= LAVALINK_MIN_GAIN && b.gain <= LAVALINK_HALF_GAIN));
+ assert.equal(f.equalizer[0].gain, LAVALINK_HALF_GAIN);assert.equal(f.equalizer[2].gain,4/12);
+ assert.equal(f.equalizer[9].gain,-2/24);assert.equal(f.equalizer[14].gain, -6 / 24);
  assert.deepEqual(stub.player.data.get('customEqualizer'),g);
 });
 test('custom EQ clamps values and neutral reset restores unity',async()=>{
  const stub=createPlayer();assert.equal(await applyKazagumoEqualizer(stub.player,{subBass:99,bass:-99}),true);
- assert.equal(stub.getApplied().equalizer[0].gain,.5);assert.equal(stub.getApplied().equalizer[2].gain,-.25);
+ assert.equal(stub.getApplied().equalizer[0].gain, LAVALINK_HALF_GAIN);assert.equal(stub.getApplied().equalizer[2].gain, LAVALINK_MIN_GAIN);
  assert.equal(await applyKazagumoEqualizer(stub.player,{}),true);
  assert.ok(stub.getApplied().equalizer.every(b=>b.gain===0));assert.equal(stub.getApplied().volume,1);
 });
