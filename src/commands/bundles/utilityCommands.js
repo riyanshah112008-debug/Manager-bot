@@ -298,7 +298,7 @@ const components = createHelpComponents();
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('🤖 Bot Cluster Statistics & Information')
+                .setTitle('🤖 Starry Bot Statistics & Information')
                 .setThumbnail(ctx.client.user.displayAvatarURL({ dynamic: true }))
                 .addFields(
                     { name: '👑 Bot Tag', value: `\`${ctx.client.user.tag}\``, inline: true },
