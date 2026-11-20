@@ -654,8 +654,8 @@ class StarryGuildPlayer {
                     args: [
                         '-hide_banner',
                         '-loglevel', 'warning',
-                        '-analyzeduration', '2000000',
-                        '-probesize', '2000000',
+                        '-analyzeduration', '500000',
+                        '-probesize', '262144',
                         '-thread_queue_size', '2048',
                         '-fflags', '+genpts+discardcorrupt',
                         '-i', 'pipe:0',
@@ -1611,6 +1611,29 @@ class StarryAudioEngine {
         // Spotify, YouTube, SoundCloud, Deezer and Apple Music are metadata/search
         // providers. Playback is resolved separately to a playable YouTube/SoundCloud stream.
         const safeSearch = async (task, timeoutMs = 2000) => {
+        // Fast path for ordinary song names: return a playable YouTube track as soon
+        // as it is found instead of waiting for slower catalogue-only metadata APIs.
+        if (!/^https?:\\/\\//i.test(query)) {
+            const fastYoutubeResults = await safeSearch(() => play.search(query, { limit: 5 }), 1200);
+            if (Array.isArray(fastYoutubeResults) && fastYoutubeResults.length > 0) {
+                const fastTracks = fastYoutubeResults.filter(item => item?.url).map(item => ({
+                    title: item.title || query,
+                    url: item.url,
+                    duration: (item.durationInSec || 180) * 1000,
+                    author: item.channel?.name || 'YouTube Artist',
+                    thumbnail: item.thumbnails?.[0]?.url,
+                    source: 'YouTube',
+                    requester
+                }));
+                if (fastTracks.length > 0) {
+                    const fastResult = { type: fastTracks.length > 1 ? 'SEARCH' : 'TRACK', tracks: fastTracks.slice(0, 25) };
+                    setCachedMusicSearch(query, { ...fastResult, tracks: fastResult.tracks.map(track => ({ ...track, requester: null })) });
+                    return fastResult;
+                }
+            }
+        }
+
+
             let timer;
             try {
                 return await Promise.race([
