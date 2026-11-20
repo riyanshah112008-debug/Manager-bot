@@ -91,3 +91,19 @@ test('prefix and slash play start voice while search is bounded and do not publi
   assert.doesNotMatch(slashPlay, /buildNowPlayingPayload\(track\)/);
   assert.match(slashPlay, /player\.playNext\(\)\.catch\(\(\) => \{\}\)/);
 });
+
+test('plain text search returns playable YouTube matches before waiting for catalogue APIs', () => {
+  const fastPath = native.indexOf('Fast path for ordinary song names');
+  const safeSearch = native.indexOf('const safeSearch = async');
+  const catalogPromise = native.indexOf('const [spotifyResults, youtubeResults, soundCloudResults');
+  assert.ok(fastPath > safeSearch && fastPath < catalogPromise);
+  assert.match(native, /play\.search\(query, \{ limit: 5 \}\), 1200/);
+  assert.match(native, /providerPriority = \{ YouTube: 0, SoundCloud: 1/);
+});
+
+test('both FFmpeg input paths use reduced probe windows for quicker stream startup', () => {
+  const analysisWindows = native.match(/'-analyzeduration', '500000'/g) || [];
+  const probeWindows = native.match(/'-probesize', '262144'/g) || [];
+  assert.equal(analysisWindows.length, 2);
+  assert.equal(probeWindows.length, 2);
+});
