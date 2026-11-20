@@ -427,7 +427,10 @@ class StarryGuildPlayer {
             const endedTrack = this.currentTrack;
             if (!endedTrack) return;
             if (this.isPlaying) this.isPlaying = false;
-            else console.warn(`⚠️ [Audio Stream Failover] Track "${endedTrack.title}" ended before confirmed playback.`);
+            else {
+                this._suppressQueueEndedOnce = true;
+                console.warn('[Music] Source ended before playback was confirmed; skipping track.');
+            }
             this.handleTrackEnd(endedTrack);
         });
 
@@ -435,6 +438,7 @@ class StarryGuildPlayer {
             console.warn(`⚠️ [Audio Stream Engine Status in ${this.guildId}]:`, error.message || error);
             if (this.destroyed) return;
             this.isPlaying = false;
+            this._suppressQueueEndedOnce = true;
             this.handleTrackEnd(this.currentTrack);
         });
     }
@@ -609,8 +613,8 @@ class StarryGuildPlayer {
                         '-reconnect_delay_max', '3',
                         '-rw_timeout', '15000000',
                         '-buffer_size', '2048k',
-                        '-analyzeduration', '2000000',
-                        '-probesize', '2000000',
+                        '-analyzeduration', '500000',
+                        '-probesize', '262144',
                         '-thread_queue_size', '2048',
                         '-fflags', '+genpts+discardcorrupt'
                     );
