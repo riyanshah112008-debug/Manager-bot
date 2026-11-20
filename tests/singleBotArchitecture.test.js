@@ -39,7 +39,7 @@ assert.doesNotMatch(dashboard, /\/api\/guild\/[^\n]*multibot|client\.multiBot|ge
 const help = read('src/utils/helpHelper.js');
 const systems = read('src/commands/bundles/systemCommands.js');
 const premium = read('src/utils/premiumHelper.js');
-assert.doesNotMatch(help + systems + premium, /multibot|multi-bot|Multi-Bot Worker/i,
+assert.doesNotMatch(help + systems + premium, /multibot|multi-bot|Multi-Bot Worker|cluster nodes|bot cluster/i,
     'Commands, help and premium catalog must not advertise multi-bot features');
 
 console.log('Single-bot architecture checks passed.');
