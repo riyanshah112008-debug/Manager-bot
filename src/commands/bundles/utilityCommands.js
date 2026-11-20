@@ -16,6 +16,7 @@ const {
 } = require('discord.js');
 const os = require('os');
 const config = require('../../config');
+const { safeEvaluateMath } = require('../../utils/safeMath');
 const { requirePremium } = require('../../utils/premiumHelper');
 
 // Channel message snipe memory cache
@@ -668,13 +669,11 @@ const components = createHelpComponents();
             if (!expr) return ctx.reply('❌ Provide a mathematical expression: `,calc 100 * 5 + 20`');
             if (!/^[0-9+\-*/().\s^%]+$/.test(expr)) return ctx.reply('❌ Expression contains invalid characters.');
 
-            try {
-                const sanitized = expr.replace(/\^/g, '**');
-                const result = Function(`'use strict'; return (${sanitized})`)();
-                return ctx.reply(`🔢 **Math Calculation:**\n\`${expr}\` = **\`${result}\`**`);
-            } catch (e) {
-                return ctx.reply('❌ Error evaluating math expression.');
+            const result = safeEvaluateMath(expr);
+            if (!Number.isFinite(result)) {
+                return ctx.reply('❌ Invalid or unsafe mathematical expression. Use numbers, parentheses, and +, -, *, /, or %.');
             }
+            return ctx.reply(`🔢 **Math Calculation:**\n\`${expr}\` = **\`${result}\`**`);
         }
     },
 
