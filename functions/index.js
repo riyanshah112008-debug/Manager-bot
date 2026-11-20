@@ -1,5 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { defineString } = require("firebase-functions/params");
+const { resolveProxyTarget } = require("./proxyTarget");
 
 const BACKEND_URL = defineString("BOT_BACKEND_URL");
 
@@ -13,7 +14,14 @@ exports.api = onRequest({ region: "us-central1", timeoutSeconds: 60 }, async (re
     return res.status(503).json({ error: "Bot backend is not configured." });
   }
 
-  const target = new URL(req.originalUrl, backend.origin);
+  let target;
+  try {
+    target = resolveProxyTarget(req.originalUrl, backend);
+  } catch (_) {
+    // Reject protocol-relative or absolute request targets before forwarding
+    // cookies or Authorization headers to any upstream host.
+    return res.status(400).json({ error: "Invalid proxy request target." });
+  }
   const headers = new Headers();
   for (const name of ["accept", "content-type", "cookie", "authorization", "user-agent", "x-requested-with"]) {
     const value = req.get(name);
