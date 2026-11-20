@@ -185,14 +185,14 @@ module.exports = {
       }
 
       const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
-      // ⚡ Instantly join voice channel in background without blocking search
+      // Begin voice negotiation while a playable source is selected.
       player.connect().catch(() => {});
 
       let searchTimeout;
       const result = await Promise.race([
         StarryAudioEngine.search(query, interaction.user),
-        new Promise((_, reject) => {
-          searchTimeout = setTimeout(() => reject(new Error('Audio search timed out after 20 seconds')), 20000);
+        new Promise(resolve => {
+          searchTimeout = setTimeout(() => resolve(null), 2800);
         })
       ]).finally(() => clearTimeout(searchTimeout));
 
@@ -243,16 +243,11 @@ module.exports = {
         const track = result.tracks[0];
         if (!player.currentTrack) {
           player.queue.push(track);
-          // ⚡ Launch playback asynchronously in background - NEVER wait for it before showing embed!
-          player.playNext().catch(err => console.warn('playNext error:', err.message || err));
-
-          // ⚡ Deliver Now Playing embed immediately (< 2 seconds)!
-          const payload = player.buildNowPlayingPayload(track);
+          // Let the native engine publish Now Playing only after Discord confirms audio.
           const replyFunc = interaction.editReply || interaction.reply;
-          const msg = await replyFunc.call(interaction, payload).catch(() => null);
-          if (msg) {
-            player.nowPlayingMessage = msg;
-          }
+          await replyFunc.call(interaction, { content: '⏳ Starting playback…' }).catch(() => null);
+          player.loadingMessage = await interaction.fetchReply().catch(() => null);
+          player.playNext().catch(() => {});
           return;
         } else {
           player.queue.push(track);
@@ -278,9 +273,9 @@ module.exports = {
       }
 
     } catch (err) {
-      console.error('Play error in play.js:', err);
+      console.warn('[Music] Search did not return a playable match within the startup window.');
       const replyFunc = interaction.editReply || interaction.reply;
-      return replyFunc.call(interaction, `❌ Playback error: \`${err.message}\``);
+      return replyFunc.call(interaction, '⚠️ I could not find a playable match quickly. Try a direct YouTube or SoundCloud link.');
     }
   }
 };

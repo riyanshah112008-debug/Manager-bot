@@ -18,7 +18,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'voice_247',
         name: '24/7 Voice Channel Persistence',
         category: 'Music & Audio',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',247', '/247', ',stay', ',alwayson'],
         description: 'Keeps the bot in your voice channel 24/7 without disconnecting when members leave, ensuring zero-latency startup and uninterrupted radio.'
     },
@@ -26,7 +26,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'audio_dsp_filters',
         name: 'Studio DSP Hi-Fi Audio Filters',
         category: 'Music & Audio',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',bass', ',8d', ',nightcore', ',daycore', ',vaporwave', ',lofi', ',reverb', ',karaoke', ',surround', ',electronic', ',soft', ',radio', ',treble', ',pop', ',filter'],
         description: 'Access 15 studio-grade audio DSP effects: Physical Vibration Bass, 360° 8D Audio, Lo-Fi Chill, Slowed & Reverb, Karaoke Vocal Remover, 3D Surround, EDM/Club Master, Soft Chill, Retro Radio, Nightcore, Daycore, Vaporwave, Treble Boost, and Pop Clarity.'
     },
@@ -34,7 +34,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'cloud_backups',
         name: 'Server Cloud Backup & Instant Restore',
         category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',backup', ',restore <id>'],
         description: 'Create encrypted cloud snapshots of your entire server architecture (channels, categories, roles, permissions) with 1-click disaster recovery.'
     },
@@ -42,23 +42,15 @@ const ALL_PREMIUM_FEATURES = [
         id: 'emergency_lockdown',
         name: 'Emergency Server Lockdown Shield',
         category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',lockdown', ',unlockdown', ',masslock'],
         description: 'Instantaneous server-wide lockdown across all public text channels to neutralize raids and unauthorized permissions changes.'
-    },
-    {
-        id: 'multibot_custom_nodes',
-        name: 'Multi-Bot Worker Node Summoning',
-        category: 'Multi-Bot Cluster',
-        tier: 'Pro Cluster / Platinum / Lifetime',
-        commands: [',multibot add <token> <role>', ',multibot setrole'],
-        description: 'Connect custom secondary bot tokens to your server cluster for simultaneous multi-channel audio playback and specialized worker task partitioning.'
     },
     {
         id: 'emoji_stealer',
         name: 'Bulk Emoji & Animated Sticker Stealer',
         category: 'Utility & Customization',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',steal', ',emojisteal', '/steal'],
         description: 'Extract and upload emojis and animated stickers from other servers directly into your server in seconds.'
     },
@@ -66,7 +58,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'flag_translator',
         name: 'Real-Time Flag Reaction Neural Translator',
         category: 'Utility & Localization',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: ['Reaction with flag emojis (e.g. 🇪🇸, 🇯🇵, 🇫🇷)'],
         description: 'Instant multi-language translation cards triggered automatically when server members react to messages with country flag emojis.'
     },
@@ -74,7 +66,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'web_captcha_gateway',
         name: 'Web Captcha Anti-Bot Verification Gateway',
         category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',verify-setup', '/verify-setup'],
         description: 'High-security browser-based human verification portal that prevents raid bots and malicious alternate accounts from gaining member roles.'
     },
@@ -82,7 +74,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'orbit_voice_boost',
         name: 'Dynamic Orbit Voice Room Custom Bitrate',
         category: 'Voice Management',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',vc lock', ',vc private', ',vc invite @member', ',vc bitrate', ',vc limit'],
         description: 'Premium audio encoding up to 384 kbps where the Discord server boost tier permits it, automatic voice-channel bitrate tuning when Starry has Manage Channels, and private join-to-create rooms with lock, unlock, and member invites.'
     },
@@ -90,7 +82,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'economy_multiplier',
         name: '2x Economy XP & Rewards Multiplier',
         category: 'Economy & Progression',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',daily', ',fish', ',mine', ',work'],
         description: 'Enjoy double credits, faster leveling XP, and reduced gathering cooldowns.'
     },
@@ -98,7 +90,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'moderation_appeals',
         name: 'Enhanced Moderation DM & Appeal Portal',
         category: 'Moderation',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: ['Automated on kick, ban, timeout'],
         description: 'Detailed moderation infraction direct messages with official server branding, case IDs, and custom appeal website links.'
     },
@@ -106,7 +98,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'vip_games',
         name: 'VIP Extended Truth or Dare Challenge Packs',
         category: 'Mini-Games',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Starry Pro / Platinum / Lifetime',
         commands: [',truth', ',dare', '/truth', '/dare'],
         description: 'Access exclusive unfiltered truth questions and daring challenge decks for party gaming.'
     }
@@ -224,7 +216,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
         .setTitle(`👑 Starry Premium Required`)
         .setDescription(
             `**${featureName}** is an exclusive **Starry Premium** feature!\n\n` +
-            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and multi-bot cluster power across your entire community.`
+            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and expanded premium features across your servers.`
         )
         .addFields(
             {
@@ -234,7 +226,6 @@ function createPremiumLockPayload(featureName, prefix = ',') {
                     '• **🎧 Studio DSP Hi-Fi Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave\n' +
                     '• **💾 Cloud Backups & Restore** — Full server layout & permissions snapshot\n' +
                     '• **🚨 Emergency Lockdown Shield** — 1-click server-wide raid isolation\n' +
-                    '• **🤖 Multi-Bot Worker Nodes** — Custom bot tokens for multi-room audio\n' +
                     '• **📥 Unlimited Emoji/Sticker Steal** — Direct 1-click upload\n' +
                     '• **💰 2x Economy XP & Rewards** — Double credits and faster leveling',
                 inline: false
@@ -268,7 +259,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
 }
 
 /**
- * Constructs the detailed perks breakdown embed for all 12 premium features.
+ * Constructs the detailed perks breakdown embed for all 11 premium features.
  * @param {string} prefix Server prefix
  * @returns {{ embeds: EmbedBuilder[], components: ActionRowBuilder[] }}
  */
@@ -281,7 +272,7 @@ function createPremiumPerksPayload(prefix = ',') {
         })
         .setTitle('👑 All Starry Premium Features & Perks')
         .setDescription(
-            `Unlock maximum performance, continuous 24/7 audio, server backup vaults, and autonomous worker node clustering for your server.\n\n` +
+            `Unlock maximum performance, continuous 24/7 audio, server backup vaults, and advanced server and audio features for your server.\n\n` +
             `To activate, run \`${prefix}redeem <license_key>\` or contact our bot developers.`
         );
 

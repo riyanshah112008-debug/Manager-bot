@@ -72,7 +72,7 @@ class StreamResolverClient {
         });
     }
 
-    async resolve(query) {
+    async resolve(query, options = {}) {
         if (!query) return null;
         const cacheKey = query.trim().toLowerCase();
         const cached = this.cache.get(cacheKey);
@@ -84,31 +84,40 @@ class StreamResolverClient {
             }
         }
 
-        if (!this.ready && !this.disabled && this.process) {
-            await new Promise((r) => {
-                const checkInterval = setInterval(() => {
-                    if (this.ready || this.disabled || !this.process) {
-                        clearInterval(checkInterval);
-                        r();
-                    }
-                }, 50);
-                setTimeout(() => {
+        const waitForReadyMs = Number.isFinite(Number(options.waitForReadyMs))
+            ? Math.max(0, Math.min(4000, Number(options.waitForReadyMs)))
+            : 4000;
+        if (!this.ready && !this.disabled && this.process && waitForReadyMs > 0) {
+            await new Promise((resolve) => {
+                let settled = false;
+                const finish = () => {
+                    if (settled) return;
+                    settled = true;
                     clearInterval(checkInterval);
-                    r();
-                }, 4000);
+                    clearTimeout(waitTimer);
+                    resolve();
+                };
+                const checkInterval = setInterval(() => {
+                    if (this.ready || this.disabled || !this.process) finish();
+                }, 40);
+                const waitTimer = setTimeout(finish, waitForReadyMs);
             });
         }
+
 
         const id = ++this.reqId;
         const payload = JSON.stringify({ id, query }) + '\n';
 
         return new Promise((resolve) => {
+            const timeoutMs = Number.isFinite(Number(options.timeoutMs))
+                ? Math.max(250, Math.min(12000, Number(options.timeoutMs)))
+                : 12000;
             const timer = setTimeout(() => {
                 if (this.pending.has(id)) {
                     this.pending.delete(id);
                     resolve(null);
                 }
-            }, 12000);
+            }, timeoutMs);
 
             this.pending.set(id, { resolve, timer });
 

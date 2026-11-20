@@ -1,7 +1,7 @@
 // ==========================================
-// 🤖 Starry MULTI-BOT, GIVEAWAYS & SYSTEMS (15 COMMANDS)
+// 🤖 Starry GIVEAWAYS & SYSTEMS
 // File Path: src/commands/bundles/systemCommands.js
-// Multi-Bot Cluster Status, 1-Year Giveaways, Tickets & Backups
+// 1-Year Giveaways, Tickets & Backups
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -149,196 +149,6 @@ const loggingPanelCommand = {
 
 const commands = [
     loggingPanelCommand,
-    // 1. MULTIBOT / BOTS / CLUSTER
-    {
-        name: 'multibot',
-        aliases: ['bots', 'cluster', 'summon', 'clones', 'inviteclones', 'clonebots'],
-        category: 'Systems',
-        description: 'View and manage Multi-Bot cluster status, worker nodes, 1-click summon invites, and roles.',
-        usage: ',multibot [invite | add <token> | setrole <bot> <role> | remove <bot> | roles]',
-        async execute(ctx) {
-            const multiBot = ctx.client.multiBot;
-            if (!multiBot) {
-                return ctx.reply('❌ Multi-Bot Cluster Manager is not initialized.');
-            }
-
-            let sub = ctx.args[0]?.toLowerCase();
-            const calledCommand = ctx.isSlash ? ctx.interaction.commandName : ctx.args[0] || '';
-            const invokedName = (!ctx.isSlash && ctx.message?.content) ? ctx.message.content.slice(1).split(/\s+/)[0].toLowerCase() : '';
-
-            if (invokedName === 'summon' || invokedName === 'clones' || invokedName === 'inviteclones' || invokedName === 'clonebots') {
-                sub = 'invite';
-            }
-
-            // 1. Available Roles Subcommand
-            if (sub === 'roles') {
-                const embed = new EmbedBuilder()
-                    .setColor(config.EMBED_COLORS.PRIMARY)
-                    .setTitle('🎭 Multi-Bot Work & Role Assignment Presets')
-                    .setDescription(
-                        `You can assign specialized roles to any bot in your cluster so each bot focuses on specific tasks:\n\n` +
-                        `• **👑 \`all\`**: Handles everything (Moderation, Music, Economy, Social, Utility).\n` +
-                        `• **🛡️ \`moderation\`**: Dedicated to Moderation, AutoMod, Security & Tickets.\n` +
-                        `• **🎵 \`music\`**: Dedicated to Voice Channels, 24/7 radio & High Quality Audio.\n` +
-                        `• **🛠️ \`utility\`**: Dedicated to Utility, Whois, Server Info & Steal.\n` +
-                        `• **💰 \`economy\`**: Dedicated to Shop, Chests, Prestige & Pet system.\n` +
-                        `• **🎭 \`social\`**: Dedicated to Anime Social Actions, Leveling & Mini-Games.\n\n` +
-                        `*Usage:* \`,multibot add <token> <role>\` or \`,multibot setrole <botName/ID> <role>\``
-                    )
-                    .setFooter({ text: 'Multi-Bot Task Partitioning • Prefix: ,' });
-                return ctx.reply({ embeds: [embed] });
-            }
-
-            // 1B. Invite Cluster Bots Subcommand (One-Click Invites for Clone Bots)
-            if (sub === 'invite' || sub === 'invites' || sub === 'clones') {
-                const row = new ActionRowBuilder();
-                const primaryId = ctx.client.user?.id || 'primary';
-                const primaryInvite = `https://discord.com/oauth2/authorize?client_id=${primaryId}&permissions=0&scope=bot%20applications.commands`;
-                const starry2Invite = `https://discord.com/oauth2/authorize?client_id=1543515940069572628&permissions=0&integration_type=0&scope=bot+applications.commands`;
-                const starry3Invite = `https://discord.com/oauth2/authorize?client_id=1543519236586999928&permissions=0&integration_type=0&scope=bot+applications.commands`;
-
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setLabel(`Invite ${ctx.client.user?.username || 'Starry 1'}`)
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(primaryInvite)
-                        .setEmoji('👑'),
-                    new ButtonBuilder()
-                        .setLabel('Invite Starry 2')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(starry2Invite)
-                        .setEmoji('🎵'),
-                    new ButtonBuilder()
-                        .setLabel('Invite Starry 3')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(starry3Invite)
-                        .setEmoji('🎵')
-                );
-
-                const embed = new EmbedBuilder()
-                    .setColor(config.EMBED_COLORS.PRIMARY)
-                    .setTitle('🤖 Starry Multi-Bot & Audio Node Invites')
-                    .setDescription(
-                        `Invite all Starry cluster bots to your server so multiple voice channels can play music simultaneously!\n\n` +
-                        `**1. ${ctx.client.user?.username || 'Starry'}** 👑 *(Primary Master Node)*\n` +
-                        `🔗 [Click to Invite Starry](${primaryInvite})\n\n` +
-                        `**2. Starry 2** 🎵 *(Dedicated Music Node #1)*\n` +
-                        `🔗 [Click to Invite Starry 2](${starry2Invite})\n\n` +
-                        `**3. Starry 3** 🎵 *(Dedicated Music Node #2)*\n` +
-                        `🔗 [Click to Invite Starry 3](${starry3Invite})\n\n` +
-                        `*Click any button below to instantly authorize and add that bot to your server.*`
-                    )
-                    .setFooter({ text: 'Starry Multi-Bot Infrastructure' });
-
-                return ctx.reply({ embeds: [embed], components: [row] });
-            }
-
-            // 2. Admin Add Token Subcommand
-            if (sub === 'add') {
-                if (!await requirePremium(ctx, 'Multi-Bot Custom Worker Nodes')) return;
-
-                if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
-                    return ctx.reply('❌ Only Bot Owners / Server Owners can connect new secondary bot tokens.');
-                }
-                const token = ctx.args[1];
-                if (!token) return ctx.reply('❌ Please provide the bot token: `,multibot add <token> [role] [name]`\n*Example: `,multibot add MTI... music "Starry Music #1"`*');
-
-                const role = ctx.args[2]?.toLowerCase() || 'all';
-                const customName = ctx.args.slice(3).join(' ') || `Worker Node #${multiBot.instances.size + 1}`;
-
-                await ctx.defer(true);
-                try {
-                    const spawned = await multiBot.addToken(token, role, customName, ctx.user.tag);
-                    if (spawned) {
-                        return ctx.reply(`✅ **Successfully spawned and connected secondary bot instance!**\n` +
-                                         `• **Name:** \`${spawned.name}\`\n` +
-                                         `• **Assigned Role:** \`${spawned.role.toUpperCase()}\`\n` +
-                                         `• **Cluster Size:** **${multiBot.instances.size} bots online**`);
-                    } else {
-                        return ctx.reply('❌ Failed to login secondary bot. Please check token permissions in Discord Developer Portal.');
-                    }
-                } catch (err) {
-                    return ctx.reply(`❌ Error adding token: \`${err.message}\``);
-                }
-            }
-
-            // 3. Admin Set Role Subcommand
-            if (sub === 'setrole' || sub === 'role') {
-                if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
-                    return ctx.reply('❌ Only Bot Owners / Server Owners can change bot roles.');
-                }
-                const targetBot = ctx.args[1];
-                const newRole = ctx.args[2]?.toLowerCase();
-                if (!targetBot || !newRole) {
-                    return ctx.reply('🔹 **Usage:** `,multibot setrole <botId/name> <role>`\n*Roles: `all`, `moderation`, `music`, `utility`, `economy`, `social`*');
-                }
-
-                try {
-                    const res = await multiBot.setRole(targetBot, newRole);
-                    if (res.success) {
-                        return ctx.reply(`✅ **Updated Work Assignment!**\nBot **${res.bot.name}** is now assigned to: **${newRole.toUpperCase()}**`);
-                    } else {
-                        return ctx.reply(`❌ ${res.message || 'Could not find bot instance.'}`);
-                    }
-                } catch (e) {
-                    return ctx.reply(`❌ Error: \`${e.message}\``);
-                }
-            }
-
-            // 4. Admin Remove Token Subcommand
-            if (sub === 'remove' || sub === 'delete') {
-                if (!config.BOT_OWNERS.includes(ctx.user.id) && ctx.user.id !== ctx.guild.ownerId) {
-                    return ctx.reply('❌ Only Bot Owners / Server Owners can remove secondary bots.');
-                }
-                const targetBot = ctx.args[1];
-                if (!targetBot) return ctx.reply('🔹 **Usage:** `,multibot remove <botId/token>`');
-
-                const removed = await multiBot.removeToken(targetBot);
-                if (removed) {
-                    return ctx.reply(`✅ **Successfully removed bot from cluster.** Current cluster size: **${multiBot.instances.size}**`);
-                } else {
-                    return ctx.reply(`❌ Could not remove bot or cannot remove Primary Bot.`);
-                }
-            }
-
-            // 5. Overview Cluster Embed
-            const stats = multiBot.getClusterStats();
-            const virtualList = (stats.virtualNodes || []).map((vn, i) => {
-                return `**${i + 1}.** ${vn.emoji} **${vn.name}** \`[ACTIVE 🟢]\`\n` +
-                       `   • **Specialization:** ${vn.role}\n` +
-                       `   • **Engine Scope:** \`${vn.commands}\` | Status: \`Online (Single-Token Virtual Multi-Bot)\``;
-            }).join('\n\n');
-
-            let physicalSection = '';
-            if (stats.physicalBots && stats.physicalBots.length > 0) {
-                const pList = stats.physicalBots.map((b, i) => {
-                    return `• \`${b.tag}\` ${b.isPrimary ? '👑 *(Primary)*' : '🤖 *(Worker)*'} • **Role:** ${b.roleLabel} • **Ping:** \`${b.ping}ms\` • **Status:** ${b.status}`;
-                }).join('\n');
-                physicalSection = `\n\n**🌐 Connected Discord Client Nodes (${stats.physicalBots.length}):**\n` + pList;
-            }
-
-            const embed = new EmbedBuilder()
-                .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('🤖 Starry Multi-Bot & Sub-Engine Architecture')
-                .setDescription(
-                    `The bot runs an asynchronous **Virtual Multi-Bot Cluster** on a single token, dividing tasks across dedicated specialized worker engines with dynamic presence and independent queue memory!\n\n` +
-                    `**🛡️ Virtual Specialized Worker Engines (6 Running):**\n\n` +
-                    virtualList +
-                    physicalSection + `\n\n` +
-                    `💡 *Presence automatically cycles across all 6 virtual workers. Use \`,multibot roles\` to inspect roles or \`,multibot add <token>\` to link physical clone bots!*`
-                )
-                .addFields(
-                    { name: '⚙️ Virtual Engines', value: `\`6\` active workers`, inline: true },
-                    { name: '🌐 Client Instances', value: `\`${stats.totalPhysicalBots}\` connected`, inline: true },
-                    { name: '🏰 Total Guilds', value: `\`${stats.totalGuilds}\` servers`, inline: true }
-                )
-                .setFooter({ text: 'Starry Virtual Multi-Bot Engine • Single-Token Multi-Tasking' })
-                .setTimestamp();
-
-            return ctx.reply({ embeds: [embed] });
-        }
-    },
-
     // 4. PET
     {
         name: 'pet',
@@ -1011,7 +821,7 @@ const commands = [
                 return; // Already sent in DM
             }
 
-            return ctx.reply(`📬 **Master Developer Control Panel sent to your DMs, <@${ctx.user.id}>!**\n*Use the interactive buttons in your DM to run terminal commands, restart the bot, check telemetry, and manage cluster nodes.*`);
+            return ctx.reply(`📬 **Master Developer Control Panel sent to your DMs, <@${ctx.user.id}>!**\n*Use the interactive buttons in your DM to run terminal commands, restart the bot, check telemetry, and manage Starry's runtime settings.*`);
         }
     },
 
@@ -1022,7 +832,7 @@ const commands = [
         name: 'botservers',
         aliases: ['guildlist', 'serverlist'],
         category: 'Systems',
-        description: 'List all servers and member counts connected to the bot cluster (Bot Owners Only).',
+        description: 'List all servers and member counts connected to Starry (Bot Owners Only).',
         usage: ',botservers',
         async execute(ctx) {
             if (!config.BOT_OWNERS.includes(ctx.user.id)) {

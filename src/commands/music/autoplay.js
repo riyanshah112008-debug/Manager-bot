@@ -14,15 +14,7 @@ module.exports = {
             return interaction.reply({ content: '❌ You must be connected to a voice channel first!', flags: [EPHEMERAL_FLAG] });
         }
 
-        let kPlayer = client.manager?.getPlayer(interaction.guild.id);
-        if (!kPlayer && client.multiBot?.instances) {
-            for (const inst of client.multiBot.instances.values()) {
-                if (inst.client?.manager) {
-                    const p = inst.client.manager.getPlayer(interaction.guild.id);
-                    if (p) { kPlayer = p; break; }
-                }
-            }
-        }
+        const kPlayer = client.manager?.getPlayer(interaction.guild.id);
 
         let newState = false;
         if (kPlayer) {

@@ -21,41 +21,19 @@ const { requirePremium } = require('../../utils/premiumHelper');
 
 function getVoiceGuard(ctx) {
     const voiceChannel = ctx.member?.voice?.channel;
-    if (!voiceChannel) {
-        return { error: '❌ You must be connected to a voice channel first!' };
-    }
+    if (!voiceChannel) return { error: '❌ You must be connected to a voice channel first!' };
 
-    const multiBot = ctx.client.multiBot;
     const botId = ctx.client.user?.id;
-    let botMember = ctx.guild?.members?.me || (botId ? ctx.guild?.members?.cache?.get(botId) : null);
-    let workerClient = ctx.client;
-
-    // If this bot is already active in a different VC, auto-delegate if multiBot has a free bot
+    const botMember = ctx.guild?.members?.me || (botId ? ctx.guild?.members?.cache?.get(botId) : null);
     if (botMember?.voice?.channelId && botMember.voice.channelId !== voiceChannel.id) {
-        if (multiBot && typeof multiBot.getMusicWorker === 'function') {
-            const candidate = multiBot.getMusicWorker(ctx.guild, voiceChannel);
-            if (candidate && candidate.client && candidate.client.user?.id !== botId) {
-                workerClient = candidate.client;
-                botMember = candidate.botMember;
-                return { voiceChannel, botMember, workerClient, delegated: true, botName: candidate.name };
-            }
-        }
-        return { error: `❌ **${botMember?.user?.username || 'Starry'}** is already active in <#${botMember.voice.channelId}>! Join that channel or use \`s2,play\` / \`s3,play\`.` };
+        return { error: `❌ Starry is already active in <#${botMember.voice.channelId}>. Join that voice channel before starting another music session in this server.` };
     }
 
-    return { voiceChannel, botMember, workerClient: ctx.client };
+    return { voiceChannel, botMember };
 }
 
 function getActivePlayer(client, guildId) {
-    let kPlayer = client.manager?.getPlayer(guildId);
-    if (!kPlayer && client.multiBot?.instances) {
-        for (const inst of client.multiBot.instances.values()) {
-            if (inst.client?.manager) {
-                const p = inst.client.manager.getPlayer(guildId);
-                if (p) { kPlayer = p; break; }
-            }
-        }
-    }
+    const kPlayer = client.manager?.getPlayer(guildId);
     const nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
     const nativeIsActive = nativePlayer && !nativePlayer.destroyed && (nativePlayer.currentTrack || nativePlayer.queue.length > 0);
     const kazagumoIsActive = kPlayer && (kPlayer.queue?.current || kPlayer.playing || kPlayer.queue?.length > 0);
@@ -127,7 +105,7 @@ const commands = [
 
             if (ctx.isSlash) await ctx.defer();
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             const manager = targetClient.manager || ctx.client.manager;
             const hasLavalink = Boolean(
                 manager && 
@@ -285,12 +263,13 @@ const commands = [
 
             // Route 2: Native Audio Engine (Local / Standalone / Cloud fallback)
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            // Start voice negotiation while provider search is running.
+            player.connect().catch(() => {});
 
             try {
-                // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
                     StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
+                    new Promise(resolve => setTimeout(() => resolve(null), 2800))
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
@@ -380,8 +359,8 @@ const commands = [
                 }
             } catch (err) {
                 if (loadingMsg) loadingMsg.delete().catch(() => {});
-                console.error('Play command error:', err);
-                return ctx.reply(`❌ Playback error: \`${err.message}\``);
+                console.warn('[Music] Search did not return a playable match within the startup window.');
+                return ctx.reply('⚠️ I could not find a playable match quickly. Try a direct YouTube or SoundCloud link.');
             }
         }
     },
@@ -613,7 +592,7 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             player.connect().catch(() => {});
             player.is247 = !player.is247;
@@ -633,16 +612,8 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             let kPlayer = targetClient.manager?.getPlayer(ctx.guild.id);
-            if (!kPlayer && targetClient.multiBot?.instances) {
-                for (const inst of targetClient.multiBot.instances.values()) {
-                    if (inst.client?.manager) {
-                        const p = inst.client.manager.getPlayer(ctx.guild.id);
-                        if (p) { kPlayer = p; break; }
-                    }
-                }
-            }
 
             let newState = false;
             if (kPlayer) {
@@ -1279,7 +1250,7 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             await player.connect();
 

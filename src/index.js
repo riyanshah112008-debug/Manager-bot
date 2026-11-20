@@ -1,6 +1,6 @@
 // ==========================================
 // 🛡️ Starry SUPREME MASTER ENGINE - INDEX.JS
-// 150+ Commands • Multi-Bot Clustering • Fixed Comma Prefix (,) • 1-Year Interaction Lifetime
+// 150+ Commands • Single-Bot Runtime • Fixed Comma Prefix (,) • 1-Year Interaction Lifetime
 // ==========================================
 
 require('dotenv').config();
@@ -59,7 +59,6 @@ const KazagumoSpotify = require('kazagumo-spotify');
 const { cleanToken, maskToken, verifyDiscordToken } = require('./utils/tokenSanitizer');
 
 const config = require('./config');
-const multiBot = require('./modules/multiBot');
 const commandRegistry = require('./modules/commandHandler');
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('./utils/contextHelper');
 
@@ -99,15 +98,6 @@ app.get('/api/servers', async (req, res) => {
         res.json(servers);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch servers' });
-    }
-});
-
-app.get('/api/multibot/stats', (req, res) => {
-    try {
-        const stats = multiBot.getClusterStats();
-        res.json(stats);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
     }
 });
 
@@ -314,7 +304,7 @@ app.listen(port, '0.0.0.0', () => {
     }, 180000);
 });
 
-// Create Primary Bot Client
+// Create the single Starry Discord client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -661,23 +651,7 @@ setInterval(() => {
         gatewayAbnormalCount = 0;
     }
 
-    // 4. Check Multi-Bot Cluster Worker Nodes
-    try {
-        const instances = multiBot?.instances;
-        if (instances && instances.size > 1) {
-            for (const [id, info] of instances.entries()) {
-                if (info.isPrimary || !info.client) continue;
-                const worker = info.client;
-                if (worker.ws && worker.isReady() && worker.uptime > 180000) {
-                    const wStatus = worker.ws.status;
-                    const wPing = worker.ws.ping;
-                    if (wStatus !== 0 || (wPing > 30000)) {
-                        console.warn(`⚠️ [Watchdog] Worker Bot [${info.name}] socket jitter (status: ${wStatus}, ping: ${wPing}ms).`);
-                    }
-                }
-            }
-        }
-    } catch (e) {}
+
 }, 15000);
 
 client.once(Events.ClientReady, async () => {
@@ -686,7 +660,7 @@ client.once(Events.ClientReady, async () => {
         clearTimeout(bootRetryTimer);
         bootRetryTimer = null;
     }
-    console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
+    console.log(`🚀 Successfully logged in as Starry: ${client.user.tag}`);
 
     try {
         if (client.manager && typeof client.manager.init === 'function') {
@@ -714,8 +688,8 @@ client.once(Events.ClientReady, async () => {
     catch (birthdayError) { console.warn('⚠️ Birthday scheduler could not start:', birthdayError.message); }
 
     // Global command registration is an explicit release task, not a bot-startup task.
-    // This avoids every worker/restart racing to overwrite the same application command set.
-    if (String(process.env.AUTO_DEPLOY_COMMANDS || '').toLowerCase() === 'true' && client.isPrimary !== false) {
+    // This avoids repeated restarts racing to overwrite the same application command set.
+    if (String(process.env.AUTO_DEPLOY_COMMANDS || '').toLowerCase() === 'true') {
         try {
             console.log("🔄 AUTO_DEPLOY_COMMANDS=true; syncing application commands...");
             const deploy = require('../deploy-commands.js');
@@ -732,8 +706,6 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.GuildCreate, async (guild) => {
     try {
         if (!guild || !guild.available) return;
-        const isPrimary = !multiBot?.primaryClient || (client.user?.id === multiBot.primaryClient?.user?.id);
-        if (!isPrimary) return; // Only primary bot posts the server greeting
 
         const { createWelcomeSetupCard } = require('./utils/i18n');
         let targetChannel = guild.systemChannel;
@@ -928,6 +900,21 @@ async function startBot(overrideToken, overrideMongo) {
             });
             console.log('🍃 Successfully connected to MongoDB Cloud!');
 
+            // Remove only the retired secondary-token credential collection; all other data is untouched.
+            try {
+                const obsoleteTokens = await mongoose.connection.db
+                    .listCollections({ name: 'multibottokens' }, { nameOnly: true })
+                    .toArray();
+                if (obsoleteTokens.length) {
+                    await mongoose.connection.db.dropCollection('multibottokens');
+                    console.log('🧹 Removed obsolete secondary-bot token credentials from MongoDB.');
+                }
+            } catch (cleanupError) {
+                if (cleanupError.code !== 26 && cleanupError.codeName !== 'NamespaceNotFound') {
+                    console.warn('⚠️ Could not remove the retired secondary-bot token collection:', cleanupError.message);
+                }
+            }
+
             const { initLanguageCache } = require('./utils/i18n');
             await initLanguageCache(client).catch(() => {});
         } catch (mongoInitErr) {
@@ -975,9 +962,9 @@ async function startBot(overrideToken, overrideMongo) {
         }
 
         // 1. Connect Primary Client to Discord Gateway IMMEDIATELY
-        console.log('🚀 Connecting Primary Bot to Discord Gateway...');
+        console.log('🚀 Connecting Starry to the Discord Gateway...');
         await client.login(primaryToken);
-        console.log('✨ Primary Bot login sequence initiated successfully!');
+        console.log('✨ Starry login sequence initiated successfully!');
 
         // 2. Initialize Background Modules
         for (const mod of MODULE_INITIALIZERS) {
@@ -989,8 +976,6 @@ async function startBot(overrideToken, overrideMongo) {
             }
         }
 
-        // 3. Boot Multi-Bot Cluster Worker Nodes
-        await multiBot.initAll(client, primaryToken);
 
     } catch (error) {
         isBootingBot = false;
@@ -1014,11 +999,7 @@ const shutdownHandler = async (signal) => {
     try {
         if (mongoose.connection.readyState === 1) await mongoose.connection.close();
         if (client) client.destroy();
-        for (const [id, info] of multiBot.instances.entries()) {
-            if (info.client && !info.isPrimary) {
-                try { info.client.destroy(); } catch (e) {}
-            }
-        }
+
         console.log("👋 Clean shutdown completed.");
         process.exit(0);
     } catch (err) {

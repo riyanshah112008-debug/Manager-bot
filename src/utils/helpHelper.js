@@ -9,7 +9,7 @@ const BASE_HELP_CATEGORIES = [
     { id: 'social', label: 'Social & Expressions (44)', desc: 'Hug, kiss, slap, anime GIFs, interactions & counters', emoji: '🎭' },
     { id: 'eco', label: 'Economy & RPG Adventure (32)', desc: 'Passport, beg, scavenge, heists, crates, shop & mining', emoji: '💰' },
     { id: 'game', label: 'Cosmic Arcade & Boss Raids (12)', desc: 'Co-op World Boss Raids, Blackjack, Mines & Wordle', emoji: '🎮' },
-    { id: 'sys', label: 'Multi-Bot & Systems (26)', desc: 'Multi-bot cluster, automated giveaways & tickets', emoji: '🤖' }
+    { id: 'sys', label: 'Systems & Automation (25)', desc: 'Automated giveaways, tickets, backups and server utilities', emoji: '🤖' }
 ];
 
 function getHelpCategories() { return BASE_HELP_CATEGORIES; }
@@ -30,7 +30,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• \`${prefix}autoplay\` (or \`${prefix}ap\`) — Seamless continuous playback using Spotify & YouTube recommendation engine\n` +
                 `• \`${prefix}spotify\` (or \`${prefix}sp\`) — Link personal Spotify account, save custom playlists & 1-click voice stream\n` +
                 `• \`${prefix}setup\` — Deploy the dedicated interactive Music Controller request channel\n` +
-                `• \`${prefix}callstarry\` — Summon a free multi-bot worker to your voice channel\n\n` +
+                `• \`${prefix}callstarry\` — Start a private AI voice call with Starry\n\n` +
                 `**🎛️ Studio DSP Audio Filters (15 Presets):**\n` +
                 `\`${prefix}bass\` *(True Subwoofer Physical Vibration)*, \`${prefix}8d\`, \`${prefix}nightcore\`, \`${prefix}daycore\`, \`${prefix}vaporwave\`, \`${prefix}lofi\`, \`${prefix}reverb\`, \`${prefix}karaoke\`, \`${prefix}surround\`, \`${prefix}electronic\`, \`${prefix}soft\`, \`${prefix}radio\`, \`${prefix}treble\`, \`${prefix}pop\`, \`${prefix}filter <name>\`, \`${prefix}clearfilters\`\n\n` +
                 `**Panels & Lyrics:**\n` +
@@ -132,11 +132,10 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• \`${prefix}coinflip\`, \`${prefix}roll\`, \`${prefix}8ball\``
             );
     } else if (catId === 'sys') {
-        embed.setTitle('🤖 Multi-Bot & Systems Management (26 Commands)')
+        embed.setTitle('🤖 Systems & Automation')
             .setDescription(
-                `**Multi-Bot Architecture & Clustering:**\n` +
-                `• \`${prefix}multibot\` — Inspect active worker bots, voice delegate states, and cluster health\n` +
-                `• \`${prefix}telemetry\` — Real-time performance, cluster latency & sharding analytics\n\n` +
+                `**Runtime & Telemetry:**\n` +
+                `• \`${prefix}telemetry\` — Real-time Starry performance and process diagnostics\n\n` +
                 `**Automated Giveaways & Tickets:**\n` +
                 `\`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}confessionsetup\`, \`${prefix}setupcount\`\n\n` +
                 `**Backups & Visual Branding:**\n` +
@@ -150,7 +149,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• **Primary Interface:** **Slash Commands (\`/\`)** *(Type \`/\` to view autocomplete list)*\n` +
                 `• **Prefix Commands (\`${prefix}\`):** Available to all members; restricted commands still require the appropriate server permissions\n` +
                 `• **Total Commands:** \`${totalCommands}\` across 8 specialized categories\n` +
-                `• **Multi-Bot Clustering:** Active and synchronized\n` +
+                `• **Runtime:** One Starry bot instance\n` +
                 `• **Embed Buttons Lifetime:** High persistence up to **1 Year**\n\n` +
                 `Select a category from the dropdown menu below or click the quick action buttons.`
             )
@@ -162,7 +161,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 { name: '🎮 Arcade (12)', value: `\`${prefix}raid\`, \`${prefix}blackjack\`, \`${prefix}mines\``, inline: true },
                 { name: '💰 Economy (32)', value: `\`${prefix}profile\`, \`${prefix}crime\`, \`${prefix}shop\``, inline: true },
                 { name: '🎭 Social (44)', value: `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}bonk\``, inline: true },
-                { name: '🤖 Systems', value: `\`${prefix}multibot\`, \`${prefix}telemetry\`, \`${prefix}backup\``, inline: true }
+                { name: '🤖 Systems', value: `\`${prefix}telemetry\`, \`${prefix}backup\`, \`${prefix}restore\``, inline: true }
             );
 
     }
