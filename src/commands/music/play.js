@@ -191,7 +191,7 @@ module.exports = {
       let searchTimeout;
       const result = await Promise.race([
         StarryAudioEngine.search(query, interaction.user),
-        new Promise((_, reject) => {
+        new Promise(resolve => {
           searchTimeout = setTimeout(() => resolve(null), 2800);
         })
       ]).finally(() => clearTimeout(searchTimeout));
