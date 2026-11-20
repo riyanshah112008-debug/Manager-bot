@@ -181,20 +181,6 @@ class CommandContext {
                 });
             }
         } else {
-            // Check if another client is targeted (Multi-Bot routing)
-            if (this.client && this.source.client && this.client.user?.id !== this.source.client.user?.id) {
-                try {
-                    const targetChannel = this.client.channels.cache.get(this.channel.id) || await this.client.channels.fetch(this.channel.id).catch(() => null);
-                    if (targetChannel) {
-                        this.replyMessage = await targetChannel.send({
-                            ...payload,
-                            reply: { messageReference: this.source.id, failIfNotExists: false }
-                        }).catch(async () => await targetChannel.send(payload).catch(() => null));
-                    }
-                } catch (e) {
-                    this.replyMessage = null;
-                }
-            }
 
             if (!this.replyMessage) {
                 this.replyMessage = await this.source.reply(payload).catch(async () => {
