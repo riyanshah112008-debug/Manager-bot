@@ -16,9 +16,9 @@ const playerResolver = read('src/utils/musicPlayerResolver.js');
 const workspace = read('public/workspace.js');
 const systemCommands = read('src/commands/bundles/systemCommands.js');
 
-assert.equal((index.match(/new Client\\(/g) || []).length, 1,
+assert.equal((index.match(/new Client\(/g) || []).length, 1,
     'Starry must create exactly one Discord.js client');
-assert.doesNotMatch(index, /BOT_TOKENS|TOKEN_\\d+|multiBot|initAll\\(/i,
+assert.doesNotMatch(index, /BOT_TOKENS|TOKEN_\d+|multiBot|initAll\(/i,
     'Startup must not load secondary bot tokens or initialize workers');
 assert.doesNotMatch(dispatcher, /multiBot|multibot|s2,|s3,|workerClient|registerEventHook/i,
     'Command dispatch must not route commands to secondary bots');
@@ -28,7 +28,7 @@ assert.doesNotMatch(musicCommands + musicController + playerResolver, /multiBot|
     'Music commands and controls must not delegate to worker bots');
 assert.doesNotMatch(workspace, /multiBot|multibot|workerToken|addWorker|Worker routing/i,
     'Dashboard must not expose worker-token or cluster controls');
-assert.doesNotMatch(systemCommands, /name:\\s*['"]multibot['"]|Multi-Bot|worker node/i,
+assert.doesNotMatch(systemCommands, /name:\s*['"]multibot['"]|Multi-Bot|worker node/i,
     'The multi-bot prefix command must not be registered');
 
 for (const removed of [
