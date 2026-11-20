@@ -900,7 +900,7 @@ async function startBot(overrideToken, overrideMongo) {
             });
             console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-            // The retired MultiBotToken collection stored secondary Discord bot credentials.
+            // The retired secondary-token credential collection is no longer used.
             // Remove only that obsolete credential collection; all other guild/user data is untouched.
             try {
                 const obsoleteTokens = await mongoose.connection.db
