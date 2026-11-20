@@ -356,7 +356,6 @@ class CommandRegistry {
                         }
                     }
                 }
-            }
 
             if (!commandBody) {
                 if (matchedPrefix === '@') {
