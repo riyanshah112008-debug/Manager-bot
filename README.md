@@ -1,6 +1,6 @@
-# 🌟 Starry Manager Bot (Multi-Bot & Voice AI Suite)
+# 🌟 Starry Manager Bot (Single-Bot & Voice AI Suite)
 
-A high-performance Discord Manager & Multi-Bot clustering framework with Voice Audio DSP streaming, Advanced Moderation, Economy & Leveling, and Modern Web Dashboard.
+A single-client Discord management bot with Voice Audio DSP streaming, Advanced Moderation, Economy & Leveling, and a Modern Web Dashboard.
 
 ---
 
