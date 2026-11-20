@@ -3,7 +3,7 @@ title Starry Discord Bot - 1-Click Auto-Deploy Launcher
 color 0B
 
 echo ===================================================================
-echo     STARRY MULTI-BOT CLUSTER - 1-CLICK PC AUTO-DEPLOY LAUNCHER
+echo     STARRY SINGLE-BOT ENGINE - 1-CLICK PC AUTO-DEPLOY LAUNCHER
 echo ===================================================================
 echo.
 
