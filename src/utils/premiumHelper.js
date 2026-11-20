@@ -18,7 +18,7 @@ const ALL_PREMIUM_FEATURES = [
         id: 'voice_247',
         name: '24/7 Voice Channel Persistence',
         category: 'Music & Audio',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
+        tier: 'Shield Plus / Pro / Platinum / Lifetime',
         commands: [',247', '/247', ',stay', ',alwayson'],
         description: 'Keeps the bot in your voice channel 24/7 without disconnecting when members leave, ensuring zero-latency startup and uninterrupted radio.'
     },
@@ -45,14 +45,6 @@ const ALL_PREMIUM_FEATURES = [
         tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
         commands: [',lockdown', ',unlockdown', ',masslock'],
         description: 'Instantaneous server-wide lockdown across all public text channels to neutralize raids and unauthorized permissions changes.'
-    },
-    {
-        id: 'multibot_custom_nodes',
-        name: 'Multi-Bot Worker Node Summoning',
-        category: 'Multi-Bot Cluster',
-        tier: 'Pro Cluster / Platinum / Lifetime',
-        commands: [',multibot add <token> <role>', ',multibot setrole'],
-        description: 'Connect custom secondary bot tokens to your server cluster for simultaneous multi-channel audio playback and specialized worker task partitioning.'
     },
     {
         id: 'emoji_stealer',
@@ -224,7 +216,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
         .setTitle(`👑 Starry Premium Required`)
         .setDescription(
             `**${featureName}** is an exclusive **Starry Premium** feature!\n\n` +
-            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and multi-bot cluster power across your entire community.`
+            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and premium audio and security tools across your community.`
         )
         .addFields(
             {
@@ -234,7 +226,6 @@ function createPremiumLockPayload(featureName, prefix = ',') {
                     '• **🎧 Studio DSP Hi-Fi Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave\n' +
                     '• **💾 Cloud Backups & Restore** — Full server layout & permissions snapshot\n' +
                     '• **🚨 Emergency Lockdown Shield** — 1-click server-wide raid isolation\n' +
-                    '• **🤖 Multi-Bot Worker Nodes** — Custom bot tokens for multi-room audio\n' +
                     '• **📥 Unlimited Emoji/Sticker Steal** — Direct 1-click upload\n' +
                     '• **💰 2x Economy XP & Rewards** — Double credits and faster leveling',
                 inline: false
