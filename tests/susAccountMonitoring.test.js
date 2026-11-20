@@ -1,10 +1,134 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { _internals } = require('../src/modules/susAccount');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const JOINED_AT = Date.parse('2026-01-01T00:00:00.000Z');
+
+
+function permissionSet(allowed) {
+    const values = new Set(allowed);
+    return {
+        has(permission) {
+            return Array.isArray(permission)
+                ? permission.every(value => values.has(value))
+                : values.has(permission);
+        }
+    };
+}
+
+function makePrivateChannelFixture(overrides = {}) {
+    const guild = { id: '12345678901234567', roles: { cache: new Map() } };
+    const everyone = { id: guild.id, permissions: permissionSet([]) };
+    const staff = {
+        id: '12345678901234568',
+        guild,
+        permissions: permissionSet([])
+    };
+    const otherRole = {
+        id: '12345678901234569',
+        managed: false,
+        permissions: permissionSet([])
+    };
+    const bot = {
+        id: '12345678901234570',
+        roles: { cache: new Map() }
+    };
+    guild.roles.everyone = everyone;
+    guild.roles.cache.set(everyone.id, everyone);
+    guild.roles.cache.set(staff.id, staff);
+    guild.roles.cache.set(otherRole.id, otherRole);
+
+    const access = new Map([
+        [everyone.id, permissionSet(overrides.everyoneCanView ? [PermissionFlagsBits.ViewChannel] : [])],
+        [staff.id, permissionSet(overrides.staffCanView === false ? [] : [PermissionFlagsBits.ViewChannel])],
+        [otherRole.id, permissionSet(overrides.otherRoleCanView ? [PermissionFlagsBits.ViewChannel] : [])],
+        [bot.id, permissionSet([
+            ...(overrides.botCanView === false ? [] : [PermissionFlagsBits.ViewChannel]),
+            ...(overrides.botCanSend === false ? [] : [PermissionFlagsBits.SendMessages]),
+            ...(overrides.botCanEmbed === false ? [] : [PermissionFlagsBits.EmbedLinks])
+        ])]
+    ]);
+    const overwrites = new Map();
+    if (overrides.directMemberCanView) {
+        overwrites.set('member', {
+            type: 1,
+            id: '12345678901234571',
+            allow: permissionSet([PermissionFlagsBits.ViewChannel])
+        });
+    }
+    const channel = {
+        guildId: guild.id,
+        type: ChannelType.GuildText,
+        isTextBased: () => true,
+        permissionsFor: subject => access.get(subject.id) || permissionSet([]),
+        permissionOverwrites: { cache: overwrites }
+    };
+    return { guild, everyone, staff, otherRole, bot, channel };
+}
+
+test('suspicious-account alerts require a private staff channel', () => {
+    const fixture = makePrivateChannelFixture();
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, fixture.guild, fixture.staff, fixture.bot
+    ), true);
+});
+
+test('public alert channels are rejected', () => {
+    const fixture = makePrivateChannelFixture({ everyoneCanView: true });
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, fixture.guild, fixture.staff, fixture.bot
+    ), false);
+});
+
+test('alert channel must be visible to the selected staff role', () => {
+    const fixture = makePrivateChannelFixture({ staffCanView: false });
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, fixture.guild, fixture.staff, fixture.bot
+    ), false);
+});
+
+test('alert channel must grant Starry the required send permissions', () => {
+    const fixture = makePrivateChannelFixture({ botCanSend: false });
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, fixture.guild, fixture.staff, fixture.bot
+    ), false);
+});
+
+test('alert channel rejects unrelated role visibility', () => {
+    const fixture = makePrivateChannelFixture({ otherRoleCanView: true });
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, fixture.guild, fixture.staff, fixture.bot
+    ), false);
+});
+
+test('alert channel rejects direct non-bot member visibility overrides', () => {
+    const fixture = makePrivateChannelFixture({ directMemberCanView: true });
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, fixture.guild, fixture.staff, fixture.bot
+    ), false);
+});
+
+test('alert channel cannot be reused across guilds', () => {
+    const fixture = makePrivateChannelFixture();
+    const otherGuild = { ...fixture.guild, id: '12345678901234572' };
+    assert.equal(_internals.isPrivateStaffChannel(
+        fixture.channel, otherGuild, fixture.staff, fixture.bot
+    ), false);
+});
+
+test('missing alert channel never falls back to the public system channel', async () => {
+    const fixture = makePrivateChannelFixture();
+    const guild = {
+        ...fixture.guild,
+        systemChannel: fixture.channel,
+        channels: { cache: new Map(), fetch: async () => null },
+        members: { me: fixture.bot, fetchMe: async () => fixture.bot }
+    };
+    assert.equal(await _internals.safeChannel(guild, '', fixture.staff.id), null);
+});
 
 test('account age accepts Date-valued scanner timestamps', () => {
     assert.equal(_internals.daysBetween(JOINED_AT, new Date(JOINED_AT + (3 * DAY_MS))), 3);
