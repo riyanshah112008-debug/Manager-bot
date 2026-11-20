@@ -192,6 +192,14 @@ test('custom five-band EQ maps bounded dB values to safe Lavalink bands',async()
  assert.equal(f.equalizer[9].gain,-2/24);assert.equal(f.equalizer[14].gain, -6 / 24);
  assert.deepEqual(stub.player.data.get('customEqualizer'),g);
 });
+test('bass profile reserves headroom for stacked low-frequency boosts',async()=>{
+ const stub=createPlayer();
+ assert.equal(await applyKazagumoEqualizer(stub.player,{subBass:3,bass:2,mids:-1,presence:0,treble:0}),true);
+ const filters=stub.getApplied();
+ const expected=Math.pow(10,-6.5/20);
+ assert.ok(Math.abs(filters.volume-expected)<1e-10);
+ assert.ok(filters.volume<Math.pow(10,-3/20),'headroom must account for both positive bass bands plus safety margin');
+});
 test('custom EQ clamps values and neutral reset restores unity',async()=>{
  const stub=createPlayer();assert.equal(await applyKazagumoEqualizer(stub.player,{subBass:99,bass:-99}),true);
  assert.equal(stub.getApplied().equalizer[0].gain, LAVALINK_HALF_GAIN);assert.equal(stub.getApplied().equalizer[2].gain, LAVALINK_MIN_GAIN);
