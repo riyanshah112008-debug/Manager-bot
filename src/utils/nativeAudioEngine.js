@@ -19,6 +19,7 @@ const fetch = globalThis.fetch;
 const spotify = require('spotify-url-info')(fetch);
 const fs = require('fs');
 const { execFile } = require('child_process');
+const { getDiscordGuildBitrateCap, resolveAudioQuality } = require('./audioQuality');
 const prism = require('prism-media');
 const streamResolver = require('./streamResolverClient');
 const { 
@@ -597,10 +598,10 @@ class StarryGuildPlayer {
         const guild = this.voiceChannel?.guild || this.client?.guilds?.cache?.get(this.guildId);
         const premium = Boolean(this.client?.isPremium?.(this.guildId));
         const tier = Number(guild?.premiumTier || 0);
-        const tierCaps = [96000, 128000, 256000, 384000];
-        const guildMax = Math.min(384000, Number(guild?.maximumBitrate) || tierCaps[tier] || 96000);
+        const guildMax = getDiscordGuildBitrateCap(tier, guild?.maximumBitrate);
 
-        // Premium servers use the highest bitrate their own Discord boost tier allows.
+        // Only Starry Premium guilds may request the 384 kbps encoder profile.
+        // Discord boost tier and voice-channel bitrate remain hard ceilings.
         if (premium && this.voiceChannel && Number(this.voiceChannel.bitrate || 0) < guildMax) {
             try {
                 const botMember = guild?.members?.me || await guild?.members?.fetchMe?.().catch(() => null);
@@ -613,11 +614,14 @@ class StarryGuildPlayer {
             }
         }
 
-        const channelCap = Number(this.voiceChannel?.bitrate) || guildMax;
-        const encoderTarget = premium ? 384000 : 128000;
-        const effectiveBitrate = Math.max(16000, Math.min(encoderTarget, guildMax, channelCap));
-        this.audioBitrateKbps = Math.floor(effectiveBitrate / 1000);
-        this.audioQualityLabel = `${this.audioBitrateKbps} kbps${premium ? ' • Premium' : ''}`;
+        const quality = resolveAudioQuality({
+            premium,
+            guildTier: tier,
+            guildMaximumBitrate: guild?.maximumBitrate,
+            channelBitrate: this.voiceChannel?.bitrate
+        });
+        this.audioBitrateKbps = quality.bitrateKbps;
+        this.audioQualityLabel = quality.label;
         return this.audioBitrateKbps;
     }
 
