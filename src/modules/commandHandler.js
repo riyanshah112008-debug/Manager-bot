@@ -13,6 +13,7 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    StringSelectMenuBuilder,
     MessageFlags
 } = require('discord.js');
 const fs = require('fs');
@@ -103,6 +104,35 @@ function setCachedPrefix(guildId, prefix) {
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
+
+const musicEqPanelSessions = new Map();
+const MUSIC_EQ_BANDS = {
+ subBass:{label:'Sub-bass · 25–60 Hz',description:'Deep rumble and low-end foundation'},
+ bass:{label:'Bass · 60–250 Hz',description:'Kick impact and bass guitar weight'},
+ mids:{label:'Mids · 250 Hz–1 kHz',description:'Body, warmth and instrument balance'},
+ presence:{label:'Presence · 1–4 kHz',description:'Vocal clarity and attack'},
+ treble:{label:'Treble · 4–16 kHz',description:'Air, detail and cymbal brightness'}
+};
+const MUSIC_EQ_LEVELS=[-6,-4,-2,0,2,4,6];
+function cleanMusicEqGains(g={}){return Object.fromEntries(Object.keys(MUSIC_EQ_BANDS).map(k=>[k,Math.max(-6,Math.min(6,Number(g[k])||0))]));}
+function buildMusicEqualizerPanel(s){
+ const lines=Object.entries(MUSIC_EQ_BANDS).map(([k,b])=>{const v=Number(s.gains[k])||0,n=Math.round((v+6)/2);return `**${b.label}**  \`${v>0?'+':''}${v} dB\`  ${'▰'.repeat(n)}${'▱'.repeat(6-n)}`;});
+ const embed=new EmbedBuilder().setColor('#5865F2').setTitle('🎚️ Starry • 5-Band Equalizer')
+  .setDescription(`Adjust a band and the current track updates immediately.\n\n${lines.join('\n')}\n\n**Selected:** ${MUSIC_EQ_BANDS[s.band].label}\n*Gain range −6 to +6 dB. Boosts reserve headroom to reduce clipping.*`)
+  .setFooter({text:'EQ applies to this active playback session.'});
+ const bands=new StringSelectMenuBuilder().setCustomId('music_eq_band').setPlaceholder('Choose frequency band').addOptions(Object.entries(MUSIC_EQ_BANDS).map(([v,b])=>({label:b.label,description:b.description,value:v,default:s.band===v})));
+ const levels=new StringSelectMenuBuilder().setCustomId('music_eq_gain').setPlaceholder('Set selected band gain').addOptions(MUSIC_EQ_LEVELS.map(v=>({label:`${v>0?'+':''}${v} dB`,value:String(v),description:v===0?'Neutral':v>0?'Boost this band':'Reduce this band',default:Number(s.gains[s.band])===v})));
+ const presets=new StringSelectMenuBuilder().setCustomId('music_eq_preset').setPlaceholder('Quick sound profile').addOptions([
+  {label:'Balanced Studio',value:'balanced',description:'Natural vocals, controlled bass and smooth highs'},
+  {label:'Deep Bass',value:'bass',description:'More sub-bass and punch without extreme boosts'},
+  {label:'Vocal Clarity',value:'vocal',description:'Clearer vocals and restrained low mids'},
+  {label:'Warm',value:'warm',description:'Full low end and relaxed presence'},
+  {label:'Bright',value:'bright',description:'More detail and air without excessive bass'}
+ ]);
+ const actions=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_eq_reset').setLabel('Reset EQ').setEmoji('↩️').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('music_eq_close').setLabel('Close').setStyle(ButtonStyle.Secondary));
+ return {embeds:[embed],components:[new ActionRowBuilder().addComponents(bands),new ActionRowBuilder().addComponents(levels),new ActionRowBuilder().addComponents(presets),actions]};
+}
+
 const mongoose = require('mongoose');
 
 function isPrimaryBotClient(client) {
@@ -1605,6 +1635,37 @@ NaN
                         } else {
                             return interaction.reply({ content: '❌ No active music session in this server.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
                         }
+                    }
+
+                    if (customId === 'music_equalizer') {
+                        if (!kPlayer && !nPlayer) return interaction.reply({content:'❌ No active music session. Start a song first.',flags:[EPHEMERAL_FLAG]}).catch(()=>{});
+                        const key=`${interaction.guildId}:${interaction.user.id}`;
+                        const stored=kPlayer?.data?.get('customEqualizer')||nPlayer?.equalizer||{};
+                        const session={band:'bass',gains:cleanMusicEqGains(stored),updatedAt:Date.now()};
+                        musicEqPanelSessions.set(key,session);
+                        if(musicEqPanelSessions.size>500)musicEqPanelSessions.delete(musicEqPanelSessions.keys().next().value);
+                        return interaction.reply({...buildMusicEqualizerPanel(session),flags:[EPHEMERAL_FLAG]}).catch(()=>{});
+                    }
+                    if(customId.startsWith('music_eq_')) {
+                        const key=`${interaction.guildId}:${interaction.user.id}`,s=musicEqPanelSessions.get(key);
+                        if(!s||Date.now()-s.updatedAt>1800000)return interaction.reply({content:'Equalizer panel expired. Reopen it from Now Playing.',flags:[EPHEMERAL_FLAG]}).catch(()=>{});
+                        if(!kPlayer&&!nPlayer)return interaction.reply({content:'Playback has ended. Start another song first.',flags:[EPHEMERAL_FLAG]}).catch(()=>{});
+                        if(customId==='music_eq_close'){musicEqPanelSessions.delete(key);return interaction.update({content:'Equalizer closed.',embeds:[],components:[]}).catch(()=>{});}
+                        if(customId==='music_eq_band')s.band=interaction.values[0];
+                        else {
+                            if(customId==='music_eq_gain'){const v=Number(interaction.values[0]);if(!MUSIC_EQ_LEVELS.includes(v))return interaction.reply({content:'Choose a valid gain level.',flags:[EPHEMERAL_FLAG]}).catch(()=>{});s.gains[s.band]=v;}
+                            if(customId==='music_eq_preset'){
+                                const presets={balanced:{subBass:1,bass:1,mids:0,presence:1,treble:1},bass:{subBass:4,bass:3,mids:-1,presence:0,treble:0},vocal:{subBass:-1,bass:0,mids:1,presence:3,treble:1},warm:{subBass:2,bass:3,mids:1,presence:0,treble:-1},bright:{subBass:0,bass:-1,mids:0,presence:2,treble:3}};
+                                s.gains={...presets[interaction.values[0]]};
+                            }
+                            if(customId==='music_eq_reset')s.gains=cleanMusicEqGains();
+                            let ok=true;
+                            if(kPlayer)ok=await require('../utils/musicManager').applyKazagumoEqualizer(kPlayer,s.gains);
+                            if(nPlayer)ok=(await nPlayer.setEqualizer(s.gains))&&ok;
+                            if(!ok)return interaction.reply({content:'Starry could not apply the EQ change. Please retry.',flags:[EPHEMERAL_FLAG]}).catch(()=>{});
+                        }
+                        s.updatedAt=Date.now();musicEqPanelSessions.set(key,s);
+                        return interaction.update(buildMusicEqualizerPanel(s)).catch(()=>{});
                     }
 
                     // 3. Audio Filter Dropdown
