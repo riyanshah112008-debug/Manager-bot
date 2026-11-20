@@ -23,6 +23,7 @@ const suites = [
   ['Owner prefix policy', 'tests/ownerPrefixPolicy.test.js'],
   ['Tickets', 'tests/tickets.test.js'],
   ['Command execution contract', 'tests/commandExecutionContract.test.js'],
+  ['Bounded safe math parser', '--test', 'tests/safeMath.test.js'],
   ['Phone database browser syntax', '--check', 'public/phone-database.js'],
   ['Phone sync', 'tests/phoneSync.test.js'],
   ['Phone sync module syntax', '--check', 'src/modules/phoneSync.js'],
