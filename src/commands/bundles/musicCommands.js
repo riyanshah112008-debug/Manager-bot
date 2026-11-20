@@ -272,7 +272,7 @@ const commands = [
                 // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
                     StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Music search did not return within the quick-start window')), 10000))
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
@@ -287,7 +287,7 @@ const commands = [
                     }
                     if (!player.currentTrack) {
                         if (ctx.isSlash && ctx.interaction) {
-                            await ctx.reply('⏳ Connecting to voice and starting the playlist. Now Playing will appear after audio is confirmed.');
+                            await ctx.reply('🎵 Starting your playlist…');
                             player.loadingMessage = await ctx.interaction.fetchReply().catch(() => null);
                         } else {
                             player.loadingMessage = loadingMsg;
@@ -329,7 +329,7 @@ const commands = [
                         player.queue.push(track);
                         // The engine posts the single Now Playing panel only after Discord reports Playing.
                         if (ctx.isSlash && ctx.interaction) {
-                            await ctx.reply('⏳ Connecting to voice and resolving **' + track.title + '**. Now Playing will appear after audio is confirmed.');
+                            await ctx.reply('🎵 Starting **' + track.title + '**…');
                             player.loadingMessage = await ctx.interaction.fetchReply().catch(() => null);
                         } else {
                             player.loadingMessage = loadingMsg;
