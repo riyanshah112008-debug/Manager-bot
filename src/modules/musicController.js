@@ -334,14 +334,6 @@ class MusicControllerEngine {
             if (!channel) return;
 
             let player = client.manager?.getPlayer(guildId);
-            if (!player && client.multiBot?.instances) {
-                for (const inst of client.multiBot.instances.values()) {
-                    if (inst.client?.manager) {
-                        const p = inst.client.manager.getPlayer(guildId);
-                        if (p) { player = p; break; }
-                    }
-                }
-            }
             if (!player) {
                 player = StarryAudioEngine.getPlayer(guildId);
             }
@@ -646,14 +638,6 @@ class MusicControllerEngine {
         if (!guildId) return false;
 
         let player = (interaction.client.manager ? interaction.client.manager.getPlayer(guildId) : null) || (client.manager ? client.manager.getPlayer(guildId) : null);
-        if (!player && client.multiBot?.instances) {
-            for (const inst of client.multiBot.instances.values()) {
-                if (inst.client?.manager) {
-                    const p = inst.client.manager.getPlayer(guildId);
-                    if (p) { player = p; break; }
-                }
-            }
-        }
         const isKazagumo = !!player;
         if (!player) {
             player = StarryAudioEngine.getPlayer(guildId);
