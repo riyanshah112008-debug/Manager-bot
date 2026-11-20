@@ -156,7 +156,7 @@ function renderPremium(){
  const plans=[
   {name:"Shield Plus",price:"€10",billing:"/ month",badge:"ESSENTIAL",capacity:"1 server",features:["24/7 voice channel persistence","Studio DSP audio filters","Server backup and restore tools","Emergency server lockdown controls","Web CAPTCHA verification gateway","Advanced emoji and animated sticker tools","Flag-reaction translation tools","Enhanced moderation appeals and audit tools","Premium economy and mini-game perks"]},
   {name:"Pro",price:"€50",billing:"/ month",badge:"PROFESSIONAL",capacity:"Up to 3 servers",features:["Everything in Shield Plus","Premium access across up to 3 servers","Expanded server-wide premium capacity"],popular:true},
-  {name:"Platinum",price:"€120",billing:"/ month",badge:"ULTIMATE",capacity:"Up to 10 servers",features:["Everything in Pro Cluster","Premium access across up to 10 servers","Highest standard premium server allowance","Priority access to Starry feature releases"]},
+  {name:"Platinum",price:"€120",billing:"/ month",badge:"ULTIMATE",capacity:"Up to 10 servers",features:["Everything in Pro","Premium access across up to 10 servers","Highest standard premium server allowance","Priority access to Starry feature releases"]},
   {name:"Supreme Lifetime",price:"€800",billing:"one-time",badge:"LIFETIME",capacity:"Unlimited servers",features:["Everything in Platinum","One-time payment — no recurring subscription","Lifetime premium entitlement","Automatic lifetime activation across eligible servers, subject to fair-use safeguards","Standard Premium feature updates included"],lifetime:true}
  ];
  return pageHeader("Starry Premium","A higher level of protection, audio and server infrastructure — with transparent pricing.")+
