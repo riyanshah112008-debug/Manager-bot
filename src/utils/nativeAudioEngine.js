@@ -90,11 +90,12 @@ function getFilterArgs(filterName, volumePercent = 100, equalizer = null) {
     const filterStr = rawFilter[1];
     const gains = equalizer && typeof equalizer === 'object' ? equalizer : null;
     const specs = [['subBass',45,0.8],['bass',110,0.8],['mids',500,0.9],['presence',2200,0.9],['treble',9000,0.8]];
-    const maxBoost = gains ? Math.max(0,...specs.map(([key])=>Number(gains[key])||0)) : 0;
-    const headroom = Math.pow(10,-(maxBoost*0.75)/20);
+    const positiveGainSum = gains ? specs.reduce((sum, [key]) => sum + Math.max(0, Math.min(6, Number(gains[key]) || 0)), 0) : 0;
+    // Conservative preamp: overlapping EQ filters can stack. Keep 1.5 dB extra peak margin.
+    const headroom = Math.pow(10, -(positiveGainSum > 0 ? (positiveGainSum + 1.5) : 0) / 20);
     const adjustedVolume = filterStr.replace(/volume=([0-9.]+)/,(match,baseVol)=>`volume=${(parseFloat(baseVol)*volScale*headroom).toFixed(3)}`);
     const eq = gains ? specs.map(([key,freq,width])=>{const gain=Math.max(-6,Math.min(6,Number(gains[key])||0));return gain===0?null:`equalizer=f=${freq}:width_type=q:w=${width}:g=${gain.toFixed(1)}`;}).filter(Boolean) : [];
-    return ['-af',[adjustedVolume,...eq,'aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
+    return ['-af',[adjustedVolume,...eq,'alimiter=limit=0.94:attack=5:release=180:level=false','aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
 }
 
 let scClientId = null;

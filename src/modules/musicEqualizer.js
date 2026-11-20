@@ -17,7 +17,7 @@ const BANDS = {
 };
 const PRESETS = {
     balanced: { subBass: 1, bass: 1, mids: 0, presence: 1, treble: 1 },
-    bass: { subBass: 4, bass: 3, mids: -1, presence: 0, treble: 0 },
+    bass: { subBass: 3, bass: 2, mids: -1, presence: 0, treble: 0 },
     vocal: { subBass: -1, bass: 0, mids: 1, presence: 3, treble: 1 },
     warm: { subBass: 2, bass: 3, mids: 1, presence: 0, treble: -1 },
     bright: { subBass: 0, bass: -1, mids: 0, presence: 2, treble: 3 }
