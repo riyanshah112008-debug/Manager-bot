@@ -352,6 +352,20 @@ function getDirectAudioStream(videoUrl) {
     });
 }
 
+// Bound slow resolver waits so one stalled provider cannot hold up playback.
+// The underlying resolver may still finish and populate its cache for the next request.
+function resolveWithin(promise, timeoutMs, fallback = null) {
+    let timer;
+    const timeout = new Promise(resolve => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+        if (typeof timer.unref === 'function') timer.unref();
+    });
+    return Promise.race([
+        Promise.resolve(promise).catch(() => fallback),
+        timeout
+    ]).finally(() => clearTimeout(timer));
+}
+
 function formatTime(ms) {
     if (!ms || isNaN(ms)) return '0:00';
     const totalSec = Math.floor(ms / 1000);
@@ -397,6 +411,9 @@ class StarryGuildPlayer {
         this.disconnectTimeout = null;
         this._isSeeking = false;
         this._endedTrack = null;
+        this._confirmedTrack = null;
+        this._suppressQueueEndedNotice = false;
+        this._lastPlayerError = null;
 
         // Initialize Discord.js AudioPlayer with Play on no-subscriber behavior and high jitter tolerance
         this.player = createAudioPlayer({
@@ -419,22 +436,32 @@ class StarryGuildPlayer {
     setupPlayerEvents() {
         this.player.on(AudioPlayerStatus.Playing, () => {
             this.isPlaying = true;
+            this._confirmedTrack = this.currentTrack;
+            this._lastPlayerError = null;
+            this._suppressQueueEndedNotice = false;
         });
 
         this.player.on(AudioPlayerStatus.Idle, () => {
             if (this.destroyed || this._isSeeking) return;
             const endedTrack = this.currentTrack;
-            if (!endedTrack) return;
-            if (this.isPlaying) this.isPlaying = false;
-            else console.warn(`⚠️ [Audio Stream Failover] Track "${endedTrack.title}" ended before confirmed playback.`);
+            // Idle before Playing means startup failed, not that a song finished.
+            // playTrack's catch path owns recovery for that case.
+            if (!endedTrack || this._confirmedTrack !== endedTrack) return;
+            this.isPlaying = false;
+            this._confirmedTrack = null;
             this.handleTrackEnd(endedTrack);
         });
 
         this.player.on('error', (error) => {
             console.warn(`⚠️ [Audio Stream Engine Status in ${this.guildId}]:`, error.message || error);
             if (this.destroyed) return;
+            this._lastPlayerError = error;
             this.isPlaying = false;
-            this.handleTrackEnd(this.currentTrack);
+            const failedTrack = this.currentTrack;
+            if (!failedTrack) return;
+            this._suppressQueueEndedNotice = true;
+            this._confirmedTrack = null;
+            this.handleTrackEnd(failedTrack);
         });
     }
 
@@ -544,10 +571,12 @@ class StarryGuildPlayer {
             }
 
             if (hadTrack && !this.destroyed) {
-                if (this.textChannel) {
+                // A failed startup is not a completed listening session.
+                if (this.textChannel && !this._suppressQueueEndedNotice) {
                     const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
                     this.textChannel.send(t(lang, 'music.queue_ended', { play_cmd: '`,play <song>`' })).catch(() => {});
                 }
+                this._suppressQueueEndedNotice = false;
                 try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
             }
 
@@ -703,6 +732,8 @@ class StarryGuildPlayer {
         }
         this.currentTrack = track;
         this._endedTrack = null;
+        this._confirmedTrack = null;
+        this._lastPlayerError = null;
 
         try {
             await this.configureAudioQuality();
@@ -730,7 +761,7 @@ class StarryGuildPlayer {
                         query = targetUrl;
                     }
 
-                    const resolved = await streamResolver.resolve(query);
+                    const resolved = await resolveWithin(streamResolver.resolve(query), 2200);
                     if (resolved) {
                         track._audioSourceInfo = {
                             container: resolved.ext || (resolved.file ? 'cached file' : 'stream'),
@@ -763,7 +794,7 @@ class StarryGuildPlayer {
                     }
                     if (ytUrl) {
                         if (streamResolver && !streamResolver.disabled) {
-                            const res = await streamResolver.resolve(ytUrl);
+                            const res = await resolveWithin(streamResolver.resolve(ytUrl), 1800);
                             if (res && res.url) {
                                 audioResource = this.createFilteredResource(res.url, true, res.headers);
                             }
@@ -833,6 +864,9 @@ class StarryGuildPlayer {
             // Do not announce a track until Discord confirms that audio is actually flowing.
             await entersState(this.player, AudioPlayerStatus.Playing, 15000);
             this.isPlaying = true;
+            this._confirmedTrack = track;
+            this._lastPlayerError = null;
+            this._suppressQueueEndedNotice = false;
             this.paused = false;
             this.playbackStartTime = Date.now();
             this._pausedPosition = 0;
@@ -846,13 +880,16 @@ class StarryGuildPlayer {
             try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
 
         } catch (err) {
-            console.error(`⚠️ [Playback Exception for "${track.title}"]:`, err.message || err);
+            // Keep technical AbortError/transport details in server logs, not in Discord.
+            console.warn(`[Playback] Could not start "${track.title}":`, err?.message || 'stream unavailable');
             if (this.loadingMessage) {
                 this.loadingMessage.delete().catch(() => {});
                 this.loadingMessage = null;
             }
-            if (this.textChannel) {
-                this.textChannel.send(`⚠️ Could not stream **${track.title}**: ${err.message || 'Source stream unreachable'}`).catch(() => {});
+            this._suppressQueueEndedNotice = true;
+            this._confirmedTrack = null;
+            if (this.queue.length > 0 && this.textChannel) {
+                this.textChannel.send(`⏭️ Couldn't start **${track.title}**. Skipping to the next playable track.`).catch(() => {});
             }
             this.handleTrackEnd(track);
         }
