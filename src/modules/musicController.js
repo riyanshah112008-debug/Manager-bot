@@ -223,7 +223,8 @@ class MusicControllerEngine {
                 .setCustomId('ctrl_vote')
                 .setEmoji('👍')
                 .setLabel(t(lang, 'music.btn_vote'))
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary)
         );
 
         return [row1, row2, row3, row4, row5];

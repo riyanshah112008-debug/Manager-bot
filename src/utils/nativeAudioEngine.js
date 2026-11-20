@@ -83,16 +83,18 @@ FILTER_ARGS.mellow = FILTER_ARGS.soft;
 FILTER_ARGS.relax = FILTER_ARGS.soft;
 FILTER_ARGS.vintage = FILTER_ARGS.radio;
 
-function getFilterArgs(filterName, volumePercent = 100) {
+function getFilterArgs(filterName, volumePercent = 100, equalizer = null) {
     const rawFilter = (filterName && FILTER_ARGS[filterName]) ? FILTER_ARGS[filterName] : FILTER_ARGS.clear;
     const numericVolume = Number.isFinite(Number(volumePercent)) ? Number(volumePercent) : 100;
     const volScale = Math.max(0, Math.min(1.0, numericVolume / 100));
     const filterStr = rawFilter[1];
-    const adjustedFilterStr = filterStr.replace(/volume=([0-9.]+)/, (match, baseVol) => {
-        const adjustedVol = (parseFloat(baseVol) * volScale).toFixed(2);
-        return `volume=${adjustedVol}`;
-    }) + ',aresample=48000:resampler=swr:filter_size=32:phase_shift=10';
-    return ['-af', adjustedFilterStr];
+    const gains = equalizer && typeof equalizer === 'object' ? equalizer : null;
+    const specs = [['subBass',45,0.8],['bass',110,0.8],['mids',500,0.9],['presence',2200,0.9],['treble',9000,0.8]];
+    const maxBoost = gains ? Math.max(0,...specs.map(([key])=>Number(gains[key])||0)) : 0;
+    const headroom = Math.pow(10,-(maxBoost*0.75)/20);
+    const adjustedVolume = filterStr.replace(/volume=([0-9.]+)/,(match,baseVol)=>`volume=${(parseFloat(baseVol)*volScale*headroom).toFixed(3)}`);
+    const eq = gains ? specs.map(([key,freq,width])=>{const gain=Math.max(-6,Math.min(6,Number(gains[key])||0));return gain===0?null:`equalizer=f=${freq}:width_type=q:w=${width}:g=${gain.toFixed(1)}`;}).filter(Boolean) : [];
+    return ['-af',[adjustedVolume,...eq,'aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
 }
 
 let scClientId = null;
@@ -399,6 +401,7 @@ class StarryGuildPlayer {
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
         this.filter = 'clear';
+        this.equalizer = { subBass: 0, bass: 0, mids: 0, presence: 0, treble: 0 };
         this.is247 = false;
         this.autoplay = false;
         this.nowPlayingMessage = null;
@@ -626,7 +629,7 @@ class StarryGuildPlayer {
     }
 
     createFilteredResource(streamOrPath, isFile = false, customHeaders = null) {
-        const activeFilter = getFilterArgs(this.filter, this.volume);
+        const activeFilter = getFilterArgs(this.filter, this.volume, this.equalizer);
 
         try {
             if (isFile) {
@@ -974,6 +977,7 @@ class StarryGuildPlayer {
                 .setStyle(this.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel('Lock VC').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel('Unlock VC').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setLabel('Music Dashboard').setEmoji('🎛️').setStyle(ButtonStyle.Link).setURL(MUSIC_DASHBOARD_URL)
         );
 
@@ -1085,14 +1089,20 @@ class StarryGuildPlayer {
 
     async setFilter(filterName) {
         this.filter = filterName;
-        if (this.currentTrack && this.isPlaying) {
-            const currentPosSec = Math.max(0, Math.floor(this.position / 1000));
-            await this.seekTo(currentPosSec);
-        }
-        if (this.currentTrack && this.nowPlayingMessage) {
-            await this.sendNowPlayingPanel(this.currentTrack, true);
-        }
+        if (this.currentTrack && this.isPlaying) await this.seekTo(Math.max(0, Math.floor(this.position / 1000)));
+        if (this.currentTrack && this.nowPlayingMessage) await this.sendNowPlayingPanel(this.currentTrack, true);
         try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
+    }
+
+    async setEqualizer(gains) {
+        const keys = ['subBass','bass','mids','presence','treble'];
+        this.equalizer = Object.fromEntries(keys.map(key=>[key,Math.max(-6,Math.min(6,Number(gains?.[key])||0))]));
+        this.filter = 'custom-eq';
+        let applied = true;
+        if (this.currentTrack && this.isPlaying) applied = await this.seekTo(Math.max(0,Math.floor(this.position/1000)));
+        if (this.currentTrack && this.nowPlayingMessage) await this.sendNowPlayingPanel(this.currentTrack,true);
+        try { require('../modules/musicController').update(this.guildId,this.client); } catch(e) {}
+        return applied;
     }
 
     async seekTo(seconds) {
@@ -1117,7 +1127,7 @@ class StarryGuildPlayer {
             }
 
             if (file && fs.existsSync(file)) {
-                const activeFilter = getFilterArgs(this.filter, this.volume);
+                const activeFilter = getFilterArgs(this.filter, this.volume, this.equalizer);
 
                 const ffmpeg = new prism.FFmpeg({
                     args: [

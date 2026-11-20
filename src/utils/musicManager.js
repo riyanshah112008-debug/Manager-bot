@@ -365,7 +365,8 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
             .setStyle(isAutoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('ctrl_spotify').setEmoji('🟢').setLabel('My Spotify').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('dj_lock').setEmoji('🔒').setLabel(t(lang, 'music.btn_lockvc')).setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel(t(lang, 'music.btn_unlockvc')).setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId('dj_unlock').setEmoji('🔓').setLabel(t(lang, 'music.btn_unlockvc')).setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary)
     );
 
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
@@ -887,6 +888,22 @@ async function applyKazagumoFilter(player, filterName) {
     }
 }
 
+async function applyKazagumoEqualizer(player,gains={}) {
+ if(!player?.shoukaku?.setFilters)return false;
+ try {
+  const keys=['subBass','bass','mids','presence','treble'];
+  const clean=Object.fromEntries(keys.map(k=>[k,Math.max(-6,Math.min(6,Number(gains[k])||0))]));
+  const map={subBass:[0,1],bass:[2,3,4],mids:[5,6,7,8],presence:[9,10,11],treble:[12,13,14]};
+  const equalizer=[];
+  for(const key of keys){const db=clean[key],gain=db<0?db/24:db/12;for(const band of map[key])equalizer.push({band,gain});}
+  const peak=Math.max(0,...keys.map(k=>clean[k]));
+  await player.shoukaku.setFilters({volume:Math.max(.35,Math.min(1,Math.pow(10,-(peak*.75)/20))),equalizer,timescale:null,karaoke:null,rotation:null,tremolo:null,vibrato:null,lowPass:null,channelMix:null,distortion:null});
+  player.data?.set?.('customEqualizer',clean); player.data?.set?.('activeFilter','custom-eq');
+  try{const mc=require('../modules/musicController');if(player.guildId)mc.update(player.guildId,player.kazagumo?.client).catch(()=>{});}catch(_){}
+  return true;
+ }catch(err){console.warn('[Music EQ] Apply failed:',err.message||err);return false;}
+}
+
 // 📻 CONTINUOUS SMART AUTOPLAY RECOMMENDATION & PRE-BUFFERING ENGINE
 function getAutoplayHistory(player) {
     let history = player.data.get('autoplayHistory');
@@ -1377,6 +1394,7 @@ module.exports = {
     createMusicManager,
     buildNowPlayingComponents,
     applyKazagumoFilter,
+    applyKazagumoEqualizer,
     scoreTrack,
     rankAndFilterCanonicalTracks,
     triggerAutoplayBuffer,

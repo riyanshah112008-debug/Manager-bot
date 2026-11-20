@@ -13,6 +13,7 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    StringSelectMenuBuilder,
     MessageFlags
 } = require('discord.js');
 const fs = require('fs');
@@ -103,6 +104,9 @@ function setCachedPrefix(guildId, prefix) {
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
 const executedMessageIds = new Set();
 const executedInteractionIds = new Set();
+
+const { handleMusicEqualizer } = require('./musicEqualizer');
+
 const mongoose = require('mongoose');
 
 function isPrimaryBotClient(client) {
@@ -1605,6 +1609,20 @@ NaN
                         } else {
                             return interaction.reply({ content: '❌ No active music session in this server.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
                         }
+                    }
+
+                    if (customId === 'music_equalizer' || customId.startsWith('music_eq_')) {
+                        return handleMusicEqualizer(interaction, {
+                            kazagumoPlayer: kPlayer,
+                            nativePlayer: nPlayer,
+                            ephemeralFlag: EPHEMERAL_FLAG
+                        }).catch(error => {
+                            console.error('[Music EQ] Interaction failed:', error);
+                            if (!interaction.replied && !interaction.deferred) {
+                                return interaction.reply({ content: 'The equalizer could not complete that action. Please try again.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                            }
+                            return null;
+                        });
                     }
 
                     // 3. Audio Filter Dropdown
