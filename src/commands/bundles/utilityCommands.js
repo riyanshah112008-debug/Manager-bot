@@ -577,7 +577,7 @@ const components = createHelpComponents();
                 .setColor(config.EMBED_COLORS.PRIMARY)
                 .setTitle(`🤖 Invite ${ctx.client.user.username} to your Server`)
                 .setDescription(`Click below to invite Starry to your server.`)
-                .setFooter({ text: 'Starry Multi-Bot Network' })
+                .setFooter({ text: 'Starry Single-Bot Runtime' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
