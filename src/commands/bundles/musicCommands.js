@@ -25,22 +25,12 @@ function getVoiceGuard(ctx) {
         return { error: '❌ You must be connected to a voice channel first!' };
     }
 
-    const multiBot = ctx.client.multiBot;
     const botId = ctx.client.user?.id;
-    let botMember = ctx.guild?.members?.me || (botId ? ctx.guild?.members?.cache?.get(botId) : null);
-    let workerClient = ctx.client;
-
-    // If this bot is already active in a different VC, auto-delegate if multiBot has a free bot
+    const botMember = ctx.guild?.members?.me || (botId ? ctx.guild?.members?.cache?.get(botId) : null);
     if (botMember?.voice?.channelId && botMember.voice.channelId !== voiceChannel.id) {
-        if (multiBot && typeof multiBot.getMusicWorker === 'function') {
-            const candidate = multiBot.getMusicWorker(ctx.guild, voiceChannel);
-            if (candidate && candidate.client && candidate.client.user?.id !== botId) {
-                workerClient = candidate.client;
-                botMember = candidate.botMember;
-                return { voiceChannel, botMember, workerClient, delegated: true, botName: candidate.name };
-            }
-        }
-        return { error: `❌ **${botMember?.user?.username || 'Starry'}** is already active in <#${botMember.voice.channelId}>! Join that channel or use \`s2,play\` / \`s3,play\`.` };
+        return {
+            error: `❌ Starry is already active in <#${botMember.voice.channelId}>. A single Discord bot can only join one voice channel per server at a time.`
+        };
     }
 
     return { voiceChannel, botMember, workerClient: ctx.client };
@@ -48,14 +38,6 @@ function getVoiceGuard(ctx) {
 
 function getActivePlayer(client, guildId) {
     let kPlayer = client.manager?.getPlayer(guildId);
-    if (!kPlayer && client.multiBot?.instances) {
-        for (const inst of client.multiBot.instances.values()) {
-            if (inst.client?.manager) {
-                const p = inst.client.manager.getPlayer(guildId);
-                if (p) { kPlayer = p; break; }
-            }
-        }
-    }
     const nativePlayer = StarryAudioEngine.getPlayer(guildId, client);
     const nativeIsActive = nativePlayer && !nativePlayer.destroyed && (nativePlayer.currentTrack || nativePlayer.queue.length > 0);
     const kazagumoIsActive = kPlayer && (kPlayer.queue?.current || kPlayer.playing || kPlayer.queue?.length > 0);
@@ -635,13 +617,6 @@ const commands = [
 
             const targetClient = guard.workerClient || ctx.client;
             let kPlayer = targetClient.manager?.getPlayer(ctx.guild.id);
-            if (!kPlayer && targetClient.multiBot?.instances) {
-                for (const inst of targetClient.multiBot.instances.values()) {
-                    if (inst.client?.manager) {
-                        const p = inst.client.manager.getPlayer(ctx.guild.id);
-                        if (p) { kPlayer = p; break; }
-                    }
-                }
             }
 
             let newState = false;
