@@ -368,7 +368,7 @@ commands.push(
     { name: 'setlogs', description: 'Set server log channel', default_member_permissions: ADMIN, options: [{ name: 'channel', type: 7, required: true, description: 'Channel' }] },
     { name: 'setupvc', description: 'Configure join-to-create voice channel', default_member_permissions: MANAGE_CHANNELS, options: [{ name: 'channel', type: 7, required: true, description: 'Voice channel' }] },
     { name: 'help', description: 'Show bot command list with 100+ commands' },
-    { name: 'ping', description: 'Check bot latency and multi-bot cluster status' },
+    { name: 'ping', description: 'Check Starry gateway heartbeat and API latency' },
     { name: 'activatepremium', description: 'Activate Premium', options: [{ name: 'server_id', type: 3, required: false, description: 'Server/User ID' }] },
     { name: 'avatar', description: '🖼️ Display user profile avatar in high resolution', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
     { name: 'banner', description: '🎨 Display user or server profile banner', options: [{ name: 'user', type: 6, required: false, description: 'Target user' }] },
