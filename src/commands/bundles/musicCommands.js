@@ -263,12 +263,13 @@ const commands = [
 
             // Route 2: Native Audio Engine (Local / Standalone / Cloud fallback)
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
+            // Start voice negotiation while provider search is running.
+            player.connect().catch(() => {});
 
             try {
-                // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
                     StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
+                    new Promise(resolve => setTimeout(() => resolve(null), 2800))
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
@@ -358,8 +359,8 @@ const commands = [
                 }
             } catch (err) {
                 if (loadingMsg) loadingMsg.delete().catch(() => {});
-                console.error('Play command error:', err);
-                return ctx.reply(`❌ Playback error: \`${err.message}\``);
+                console.warn('[Music] Search did not return a playable match within the startup window.');
+                return ctx.reply('⚠️ I could not find a playable match quickly. Try a direct YouTube or SoundCloud link.');
             }
         }
     },
