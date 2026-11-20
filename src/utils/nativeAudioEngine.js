@@ -428,7 +428,7 @@ class StarryGuildPlayer {
             if (!endedTrack) return;
             if (this.isPlaying) this.isPlaying = false;
             else {
-                this._suppressQueueEndedOnce = true;
+                this._suppressQueueEndedOnce = this.queue.length === 0;
                 console.warn('[Music] Source ended before playback was confirmed; skipping track.');
             }
             this.handleTrackEnd(endedTrack);
@@ -438,7 +438,7 @@ class StarryGuildPlayer {
             console.warn(`⚠️ [Audio Stream Engine Status in ${this.guildId}]:`, error.message || error);
             if (this.destroyed) return;
             this.isPlaying = false;
-            this._suppressQueueEndedOnce = true;
+            this._suppressQueueEndedOnce = this.queue.length === 0;
             this.handleTrackEnd(this.currentTrack);
         });
     }
@@ -825,7 +825,7 @@ class StarryGuildPlayer {
                 this.loadingMessage.delete().catch(() => {});
                 this.loadingMessage = null;
             }
-            this._suppressQueueEndedOnce = true;
+            this._suppressQueueEndedOnce = this.queue.length === 0;
             this.handleTrackEnd(track);
         }
     }
