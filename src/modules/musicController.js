@@ -624,11 +624,7 @@ class MusicControllerEngine {
 
             await this.update(message.guild.id, client);
         } catch (err) {
-            console.error('❌ [Music Controller Request Error]:', err);
-            const temp = await message.channel.send({
-                content: `⚠️ Failed to resolve song: \`${err.message || 'Stream error'}\``
-            }).catch(() => null);
-            if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+            console.warn('[Music Controller] Request could not be queued; provider details were suppressed.');
         }
     }
 
