@@ -397,6 +397,7 @@ class StarryGuildPlayer {
         this.disconnectTimeout = null;
         this._isSeeking = false;
         this._endedTrack = null;
+        this._suppressQueueEndedOnce = false;
 
         // Initialize Discord.js AudioPlayer with Play on no-subscriber behavior and high jitter tolerance
         this.player = createAudioPlayer({
@@ -506,6 +507,8 @@ class StarryGuildPlayer {
 
         if (this.queue.length === 0) {
             const hadTrack = !!this.currentTrack;
+            const suppressQueueEnded = this._suppressQueueEndedOnce;
+            this._suppressQueueEndedOnce = false;
             if (this.currentTrack) {
                 this.history.push(this.currentTrack);
                 this.previousTrack = this.currentTrack;
@@ -518,7 +521,6 @@ class StarryGuildPlayer {
                 this.nowPlayingMessage = null;
             }
 
-            // High-Intelligence Autoplay Recommendation
             if (this.autoplay && this.previousTrack) {
                 try {
                     const nextSong = await StarryAudioEngine.getAutoplayRecommendation(this.previousTrack, this.history);
@@ -526,36 +528,36 @@ class StarryGuildPlayer {
                         if (this.textChannel) {
                             const autoEmbed = new EmbedBuilder()
                                 .setColor('#5865F2')
-                                .setAuthor({ 
-                                    name: '📻 Autoplay Recommendation • Smart Stream', 
-                                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96' 
+                                .setAuthor({
+                                    name: '📻 Autoplay Recommendation • Smart Stream',
+                                    iconURL: 'https://cdn.discordapp.com/emojis/1049283733054177301.webp?size=96'
                                 })
                                 .setTitle(nextSong.title ? nextSong.title.substring(0, 90) : 'Recommended Song')
-                                .setDescription(`🎵 Playing next recommended song by **${nextSong.author}**!\n*Mastering: Empowering Hi-Fi Active*`)
-                                .setFooter({ text: 'Continuous playback active • Click 📻 in player or use ,autoplay to toggle' });
+                                .setDescription(`🎵 Playing next recommended song by **${nextSong.author}**!`)
+                                .setFooter({ text: 'Continuous playback active • Use ,autoplay to toggle' });
                             this.textChannel.send({ embeds: [autoEmbed] }).catch(() => {});
                         }
                         this.queue.push(nextSong);
                         return this.playNext();
                     }
                 } catch (e) {
-                    console.warn('⚠️ [Autoplay Error]:', e.message || e);
+                    console.warn('[Autoplay] Recommendation unavailable.');
                 }
             }
 
+            // Do not emit a misleading "queue ended" message when the final track failed to resolve.
+            if (hadTrack && !suppressQueueEnded && !this.destroyed && this.textChannel) {
+                const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
+                this.textChannel.send(t(lang, 'music.queue_ended', { play_cmd: '`,play <song>`' })).catch(() => {});
+            }
             if (hadTrack && !this.destroyed) {
-                if (this.textChannel) {
-                    const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
-                    this.textChannel.send(t(lang, 'music.queue_ended', { play_cmd: '`,play <song>`' })).catch(() => {});
-                }
                 try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
             }
 
             if (!this.is247) {
+                if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
                 this.disconnectTimeout = setTimeout(() => {
-                    if (this.queue.length === 0 && !this.currentTrack) {
-                        this.destroy();
-                    }
+                    if (this.queue.length === 0 && !this.currentTrack) this.destroy();
                 }, 60000);
             }
             return;
@@ -688,9 +690,7 @@ class StarryGuildPlayer {
             if (!this.is247) {
                 if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
                 this.disconnectTimeout = setTimeout(() => {
-                    if (this.queue.length === 0 && !this.currentTrack) {
-                        this.destroy();
-                    }
+                    if (this.queue.length === 0 && !this.currentTrack) this.destroy();
                 }, 60000);
             }
             return;
@@ -703,135 +703,106 @@ class StarryGuildPlayer {
         }
         this.currentTrack = track;
         this._endedTrack = null;
+        this._suppressQueueEndedOnce = false;
+
+        // Start Discord's voice handshake while the source is resolved, not after it.
+        const connectionReady = this.connect();
+        connectionReady.catch(() => {});
+
+        const withTimeout = async (task, timeoutMs) => {
+            let timer;
+            try {
+                return await Promise.race([
+                    Promise.resolve().then(task),
+                    new Promise(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); })
+                ]);
+            } catch (_) {
+                return null;
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        };
+
+        const streamFromUrl = async (url, timeoutMs = 2200) => {
+            if (!url) return null;
+            const result = await withTimeout(() => play.stream(url, { quality: 2 }), timeoutMs);
+            if (!result?.stream) return null;
+            try {
+                return this.createFilteredResource(result.stream, false);
+            } catch (_) {
+                return null;
+            }
+        };
 
         try {
             await this.configureAudioQuality();
-            await this.connect();
-            let targetUrl = track.url;
+            const targetUrl = String(track.url || '').trim();
+            const lowerUrl = targetUrl.toLowerCase();
+            const isYouTube = /(?:youtube\.com|youtu\.be)/i.test(lowerUrl);
+            const isSoundCloud = lowerUrl.includes('soundcloud.com');
+            const isDirectMedia = /\.(?:mp3|wav|ogg|m4a)(?:\?|$)/i.test(targetUrl);
             let audioResource = null;
 
-            // 1. Direct SoundCloud link
-            if (targetUrl && targetUrl.includes('soundcloud.com/')) {
-                try {
-                    await refreshSoundCloudToken();
-                    const stream = await play.stream(targetUrl, { quality: 2 });
-                    if (stream && stream.stream) {
-                        audioResource = this.createFilteredResource(stream.stream, false);
-                    }
-                } catch (scErr) {}
+            // Prefer the selected playable source immediately. Do not wait for yt-dlp/Python
+            // on the critical path: cold resolver startup was adding up to 16 seconds.
+            if (isYouTube || isSoundCloud) {
+                if (isSoundCloud) refreshSoundCloudToken().catch(() => {});
+                audioResource = await streamFromUrl(targetUrl, 2300);
+            } else if (isDirectMedia) {
+                try { audioResource = this.createFilteredResource(targetUrl, true); } catch (_) {}
             }
 
-            // 2. Local Studio Audio Stream via StreamResolver Engine (if available)
+            // Spotify, Apple Music and Deezer links are catalogue metadata, not audio streams.
+            // Resolve one playable YouTube match with a short bound instead of a long serial fallback chain.
+            if (!audioResource) {
+                const primaryArtist = (track.author || '').split(',')[0].trim();
+                const searchQuery = `${primaryArtist} ${track.title || ''}`.trim() || String(track.title || '');
+                const ytResults = await withTimeout(
+                    () => play.search(searchQuery, { limit: 1 }),
+                    1500
+                );
+                const ytUrl = Array.isArray(ytResults) ? (ytResults[0]?.url || ytResults[0]?.permalink) : null;
+                if (ytUrl) {
+                    audioResource = await streamFromUrl(ytUrl, 2300);
+                }
+            }
+
+            // A warm yt-dlp result can be useful, but a cold resolver is never allowed to block play.
             if (!audioResource && streamResolver && !streamResolver.disabled) {
-                try {
-                    const primaryArtist = (track.author || '').split(',')[0].trim();
-                    let query = `${primaryArtist} ${track.title}`.trim();
-                    if (targetUrl && (targetUrl.includes('youtube.com/') || targetUrl.includes('youtu.be/') || targetUrl.includes('soundcloud.com/'))) {
-                        query = targetUrl;
-                    }
-
-                    const resolved = await streamResolver.resolve(query);
-                    if (resolved) {
-                        track._audioSourceInfo = {
-                            container: resolved.ext || (resolved.file ? 'cached file' : 'stream'),
-                            codec: resolved.codec || 'unknown',
-                            sourceBitrateKbps: Number.isFinite(Number(resolved.abr)) ? Math.round(Number(resolved.abr)) : null,
-                            sampleRate: resolved.sampleRate || null,
-                            channels: resolved.channels || null
-                        };
-                        console.info(`[Audio Source ${this.guildId}] ${track.title}: ${JSON.stringify(track._audioSourceInfo)}`);
-                        if (resolved.file && fs.existsSync(resolved.file)) {
-                            track._resolvedFile = resolved.file;
-                            audioResource = this.createFilteredResource(resolved.file, true);
-                        } else if (resolved.url) {
-                            audioResource = this.createFilteredResource(resolved.url, true, resolved.headers);
-                        }
-                    }
-                } catch (srErr) {}
-            }
-
-            // 3. Preserve the selected YouTube track before trying unrelated catalogue fallbacks.
-            if (!audioResource) {
-                try {
-                    let ytUrl = targetUrl;
-                    if (!ytUrl || (!ytUrl.includes('youtube.com/') && !ytUrl.includes('youtu.be/'))) {
-                        let ytSearch = await play.search(`${track.author || ''} ${track.title}`.trim(), { limit: 1 }).catch(() => []);
-                        if (!ytSearch || ytSearch.length === 0) {
-                            ytSearch = await play.search(track.title, { limit: 1 }).catch(() => []);
-                        }
-                        if (ytSearch && ytSearch[0]) ytUrl = ytSearch[0].url;
-                    }
-                    if (ytUrl) {
-                        if (streamResolver && !streamResolver.disabled) {
-                            const res = await streamResolver.resolve(ytUrl);
-                            if (res && res.url) {
-                                audioResource = this.createFilteredResource(res.url, true, res.headers);
-                            }
-                        }
-                        if (!audioResource) {
-                            try {
-                                const stream = await play.stream(ytUrl, { quality: 2 });
-                                if (stream && stream.stream) {
-                                    audioResource = this.createFilteredResource(stream.stream, false);
-                                }
-                            } catch (pErr) {
-                                const ytdl = require('@distube/ytdl-core');
-                                const ytdlStream = ytdl(ytUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-                                audioResource = this.createFilteredResource(ytdlStream, false);
-                            }
-                        }
-                    }
-                } catch (ytErr) {
-                    console.warn('⚠️ [YouTube Streamer Fallback]:', ytErr.message || ytErr);
+                const searchQuery = `${(track.author || '').split(',')[0].trim()} ${track.title || ''}`.trim();
+                const resolved = await streamResolver.resolve(searchQuery, { waitForReadyMs: 0, timeoutMs: 900 });
+                if (resolved?.file && fs.existsSync(resolved.file)) {
+                    track._resolvedFile = resolved.file;
+                    try { audioResource = this.createFilteredResource(resolved.file, true); } catch (_) {}
+                } else if (resolved?.url) {
+                    try { audioResource = this.createFilteredResource(resolved.url, true, resolved.headers); } catch (_) {}
                 }
             }
 
-            // 4. Last-resort SoundCloud search fallback. Keep YouTube as the preferred match for YouTube tracks.
+            // Quick SoundCloud fallback for catalogues whose YouTube match is unavailable.
             if (!audioResource) {
-                try {
-                    await refreshSoundCloudToken();
-                    const primaryArtist = (track.author || '').split(',')[0].trim();
-                    const scSearchQuery = `${primaryArtist} ${track.title}`.trim() || track.title;
-                    let scResults = await play.search(scSearchQuery, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
-                    if (!scResults || scResults.length === 0) {
-                        scResults = await play.search(track.title, { source: { soundcloud: 'tracks' }, limit: 1 }).catch(() => []);
-                    }
-                    const targetSc = scResults?.[0];
-                    const scUrl = targetSc?.permalink || targetSc?.url;
-                    if (scUrl) {
-                        const stream = await play.stream(scUrl, { quality: 2 }).catch(() => null);
-                        if (stream && stream.stream) {
-                            audioResource = this.createFilteredResource(stream.stream, false);
-                        }
-                    }
-                } catch (scErr) {
-                    console.warn('⚠️ [SoundCloud Streamer Fallback]:', scErr.message || scErr);
-                }
+                refreshSoundCloudToken().catch(() => {});
+                const primaryArtist = (track.author || '').split(',')[0].trim();
+                const scQuery = `${primaryArtist} ${track.title || ''}`.trim() || String(track.title || '');
+                const scResults = await withTimeout(
+                    () => play.search(scQuery, { source: { soundcloud: 'tracks' }, limit: 1 }),
+                    1200
+                );
+                const scUrl = Array.isArray(scResults) ? (scResults[0]?.permalink || scResults[0]?.url) : null;
+                if (scUrl) audioResource = await streamFromUrl(scUrl, 2200);
             }
 
-            // 5. Direct Media URL Fallback (mp3, wav, ogg, m4a)
-            if (!audioResource && targetUrl && (targetUrl.endsWith('.mp3') || targetUrl.endsWith('.wav') || targetUrl.endsWith('.ogg') || targetUrl.endsWith('.m4a'))) {
-                try {
-                    audioResource = this.createFilteredResource(targetUrl, true);
-                } catch (urlErr) {}
-            }
+            if (!audioResource) throw new Error('source_unavailable');
 
-            if (!audioResource) {
-                throw new Error('Could not resolve audio stream for track: ' + track.title);
-            }
-
+            // Audio and voice are prepared concurrently; only now wait for the voice connection.
+            await connectionReady;
             this.audioResource = audioResource;
-            if (this.audioResource.volume) {
-                this.audioResource.volume.setVolume(this.volume / 100);
-            }
-
-            if (this.connection) {
-                this.connection.subscribe(this.player);
-            }
-
+            if (this.audioResource.volume) this.audioResource.volume.setVolume(this.volume / 100);
+            this.connection?.subscribe(this.player);
             this.player.play(this.audioResource);
-            // Do not announce a track until Discord confirms that audio is actually flowing.
-            await entersState(this.player, AudioPlayerStatus.Playing, 15000);
+
+            // Only publish Now Playing after Discord confirms audio is actually flowing.
+            await entersState(this.player, AudioPlayerStatus.Playing, 7000);
             this.isPlaying = true;
             this.paused = false;
             this.playbackStartTime = Date.now();
@@ -841,19 +812,16 @@ class StarryGuildPlayer {
                 this.loadingMessage.delete().catch(() => {});
                 this.loadingMessage = null;
             }
-
             await this.sendNowPlayingPanel(track, true);
-            try { require('../modules/musicController').update(this.guildId, this.client); } catch (e) {}
-
+            try { require('../modules/musicController').update(this.guildId, this.client); } catch (_) {}
         } catch (err) {
-            console.error(`⚠️ [Playback Exception for "${track.title}"]:`, err.message || err);
+            // Keep provider/network details in server logs only; never post raw transport errors.
+            console.warn(`[Music] Track skipped after source/voice startup failure in guild ${this.guildId}.`);
             if (this.loadingMessage) {
                 this.loadingMessage.delete().catch(() => {});
                 this.loadingMessage = null;
             }
-            if (this.textChannel) {
-                this.textChannel.send(`⚠️ Could not stream **${track.title}**: ${err.message || 'Source stream unreachable'}`).catch(() => {});
-            }
+            this._suppressQueueEndedOnce = true;
             this.handleTrackEnd(track);
         }
     }
