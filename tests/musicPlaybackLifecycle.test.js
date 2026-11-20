@@ -58,3 +58,22 @@ test('Starry source selector exposes five services and a separate cancel row', (
 test('Starry keeps Cancel Search available when a provider has no playable results', () => {
   assert.ok(search.includes('components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]'));
 });
+
+
+test('native stream resolver uses bounded low-latency timeouts', () => {
+  const resolver = read('src/utils/streamResolverClient.js');
+  assert.match(resolver, /async resolve\(query, options = \{\}\)/);
+  assert.match(resolver, /Math\.min\(2600, Number\(options\.timeoutMs\) \|\| 2200\)/);
+  assert.match(resolver, /\}, 500\)/);
+});
+
+test('failed native playback never leaks provider errors or a false queue-ended message', () => {
+  assert.match(native, /_suppressQueueEndedOnce/);
+  assert.match(native, /Could not start \\*\\*\$\{String\(track\.title/);
+  assert.doesNotMatch(native, /Could not stream \\*\\*\$\{track\.title\\*\\*: \$\{err\.message/);
+});
+
+test('prefix music search is bounded to the requested quick-start window', () => {
+  assert.match(commands, /new Error\('Music search did not return within the quick-start window'\)/);
+  assert.match(commands, /\}, 3000\)\)/);
+});
