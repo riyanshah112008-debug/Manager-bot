@@ -633,7 +633,7 @@ const components = createHelpComponents();
         description: 'Check how long the bot has been running without restarts.',
         usage: ',uptime',
         async execute(ctx) {
-            return ctx.reply(`⏱️ **Bot Cluster Uptime:** \`${formatUptime(process.uptime())}\``);
+            return ctx.reply(`⏱️ **Starry Uptime:** \`${formatUptime(process.uptime())}\``);
         }
     },
 
