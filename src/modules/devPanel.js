@@ -71,14 +71,14 @@ function buildDevPanelEmbed(client, user) {
                 value: 
                     `• **Heap Used:** \`${heapUsed} MB\` / \`${heapTotal} MB\`\n` +
                     `• **Resident RSS:** \`${rss} MB\`\n` +
-                    `• **Runtime:** `Single bot process`,
+                    `• **Runtime:** Single bot process`,
                 inline: true
             },
             {
                 name: '🛡️ Security & Shard',
                 value: 
                     `• **Status:** \`🟢 Online & Operational\`\n` +
-                    `• **Runtime Mode:** `Single Starry bot`
+                    `• **Runtime Mode:** Single Starry bot\n` +
                     `• **Process PID:** \`${process.pid}\``,
                 inline: true
             }
