@@ -30,7 +30,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• \`${prefix}autoplay\` (or \`${prefix}ap\`) — Seamless continuous playback using Spotify & YouTube recommendation engine\n` +
                 `• \`${prefix}spotify\` (or \`${prefix}sp\`) — Link personal Spotify account, save custom playlists & 1-click voice stream\n` +
                 `• \`${prefix}setup\` — Deploy the dedicated interactive Music Controller request channel\n` +
-                `• \`${prefix}callstarry\` — Summon a free multi-bot worker to your voice channel\n\n` +
+                `• \`${prefix}callstarry\` — Start a private AI voice call with Starry\n\n` +
                 `**🎛️ Studio DSP Audio Filters (15 Presets):**\n` +
                 `\`${prefix}bass\` *(True Subwoofer Physical Vibration)*, \`${prefix}8d\`, \`${prefix}nightcore\`, \`${prefix}daycore\`, \`${prefix}vaporwave\`, \`${prefix}lofi\`, \`${prefix}reverb\`, \`${prefix}karaoke\`, \`${prefix}surround\`, \`${prefix}electronic\`, \`${prefix}soft\`, \`${prefix}radio\`, \`${prefix}treble\`, \`${prefix}pop\`, \`${prefix}filter <name>\`, \`${prefix}clearfilters\`\n\n` +
                 `**Panels & Lyrics:**\n` +
