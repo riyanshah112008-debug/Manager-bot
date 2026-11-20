@@ -304,7 +304,7 @@ app.listen(port, '0.0.0.0', () => {
     }, 180000);
 });
 
-// Create Primary Bot Client
+// Create the single Starry Discord client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -660,7 +660,7 @@ client.once(Events.ClientReady, async () => {
         clearTimeout(bootRetryTimer);
         bootRetryTimer = null;
     }
-    console.log(`🚀 Successfully logged in as Primary Bot: ${client.user.tag}`);
+    console.log(`🚀 Successfully logged in as Starry: ${client.user.tag}`);
 
     try {
         if (client.manager && typeof client.manager.init === 'function') {
@@ -900,8 +900,7 @@ async function startBot(overrideToken, overrideMongo) {
             });
             console.log('🍃 Successfully connected to MongoDB Cloud!');
 
-            // The retired secondary-token credential collection is no longer used.
-            // Remove only that obsolete credential collection; all other guild/user data is untouched.
+            // Remove only the retired secondary-token credential collection; all other data is untouched.
             try {
                 const obsoleteTokens = await mongoose.connection.db
                     .listCollections({ name: 'multibottokens' }, { nameOnly: true })
@@ -963,9 +962,9 @@ async function startBot(overrideToken, overrideMongo) {
         }
 
         // 1. Connect Primary Client to Discord Gateway IMMEDIATELY
-        console.log('🚀 Connecting Primary Bot to Discord Gateway...');
+        console.log('🚀 Connecting Starry to the Discord Gateway...');
         await client.login(primaryToken);
-        console.log('✨ Primary Bot login sequence initiated successfully!');
+        console.log('✨ Starry login sequence initiated successfully!');
 
         // 2. Initialize Background Modules
         for (const mod of MODULE_INITIALIZERS) {
