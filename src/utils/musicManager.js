@@ -899,7 +899,7 @@ async function applyKazagumoEqualizer(player,gains={}) {
   // Account for overlapping low-frequency bands: reserve headroom for the sum of positive gains.
   // Do not floor this attenuation; doing so would reintroduce clipping on aggressive custom profiles.
   const positiveGainSum=keys.reduce((sum,key)=>sum+Math.max(0,clean[key]),0);
-  const preampDb=positiveGainSum+1.5;
+  const preampDb=positiveGainSum > 0 ? positiveGainSum + 1.5 : 0;
   const safeVolume=Math.pow(10,-preampDb/20);
   await player.shoukaku.setFilters({volume:Math.max(0.01,Math.min(1,safeVolume)),equalizer,timescale:null,karaoke:null,rotation:null,tremolo:null,vibrato:null,lowPass:null,channelMix:null,distortion:null});
   player.data?.set?.('customEqualizer',clean); player.data?.set?.('activeFilter','custom-eq');
