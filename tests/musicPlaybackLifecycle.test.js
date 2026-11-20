@@ -7,10 +7,12 @@ const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const native = read('src/utils/nativeAudioEngine.js');
 const commands = read('src/commands/bundles/musicCommands.js');
 const search = read('src/utils/musicSearchHelper.js');
+const slashPlay = read('src/commands/music/play.js');
+const resolverClient = read('src/utils/streamResolverClient.js');
 
 test('Starry announces Now Playing only after Discord confirms audio is Playing', () => {
   const play = native.indexOf('this.player.play(this.audioResource)');
-  const playing = native.indexOf('await entersState(this.player, AudioPlayerStatus.Playing, 15000)');
+  const playing = native.indexOf('await entersState(this.player, AudioPlayerStatus.Playing, 7000)');
   const panel = native.indexOf('await this.sendNowPlayingPanel(track, true)');
   assert.ok(play >= 0 && playing > play && panel > playing);
 });
@@ -22,7 +24,7 @@ test('Starry advances each failed track only once', () => {
 
 test('multi-source search does not wait for SoundCloud token refresh and bounds provider fan-out', () => {
  assert.match(native, /refreshSoundCloudToken\(\)\.catch\(\(\) => \{\}\)/);
- assert.match(native, /timeoutMs = 2600/);
+ assert.match(native, /timeoutMs = 2000/);
  assert.match(native, /Promise\.all\(\[/);
 });
 test('multi-source text search caches successful results for repeat queries', () => {
@@ -57,4 +59,35 @@ test('Starry source selector exposes five services and a separate cancel row', (
 
 test('Starry keeps Cancel Search available when a provider has no playable results', () => {
   assert.ok(search.includes('components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]'));
+});
+
+
+test('native playback overlaps voice connection and uses short bounded source resolution', () => {
+  const connectStart = native.indexOf('const connectionReady = this.connect()');
+  const configure = native.indexOf('await this.configureAudioQuality()', connectStart);
+  const sourceSearch = native.indexOf('play.search(searchQuery, { limit: 1 })', configure);
+  const voiceAwait = native.indexOf('await connectionReady', sourceSearch);
+  assert.ok(connectStart >= 0 && configure > connectStart && sourceSearch > configure && voiceAwait > sourceSearch,
+    'Voice setup must begin before source search and only be awaited after source preparation');
+  assert.match(native, /waitForReadyMs: 0, timeoutMs: 900/);
+  assert.match(resolverClient, /options\.waitForReadyMs/);
+  assert.match(resolverClient, /options\.timeoutMs/);
+});
+
+test('playable source results are ranked before metadata-only catalogues', () => {
+  assert.match(native, /providerPriority = \{ YouTube: 0, SoundCloud: 1, Spotify: 2/);
+});
+
+test('failed streams suppress raw transport errors and false queue-ended notices', () => {
+  assert.match(native, /_suppressQueueEndedOnce/);
+  assert.doesNotMatch(native, /Could not stream \\*\\*\$\{track\.title\}/);
+  assert.match(native, /suppressQueueEnded/);
+});
+
+test('prefix and slash play start voice while search is bounded and do not publish premature Now Playing', () => {
+  assert.match(commands, /player\.connect\(\)\.catch\(\(\) => \{\}\);[\s\S]{0,180}StarryAudioEngine\.search/);
+  assert.match(commands, /setTimeout\(\(\) => resolve\(null\), 2800\)/);
+  assert.match(slashPlay, /setTimeout\(\(\) => resolve\(null\), 2800\)/);
+  assert.doesNotMatch(slashPlay, /buildNowPlayingPayload\(track\)/);
+  assert.match(slashPlay, /player\.playNext\(\)\.catch\(\(\) => \{\}\)/);
 });
