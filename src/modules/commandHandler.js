@@ -314,6 +314,7 @@ class CommandRegistry {
                 matchedPrefix = '@';
             }
             // B. Single Prefix Matching (Guild Prefix or DM Fallback)
+            else {
                     if (content.startsWith('<@')) return;
 
                     if (message.guild) {
