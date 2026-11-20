@@ -1311,7 +1311,7 @@ function setupDashboardRoutes(app, client) {
                 player.setVolume(player.shoukaku ? Math.min(volume, 100) : volume);
             } else if (action === 'filter') {
                 const hasPremium = await isServerOrUserPremium(guild.id, req.session?.user?.id, client);
-                if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro Cluster or Lifetime premium.' });
+                if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro or Lifetime premium.' });
                 const allowed = new Set(['clear', 'flat', 'empowering', 'bass', 'bassboost', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop']);
                 if (typeof value !== 'string' || !allowed.has(value)) return res.status(400).json({ success: false, error: 'Choose a supported audio profile.' });
                 if (player.shoukaku) {
