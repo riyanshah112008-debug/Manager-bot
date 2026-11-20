@@ -900,6 +900,22 @@ async function startBot(overrideToken, overrideMongo) {
             });
             console.log('🍃 Successfully connected to MongoDB Cloud!');
 
+            // The retired MultiBotToken collection stored secondary Discord bot credentials.
+            // Remove only that obsolete credential collection; all other guild/user data is untouched.
+            try {
+                const obsoleteTokens = await mongoose.connection.db
+                    .listCollections({ name: 'multibottokens' }, { nameOnly: true })
+                    .toArray();
+                if (obsoleteTokens.length) {
+                    await mongoose.connection.db.dropCollection('multibottokens');
+                    console.log('🧹 Removed obsolete secondary-bot token credentials from MongoDB.');
+                }
+            } catch (cleanupError) {
+                if (cleanupError.code !== 26 && cleanupError.codeName !== 'NamespaceNotFound') {
+                    console.warn('⚠️ Could not remove the retired secondary-bot token collection:', cleanupError.message);
+                }
+            }
+
             const { initLanguageCache } = require('./utils/i18n');
             await initLanguageCache(client).catch(() => {});
         } catch (mongoInitErr) {
