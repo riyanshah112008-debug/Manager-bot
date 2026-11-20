@@ -89,13 +89,53 @@ function isClaimRecoverable(status, claimedAt, now = Date.now()) {
     return !Number.isFinite(claimTime) || now - claimTime >= CLAIM_RECOVERY_MS;
 }
 
-async function safeChannel(guild, channelId) {
-    let channel = guild.systemChannel;
-    if (channelId) {
-        channel = guild.channels.cache.get(channelId) ||
-            await guild.channels.fetch(channelId).catch(() => null);
+function isPrivateStaffChannel(channel, guild, staffRole, botMember) {
+    if (!channel || !guild || !staffRole || !botMember) return false;
+    if (channel.guildId !== guild.id || channel.type !== ChannelType.GuildText || !channel.isTextBased()) return false;
+    if (staffRole.guild?.id !== guild.id || staffRole.id === guild.roles?.everyone?.id) return false;
+
+    const everyonePermissions = channel.permissionsFor(guild.roles.everyone);
+    const staffPermissions = channel.permissionsFor(staffRole);
+    const botPermissions = channel.permissionsFor(botMember);
+    if (!everyonePermissions || everyonePermissions.has(PermissionFlagsBits.ViewChannel)) return false;
+    if (!staffPermissions?.has(PermissionFlagsBits.ViewChannel)) return false;
+    if (!botPermissions?.has([
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks
+    ])) return false;
+
+    for (const role of guild.roles.cache.values()) {
+        if (
+            role.id === guild.roles.everyone.id ||
+            role.id === staffRole.id ||
+            role.permissions?.has(PermissionFlagsBits.Administrator) ||
+            (role.managed && botMember.roles?.cache?.has(role.id))
+        ) continue;
+        if (channel.permissionsFor(role)?.has(PermissionFlagsBits.ViewChannel)) return false;
     }
-    return channel && channel.type === ChannelType.GuildText && channel.isTextBased() ? channel : null;
+
+    for (const overwrite of channel.permissionOverwrites?.cache?.values?.() || []) {
+        if (
+            overwrite.type === 1 &&
+            overwrite.id !== botMember.id &&
+            overwrite.allow?.has(PermissionFlagsBits.ViewChannel)
+        ) return false;
+    }
+
+    return true;
+}
+
+async function safeChannel(guild, channelId, staffRoleId) {
+    if (!guild || !isValidDiscordSnowflake(channelId) || !isValidDiscordSnowflake(staffRoleId)) return null;
+
+    const channel = guild.channels.cache.get(channelId) ||
+        await guild.channels.fetch(channelId).catch(() => null);
+    const staffRole = guild.roles.cache.get(staffRoleId) ||
+        await guild.roles.fetch(staffRoleId).catch(() => null);
+    const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+
+    return isPrivateStaffChannel(channel, guild, staffRole, botMember) ? channel : null;
 }
 
 function buildJoinRiskEmbed(member, accountAgeDays, threshold) {
@@ -234,7 +274,7 @@ module.exports = (client) => {
         try {
             const settings = await getSettings(guild.id);
             if (!settings || !settings.enabled || !settings.logChannelId) return;
-            const channel = await safeChannel(guild, settings.logChannelId);
+            const channel = await safeChannel(guild, settings.logChannelId, settings.staffRoleId);
             if (!channel) {
                 console.warn(`[SusAccount] Alert channel unavailable in guild ${guild.id}.`);
                 return;
@@ -507,6 +547,12 @@ module.exports = (client) => {
                     });
                 }
 
+                if (!isPrivateStaffChannel(resolvedChannel, guild, resolvedRole, botMember)) {
+                    return interaction.editReply({
+                        content: '❌ The alert channel must be private: @everyone and non-staff roles or members cannot view it, the selected staff role must be able to view it, and Starry must have View Channel, Send Messages and Embed Links.'
+                    });
+                }
+
                 const canMentionStaff = resolvedRole.mentionable ||
                     channelPermissions.has(PermissionFlagsBits.MentionEveryone);
                 if (!canMentionStaff) {
@@ -610,7 +656,7 @@ module.exports = (client) => {
                 else observedActivity.delete(membershipId);
 
                 const accountAgeDays = daysBetween(member.user.createdTimestamp);
-                const channel = await safeChannel(member.guild, settings.logChannelId);
+                const channel = await safeChannel(member.guild, settings.logChannelId, settings.staffRoleId);
                 if (!channel) {
                     console.warn(`[SusAccount] Join alert channel unavailable in guild ${member.guild.id}.`);
                     return;
@@ -719,4 +765,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
-module.exports._internals = { daysBetween, buildInactivityAlertNonce, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake };
+module.exports._internals = { daysBetween, buildInactivityAlertNonce, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake, isPrivateStaffChannel, safeChannel };
