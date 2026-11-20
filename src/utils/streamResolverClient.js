@@ -72,8 +72,9 @@ class StreamResolverClient {
         });
     }
 
-    async resolve(query) {
+    async resolve(query, options = {}) {
         if (!query) return null;
+        const timeoutMs = Math.max(500, Math.min(2600, Number(options.timeoutMs) || 2200));
         const cacheKey = query.trim().toLowerCase();
         const cached = this.cache.get(cacheKey);
         if (cached) {
@@ -95,7 +96,7 @@ class StreamResolverClient {
                 setTimeout(() => {
                     clearInterval(checkInterval);
                     r();
-                }, 4000);
+                }, 500);
             });
         }
 
@@ -108,7 +109,7 @@ class StreamResolverClient {
                     this.pending.delete(id);
                     resolve(null);
                 }
-            }, 12000);
+            }, timeoutMs);
 
             this.pending.set(id, { resolve, timer });
 
