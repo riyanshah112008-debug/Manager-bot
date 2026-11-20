@@ -205,7 +205,7 @@ module.exports = {
                 }
                 const res = await nativeAutoMod.deployGuildRules(guild, client);
                 const updatedProgress = await nativeAutoMod.getBadgeProgress(client);
-                const updatedPayload = buildBadgeEmbed(updatedProgress, client, client.user);
+                const updatedPayload = buildBadgeEmbed(updatedProgress, client, client.user, actionAccess);
 
                 const notice = new EmbedBuilder()
                     .setColor(res.success ? '#10B981' : '#EF4444')
