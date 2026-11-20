@@ -83,7 +83,4 @@ module.exports = {
         SOCIAL: '#FF79C6',
         ECONOMY: '#F39C12'
     },
-
-    // Multi-bot cluster metadata
-    CLUSTER_NAME: 'Starry-Starry-Network'
 };

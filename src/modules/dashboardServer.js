@@ -708,9 +708,6 @@ function setupDashboardRoutes(app, client) {
             const player = getActiveMusicPlayer(guild.id, client);
             const currentTrack = player?.currentTrack || player?.queue?.current || null;
             const queueSource = Array.isArray(player?.queue) ? player.queue : (Array.isArray(player?.queue?.tracks) ? player.queue.tracks : []);
-            const workerInfo = player && Array.from(client.multiBot?.instances?.values?.() || []).find(info =>
-                info.client?.manager?.getPlayer(guild.id) === player || StarryAudioEngine.getPlayer(guild.id, info.client) === player
-            );
             const safeTrack = track => track ? ({
                 title: String(track.title || 'Unknown track').slice(0, 200),
                 author: String(track.author || track.artist || 'Unknown artist').slice(0, 120),
@@ -744,24 +741,13 @@ function setupDashboardRoutes(app, client) {
                     filter: player.filter || player.data?.get?.('activeFilter') || 'clear',
                     autoplay: Boolean(player.autoplay || player.data?.get?.('autoplay')),
                     is247: Boolean(player.is247),
-                    botName: workerInfo?.name || client.user?.username || 'Starry'
+                    botName: client.user?.username || 'Starry'
                 } : null
             });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
     });
-
-    // Worker tokens are global cluster credentials, not per-server settings.
-    // Only Starry bot owners may view or mutate the shared worker pool.
-    const requireClusterManager = (req, res, next) => {
-        const userId = String(req.session?.user?.id || '');
-        const isBotOwner = typeof config.isBotOwner === 'function'
-            ? config.isBotOwner(userId, client)
-            : (config.BOT_OWNERS || []).includes(userId);
-        if (isBotOwner) return next();
-        return res.status(403).json({ success: false, error: 'Only Starry bot owners can manage the global Multi-Bot cluster.' });
-    };
 
     app.get('/api/guild/:id/commands', requireGuildAdmin, (req, res) => {
         try {
@@ -788,80 +774,6 @@ function setupDashboardRoutes(app, client) {
         } catch (error) {
             console.error('Dashboard command catalogue failed:', error?.message || error);
             return res.status(500).json({ success: false, error: 'Could not load Starry command catalogue.' });
-        }
-    });
-
-    app.get('/api/guild/:id/multibot', requireGuildAdmin, requireClusterManager, (req, res) => {
-        try {
-            res.set('Cache-Control', 'no-store, private');
-            const cluster = client.multiBot || require('./multiBot');
-            const stats = cluster.getClusterStats();
-            const roles = Object.entries(cluster.ROLE_PRESETS || {}).map(([value, preset]) => ({
-                value, label: preset.name, emoji: preset.emoji
-            }));
-            // Cluster statistics intentionally contain no bot tokens or credential material.
-            return res.json({ success: true, stats, roles });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: 'Could not load Multi-Bot cluster status.' });
-        }
-    });
-
-    app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
-        try {
-            const cluster = client.multiBot || require('./multiBot');
-            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
-            const premium = premiumSettings?.premium;
-            const premiumActive = Boolean(premium?.isPremium) &&
-                (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
-            if (!premiumActive || !['pro_cluster', 'platinum', 'lifetime'].includes(premium.tier)) {
-                return res.status(403).json({ success: false, error: 'Connecting custom Multi-Bot worker nodes requires active Starry Pro Cluster or Lifetime premium on this server.' });
-            }
-            const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
-            const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 64) : '';
-            const role = typeof req.body?.role === 'string' ? req.body.role : 'all';
-            if (!token || token.length > 256) return res.status(400).json({ success: false, error: 'Enter a valid Discord bot token (maximum 256 characters).' });
-            if (role && !cluster.ROLE_PRESETS?.[role]) return res.status(400).json({ success: false, error: 'Choose a valid worker specialization.' });
-            const worker = await cluster.addToken(token, role, name || 'Worker Bot', req.session.user.id);
-            if (!worker?.client?.user) return res.status(502).json({ success: false, error: 'The worker could not connect to Discord.' });
-            return res.status(201).json({
-                success: true,
-                message: 'Worker bot connected and saved to the Starry cluster.',
-                bot: { id: worker.client.user.id, name: worker.name, role: worker.role }
-            });
-        } catch (error) {
-            const message = String(error?.message || 'Could not connect worker bot.');
-            const status = /already connected|primary|token|discord rejected/i.test(message) ? 400 : 502;
-            return res.status(status).json({ success: false, error: message });
-        }
-    });
-
-    app.patch('/api/guild/:id/multibot/workers/:botId/role', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
-        try {
-            const cluster = client.multiBot || require('./multiBot');
-            const worker = cluster.instances.get(String(req.params.botId));
-            if (!worker) return res.status(404).json({ success: false, error: 'Worker bot is not connected.' });
-            if (worker.isPrimary) return res.status(400).json({ success: false, error: 'The primary Starry bot role is managed separately.' });
-            const role = typeof req.body?.role === 'string' ? req.body.role : '';
-            if (!cluster.ROLE_PRESETS?.[role]) return res.status(400).json({ success: false, error: 'Choose a valid worker specialization.' });
-            const result = await cluster.setRole(String(req.params.botId), role);
-            if (!result.success) return res.status(404).json({ success: false, error: result.message });
-            return res.json({ success: true, message: 'Worker specialization updated.' });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: 'Could not update worker specialization.' });
-        }
-    });
-
-    app.delete('/api/guild/:id/multibot/workers/:botId', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
-        try {
-            const cluster = client.multiBot || require('./multiBot');
-            const worker = cluster.instances.get(String(req.params.botId));
-            if (!worker) return res.status(404).json({ success: false, error: 'Worker bot is not connected.' });
-            if (worker.isPrimary) return res.status(400).json({ success: false, error: 'The primary Starry bot cannot be disconnected here.' });
-            const removed = await cluster.removeToken(String(req.params.botId));
-            if (!removed) return res.status(404).json({ success: false, error: 'Worker bot was not removed.' });
-            return res.json({ success: true, message: 'Worker disconnected and removed from the saved cluster.' });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: 'Could not disconnect worker bot.' });
         }
     });
 
@@ -1399,7 +1311,7 @@ function setupDashboardRoutes(app, client) {
                 player.setVolume(player.shoukaku ? Math.min(volume, 100) : volume);
             } else if (action === 'filter') {
                 const hasPremium = await isServerOrUserPremium(guild.id, req.session?.user?.id, client);
-                if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro Cluster or Lifetime premium.' });
+                if (!hasPremium) return res.status(403).json({ success: false, error: 'Studio DSP audio profiles require Starry Shield Plus, Pro or Lifetime premium.' });
                 const allowed = new Set(['clear', 'flat', 'empowering', 'bass', 'bassboost', '8d', 'nightcore', 'daycore', 'vaporwave', 'lofi', 'reverb', 'karaoke', 'surround', 'electronic', 'soft', 'radio', 'treble', 'pop']);
                 if (typeof value !== 'string' || !allowed.has(value)) return res.status(400).json({ success: false, error: 'Choose a supported audio profile.' });
                 if (player.shoukaku) {
@@ -1452,23 +1364,14 @@ function setupDashboardRoutes(app, client) {
 
             const tChannel = textChannelId ? guild.channels.cache.get(textChannelId) : (guild.channels.cache.find(c => c.isTextBased()) || vChannel);
 
-            const assignment = client.multiBot?.getMusicWorker(guild, vChannel);
-            if (assignment && assignment.isAvailable === false) {
-                return res.status(409).json({ success: false, error: 'All Starry music workers are currently occupied. Try another voice channel or wait for a worker to become free.' });
-            }
-            const musicClient = assignment?.client || client;
-            const musicGuild = musicClient.guilds.cache.get(guild.id) || (musicClient === client ? guild : null);
-            if (!musicGuild) return res.status(409).json({ success: false, error: 'The selected music worker has not joined this Discord server yet. Invite it first.' });
-            const musicVoice = musicGuild.channels.cache.get(vChannel.id);
-            const musicText = musicGuild.channels.cache.get(tChannel.id) || musicGuild.channels.cache.find(channel => channel.isTextBased());
-            if (!musicVoice?.isVoiceBased()) return res.status(400).json({ success: false, error: 'The selected worker cannot access that voice channel.' });
-
-            const manager = musicClient.manager;
+            const musicVoice = vChannel;
+            const musicText = tChannel || guild.channels.cache.find(channel => channel.isTextBased()) || vChannel;
+            const manager = client.manager;
             const hasReadyLavalink = Boolean(manager?.shoukaku?.nodes && Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1));
 
-            // Render workers without a reachable Lavalink node use the native FFmpeg/Discord voice player.
+            // Starry without a reachable Lavalink node use the native FFmpeg/Discord voice player.
             if (!hasReadyLavalink) {
-                const nativePlayer = StarryAudioEngine.getOrCreatePlayer(musicClient, guild.id, musicVoice, musicText);
+                const nativePlayer = StarryAudioEngine.getOrCreatePlayer(client, guild.id, musicVoice, musicText);
                 await nativePlayer.connect();
                 const nativeResult = await StarryAudioEngine.search(String(query).trim(), req.session.user);
                 const nativeTracks = nativeResult?.tracks || [];
@@ -1504,8 +1407,8 @@ function setupDashboardRoutes(app, client) {
                     const batch = collection.tracks.slice(offset, offset + 3);
                     const matches = await Promise.all(batch.map(async metadata => {
                         if (!metadata?.query) return null;
-                        let found = await player.search('ytmsearch:' + metadata.query, { requester: musicClient.user });
-                        if (!found?.tracks?.length) found = await player.search('ytsearch:' + metadata.query, { requester: musicClient.user });
+                        let found = await player.search('ytmsearch:' + metadata.query, { requester: client.user });
+                        if (!found?.tracks?.length) found = await player.search('ytsearch:' + metadata.query, { requester: client.user });
                         const playable = bestPlayableMusicMatch(found?.tracks, metadata.query);
                         if (!playable) {
                             console.warn('[Music Match] Skipped weak Spotify-to-audio match:', metadata.query);
@@ -1516,7 +1419,7 @@ function setupDashboardRoutes(app, client) {
                     tracksToQueue.push(...matches.filter(Boolean));
                 }
             } else {
-                const resTrack = await player.search(query, { requester: musicClient.user });
+                const resTrack = await player.search(query, { requester: client.user });
                 if (resTrack?.tracks?.length) tracksToQueue = [resTrack.tracks[0]];
             }
             if (!tracksToQueue.length) {
@@ -1527,7 +1430,7 @@ function setupDashboardRoutes(app, client) {
             const firstTrack = tracksToQueue[0];
             return res.json({
                 success: true,
-                message: 'Queued ' + tracksToQueue.length + ' track(s), starting with "' + String(firstTrack.title || query).slice(0, 160) + '" via ' + (assignment?.name || musicClient.user?.username || 'Starry') + '.',
+                message: 'Queued ' + tracksToQueue.length + ' track(s), starting with "' + String(firstTrack.title || query).slice(0, 160) + '" via ' + (client.user?.username || 'Starry') + '.',
                 track: { title: firstTrack.title, author: firstTrack.author, duration: firstTrack.length },
                 queued: tracksToQueue.length
             });

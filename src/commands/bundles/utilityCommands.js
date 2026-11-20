@@ -260,7 +260,7 @@ const components = createHelpComponents();
         usage: ',ping',
         async execute(ctx) {
             const start = Date.now();
-            const replyMsg = await ctx.reply('🏓 **Pinging server cluster...**');
+            const replyMsg = await ctx.reply('🏓 **Pinging Starry...**');
             const latency = Date.now() - start;
             const wsPing = Math.round(ctx.client.ws.ping);
 
@@ -270,9 +270,9 @@ const components = createHelpComponents();
                 .addFields(
                     { name: '🌐 WebSocket Latency', value: `\`${wsPing} ms\``, inline: true },
                     { name: '⚡ Message Roundtrip', value: `\`${latency} ms\``, inline: true },
-                    { name: '🤖 Multi-Bot Status', value: `\`Cluster Online 🟢\``, inline: true }
+                    { name: '🤖 Bot Status', value: '`Online 🟢`', inline: true }
                 )
-                .setFooter({ text: 'Starry Multi-Bot Network' })
+                .setFooter({ text: 'Starry Single-Bot Network' })
                 .setTimestamp();
 
             if (replyMsg && typeof replyMsg.edit === 'function') {
@@ -288,31 +288,30 @@ const components = createHelpComponents();
         name: 'botinfo',
         aliases: ['stats', 'info', 'about'],
         category: 'Utility',
-        description: 'View full bot statistics, memory usage, shards & multi-bot cluster.',
+        description: 'View Starry statistics, memory usage, shards and uptime.',
         usage: ',botinfo',
         async execute(ctx) {
             const memUsed = process.memoryUsage().heapUsed;
             const memTotal = os.totalmem();
             const totalGuilds = ctx.client.guilds.cache.size;
             const totalMembers = ctx.client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
-            const clusterStats = ctx.client.multiBot ? ctx.client.multiBot.getClusterStats() : { totalBots: 1 };
 
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.PRIMARY)
-                .setTitle('🤖 Bot Cluster Statistics & Information')
+                .setTitle('🤖 Starry Bot Statistics & Information')
                 .setThumbnail(ctx.client.user.displayAvatarURL({ dynamic: true }))
                 .addFields(
                     { name: '👑 Bot Tag', value: `\`${ctx.client.user.tag}\``, inline: true },
                     { name: '🌐 Servers', value: `\`${totalGuilds}\` guilds`, inline: true },
                     { name: '👥 Total Users', value: `\`${totalMembers}\` members`, inline: true },
-                    { name: '🤖 Multi-Bot Cluster', value: `\`${clusterStats.totalBots}\` bot instances online`, inline: true },
+                    { name: '🤖 Bot Instances', value: '`1` primary bot online', inline: true },
                     { name: '⏳ Uptime', value: `\`${formatUptime(process.uptime())}\``, inline: true },
                     { name: '💾 Memory Heap', value: `\`${formatBytes(memUsed)}\``, inline: true },
                     { name: '⚙️ Node.js', value: `\`${process.version}\``, inline: true },
                     { name: '📚 Discord.js', value: `\`v14.15.0\``, inline: true },
                     { name: '⚡ Fixed Prefix', value: `\`${config.DEFAULT_PREFIX || ','}\``, inline: true }
                 )
-                .setFooter({ text: 'Starry Multi-Bot Architecture' })
+                .setFooter({ text: 'Starry Single-Bot Runtime' })
                 .setTimestamp();
 
             return ctx.reply({ embeds: [embed] });
@@ -568,7 +567,7 @@ const components = createHelpComponents();
         name: 'invite',
         aliases: ['inv', 'addbot'],
         category: 'Utility',
-        description: 'Get bot invite link (with Multi-Bot options).',
+        description: 'Get the Starry bot invite link.',
         usage: ',invite',
         async execute(ctx) {
             const clientId = ctx.client.user.id;
@@ -578,11 +577,11 @@ const components = createHelpComponents();
                 .setColor(config.EMBED_COLORS.PRIMARY)
                 .setTitle(`🤖 Invite ${ctx.client.user.username} to your Server`)
                 .setDescription(`Click below to invite this bot instance with full administrative powers!`)
-                .setFooter({ text: 'Starry Multi-Bot Network' })
+                .setFooter({ text: 'Starry Single-Bot Network' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setLabel('Invite Primary Bot').setStyle(ButtonStyle.Link).setURL(link)
+                new ButtonBuilder().setLabel('Invite Starry').setStyle(ButtonStyle.Link).setURL(link)
             );
             return ctx.reply({ embeds: [embed], components: [row] });
         }
@@ -616,9 +615,9 @@ const components = createHelpComponents();
             const embed = new EmbedBuilder()
                 .setColor(config.EMBED_COLORS.ECONOMY)
                 .setTitle('⭐ Support Starry Bot Development')
-                .setDescription('Thank you for considering supporting Starry! Your contributions keep our 24/7 high-fidelity music nodes, AI servers, and low-latency clusters running smoothly.')
+                .setDescription('Thank you for considering supporting Starry! Your contributions help keep our music, AI and server-management services running smoothly.')
                 .addFields(
-                    { name: '👑 Starry Premium', value: 'Unlock 24/7 voice persistence, studio DSP audio filters, cloud backups, and multi-bot workers with `,premium`!', inline: false },
+                    { name: '👑 Starry Premium', value: 'Unlock 24/7 voice persistence, studio DSP audio filters and cloud backups with `,premium`!', inline: false },
                     { name: '🌐 Web Store', value: 'Check out our official dashboard at https://starry-bot.loca.lt', inline: false }
                 )
                 .setFooter({ text: 'Starry Bot • Handcrafted with love' });
@@ -1015,7 +1014,7 @@ const components = createHelpComponents();
                     `• **Cloud Backups & Ban File Export**\n` +
                     `• **Starry Premium & License Key Store**`
                 )
-                .setFooter({ text: 'Prefix: , • Single-Host Multi-Bot Orchestration' })
+                .setFooter({ text: 'Prefix: , • Single-Bot Runtime' })
                 .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
@@ -1063,12 +1062,12 @@ const components = createHelpComponents();
                 .setTitle(isPrem ? `👑 Premium Active: ${tier.toUpperCase()}` : '⭐ Upgrade to Starry Premium')
                 .setDescription(
                     isPrem 
-                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 12 Studio & Security features are fully unlocked.*`
-                        : `Supercharge your server with 24/7 Voice persistence, Studio DSP Audio Filters, Cloud Disaster Backups, and Multi-Bot Worker Nodes!`
+                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 11 Studio & Security features are fully unlocked.*`
+                        : `Supercharge your server with 24/7 Voice persistence, Studio DSP Audio Filters, Cloud Disaster Backups, and premium community features!`
                 )
                 .addFields(
                     { name: '🛡️ Shield Plus ($4.99/mo | ₹399)', value: '• 24/7 Voice Channel Mode\n• 9 Studio DSP Hi-Fi Filters\n• Server Cloud Backup & Restore\n• Web Captcha Gateway\n• Emergency Lockdown Shield', inline: true },
-                    { name: '🌟 Pro Cluster ($12.99/mo | ₹999)', value: '• Everything in Shield Plus\n• Multi-Bot Worker Nodes\n• 3-Room Simultaneous Playback\n• 2x Economy XP & Loot Multiplier\n• Flag Neural Translator', inline: true },
+                    { name: '🌟 Pro ($12.99/mo | ₹999)', value: '• Everything in Shield Plus\n• 2x Economy XP & Loot Multiplier\n• Flag Neural Translator', inline: true },
                     { name: '👑 Lifetime VIP ($39.99 | ₹3,299)', value: '• Permanent Lifetime Access\n• Unlimited Server Transfers\n• Golden Crown VIP Badge\n• Top-Priority FLAC Nodes\n• VIP Game Packs & Appeal Portal', inline: true }
                 )
                 .setFooter({ text: `Use ,premium perks to view the available plans` })

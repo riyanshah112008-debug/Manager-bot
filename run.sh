@@ -3,7 +3,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "==================================================================="
-echo "    STARRY MULTI-BOT CLUSTER - 1-CLICK AUTO-DEPLOY LAUNCHER"
+echo "    STARRY DISCORD BOT - 1-CLICK AUTO-DEPLOY LAUNCHER"
 echo "==================================================================="
 echo ""
 

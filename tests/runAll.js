@@ -21,6 +21,7 @@ const suites = [
   ['Color blend', 'tests/colorBlend.test.js'],
   ['Media permissions', 'tests/mediaPerms.test.js'],
   ['Owner prefix policy', 'tests/ownerPrefixPolicy.test.js'],
+  ['Single-bot architecture', 'tests/singleBotArchitecture.test.js'],
   ['Tickets', 'tests/tickets.test.js'],
   ['Command execution contract', 'tests/commandExecutionContract.test.js'],
   ['Phone database browser syntax', '--check', 'public/phone-database.js'],
