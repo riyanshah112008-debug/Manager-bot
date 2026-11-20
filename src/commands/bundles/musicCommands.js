@@ -31,7 +31,7 @@ function getVoiceGuard(ctx) {
         return { error: `❌ **Starry** is already active in <#${botMember.voice.channelId}>. Join that channel or move Starry first.` };
     }
 
-    return { voiceChannel, botMember, workerClient: ctx.client };
+    return { voiceChannel, botMember };
 }
 
 function getActivePlayer(client, guildId) {
@@ -107,7 +107,7 @@ const commands = [
 
             if (ctx.isSlash) await ctx.defer();
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             const manager = targetClient.manager || ctx.client.manager;
             const hasLavalink = Boolean(
                 manager && 
@@ -593,7 +593,7 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             player.connect().catch(() => {});
             player.is247 = !player.is247;
@@ -613,7 +613,7 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             let kPlayer = targetClient.manager?.getPlayer(ctx.guild.id);
 
             let newState = false;
@@ -1251,7 +1251,7 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
-            const targetClient = guard.workerClient || ctx.client;
+            const targetClient = ctx.client;
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             await player.connect();
 
