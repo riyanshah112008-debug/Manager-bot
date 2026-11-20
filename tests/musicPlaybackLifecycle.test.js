@@ -107,3 +107,7 @@ test('both FFmpeg input paths use reduced probe windows for quicker stream start
   assert.equal(analysisWindows.length, 2);
   assert.equal(probeWindows.length, 2);
 });
+
+test('failed tracks only suppress queue-ended notices when no queued track remains', () => {
+  assert.match(native, /_suppressQueueEndedOnce = this\.queue\.length === 0/);
+});
