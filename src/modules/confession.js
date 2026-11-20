@@ -505,17 +505,8 @@ function createInteractionHandler(client) {
   }
  };
 }
-function registerWorkerHook(client, manager) {
- if (!client || client.isPrimary === false || client.__starryWhisperWorkerHookRegistered) return false;
- const multiBot = manager || client.multiBot || require('./multiBot');
- if (!multiBot || typeof multiBot.registerEventHook !== 'function') return false;
- client.__starryWhisperWorkerHookRegistered = true;
- multiBot.registerEventHook(workerClient => whisperModule(workerClient));
- return true;
-}
 function whisperModule(client) {
  if (!client || client.__starryWhisperHandlerInstalled) return;
- registerWorkerHook(client);
  registerInteractionHandler(client, 'anonymous-confessions', createInteractionHandler(client), { priority: 1000 });
  client.__starryWhisperHandlerInstalled = true;
  console.log('✉️ Starry Anonymous Confessions initialized.');
@@ -538,5 +529,4 @@ whisperModule.validateChannels = validateChannels;
 whisperModule.isStaffChannelPermissionIssue = isStaffChannelPermissionIssue;
 whisperModule.getReportDeliveryFailure = getReportDeliveryFailure;
 whisperModule.createInteractionHandler = createInteractionHandler;
-whisperModule.registerWorkerHook = registerWorkerHook;
 module.exports = whisperModule;
