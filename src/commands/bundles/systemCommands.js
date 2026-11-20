@@ -821,7 +821,7 @@ const commands = [
                 return; // Already sent in DM
             }
 
-            return ctx.reply(`📬 **Master Developer Control Panel sent to your DMs, <@${ctx.user.id}>!**\n*Use the interactive buttons in your DM to run terminal commands, restart the bot, check telemetry, and manage cluster nodes.*`);
+            return ctx.reply(`📬 **Master Developer Control Panel sent to your DMs, <@${ctx.user.id}>!**\n*Use the interactive buttons in your DM to run terminal commands, restart the bot, check telemetry, and manage Starry's runtime settings.*`);
         }
     },
 
@@ -832,7 +832,7 @@ const commands = [
         name: 'botservers',
         aliases: ['guildlist', 'serverlist'],
         category: 'Systems',
-        description: 'List all servers and member counts connected to the bot cluster (Bot Owners Only).',
+        description: 'List all servers and member counts connected to Starry (Bot Owners Only).',
         usage: ',botservers',
         async execute(ctx) {
             if (!config.BOT_OWNERS.includes(ctx.user.id)) {
