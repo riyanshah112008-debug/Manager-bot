@@ -40,7 +40,7 @@ function canPerformAction(access, action) {
 }
 
 function buildBadgeEmbed(progress, client, botUser, access = {}) {
-    const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=18014398509481983&scope=bot%20applications.commands`;
+    const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=32&scope=bot%20applications.commands`;
 
     const embed = new EmbedBuilder()
         .setColor(progress.hasBadge ? '#10B981' : '#5865F2')
