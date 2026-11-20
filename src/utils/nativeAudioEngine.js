@@ -397,6 +397,7 @@ class StarryGuildPlayer {
         this.disconnectTimeout = null;
         this._isSeeking = false;
         this._endedTrack = null;
+        this._suppressQueueEndedOnce = false;
 
         // Initialize Discord.js AudioPlayer with Play on no-subscriber behavior and high jitter tolerance
         this.player = createAudioPlayer({
@@ -544,7 +545,9 @@ class StarryGuildPlayer {
             }
 
             if (hadTrack && !this.destroyed) {
-                if (this.textChannel) {
+                const suppressQueueEnded = this._suppressQueueEndedOnce === true;
+                this._suppressQueueEndedOnce = false;
+                if (!suppressQueueEnded && this.textChannel) {
                     const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
                     this.textChannel.send(t(lang, 'music.queue_ended', { play_cmd: '`,play <song>`' })).catch(() => {});
                 }
@@ -703,6 +706,7 @@ class StarryGuildPlayer {
         }
         this.currentTrack = track;
         this._endedTrack = null;
+        this._suppressQueueEndedOnce = false;
 
         try {
             await this.configureAudioQuality();
@@ -713,7 +717,6 @@ class StarryGuildPlayer {
             // 1. Direct SoundCloud link
             if (targetUrl && targetUrl.includes('soundcloud.com/')) {
                 try {
-                    await refreshSoundCloudToken();
                     const stream = await play.stream(targetUrl, { quality: 2 });
                     if (stream && stream.stream) {
                         audioResource = this.createFilteredResource(stream.stream, false);
@@ -722,7 +725,8 @@ class StarryGuildPlayer {
             }
 
             // 2. Local Studio Audio Stream via StreamResolver Engine (if available)
-            if (!audioResource && streamResolver && !streamResolver.disabled) {
+            const isDirectYouTubeUrl = Boolean(targetUrl && (targetUrl.includes('youtube.com/') || targetUrl.includes('youtu.be/')));
+            if (!audioResource && streamResolver && !streamResolver.disabled && !isDirectYouTubeUrl) {
                 try {
                     const primaryArtist = (track.author || '').split(',')[0].trim();
                     let query = `${primaryArtist} ${track.title}`.trim();
@@ -730,7 +734,7 @@ class StarryGuildPlayer {
                         query = targetUrl;
                     }
 
-                    const resolved = await streamResolver.resolve(query);
+                    const resolved = await streamResolver.resolve(query, { timeoutMs: 1600 });
                     if (resolved) {
                         track._audioSourceInfo = {
                             container: resolved.ext || (resolved.file ? 'cached file' : 'stream'),
@@ -763,7 +767,7 @@ class StarryGuildPlayer {
                     }
                     if (ytUrl) {
                         if (streamResolver && !streamResolver.disabled) {
-                            const res = await streamResolver.resolve(ytUrl);
+                            const res = await streamResolver.resolve(ytUrl, { timeoutMs: 1400 });
                             if (res && res.url) {
                                 audioResource = this.createFilteredResource(res.url, true, res.headers);
                             }
@@ -833,6 +837,7 @@ class StarryGuildPlayer {
             // Do not announce a track until Discord confirms that audio is actually flowing.
             await entersState(this.player, AudioPlayerStatus.Playing, 15000);
             this.isPlaying = true;
+            this._suppressQueueEndedOnce = false;
             this.paused = false;
             this.playbackStartTime = Date.now();
             this._pausedPosition = 0;
@@ -851,8 +856,12 @@ class StarryGuildPlayer {
                 this.loadingMessage.delete().catch(() => {});
                 this.loadingMessage = null;
             }
+            this._suppressQueueEndedOnce = true;
             if (this.textChannel) {
-                this.textChannel.send(`⚠️ Could not stream **${track.title}**: ${err.message || 'Source stream unreachable'}`).catch(() => {});
+                const nextAction = this.queue.length > 0
+                    ? 'Trying the next queued track.'
+                    : 'Try another version of the song or a different source.';
+                this.textChannel.send(`⏭️ Could not start **${String(track.title || 'this track').slice(0, 90)}** from its source. ${nextAction}`).catch(() => {});
             }
             this.handleTrackEnd(track);
         }
