@@ -690,7 +690,7 @@ client.once(Events.ClientReady, async () => {
     catch (birthdayError) { console.warn('⚠️ Birthday scheduler could not start:', birthdayError.message); }
 
     // Global command registration is an explicit release task, not a bot-startup task.
-    if (String(process.env.AUTO_DEPLOY_COMMANDS || '').toLowerCase() === 'true' && true) {
+    if (String(process.env.AUTO_DEPLOY_COMMANDS || '').toLowerCase() === 'true' ) {
         try {
             console.log("🔄 AUTO_DEPLOY_COMMANDS=true; syncing application commands...");
             const deploy = require('../deploy-commands.js');
