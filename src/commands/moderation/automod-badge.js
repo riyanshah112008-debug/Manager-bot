@@ -12,6 +12,7 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const nativeAutoMod = require('../../modules/nativeAutoMod');
+const config = require('../../config');
 
 function createProgressBar(current, max, size = 15) {
     const ratio = Math.min(1, Math.max(0, current / max));
@@ -20,7 +21,25 @@ function createProgressBar(current, max, size = 15) {
     return `\`[${'█'.repeat(filled)}${'░'.repeat(empty)}]\` **${Math.round(ratio * 100)}%**`;
 }
 
-function buildBadgeEmbed(progress, client, botUser) {
+function getActorAccess(actor, client) {
+    const userId = actor?.user?.id || actor?.author?.id || null;
+    const permissions = actor?.interaction?.memberPermissions || actor?.memberPermissions || actor?.member?.permissions;
+    return {
+        userId,
+        isBotOwner: Boolean(userId && config.isBotOwner(userId, client)),
+        canManageGuild: Boolean(permissions?.has?.(PermissionFlagsBits.ManageGuild))
+    };
+}
+
+function canPerformAction(access, action) {
+    if (action === 'open') return Boolean(access?.isBotOwner || access?.canManageGuild);
+    if (action === 'deploy_all') return Boolean(access?.isBotOwner);
+    if (action === 'deploy_here') return Boolean(access?.canManageGuild);
+    if (action === 'refresh') return Boolean(access?.isBotOwner || access?.canManageGuild);
+    return false;
+}
+
+function buildBadgeEmbed(progress, client, botUser, access = {}) {
     const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=18014398509481983&scope=bot%20applications.commands`;
 
     const embed = new EmbedBuilder()
@@ -47,27 +66,34 @@ function buildBadgeEmbed(progress, client, botUser) {
             },
             {
                 name: '🎯 Fast Route to 100 Rules',
-                value: progress.hasBadge 
+                value: progress.hasBadge
                     ? '🎉 **Congratulations!** You have reached 100+ native rules. Discord\'s profile badge engine typically refreshes within 12–24 hours.'
-                    : `1. Tap **⚡ Deploy to All Current Servers** below to fill available slots.\n` +
-                      `2. Create **${progress.estimatedGuildsNeeded} free private Discord servers** (takes 2 minutes).\n` +
-                      `3. Invite Starry with **Manage Server** using the Invite button.\n` +
-                      `4. Tap deploy again! Reaching 100 unlocks the badge on Starry\'s profile.`,
+                    : access.isBotOwner
+                        ? `1. Tap **⚡ Deploy to All Current Servers** to fill available slots.\n` +
+                          `2. Invite Starry only to servers where its permissions are approved.\n` +
+                          `3. Reaching 100 rules unlocks the badge on Starry\'s profile.`
+                        : `1. Tap **🛡️ Deploy in This Server Only** to configure this server.\n` +
+                          `2. Ask a configured Starry bot owner to authorize any cross-server rollout.`,
                 inline: false
             }
         )
         .setFooter({ text: 'Discord Native AutoMod Engine • Starry Pro Security', iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
 
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
+    const buttons = [];
+    if (access.isBotOwner) {
+        buttons.push(new ButtonBuilder()
             .setCustomId('ambadge_deploy_all')
             .setLabel('⚡ Deploy to All Current Servers')
-            .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
+            .setStyle(ButtonStyle.Primary));
+    }
+    if (access.canManageGuild) {
+        buttons.push(new ButtonBuilder()
             .setCustomId('ambadge_deploy_here')
             .setLabel('🛡️ Deploy in This Server Only')
-            .setStyle(ButtonStyle.Success),
+            .setStyle(ButtonStyle.Success));
+    }
+    buttons.push(
         new ButtonBuilder()
             .setCustomId('ambadge_refresh')
             .setLabel('🔄 Refresh')
@@ -77,6 +103,7 @@ function buildBadgeEmbed(progress, client, botUser) {
             .setStyle(ButtonStyle.Link)
             .setURL(inviteUrl)
     );
+    const row = new ActionRowBuilder().addComponents(...buttons);
 
     return { embeds: [embed], components: [row] };
 }
@@ -86,25 +113,34 @@ module.exports = {
     aliases: ['ambadge', 'automodbadge', 'automodsign', 'automod-sign'],
     category: 'moderation',
     description: 'Track and deploy native Discord AutoMod rules across servers to earn the "Uses AutoMod" profile badge.',
-    
+    permissions: [PermissionFlagsBits.ManageGuild],
+
     data: new SlashCommandBuilder()
         .setName('automod-badge')
         .setDescription('Track and batch-deploy AutoMod rules to unlock the official "Uses AutoMod" profile badge')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
     async execute(ctx, args) {
+        const client = ctx.client;
+        const access = getActorAccess(ctx, client);
+        if (!canPerformAction(access, 'open')) {
+            return ctx.reply({
+                content: '❌ You need **Manage Server** permission or configured Starry bot-owner authorization to open this panel.',
+                ephemeral: true
+            });
+        }
+
         // Normalize context for prefix message or slash interaction
         const isInteraction = Boolean(ctx.isChatInputCommand || ctx.isCommand);
-        const client = ctx.client;
         const guild = ctx.guild;
-        const user = isInteraction ? ctx.user : ctx.author;
+        const user = ctx.user || ctx.author;
 
         if (isInteraction) {
             await ctx.deferReply().catch(() => {});
         }
 
         const initialProgress = await nativeAutoMod.getBadgeProgress(client);
-        const payload = buildBadgeEmbed(initialProgress, client, client.user);
+        const payload = buildBadgeEmbed(initialProgress, client, client.user, access);
 
         let replyMessage;
         if (isInteraction) {
@@ -115,14 +151,21 @@ module.exports = {
 
         // Handle button interactions
         const collector = replyMessage.createMessageComponentCollector({
-            filter: i => i.user.id === user.id,
+            filter: i => i.user.id === user.id && (i.guildId || null) === (guild?.id || null),
             time: 300000 // 5 minutes
         });
 
         collector.on('collect', async (interaction) => {
             await interaction.deferUpdate().catch(() => {});
+            const actionAccess = getActorAccess(interaction, client);
 
             if (interaction.customId === 'ambadge_deploy_all') {
+                if (!canPerformAction(actionAccess, 'deploy_all')) {
+                    return interaction.followUp({
+                        content: '❌ Only configured Starry bot owners can deploy AutoMod rules across all connected servers.',
+                        ephemeral: true
+                    });
+                }
                 const loadingEmbed = new EmbedBuilder()
                     .setColor('#F59E0B')
                     .setTitle('⚡ Deploying Native AutoMod Rules...')
@@ -131,7 +174,7 @@ module.exports = {
 
                 const result = await nativeAutoMod.deployAllGuilds(client);
                 const updatedProgress = await nativeAutoMod.getBadgeProgress(client);
-                const updatedPayload = buildBadgeEmbed(updatedProgress, client, client.user);
+                const updatedPayload = buildBadgeEmbed(updatedProgress, client, client.user, actionAccess);
 
                 const statusNotice = new EmbedBuilder()
                     .setColor('#10B981')
@@ -154,6 +197,12 @@ module.exports = {
                 if (!guild) {
                     return interaction.followUp({ content: '❌ This action must be performed in a server.', ephemeral: true });
                 }
+                if (!canPerformAction(actionAccess, 'deploy_here')) {
+                    return interaction.followUp({
+                        content: '❌ You need **Manage Server** permission in this server to deploy AutoMod rules here.',
+                        ephemeral: true
+                    });
+                }
                 const res = await nativeAutoMod.deployGuildRules(guild, client);
                 const updatedProgress = await nativeAutoMod.getBadgeProgress(client);
                 const updatedPayload = buildBadgeEmbed(updatedProgress, client, client.user);
@@ -172,7 +221,7 @@ module.exports = {
 
             } else if (interaction.customId === 'ambadge_refresh') {
                 const refreshedProgress = await nativeAutoMod.getBadgeProgress(client);
-                const refreshedPayload = buildBadgeEmbed(refreshedProgress, client, client.user);
+                const refreshedPayload = buildBadgeEmbed(refreshedProgress, client, client.user, actionAccess);
                 await interaction.editReply(refreshedPayload);
             }
         });
@@ -180,5 +229,6 @@ module.exports = {
         collector.on('end', () => {
             replyMessage.edit({ components: [] }).catch(() => {});
         });
-    }
+    },
+    _internals: { getActorAccess, canPerformAction, buildBadgeEmbed }
 };
