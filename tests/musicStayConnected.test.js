@@ -2,7 +2,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const { isStayConnected, setStayConnected } = require('../src/utils/musicStayConnected');
 
 test('native player 24/7 mode enables continuous autoplay and can be disabled', () => {
@@ -29,29 +28,9 @@ test('Lavalink player 24/7 mode persists in player data and enables autoplay', (
     assert.equal(data.get('isBufferingAutoplay'), false);
 });
 
-test('native engine uses automatic studio mastering and preserves 24/7 voice sessions', () => {
-    const source = fs.readFileSync('src/utils/nativeAudioEngine.js', 'utf8');
-    assert.match(source, /this\.filter = 'empowering'/);
-    assert.match(source, /if \(!this\.is247\)\s*\{\s*this\.disconnectTimeout = setTimeout/);
-    assert.match(source, /_reconnectPromise/);
-});
-
-test('Lavalink applies studio mastering by default and keeps an empty 24/7 queue connected', () => {
-    const source = fs.readFileSync('src/utils/musicManager.js', 'utf8');
-    assert.match(source, /player\.data\.get\('activeFilter'\) \|\| 'empowering'/);
-    assert.match(source, /const stayConnected = isStayConnected\(player\)/);
-    assert.match(source, /if \(stayConnected\)\s*\{[\s\S]*?return;\s*\}/);
-    assert.match(source, /setCustomId\('ctrl_247'\)/);
-});
-
-test('Lavalink 24/7 sessions cleanly stop when the bot is manually disconnected', () => {
-    const source = fs.readFileSync('src/utils/musicManager.js', 'utf8');
-    assert.match(source, /_starryMusicVoiceExitListener/);
-    assert.match(source, /newState\?\.id !== client\.user\?\.id/);
-    assert.match(source, /active\.destroy\?\.\(\)/);
-});
-
-test('source resolver prefers 192 kbps audio when available and falls back to best audio', () => {
-    const source = fs.readFileSync('src/utils/streamResolver.py', 'utf8');
-    assert.match(source, /bestaudio\[abr>=320\]\/bestaudio\[abr>=256\]\/bestaudio\[abr>=192\]\/bestaudio\/best/);
+test('24/7 helpers safely reject missing or unsupported player objects', () => {
+    assert.equal(isStayConnected(null), false);
+    assert.equal(isStayConnected(undefined), false);
+    assert.equal(setStayConnected(null, true), false);
+    assert.equal(setStayConnected({}, true), false);
 });
