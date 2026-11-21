@@ -44,3 +44,15 @@ test('Lavalink applies studio mastering by default and keeps an empty 24/7 queue
     assert.match(source, /if \(stayConnected\)\s*\{[\s\S]*?return;\s*\}/);
     assert.match(source, /setCustomId\('ctrl_247'\)/);
 });
+
+test('Lavalink 24/7 sessions cleanly stop when the bot is manually disconnected', () => {
+    const source = fs.readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
+    assert.match(source, /_starryMusicVoiceExitListener/);
+    assert.match(source, /newState\?\.id !== client\.user\?\.id/);
+    assert.match(source, /active\.destroy\?\.\(\)/);
+});
+
+test('source resolver prefers 192 kbps audio when available and falls back to best audio', () => {
+    const source = fs.readFileSync(require.resolve('../src/utils/streamResolver.py'), 'utf8');
+    assert.match(source, /bestaudio\[abr>=192\]\/bestaudio\/best/);
+});
