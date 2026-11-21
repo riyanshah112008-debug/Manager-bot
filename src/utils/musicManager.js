@@ -3,6 +3,7 @@ const { Connectors } = require('shoukaku');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
+const { isStayConnected, setStayConnected } = require('./musicStayConnected');
 
 // 🛡️ Ensure KazagumoPlayer has .search() for internal delegates
 if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
@@ -337,7 +338,7 @@ const defaultNodes = [
 
 const Nodes = defaultNodes;
 
-function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
+function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConnected = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
 
     // Row 1: Primary Transport Controls (4 buttons - fits mobile without wrapping)
@@ -369,6 +370,15 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
         new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary)
     );
 
+    // Row 4: 24/7 continuous voice mode
+    const stayRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('ctrl_247')
+            .setEmoji('🌙')
+            .setLabel(stayConnected ? '24/7: ON' : '24/7: OFF')
+            .setStyle(stayConnected ? ButtonStyle.Success : ButtonStyle.Secondary)
+    );
+
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
@@ -391,7 +401,7 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
         ])
     );
 
-    return [row1, row2, row3, filterRow];
+    return [row1, row2, row3, stayRow, filterRow];
 }
 
 async function applyKazagumoFilter(player, filterName) {
@@ -1190,6 +1200,16 @@ function createMusicManager(client) {
         console.warn(`⚠️ [Lavalink Failover] (${client.user ? client.user.username : 'Bot'}) Node [${name}] notice`);
     });
 
+    // A real voice-state departure (kick, move or explicit disconnect) ends 24/7 mode.
+    if (typeof client.on === 'function') {
+        client.on('voiceStateUpdate', (oldState, newState) => {
+            if (newState?.id !== client.user?.id || !oldState?.channelId) return;
+            if (newState.channelId === oldState.channelId) return;
+            const activePlayer = manager.getPlayer(oldState.guild?.id);
+            if (activePlayer && isStayConnected(activePlayer)) setStayConnected(activePlayer, false);
+        });
+    }
+
     manager.shoukaku.on('disconnect', (name, count) => {
         console.warn(`⚠️ [Lavalink] Node [${name}] disconnected (Retry: ${count})`);
     });
@@ -1212,7 +1232,7 @@ function createMusicManager(client) {
         recordTrackHistory(player, track);
 
         // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
-        const activeFilter = player.data.get('activeFilter') || 'clear';
+        const activeFilter = player.data.get('activeFilter') || 'empowering';
         player.data.set('activeFilter', activeFilter);
         await applyKazagumoFilter(player, activeFilter).catch(() => {});
 
@@ -1295,7 +1315,7 @@ function createMusicManager(client) {
             });
 
         const lang = player.guildId ? getGuildLanguageSync(player.guildId) : 'en';
-        const components = buildNowPlayingComponents(player.guildId, isAutoplay);
+        const components = buildNowPlayingComponents(player.guildId, isAutoplay, isStayConnected(player));
         const messageData = localizePayload({ embeds: [embed], components }, lang);
 
         try {
@@ -1341,12 +1361,24 @@ function createMusicManager(client) {
 
     manager.on('playerEmpty', async player => {
         const channel = client.channels.cache.get(player.textId);
-        const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
+        const stayConnected = isStayConnected(player);
+        if (stayConnected) setStayConnected(player, true);
+        const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay || stayConnected);
 
-        // 📻 HIGH-INTELLIGENCE AUTOPLAY RECOMMENDATION ENGINE
+        // Continuous sessions request a replacement track whenever the queue empties.
         if (isAutoplay) {
             const success = await triggerAutoplayBuffer(player, true).catch(() => false);
             if (success) return;
+        }
+
+        // If recommendations are temporarily unavailable, keep the voice session alive
+        // and wait for a user request instead of treating an empty queue as a disconnect.
+        if (stayConnected) {
+            try {
+                const musicController = require('../modules/musicController');
+                await musicController.update(player.guildId, client).catch(() => {});
+            } catch (_) {}
+            return;
         }
 
         // Dedicated Request Channel Integration: Update controller in-place
