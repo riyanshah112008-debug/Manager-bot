@@ -461,10 +461,10 @@ async function applyKazagumoFilter(player, filterName) {
                     // accumulate and clip even when each individual EQ value looks safe.
                     volume: 0.86,
                     equalizer: [
-                        { band: 0, gain: 0.12 },  // 25 Hz - Gentle sub-bass support
-                        { band: 1, gain: 0.22 },  // 40 Hz - Main low-bass weight
-                        { band: 2, gain: 0.18 },  // 63 Hz - Controlled punch
-                        { band: 3, gain: 0.10 },  // 100 Hz - Tight kick impact
+                        { band: 0, gain: 0.06 },  // 25 Hz - Gentle sub-bass support
+                        { band: 1, gain: 0.14 },  // 40 Hz - Main low-bass weight
+                        { band: 2, gain: 0.12 },  // 63 Hz - Controlled punch
+                        { band: 3, gain: 0.05 },  // 100 Hz - Tight kick impact
                         { band: 4, gain: -0.02 }, // 160 Hz - Minimal low-mid trim
                         { band: 5, gain: -0.04 }, // 250 Hz - Light mud control
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
@@ -829,17 +829,17 @@ async function applyKazagumoFilter(player, filterName) {
                 await setFilters({
                     volume: 1.0,
                     equalizer: [
-                        { band: 0, gain: 0.08 },  // 25 Hz: Sub extension
-                        { band: 1, gain: 0.18 },  // 40 Hz: Warm low bass
-                        { band: 2, gain: 0.16 },  // 63 Hz: Kick impact
-                        { band: 3, gain: 0.08 },  // 100 Hz: Bass body
+                        { band: 0, gain: 0.04 },  // 25 Hz: Sub extension
+                        { band: 1, gain: 0.10 },  // 40 Hz: Warm low bass
+                        { band: 2, gain: 0.09 },  // 63 Hz: Kick impact
+                        { band: 3, gain: 0.04 },  // 100 Hz: Bass body
                         { band: 4, gain: 0.00 },  // 160 Hz: Keep warmth without boom
                         { band: 5, gain: -0.08 }, // 250 Hz: Reduce muddiness
                         { band: 6, gain: -0.02 }, // 400 Hz: Preserve natural mids
                         { band: 7, gain: 0.01 },  // 630 Hz: Neutral body
                         { band: 8, gain: 0.04 },  // 1.0 kHz: Vocal intelligibility
-                        { band: 9, gain: 0.07 },  // 1.6 kHz: Vocal presence
-                        { band: 10, gain: 0.06 }, // 2.5 kHz: Clarity without harshness
+                        { band: 9, gain: 0.04 },  // 1.6 kHz: Vocal presence
+                        { band: 10, gain: 0.03 }, // 2.5 kHz: Clarity without harshness
                         { band: 11, gain: 0.03 }, // 4.0 kHz: Transient detail
                         { band: 12, gain: 0.01 }, // 6.3 kHz: Smooth highs
                         { band: 13, gain: 0.03 }, // 10.0 kHz: Air

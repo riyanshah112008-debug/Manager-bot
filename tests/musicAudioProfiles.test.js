@@ -58,9 +58,9 @@ test('Automatic studio master has fuller bass, clear vocals and safe peak headro
     const filters = stub.getApplied();
     assert.ok(filters.volume >= 0.70 && filters.volume < 0.85,
         'mastering should retain useful loudness while reserving headroom for cumulative EQ boosts');
-    assert.ok(filters.equalizer.some(band => band.band === 1 && band.gain >= 0.15),
+    assert.ok(filters.equalizer.some(band => band.band === 1 && band.gain >= 0.09),
         '40 Hz band must provide audible low-bass weight');
-    assert.ok(filters.equalizer.some(band => band.band === 2 && band.gain >= 0.15),
+    assert.ok(filters.equalizer.some(band => band.band === 2 && band.gain >= 0.08),
         '63 Hz band must provide kick impact');
     assert.ok(filters.equalizer.some(band => band.band === 5 && band.gain < 0),
         '250 Hz cut must control muddiness');
@@ -152,11 +152,11 @@ test('bass EQ retains strong low-frequency energy with controlled preamp headroo
     assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
     const filters = stub.getApplied();
     const volumePercent = Math.round(filters.volume * 100);
-    assert.ok(volumePercent > 60 && volumePercent < 80,
+    assert.ok(volumePercent > 65 && volumePercent < 85,
         'bass profile should preserve useful overall loudness while retaining headroom');
-    assert.ok(filters.equalizer.some(band => band.band === 1 && Math.round(band.gain * 100) >= 20),
+    assert.ok(filters.equalizer.some(band => band.band === 1 && Math.round(band.gain * 100) >= 13),
         '40 Hz low-bass band must retain a controlled audible boost');
-    assert.ok(filters.equalizer.some(band => band.band === 2 && Math.round(band.gain * 100) >= 15),
+    assert.ok(filters.equalizer.some(band => band.band === 2 && Math.round(band.gain * 100) >= 11),
         '63 Hz punch band must retain a controlled audible boost');
     const lowBandBoost = filters.equalizer
         .filter(band => band.band <= 3)
