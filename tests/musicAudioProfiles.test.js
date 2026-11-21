@@ -56,8 +56,8 @@ test('Automatic studio master has fuller bass, clear vocals and safe peak headro
     const stub = createPlayer();
     assert.equal(await applyKazagumoFilter(stub.player, 'empowering'), true);
     const filters = stub.getApplied();
-    assert.ok(filters.volume >= 0.85 && filters.volume < 1,
-        'mastering should retain loudness without removing all peak headroom');
+    assert.ok(filters.volume >= 0.70 && filters.volume < 0.85,
+        'mastering should retain useful loudness while reserving headroom for cumulative EQ boosts');
     assert.ok(filters.equalizer.some(band => band.band === 1 && band.gain >= 0.15),
         '40 Hz band must provide audible low-bass weight');
     assert.ok(filters.equalizer.some(band => band.band === 2 && band.gain >= 0.15),
@@ -68,6 +68,18 @@ test('Automatic studio master has fuller bass, clear vocals and safe peak headro
         'vocal presence must remain clear');
     assert.ok(filters.equalizer.every(band => band.gain >= -0.25 && band.gain <= 0.65),
         'EQ gains must remain within Lavalink limits');
+});
+
+
+test('automatic studio master reserves headroom for cumulative EQ peaks', async () => {
+    const stub = createPlayer();
+    assert.equal(await applyKazagumoFilter(stub.player, 'empowering'), true);
+    const filters = stub.getApplied();
+    const positiveBoostSum = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
+    const expectedHeadroomDb = Math.min(4, 0.5 + positiveBoostSum * 2.5);
+    const expectedVolume = Math.pow(10, -expectedHeadroomDb / 20);
+    assert.ok(Math.abs(filters.volume - expectedVolume) < 1e-10,
+        'preamp must account for combined EQ boosts rather than only the strongest band');
 });
 
 test('official artist/topic audio ranks above lyric-video and fan uploads', () => {
