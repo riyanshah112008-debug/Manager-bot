@@ -41,10 +41,6 @@ function extractStealItems(text = '', stickers = null, attachments = null) {
         items.push(item);
     };
 
-module.exports.parseStealCommand = parseStealCommand;
-module.exports.extractStealItems = extractStealItems;
-module.exports.normalizeAssetName = normalizeAssetName;
-
     if (stickers && typeof stickers.forEach === 'function') {
         stickers.forEach(sticker => add({
             id: sticker.id,
@@ -246,3 +242,7 @@ module.exports = (client) => {
         }
     });
 };
+
+module.exports.parseStealCommand = parseStealCommand;
+module.exports.extractStealItems = extractStealItems;
+module.exports.normalizeAssetName = normalizeAssetName;
