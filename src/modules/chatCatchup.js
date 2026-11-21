@@ -10,6 +10,7 @@ const {
     ButtonBuilder, 
     ButtonStyle 
 } = require('discord.js');
+const { hasChannelReadAccess } = require('../utils/aiChannelAccess');
 
 function getGeminiApiKey() {
     const raw = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || '';
@@ -19,9 +20,41 @@ function getGeminiApiKey() {
 }
 
 /**
- * Fetches recent channel messages within a time window and generates an AI summary briefing
+ * Returns a consistent, non-sensitive failure response without fetching channel messages.
+ */
+function unavailable(message) {
+    return {
+        embed: new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle('❌ Catch-Up Unavailable')
+            .setDescription(message),
+        components: []
+    };
+}
+
+/**
+ * Fetches recent channel messages only when both the requester and Starry can read
+ * the selected SFW channel. The caller must supply the authenticated Discord user.
  */
 async function generateChannelCatchup(channel, options = {}) {
+    if (!channel?.guild || typeof channel.messages?.fetch !== 'function') {
+        return unavailable('This command requires a server text channel.');
+    }
+
+    const requesterMember = options.requesterMember || (
+        options.user?.id
+            ? await channel.guild.members.fetch(options.user.id).catch(() => null)
+            : null
+    );
+    const botMember = channel.guild.members.me;
+
+    if (!hasChannelReadAccess(channel, requesterMember)) {
+        return unavailable('You can only summarize SFW channels that you can view and read.');
+    }
+    if (!hasChannelReadAccess(channel, botMember)) {
+        return unavailable('Starry needs View Channel and Read Message History permissions in this SFW channel.');
+    }
+
     const hours = Math.max(1, Math.min(24, options.hours || 6));
     const cutoffTime = Date.now() - (hours * 3600 * 1000);
 
@@ -33,13 +66,7 @@ async function generateChannelCatchup(channel, options = {}) {
             fetchedMessages = Array.from(msgs.values());
         }
     } catch (e) {
-        return {
-            embed: new EmbedBuilder()
-                .setColor('#ED4245')
-                .setTitle('❌ Catch-Up Unavailable')
-                .setDescription('Starry lacks permission to view or read message history in this channel!'),
-            components: []
-        };
+        return unavailable('Starry could not read message history in this channel.');
     }
 
     // Filter relevant human messages within timeframe

@@ -957,7 +957,7 @@ const components = createHelpComponents();
             const hours = Math.max(1, Math.min(24, rawHours || 6));
 
             const { generateChannelCatchup } = require('../../modules/chatCatchup');
-            const result = await generateChannelCatchup(ctx.channel, { hours });
+            const result = await generateChannelCatchup(ctx.channel, { hours, user: ctx.user });
 
             return ctx.reply({
                 embeds: [result.embed],

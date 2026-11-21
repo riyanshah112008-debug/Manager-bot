@@ -5,6 +5,7 @@
 // ==========================================
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const mongoose = require('mongoose');
+const { isSfwTextChannel } = require('../utils/aiChannelAccess');
 
 // In-Memory Active Poll Cache: messageId -> { question, options: [{ id, label, votes: Set(userIds) }] }
 const activeSparks = new Map();
@@ -20,6 +21,21 @@ function getGeminiApiKey() {
  * Reads recent channel context and generates an intelligent conversation spark
  */
 async function createChatSpark(channel, requester = null) {
+    if (!isSfwTextChannel(channel)) {
+        const embed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle('🔒 SFW Channel Required')
+            .setDescription('Starry AI Chat Spark is disabled in NSFW and non-text channels.');
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('spark_unavailable')
+                .setLabel('Unavailable in this channel')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true)
+        );
+        return { embed, row, sparkData: null };
+    }
+
     let recentContext = [];
     try {
         const msgs = await channel.messages.fetch({ limit: 12 }).catch(() => null);
