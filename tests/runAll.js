@@ -20,6 +20,7 @@ const suites = [
   ['Music native engine syntax', '--check', 'src/utils/nativeAudioEngine.js'],
   ['Music manager syntax', '--check', 'src/utils/musicManager.js'],
   ['Music controller syntax', '--check', 'src/modules/musicController.js'],
+  ['AI DJ recommendation utility', '--test', 'tests/aiMusicDj.test.js'],
   ['AI vision', 'tests/aiVision.test.js'],
   ['Bot avatar', 'tests/botAvatar.test.js'],
   ['Bot Studio', 'tests/botStudio.test.js'],
