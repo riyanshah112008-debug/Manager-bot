@@ -460,14 +460,16 @@ async function applyKazagumoFilter(player, filterName) {
                 await setFilters({
                     // Keep the bass profile punchy, not extreme: overlapping low bands can
                     // accumulate and clip even when each individual EQ value looks safe.
-                    volume: 0.86,
+                    // A tactile 40–100 Hz lift: strong kick/body, with a controlled 250 Hz cut.
+                    // The shared peak-aware preamp retains headroom before Discord's Opus encoder.
+                    volume: 1.0,
                     equalizer: [
-                        { band: 0, gain: 0.06 },  // 25 Hz - Gentle sub-bass support
-                        { band: 1, gain: 0.14 },  // 40 Hz - Main low-bass weight
-                        { band: 2, gain: 0.12 },  // 63 Hz - Controlled punch
-                        { band: 3, gain: 0.05 },  // 100 Hz - Tight kick impact
-                        { band: 4, gain: -0.02 }, // 160 Hz - Minimal low-mid trim
-                        { band: 5, gain: -0.04 }, // 250 Hz - Light mud control
+                        { band: 0, gain: 0.04 },  // 25 Hz - Filter inaudible rumble, retain sub extension
+                        { band: 1, gain: 0.22 },  // 40 Hz - Deep, physical low-bass weight
+                        { band: 2, gain: 0.18 },  // 63 Hz - Kick and bass impact
+                        { band: 3, gain: 0.08 },  // 100 Hz - Controlled punch and warmth
+                        { band: 4, gain: -0.03 }, // 160 Hz - Keep the low mids tight
+                        { band: 5, gain: -0.07 }, // 250 Hz - Reduce boxiness and protect vocal clarity
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
                         { band: 7, gain: 0.00 },  // 630 Hz - Flat
                         { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
