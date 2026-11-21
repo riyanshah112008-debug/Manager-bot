@@ -103,8 +103,6 @@ function normalizeAssetName(name, fallback = 'stolen_emoji') {
 }
 
 module.exports = (client) => {
-    const PREFIX = config.DEFAULT_PREFIX || ',';
-
     const runStealUI = async (textToScan, stickers, member, guild, replyFunction, user, attachments = null) => {
         // 1. External / DM Context Check
         if (!guild) {
