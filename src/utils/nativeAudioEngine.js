@@ -33,6 +33,7 @@ const {
 } = require('discord.js');
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const config = require('../config');
+const { createMusicDJPlan } = require('./openAIMusicDJ');
 
 const MUSIC_BASE_URL = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`).replace(/\/+$/, '');
 const MUSIC_DASHBOARD_URL = `${MUSIC_BASE_URL}/music.html`;
@@ -588,7 +589,7 @@ class StarryGuildPlayer {
             // High-Intelligence Autoplay Recommendation
             if (this.autoplay && this.previousTrack) {
                 try {
-                    const nextSong = await StarryAudioEngine.getAutoplayRecommendation(this.previousTrack, this.history);
+                    const nextSong = await StarryAudioEngine.getAutoplayRecommendation(this.previousTrack, this.history, this.djRequest || '');
                     if (nextSong) {
                         if (this.textChannel) {
                             const autoEmbed = new EmbedBuilder()
@@ -1857,7 +1858,7 @@ class StarryAudioEngine {
         return result;
     }
 
-    static async getAutoplayRecommendation(currentTrack, history = []) {
+    static async getAutoplayRecommendation(currentTrack, history = [], djRequest = '') {
         if (!currentTrack) return null;
         const primaryArtist = (currentTrack.author || '').split(',')[0].trim();
         const currentTitleClean = (currentTrack.title || '')
@@ -1879,6 +1880,35 @@ class StarryAudioEngine {
             }
             return true;
         };
+
+        // OpenAI proposes songs only; the native provider search must return a playable result.
+        if (djRequest && process.env.OPENAI_API_KEY) {
+            const plan = await createMusicDJPlan({
+                request: djRequest,
+                currentTrack,
+                recentTracks: history,
+                limit: 4
+            });
+            for (const recommendation of plan?.recommendations || []) {
+                try {
+                    const results = await play.search(recommendation.search_query, { limit: 6 });
+                    for (const item of results || []) {
+                        if (!isFresh(item.title, item.url)) continue;
+                        return {
+                            title: item.title,
+                            author: item.channel?.name || recommendation.artist || primaryArtist,
+                            url: item.url,
+                            duration: (item.durationInSec || 180) * 1000,
+                            thumbnail: item.thumbnails?.[0]?.url || currentTrack.thumbnail,
+                            source: 'Starry AI DJ',
+                            requester: currentTrack.requester
+                        };
+                    }
+                } catch (_) {
+                    // Continue through the AI plan; built-in Spotify and YouTube autoplay remain the fallback.
+                }
+            }
+        }
 
         // 1. Official Spotify Search: top tracks by artist
         try {
