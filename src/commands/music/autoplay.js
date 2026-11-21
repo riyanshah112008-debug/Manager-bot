@@ -40,7 +40,7 @@ module.exports = {
             const nowMsg = kPlayer.data?.get('nowPlayingMessage');
             if (nowMsg && typeof nowMsg.edit === 'function') {
                 const { buildNowPlayingComponents } = require('../../utils/musicManager');
-                nowMsg.edit({ components: buildNowPlayingComponents(interaction.guild.id, newState) }).catch(() => {});
+                nowMsg.edit({ components: buildNowPlayingComponents(interaction.guild.id, newState, Boolean(kPlayer.data?.get('stayConnected'))) }).catch(() => {});
             }
         } else {
             const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
