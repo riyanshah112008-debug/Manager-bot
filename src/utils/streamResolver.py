@@ -39,7 +39,7 @@ def _bg_cache_track(source_url, vid_id):
     try:
         out_tmpl = os.path.join(CACHE_DIR, f"{vid_id}.%(ext)s")
         download_opts = {
-            'format': 'bestaudio[abr>=192]/bestaudio/best',
+            'format': 'bestaudio[abr>=320]/bestaudio[abr>=256]/bestaudio[abr>=192]/bestaudio/best',
             'outtmpl': out_tmpl,
             'quiet': True,
             'no_warnings': True,
@@ -52,7 +52,7 @@ def _bg_cache_track(source_url, vid_id):
         pass
 
 ydl_track_opts = {
-    'format': 'bestaudio[abr>=192]/bestaudio/best',
+    'format': 'bestaudio[abr>=320]/bestaudio[abr>=256]/bestaudio[abr>=192]/bestaudio/best',
     'quiet': True,
     'no_warnings': True,
     'noplaylist': True,
