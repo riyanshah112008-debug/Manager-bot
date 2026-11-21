@@ -44,7 +44,7 @@ const FILTER_ARGS = {
     clear: ['-af', 'volume=1.0'],
     flat: ['-af', 'volume=1.0'],
     // Matches the gentle Lavalink Studio master: restrained low lift, vocal presence, smooth air.
-    empowering: ['-af', 'volume=0.94,equalizer=f=63:width_type=q:w=1.0:g=1.0,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.6,equalizer=f=2500:width_type=q:w=1.0:g=0.8,equalizer=f=10000:width_type=q:w=0.8:g=0.5,alimiter=limit=0.98:attack=5:release=120:level=false'],
+    empowering: ['-af', 'volume=1.0,highpass=f=25,equalizer=f=63:width_type=q:w=1.0:g=1.0,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.6,equalizer=f=2500:width_type=q:w=1.0:g=0.8,equalizer=f=10000:width_type=q:w=0.8:g=0.5,acompressor=threshold=-18dB:ratio=1.35:attack=20:release=250:makeup=1.5dB,alimiter=limit=0.98:attack=5:release=120:level=false'],
     bass: ['-af', 'volume=0.70,bass=g=2.0:f=65:w=0.7,equalizer=f=250:width_type=q:w=1.1:g=-1.0,alimiter=limit=0.94:attack=5:release=160:level=false'],
     '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.65:offset_l=0:offset_r=0.5,alimiter=limit=0.96:attack=5:release=120:level=false'],
     nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-0.8,alimiter=limit=0.96:attack=5:release=120:level=false'],
@@ -95,7 +95,7 @@ function getFilterArgs(filterName, volumePercent = 100, equalizer = null) {
     const headroom = Math.pow(10, -(positiveGainSum > 0 ? (positiveGainSum + 1.5) : 0) / 20);
     const adjustedVolume = filterStr.replace(/volume=([0-9.]+)/,(match,baseVol)=>`volume=${(parseFloat(baseVol)*volScale*headroom).toFixed(3)}`);
     const eq = gains ? specs.map(([key,freq,width])=>{const gain=Math.max(-6,Math.min(6,Number(gains[key])||0));return gain===0?null:`equalizer=f=${freq}:width_type=q:w=${width}:g=${gain.toFixed(1)}`;}).filter(Boolean) : [];
-    return ['-af',[adjustedVolume,...eq,'alimiter=limit=0.94:attack=5:release=180:level=false','aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
+    return ['-af',[adjustedVolume,...eq,'alimiter=limit=0.98:attack=5:release=180:level=false','aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
 }
 
 let scClientId = null;
@@ -401,7 +401,7 @@ class StarryGuildPlayer {
         this.previousTrack = null;
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
-        this.filter = 'clear';
+        this.filter = 'empowering';
         this.equalizer = { subBass: 0, bass: 0, mids: 0, presence: 0, treble: 0 };
         this.is247 = false;
         this.autoplay = false;
@@ -419,6 +419,21 @@ class StarryGuildPlayer {
         this._confirmedTrack = null;
         this._suppressQueueEndedNotice = false;
         this._lastPlayerError = null;
+        this._reconnectPromise = null;
+        this._disconnectRequested = false;
+        this._voiceStateListener = null;
+
+        // Detect an intentional server-side disconnect/move. A 24/7 session must not fight moderators.
+        if (typeof this.client?.on === 'function') {
+            this._voiceStateListener = (oldState, newState) => {
+                if (newState?.id !== this.client?.user?.id || !oldState?.channelId) return;
+                if (newState.channelId === oldState.channelId) return;
+                this.is247 = false;
+                this.autoplay = false;
+                this.destroy();
+            };
+            this.client.on('voiceStateUpdate', this._voiceStateListener);
+        }
 
         // Initialize Discord.js AudioPlayer with Play on no-subscriber behavior and high jitter tolerance
         this.player = createAudioPlayer({
@@ -505,15 +520,35 @@ class StarryGuildPlayer {
             });
 
             this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+                const disconnectedConnection = this.connection;
                 try {
                     await Promise.race([
-                        entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
-                        entersState(this.connection, VoiceConnectionStatus.Connecting, 5000)
+                        entersState(disconnectedConnection, VoiceConnectionStatus.Signalling, 5000),
+                        entersState(disconnectedConnection, VoiceConnectionStatus.Connecting, 5000)
                     ]);
                 } catch (e) {
+                    if (this.destroyed || this._disconnectRequested) return;
                     if (!this.is247) {
                         this.destroy();
+                        return;
                     }
+                    // Recover transient gateway/voice outages without abandoning an enabled 24/7 session.
+                    if (this._reconnectPromise) return;
+                    this._reconnectPromise = (async () => {
+                        for (let attempt = 0; attempt < 3 && this.is247 && !this.destroyed; attempt++) {
+                            await new Promise(resolve => setTimeout(resolve, 750 * (2 ** attempt)));
+                            try {
+                                const previous = this.connection;
+                                this.connection = null;
+                                try { previous?.destroy(); } catch (_) {}
+                                await this.connect();
+                                return;
+                            } catch (reconnectError) {
+                                console.warn(`[24/7 Voice Recovery ${this.guildId}] Attempt ${attempt + 1} failed:`, reconnectError.message || reconnectError);
+                            }
+                        }
+                    })().finally(() => { this._reconnectPromise = null; });
+                    await this._reconnectPromise;
                 }
             });
         }
@@ -1237,7 +1272,15 @@ class StarryGuildPlayer {
     }
 
     destroy() {
+        this._disconnectRequested = true;
+        this.is247 = false;
+        this.autoplay = false;
         this.destroyed = true;
+        if (this._voiceStateListener && typeof this.client?.off === 'function') {
+            this.client.off('voiceStateUpdate', this._voiceStateListener);
+            this._voiceStateListener = null;
+        }
+        if (this.disconnectTimeout) clearTimeout(this.disconnectTimeout);
         this.stop();
         if (this.connection) {
             try {
