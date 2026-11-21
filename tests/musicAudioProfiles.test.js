@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const LAVALINK_MIN_GAIN = -1 / 4;
 const LAVALINK_HALF_GAIN = 1 / 2;
-const { getFilterArgs, FILTER_ARGS } = require('../src/utils/nativeAudioEngine');
+const fs = require('node:fs');
+const nativeAudioSource = fs.readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
 const {
     applyKazagumoFilter,
     applyKazagumoEqualizer,
@@ -181,14 +182,17 @@ test('Bass profile keeps tactile low-end impact with bounded Lavalink headroom',
 });
 
 test('native Bass and Studio profiles use one final limiter and controlled compression', () => {
-    for (const profile of ['bass', 'empowering']) {
-        const args = getFilterArgs(profile, 100);
-        const filterChain = args[1];
-        assert.equal((filterChain.match(/alimiter=/g) || []).length, 1, profile + ' must not stack limiters');
-    }
-    assert.match(FILTER_ARGS.bass[1], /acompressor=/);
-    assert.match(FILTER_ARGS.bass[1], /bass=g=3\.8:f=58/);
-    assert.match(FILTER_ARGS.bass[1], /equalizer=f=250/);
+    const bassProfile = nativeAudioSource.match(/    bass: \['-af', '([^']+)'\],/);
+    const studioProfile = nativeAudioSource.match(/    empowering: \['-af', '([^']+)'\],/);
+    assert.ok(bassProfile, 'native Bass profile must exist');
+    assert.ok(studioProfile, 'native Studio profile must exist');
+    assert.match(bassProfile[1], /acompressor=/);
+    assert.match(bassProfile[1], /bass=g=3\.8:f=58/);
+    assert.match(bassProfile[1], /equalizer=f=250/);
+    assert.doesNotMatch(bassProfile[1], /alimiter=/, 'profiles must not stack a limiter before the shared final limiter');
+    assert.doesNotMatch(studioProfile[1], /alimiter=/, 'studio profile must use the shared final limiter');
+    const sharedLimiter = nativeAudioSource.match(/'alimiter=limit=0\.96:attack=5:release=180:level=false'/g) || [];
+    assert.equal(sharedLimiter.length, 1, 'native output chain must have one final limiter');
 });
 
 test('each selectable audio mode applies its defining DSP effect', async () => {
