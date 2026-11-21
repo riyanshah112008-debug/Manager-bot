@@ -52,13 +52,22 @@ test('clear resets every Lavalink filter dimension', async () => {
     assert.equal(filters.volume, 1);
 });
 
-test('Studio master remains a gentle headroom-safe profile', async () => {
+test('Automatic studio master has fuller bass, clear vocals and safe peak headroom', async () => {
     const stub = createPlayer();
     assert.equal(await applyKazagumoFilter(stub.player, 'empowering'), true);
     const filters = stub.getApplied();
-    assert.ok(filters.volume < 1);
-    assert.ok(filters.equalizer.some(band => band.band === 5 && band.gain < 0));
-    assert.ok(filters.equalizer.some(band => band.band === 9 && band.gain > 0));
+    assert.ok(filters.volume >= 0.85 && filters.volume < 1,
+        'mastering should retain loudness without removing all peak headroom');
+    assert.ok(filters.equalizer.some(band => band.band === 1 && band.gain >= 0.15),
+        '40 Hz band must provide audible low-bass weight');
+    assert.ok(filters.equalizer.some(band => band.band === 2 && band.gain >= 0.15),
+        '63 Hz band must provide kick impact');
+    assert.ok(filters.equalizer.some(band => band.band === 5 && band.gain < 0),
+        '250 Hz cut must control muddiness');
+    assert.ok(filters.equalizer.some(band => band.band === 9 && band.gain > 0),
+        'vocal presence must remain clear');
+    assert.ok(filters.equalizer.every(band => band.gain >= -0.25 && band.gain <= 0.65),
+        'EQ gains must remain within Lavalink limits');
 });
 
 test('official artist/topic audio ranks above lyric-video and fan uploads', () => {
