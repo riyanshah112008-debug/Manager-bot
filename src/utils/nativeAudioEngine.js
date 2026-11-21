@@ -610,7 +610,7 @@ class StarryGuildPlayer {
                 }
             }
 
-            if (hadTrack && !this.destroyed) {
+            if (hadTrack && !this.destroyed && !this.is247) {
                 // A failed startup is not a completed listening session.
                 if (this.textChannel && !this._suppressQueueEndedNotice) {
                     const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
@@ -1017,10 +1017,20 @@ class StarryGuildPlayer {
             new ButtonBuilder().setLabel('Music Dashboard').setEmoji('🎛️').setStyle(ButtonStyle.Link).setURL(MUSIC_DASHBOARD_URL)
         );
 
+        // Row 4: Continuous 24/7 voice mode
+        const stayRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ctrl_247')
+                .setEmoji('🌙')
+                .setLabel(this.is247 ? '24/7: ON' : '24/7: OFF')
+                .setStyle(this.is247 ? ButtonStyle.Success : ButtonStyle.Secondary)
+        );
+
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
-                { label: 'Natural / Unprocessed (Default)', description: 'No EQ boost or artificial spatial processing', value: 'clear', emoji: '🎼' },
+                { label: 'Balanced Studio Master (Default)', description: 'Automatic bass balance, vocal presence and peak-safe loudness', value: 'empowering', emoji: '✨' },
+                { label: 'Natural / Unprocessed', description: 'No EQ boost or artificial spatial processing', value: 'clear', emoji: '🎼' },
                 { label: 'Empowering EQ', description: 'Bass and treble enhancement; may color the original mix', value: 'empowering', emoji: '✨' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -1042,7 +1052,7 @@ class StarryGuildPlayer {
         const lang = this.guildId ? getGuildLanguageSync(this.guildId) : 'en';
         return localizePayload({
             embeds: [embed],
-            components: [row1, row2, row3, filterRow]
+            components: [row1, row2, row3, stayRow, filterRow]
         }, lang);
     }
 
