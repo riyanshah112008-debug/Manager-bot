@@ -438,6 +438,11 @@ class CommandRegistry {
             const commandKey = args.shift()?.toLowerCase();
             if (!commandKey) return;
 
+            // AFK has its own dedicated messageCreate handler in modules/afk.js.
+            // Do not pass it through the generic command registry as well: that
+            // creates a second execution path after the AFK embed has already sent.
+            if (commandKey === 'afk') return;
+
             const resolvedName = this.commands.has(commandKey) ? commandKey : (this.aliases.get(commandKey) || commandKey);
             let command = this.commands.get(resolvedName);
 
