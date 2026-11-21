@@ -75,7 +75,6 @@ module.exports = {
         const manager = client.manager;
         const requester = interaction.user;
         const queued = [];
-        const errors = [];
         const useLavalink = isLavalinkReady(manager);
 
         if (useLavalink) {
@@ -97,9 +96,7 @@ module.exports = {
                         const result = await manager.search(`ytmsearch:${recommendation.search_query}`, { requester });
                         const track = result?.tracks?.[0];
                         if (track) queued.push(track);
-                        else errors.push(recommendation.search_query);
                     } catch (_) {
-                        errors.push(recommendation.search_query);
                     }
                     if (queued.length >= MAX_TRACKS) break;
                 }
@@ -132,10 +129,8 @@ module.exports = {
                         const result = await StarryAudioEngine.search(recommendation.search_query, requester);
                         const track = result?.tracks?.[0];
                         if (track) queued.push(track);
-                        else errors.push(recommendation.search_query);
-                    } catch (_) {
-                        errors.push(recommendation.search_query);
-                    }
+                        } catch (_) {
+                        }
                     if (queued.length >= MAX_TRACKS) break;
                 }
                 if (!queued.length) {
