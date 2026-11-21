@@ -345,7 +345,7 @@ function getDirectAudioStream(videoUrl) {
         execFile('yt-dlp', [
             '--js-runtimes', 'node',
             '--no-playlist',
-            '-f', 'bestaudio[abr>=192]/bestaudio/best',
+            '-f', 'bestaudio[abr>=320]/bestaudio[abr>=256]/bestaudio[abr>=192]/bestaudio/best',
             '-g',
             videoUrl
         ], { timeout: 12000 }, (err, stdout) => {
