@@ -4,6 +4,7 @@ const KazagumoSpotify = require('kazagumo-spotify');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const { isStayConnected, setStayConnected } = require('./musicStayConnected');
+const { createMusicDJPlan } = require('./openAIMusicDJ');
 
 // 🛡️ Ensure KazagumoPlayer has .search() for internal delegates
 if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
@@ -459,14 +460,16 @@ async function applyKazagumoFilter(player, filterName) {
                 await setFilters({
                     // Keep the bass profile punchy, not extreme: overlapping low bands can
                     // accumulate and clip even when each individual EQ value looks safe.
-                    volume: 0.86,
+                    // A tactile 40–100 Hz lift: strong kick/body, with a controlled 250 Hz cut.
+                    // The shared peak-aware preamp retains headroom before Discord's Opus encoder.
+                    volume: 1.0,
                     equalizer: [
-                        { band: 0, gain: 0.06 },  // 25 Hz - Gentle sub-bass support
-                        { band: 1, gain: 0.14 },  // 40 Hz - Main low-bass weight
-                        { band: 2, gain: 0.12 },  // 63 Hz - Controlled punch
-                        { band: 3, gain: 0.05 },  // 100 Hz - Tight kick impact
-                        { band: 4, gain: -0.02 }, // 160 Hz - Minimal low-mid trim
-                        { band: 5, gain: -0.04 }, // 250 Hz - Light mud control
+                        { band: 0, gain: 0.04 },  // 25 Hz - Filter inaudible rumble, retain sub extension
+                        { band: 1, gain: 0.22 },  // 40 Hz - Deep, physical low-bass weight
+                        { band: 2, gain: 0.18 },  // 63 Hz - Kick and bass impact
+                        { band: 3, gain: 0.08 },  // 100 Hz - Controlled punch and warmth
+                        { band: 4, gain: -0.03 }, // 160 Hz - Keep the low mids tight
+                        { band: 5, gain: -0.07 }, // 250 Hz - Reduce boxiness and protect vocal clarity
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
                         { band: 7, gain: 0.00 },  // 630 Hz - Flat
                         { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
@@ -990,6 +993,50 @@ async function triggerAutoplayBuffer(player, playImmediately = false) {
         const requester = referenceTrack.requester || player.kazagumo?.client?.user;
         let candidates = [];
         const searcher = player.kazagumo || player;
+
+        // AI DJ recommendations are only used for a mix explicitly started with /dj.
+        // Every suggested title is resolved by the live music provider before queueing.
+        if (player.data.get('djMode') && process.env.OPENAI_API_KEY) {
+            const plan = await createMusicDJPlan({
+                request: player.data.get('djRequest') || '',
+                currentTrack: referenceTrack,
+                recentTracks: [referenceTrack, ...(Array.isArray(player.queue) ? player.queue.slice(0, 6) : [])],
+                limit: 4
+            });
+            if (plan) {
+                player.data.set('djLastMood', plan.mood);
+                for (const recommendation of plan.recommendations) {
+                    const searchVariants = [
+                        `ytmsearch:${recommendation.search_query}`,
+                        `ytsearch:${recommendation.search_query}`
+                    ];
+                    for (const query of searchVariants) {
+                        if (candidates.length >= 4) break;
+                        try {
+                            const result = await searcher.search(query, { requester });
+                            for (const candidate of result?.tracks || []) {
+                                if (isTrackInHistory(player, candidate)) continue;
+                                if (referenceTrack.identifier && referenceTrack.identifier === candidate.identifier) continue;
+                                if (candidate.length && (candidate.length < 50000 || candidate.length > 900000)) continue;
+                                const duplicate = candidates.some(existing =>
+                                    (existing.identifier && existing.identifier === candidate.identifier) ||
+                                    (existing.title && candidate.title && existing.title.toLowerCase() === candidate.title.toLowerCase())
+                                );
+                                const queued = player.queue?.some(item =>
+                                    (item.identifier && item.identifier === candidate.identifier) ||
+                                    (item.title && candidate.title && item.title.toLowerCase() === candidate.title.toLowerCase())
+                                );
+                                if (!duplicate && !queued) candidates.push(candidate);
+                            }
+                            if (result?.tracks?.length) break;
+                        } catch (_) {
+                            // Fall through to the other provider prefix and native autoplay search.
+                        }
+                    }
+                    if (candidates.length >= 4) break;
+                }
+            }
+        }
 
         for (const query of searchQueries) {
             try {

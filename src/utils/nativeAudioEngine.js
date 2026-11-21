@@ -33,6 +33,7 @@ const {
 } = require('discord.js');
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const config = require('../config');
+const { createMusicDJPlan } = require('./openAIMusicDJ');
 
 const MUSIC_BASE_URL = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`).replace(/\/+$/, '');
 const MUSIC_DASHBOARD_URL = `${MUSIC_BASE_URL}/music.html`;
@@ -44,21 +45,21 @@ const FILTER_ARGS = {
     clear: ['-af', 'volume=1.0'],
     flat: ['-af', 'volume=1.0'],
     // Matches the gentle Lavalink Studio master: restrained low lift, vocal presence, smooth air.
-    empowering: ['-af', 'volume=1.0,highpass=f=25,equalizer=f=40:width_type=q:w=1.0:g=1.2,equalizer=f=63:width_type=q:w=1.0:g=1.4,equalizer=f=110:width_type=q:w=1.0:g=0.8,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.5,equalizer=f=2500:width_type=q:w=1.0:g=0.4,equalizer=f=10000:width_type=q:w=0.8:g=0.3,acompressor=threshold=-20dB:ratio=1.5:attack=15:release=220:makeup=2dB,alimiter=limit=0.96:attack=5:release=140:level=false'],
-    bass: ['-af', 'volume=0.70,bass=g=2.0:f=65:w=0.7,equalizer=f=250:width_type=q:w=1.1:g=-1.0,alimiter=limit=0.94:attack=5:release=160:level=false'],
-    '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.65:offset_l=0:offset_r=0.5,alimiter=limit=0.96:attack=5:release=120:level=false'],
-    nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-0.8,alimiter=limit=0.96:attack=5:release=120:level=false'],
-    daycore: ['-af', 'volume=0.86,asetrate=48000*0.85,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,bass=g=1.0:f=65:w=0.7,alimiter=limit=0.96:attack=5:release=120:level=false'],
-    vaporwave: ['-af', 'volume=0.84,asetrate=48000*0.80,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,aecho=0.8:0.85:50:0.20,alimiter=limit=0.95:attack=5:release=140:level=false'],
-    lofi: ['-af', 'volume=0.88,lowpass=f=4500,bass=g=1.0:f=95:w=0.7,alimiter=limit=0.96:attack=5:release=120:level=false'],
-    reverb: ['-af', 'volume=0.82,asetrate=48000*0.92,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,aecho=0.8:0.85:60|120:0.22|0.16,alimiter=limit=0.94:attack=5:release=160:level=false'],
-    karaoke: ['-af', 'volume=0.92,stereotools=mlev=0.0:slev=1.0,equalizer=f=1000:width_type=q:w=1.5:g=-2.0,alimiter=limit=0.96:attack=5:release=120:level=false'],
-    surround: ['-af', 'volume=0.90,extrastereo=m=1.25,equalizer=f=3500:width_type=q:w=1.0:g=0.6,alimiter=limit=0.96:attack=5:release=120:level=false'],
-    electronic: ['-af', 'volume=0.78,bass=g=1.8:f=60:w=0.7,equalizer=f=280:width_type=q:w=1.2:g=-1.0,treble=g=1.0:f=9000:w=0.7,alimiter=limit=0.94:attack=5:release=140:level=false'],
-    soft: ['-af', 'volume=0.94,equalizer=f=7500:width_type=q:w=1.0:g=-1.5,equalizer=f=12000:width_type=q:w=1.0:g=-2.0,alimiter=limit=0.97:attack=5:release=120:level=false'],
-    radio: ['-af', 'volume=0.86,highpass=f=450,lowpass=f=3200,equalizer=f=1400:width_type=q:w=1.0:g=1.5,alimiter=limit=0.94:attack=5:release=140:level=false'],
-    treble: ['-af', 'volume=0.88,equalizer=f=8000:width_type=q:w=0.8:g=1.2,equalizer=f=12000:width_type=q:w=1.0:g=0.8,alimiter=limit=0.95:attack=5:release=120:level=false'],
-    pop: ['-af', 'volume=0.90,equalizer=f=220:width_type=q:w=1.2:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.5,equalizer=f=3200:width_type=q:w=1.0:g=0.8,alimiter=limit=0.96:attack=5:release=120:level=false']
+    empowering: ['-af', 'volume=1.0,highpass=f=25,equalizer=f=40:width_type=q:w=1.0:g=0.7,equalizer=f=63:width_type=q:w=1.0:g=0.9,equalizer=f=110:width_type=q:w=1.0:g=0.5,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.5,equalizer=f=2500:width_type=q:w=1.0:g=0.4,equalizer=f=10000:width_type=q:w=0.8:g=0.3,acompressor=threshold=0.16:ratio=1.5:attack=15:release=220:makeup=1.15:knee=3.0'],
+    bass: ['-af', 'volume=0.90,highpass=f=28,bass=g=3.8:f=58:w=0.8,equalizer=f=160:width_type=q:w=1.1:g=-1.0,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1800:width_type=q:w=0.9:g=0.3,acompressor=threshold=0.16:ratio=2.0:attack=12:release=180:makeup=1.05:knee=3.0'],
+    '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.65:offset_l=0:offset_r=0.5'],
+    nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-0.8'],
+    daycore: ['-af', 'volume=0.86,asetrate=48000*0.85,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,bass=g=1.0:f=65:w=0.7'],
+    vaporwave: ['-af', 'volume=0.84,asetrate=48000*0.80,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,aecho=0.8:0.85:50:0.20'],
+    lofi: ['-af', 'volume=0.88,lowpass=f=4500,bass=g=1.0:f=95:w=0.7'],
+    reverb: ['-af', 'volume=0.82,asetrate=48000*0.92,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,aecho=0.8:0.85:60|120:0.22|0.16'],
+    karaoke: ['-af', 'volume=0.92,stereotools=mlev=0.0:slev=1.0,equalizer=f=1000:width_type=q:w=1.5:g=-2.0'],
+    surround: ['-af', 'volume=0.90,extrastereo=m=1.25,equalizer=f=3500:width_type=q:w=1.0:g=0.6'],
+    electronic: ['-af', 'volume=0.78,bass=g=1.8:f=60:w=0.7,equalizer=f=280:width_type=q:w=1.2:g=-1.0,treble=g=1.0:f=9000:w=0.7'],
+    soft: ['-af', 'volume=0.94,equalizer=f=7500:width_type=q:w=1.0:g=-1.5,equalizer=f=12000:width_type=q:w=1.0:g=-2.0'],
+    radio: ['-af', 'volume=0.86,highpass=f=450,lowpass=f=3200,equalizer=f=1400:width_type=q:w=1.0:g=1.5'],
+    treble: ['-af', 'volume=0.88,equalizer=f=8000:width_type=q:w=0.8:g=1.2,equalizer=f=12000:width_type=q:w=1.0:g=0.8'],
+    pop: ['-af', 'volume=0.90,equalizer=f=220:width_type=q:w=1.2:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.5,equalizer=f=3200:width_type=q:w=1.0:g=0.8']
 };
 // Aliases for seamless backwards compatibility
 FILTER_ARGS.bassboost = FILTER_ARGS.bass;
@@ -95,7 +96,7 @@ function getFilterArgs(filterName, volumePercent = 100, equalizer = null) {
     const headroom = Math.pow(10, -(positiveGainSum > 0 ? (positiveGainSum + 1.5) : 0) / 20);
     const adjustedVolume = filterStr.replace(/volume=([0-9.]+)/,(match,baseVol)=>`volume=${(parseFloat(baseVol)*volScale*headroom).toFixed(3)}`);
     const eq = gains ? specs.map(([key,freq,width])=>{const gain=Math.max(-6,Math.min(6,Number(gains[key])||0));return gain===0?null:`equalizer=f=${freq}:width_type=q:w=${width}:g=${gain.toFixed(1)}`;}).filter(Boolean) : [];
-    return ['-af',[adjustedVolume,...eq,'alimiter=limit=0.98:attack=5:release=180:level=false','aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
+    return ['-af',[adjustedVolume,...eq,'alimiter=limit=0.96:attack=5:release=180:level=false','aresample=48000:resampler=swr:filter_size=32:phase_shift=10'].join(',')];
 }
 
 let scClientId = null;
@@ -588,7 +589,7 @@ class StarryGuildPlayer {
             // High-Intelligence Autoplay Recommendation
             if (this.autoplay && this.previousTrack) {
                 try {
-                    const nextSong = await StarryAudioEngine.getAutoplayRecommendation(this.previousTrack, this.history);
+                    const nextSong = await StarryAudioEngine.getAutoplayRecommendation(this.previousTrack, this.history, this.djRequest || '');
                     if (nextSong) {
                         if (this.textChannel) {
                             const autoEmbed = new EmbedBuilder()
@@ -1857,7 +1858,7 @@ class StarryAudioEngine {
         return result;
     }
 
-    static async getAutoplayRecommendation(currentTrack, history = []) {
+    static async getAutoplayRecommendation(currentTrack, history = [], djRequest = '') {
         if (!currentTrack) return null;
         const primaryArtist = (currentTrack.author || '').split(',')[0].trim();
         const currentTitleClean = (currentTrack.title || '')
@@ -1879,6 +1880,35 @@ class StarryAudioEngine {
             }
             return true;
         };
+
+        // OpenAI proposes songs only; the native provider search must return a playable result.
+        if (djRequest && process.env.OPENAI_API_KEY) {
+            const plan = await createMusicDJPlan({
+                request: djRequest,
+                currentTrack,
+                recentTracks: history,
+                limit: 4
+            });
+            for (const recommendation of plan?.recommendations || []) {
+                try {
+                    const results = await play.search(recommendation.search_query, { limit: 6 });
+                    for (const item of results || []) {
+                        if (!isFresh(item.title, item.url)) continue;
+                        return {
+                            title: item.title,
+                            author: item.channel?.name || recommendation.artist || primaryArtist,
+                            url: item.url,
+                            duration: (item.durationInSec || 180) * 1000,
+                            thumbnail: item.thumbnails?.[0]?.url || currentTrack.thumbnail,
+                            source: 'Starry AI DJ',
+                            requester: currentTrack.requester
+                        };
+                    }
+                } catch (_) {
+                    // Continue through the AI plan; built-in Spotify and YouTube autoplay remain the fallback.
+                }
+            }
+        }
 
         // 1. Official Spotify Search: top tracks by artist
         try {
@@ -1950,5 +1980,7 @@ module.exports = {
     StarryAudioEngine,
     StarryGuildPlayer,
     formatTime,
-    createProgressBar
+    createProgressBar,
+    getFilterArgs,
+    FILTER_ARGS
 };

@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const LAVALINK_MIN_GAIN = -1 / 4;
 const LAVALINK_HALF_GAIN = 1 / 2;
+const fs = require('node:fs');
+const nativeAudioSource = fs.readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
 const {
     applyKazagumoFilter,
     applyKazagumoEqualizer,
@@ -167,6 +169,31 @@ test('bass EQ retains strong low-frequency energy with controlled preamp headroo
         'all EQ bands must remain inside the supported safety range');
 });
 
+
+test('Bass profile keeps tactile low-end impact with bounded Lavalink headroom', async () => {
+    const stub = createPlayer();
+    assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
+    const filters = stub.getApplied();
+    assert.ok(filters.volume > 0.78 && filters.volume < 0.85);
+    assert.ok(filters.equalizer.find(band => band.band === 1)?.gain >= 0.22);
+    assert.ok(filters.equalizer.find(band => band.band === 2)?.gain >= 0.18);
+    assert.ok(filters.equalizer.find(band => band.band === 5)?.gain <= -0.07);
+    assert.ok(filters.equalizer.every(band => band.gain >= LAVALINK_MIN_GAIN && band.gain <= LAVALINK_HALF_GAIN));
+});
+
+test('native Bass and Studio profiles use one final limiter and controlled compression', () => {
+    const bassProfile = nativeAudioSource.match(/    bass: \['-af', '([^']+)'\],/);
+    const studioProfile = nativeAudioSource.match(/    empowering: \['-af', '([^']+)'\],/);
+    assert.ok(bassProfile, 'native Bass profile must exist');
+    assert.ok(studioProfile, 'native Studio profile must exist');
+    assert.match(bassProfile[1], /acompressor=/);
+    assert.match(bassProfile[1], /bass=g=3\.8:f=58/);
+    assert.match(bassProfile[1], /equalizer=f=250/);
+    assert.doesNotMatch(bassProfile[1], /alimiter=/, 'profiles must not stack a limiter before the shared final limiter');
+    assert.doesNotMatch(studioProfile[1], /alimiter=/, 'studio profile must use the shared final limiter');
+    const sharedLimiter = nativeAudioSource.match(/'alimiter=limit=0\.96:attack=5:release=180:level=false'/g) || [];
+    assert.equal(sharedLimiter.length, 1, 'native output chain must have one final limiter');
+});
 
 test('each selectable audio mode applies its defining DSP effect', async () => {
     const expected = {
