@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const LAVALINK_MIN_GAIN = -1 / 4;
 const LAVALINK_HALF_GAIN = 1 / 2;
+const { getFilterArgs, FILTER_ARGS } = require('../src/utils/nativeAudioEngine');
 const {
     applyKazagumoFilter,
     applyKazagumoEqualizer,
@@ -167,6 +168,28 @@ test('bass EQ retains strong low-frequency energy with controlled preamp headroo
         'all EQ bands must remain inside the supported safety range');
 });
 
+
+test('Bass profile keeps tactile low-end impact with bounded Lavalink headroom', async () => {
+    const stub = createPlayer();
+    assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
+    const filters = stub.getApplied();
+    assert.ok(filters.volume > 0.78 && filters.volume < 0.85);
+    assert.ok(filters.equalizer.find(band => band.band === 1)?.gain >= 0.22);
+    assert.ok(filters.equalizer.find(band => band.band === 2)?.gain >= 0.18);
+    assert.ok(filters.equalizer.find(band => band.band === 5)?.gain <= -0.07);
+    assert.ok(filters.equalizer.every(band => band.gain >= LAVALINK_MIN_GAIN && band.gain <= LAVALINK_HALF_GAIN));
+});
+
+test('native Bass and Studio profiles use one final limiter and controlled compression', () => {
+    for (const profile of ['bass', 'empowering']) {
+        const args = getFilterArgs(profile, 100);
+        const filterChain = args[1];
+        assert.equal((filterChain.match(/alimiter=/g) || []).length, 1, profile + ' must not stack limiters');
+    }
+    assert.match(FILTER_ARGS.bass[1], /acompressor=/);
+    assert.match(FILTER_ARGS.bass[1], /bass=g=3\.8:f=58/);
+    assert.match(FILTER_ARGS.bass[1], /equalizer=f=250/);
+});
 
 test('each selectable audio mode applies its defining DSP effect', async () => {
     const expected = {
