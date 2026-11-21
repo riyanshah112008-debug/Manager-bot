@@ -906,7 +906,7 @@ class MusicControllerEngine {
 
         // Active Player Guards
         const hasTrack = isKazagumo ? (player.playing || !!player.queue?.current) : (player && !!player.currentTrack);
-        if (!player || !hasTrack) {
+        if (!player || (!hasTrack && !(customId === 'ctrl_stop' && getStayConnected(player)))) {
             return interaction.reply({ content: '❌ No active music session playing right now.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
 
