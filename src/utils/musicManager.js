@@ -420,11 +420,13 @@ async function applyKazagumoFilter(player, filterName) {
                         gain: Math.max(-0.25, Math.min(0.65, Number.isFinite(gain) ? gain : 0))
                     };
                 });
-            // EQ boosts can raise peaks. Use a conservative, bounded preamp reserve.
-            const maximumPositiveBoost = equalizer.reduce((maximum, band) => Math.max(maximum, band.gain), 0);
-            // A measured 0.5 dB base reserve avoids the excessive loudness drop
-            // caused by the former 1 dB + 3x-boost attenuation, while retaining peak safety.
-            const peakHeadroomDb = maximumPositiveBoost > 0 ? Math.min(3, 0.5 + (maximumPositiveBoost * 2)) : 0;
+            // EQ bands overlap in the low end and presence region. A reserve based only
+            // on the single largest band can leave the combined signal clipping. Estimate
+            // cumulative boost and apply a modest preamp reduction before voice encoding.
+            const positiveBoostSum = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
+            const peakHeadroomDb = positiveBoostSum > 0
+                ? Math.min(4, 0.5 + (positiveBoostSum * 2.5))
+                : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const rawVolume = Number(filters.volume ?? 1);
             const requestedVolume = Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 1;
