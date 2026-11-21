@@ -3,6 +3,7 @@ const { Connectors } = require('shoukaku');
 const KazagumoSpotify = require('kazagumo-spotify');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
+const { isStayConnected, setStayConnected } = require('./musicStayConnected');
 
 // 🛡️ Ensure KazagumoPlayer has .search() for internal delegates
 if (KazagumoPlayer && !KazagumoPlayer.prototype.search) {
@@ -337,7 +338,7 @@ const defaultNodes = [
 
 const Nodes = defaultNodes;
 
-function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
+function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConnected = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
 
     // Row 1: Primary Transport Controls (4 buttons - fits mobile without wrapping)
@@ -369,6 +370,15 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
         new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary)
     );
 
+    // Row 4: 24/7 continuous voice mode
+    const stayRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('ctrl_247')
+            .setEmoji('🌙')
+            .setLabel(stayConnected ? '24/7: ON' : '24/7: OFF')
+            .setStyle(stayConnected ? ButtonStyle.Success : ButtonStyle.Secondary)
+    );
+
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
@@ -391,7 +401,7 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false) {
         ])
     );
 
-    return [row1, row2, row3, filterRow];
+    return [row1, row2, row3, stayRow, filterRow];
 }
 
 async function applyKazagumoFilter(player, filterName) {
@@ -412,7 +422,9 @@ async function applyKazagumoFilter(player, filterName) {
                 });
             // EQ boosts can raise peaks. Use a conservative, bounded preamp reserve.
             const maximumPositiveBoost = equalizer.reduce((maximum, band) => Math.max(maximum, band.gain), 0);
-            const peakHeadroomDb = maximumPositiveBoost > 0 ? Math.min(4, 1 + (maximumPositiveBoost * 3)) : 0;
+            // A measured 0.5 dB base reserve avoids the excessive loudness drop
+            // caused by the former 1 dB + 3x-boost attenuation, while retaining peak safety.
+            const peakHeadroomDb = maximumPositiveBoost > 0 ? Math.min(3, 0.5 + (maximumPositiveBoost * 2)) : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const rawVolume = Number(filters.volume ?? 1);
             const requestedVolume = Number.isFinite(rawVolume) ? Math.max(0, Math.min(1, rawVolume)) : 1;
@@ -810,30 +822,26 @@ async function applyKazagumoFilter(player, filterName) {
             case 'audiophile':
             case 'master':
             case 'studio':
-                // ⭐ BALANCED STUDIO-STYLE EQ (headroom-preserving; source quality varies)
-                // - Gentle low-end support and a small 250 Hz cut keep the mix balanced.
-                // - Modest 1.0-4.0 kHz presence preserves vocal intelligibility without a harsh treble shelf.
-                // - Subtle 10-16 kHz lift adds air while leaving the overall profile close to neutral.
-                // - Requested profile volume is 0.94; setFilters adds bounded headroom based on the strongest EQ boost.
-                // - In-phase stereo (channelMix: null) for crystal-clear centered vocals and zero comb-filtering
+                // ⭐ Automatic Premium-style master: fuller bass, natural vocal body, controlled presence.
+                // Keep boosts modest; the shared limiter reserve prevents clipping on loud masters.
                 await setFilters({
-                    volume: 0.94,
+                    volume: 1.0,
                     equalizer: [
-                        { band: 0, gain: 0.06 },  // 25 Hz: Clean sub rumble
-                        { band: 1, gain: 0.10 },  // 40 Hz: Warm, tactile chest punch
-                        { band: 2, gain: 0.10 },  // 63 Hz: Solid kick definition
-                        { band: 3, gain: 0.04 },  // 100 Hz: Gentle warmth
-                        { band: 4, gain: -0.04 }, // 160 Hz: Transition slope
-                        { band: 5, gain: -0.12 }, // 250 Hz: Mud scoop - de-masks vocals!
-                        { band: 6, gain: -0.02 }, // 400 Hz: Clean separation
-                        { band: 7, gain: 0.00 },  // 630 Hz: Neutral
-                        { band: 8, gain: 0.02 },  // 1.0 kHz: Vocal intelligibility
-                        { band: 9, gain: 0.05 },  // 1.6 kHz: Vocal forwardness
-                        { band: 10, gain: 0.08 }, // 2.5 kHz: Crystal-clear vocal bite
-                        { band: 11, gain: 0.03 }, // 4.0 kHz: Snare snap & presence
-                        { band: 12, gain: 0.02 }, // 6.3 kHz: Smooth highs
-                        { band: 13, gain: 0.04 }, // 10.0 kHz: Air & sparkle
-                        { band: 14, gain: 0.04 }  // 16.0 kHz: Ultra-high brilliance
+                        { band: 0, gain: 0.08 },  // 25 Hz: Sub extension
+                        { band: 1, gain: 0.18 },  // 40 Hz: Warm low bass
+                        { band: 2, gain: 0.16 },  // 63 Hz: Kick impact
+                        { band: 3, gain: 0.08 },  // 100 Hz: Bass body
+                        { band: 4, gain: 0.00 },  // 160 Hz: Keep warmth without boom
+                        { band: 5, gain: -0.08 }, // 250 Hz: Reduce muddiness
+                        { band: 6, gain: -0.02 }, // 400 Hz: Preserve natural mids
+                        { band: 7, gain: 0.01 },  // 630 Hz: Neutral body
+                        { band: 8, gain: 0.04 },  // 1.0 kHz: Vocal intelligibility
+                        { band: 9, gain: 0.07 },  // 1.6 kHz: Vocal presence
+                        { band: 10, gain: 0.06 }, // 2.5 kHz: Clarity without harshness
+                        { band: 11, gain: 0.03 }, // 4.0 kHz: Transient detail
+                        { band: 12, gain: 0.01 }, // 6.3 kHz: Smooth highs
+                        { band: 13, gain: 0.03 }, // 10.0 kHz: Air
+                        { band: 14, gain: 0.02 }  // 16.0 kHz: Gentle sparkle
                     ],
                     channelMix: null,
                     timescale: null,
@@ -1190,6 +1198,16 @@ function createMusicManager(client) {
         console.warn(`⚠️ [Lavalink Failover] (${client.user ? client.user.username : 'Bot'}) Node [${name}] notice`);
     });
 
+    // A real voice-state departure (kick, move or explicit disconnect) ends 24/7 mode.
+    if (typeof client.on === 'function') {
+        client.on('voiceStateUpdate', (oldState, newState) => {
+            if (newState?.id !== client.user?.id || !oldState?.channelId) return;
+            if (newState.channelId === oldState.channelId) return;
+            const activePlayer = manager.getPlayer(oldState.guild?.id);
+            if (activePlayer && isStayConnected(activePlayer)) setStayConnected(activePlayer, false);
+        });
+    }
+
     manager.shoukaku.on('disconnect', (name, count) => {
         console.warn(`⚠️ [Lavalink] Node [${name}] disconnected (Retry: ${count})`);
     });
@@ -1203,6 +1221,21 @@ function createMusicManager(client) {
         }
     }
 
+    // If a moderator/user manually disconnects the bot from voice, end the session.
+    // 24/7 means stay connected while the bot is in the channel, not fight an explicit kick/leave.
+    if (!client._starryMusicVoiceExitListener) {
+        client._starryMusicVoiceExitListener = (oldState, newState) => {
+            if (newState?.id !== client.user?.id || !oldState?.channelId || newState?.channelId) return;
+            const active = manager.getPlayer(oldState.guild?.id);
+            if (!active || active.voiceId !== oldState.channelId) return;
+            try { active.data?.set?.('stayConnected', false); active.data?.set?.('autoplay', false); } catch (_) {}
+            Promise.resolve(active.destroy?.()).catch(error => {
+                console.warn(`[Music 24/7] Could not clean up manually disconnected player in ${oldState.guild?.id}:`, error.message || error);
+            });
+        };
+        client.on('voiceStateUpdate', client._starryMusicVoiceExitListener);
+    }
+
     // Player Start Event
     manager.on('playerStart', async (player, track) => {
         player.data.set('previousTrack', track);
@@ -1212,7 +1245,7 @@ function createMusicManager(client) {
         recordTrackHistory(player, track);
 
         // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
-        const activeFilter = player.data.get('activeFilter') || 'clear';
+        const activeFilter = player.data.get('activeFilter') || 'empowering';
         player.data.set('activeFilter', activeFilter);
         await applyKazagumoFilter(player, activeFilter).catch(() => {});
 
@@ -1295,7 +1328,7 @@ function createMusicManager(client) {
             });
 
         const lang = player.guildId ? getGuildLanguageSync(player.guildId) : 'en';
-        const components = buildNowPlayingComponents(player.guildId, isAutoplay);
+        const components = buildNowPlayingComponents(player.guildId, isAutoplay, isStayConnected(player));
         const messageData = localizePayload({ embeds: [embed], components }, lang);
 
         try {
@@ -1341,12 +1374,24 @@ function createMusicManager(client) {
 
     manager.on('playerEmpty', async player => {
         const channel = client.channels.cache.get(player.textId);
-        const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay);
+        const stayConnected = isStayConnected(player);
+        if (stayConnected) setStayConnected(player, true);
+        const isAutoplay = Boolean(player.data.get('autoplay') || player.autoplay || stayConnected);
 
-        // 📻 HIGH-INTELLIGENCE AUTOPLAY RECOMMENDATION ENGINE
+        // Continuous sessions request a replacement track whenever the queue empties.
         if (isAutoplay) {
             const success = await triggerAutoplayBuffer(player, true).catch(() => false);
             if (success) return;
+        }
+
+        // If recommendations are temporarily unavailable, keep the voice session alive
+        // and wait for a user request instead of treating an empty queue as a disconnect.
+        if (stayConnected) {
+            try {
+                const musicController = require('../modules/musicController');
+                await musicController.update(player.guildId, client).catch(() => {});
+            } catch (_) {}
+            return;
         }
 
         // Dedicated Request Channel Integration: Update controller in-place
