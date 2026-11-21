@@ -420,12 +420,17 @@ async function applyKazagumoFilter(player, filterName) {
                         gain: Math.max(-0.25, Math.min(0.65, Number.isFinite(gain) ? gain : 0))
                     };
                 });
-            // EQ bands overlap in the low end and presence region. A reserve based only
-            // on the single largest band can leave the combined signal clipping. Estimate
-            // cumulative boost and apply a modest preamp reduction before voice encoding.
-            const positiveBoostSum = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-            const peakHeadroomDb = positiveBoostSum > 0
-                ? Math.min(4, 0.5 + (positiveBoostSum * 2.5))
+            // Lavalink EQ gain is a multiplier: +0.25 doubles the affected band.
+            // Estimate local overlap from adjacent third-octave bands, then reserve
+            // the corresponding peak headroom plus 1 dB before Discord voice encoding.
+            const effectiveBandGains = equalizer.map((band, index) => {
+                const previous = Math.max(0, equalizer[index - 1]?.gain || 0);
+                const next = Math.max(0, equalizer[index + 1]?.gain || 0);
+                return Math.max(0, band.gain) + (0.25 * (previous + next));
+            });
+            const maximumEffectiveGain = Math.max(0, ...effectiveBandGains);
+            const peakHeadroomDb = maximumEffectiveGain > 0
+                ? (maximumEffectiveGain * 24.0824) + 1
                 : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const rawVolume = Number(filters.volume ?? 1);
@@ -459,14 +464,14 @@ async function applyKazagumoFilter(player, filterName) {
                 await setFilters({
                     // Keep the bass profile punchy, not extreme: overlapping low bands can
                     // accumulate and clip even when each individual EQ value looks safe.
-                    volume: 0.86,
+                    volume: 1.0,
                     equalizer: [
-                        { band: 0, gain: 0.06 },  // 25 Hz - Gentle sub-bass support
-                        { band: 1, gain: 0.14 },  // 40 Hz - Main low-bass weight
-                        { band: 2, gain: 0.12 },  // 63 Hz - Controlled punch
-                        { band: 3, gain: 0.05 },  // 100 Hz - Tight kick impact
-                        { band: 4, gain: -0.02 }, // 160 Hz - Minimal low-mid trim
-                        { band: 5, gain: -0.04 }, // 250 Hz - Light mud control
+                        { band: 0, gain: 0.03 },  // 25 Hz - Remove mostly inaudible subsonic energy
+                        { band: 1, gain: 0.19 },  // 40 Hz - Deep tactile bass weight
+                        { band: 2, gain: 0.12 },  // 63 Hz - Tight kick and bass impact
+                        { band: 3, gain: 0.03 },  // 100 Hz - Small punch support
+                        { band: 4, gain: -0.05 }, // 160 Hz - Reduce boom and muddiness
+                        { band: 5, gain: -0.08 }, // 250 Hz - Clear low mids and vocals
                         { band: 6, gain: 0.00 },  // 400 Hz - Flat
                         { band: 7, gain: 0.00 },  // 630 Hz - Flat
                         { band: 8, gain: 0.00 },  // 1.0 kHz - 100% untouched vocals
