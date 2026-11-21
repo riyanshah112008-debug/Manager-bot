@@ -1,9 +1,9 @@
 const assert = require('assert');
 const config = require('../src/config');
-const { CommandRegistry } = require('../src/modules/commandHandler');
+const { CommandRegistry, getCommandDefaultMemberPermissions } = require('../src/modules/commandHandler');
 const { buildCategoryEmbed } = require('../src/utils/helpHelper');
 const { EventEmitter } = require('events');
-const { PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
 
 console.log('🧪 Starting Starry Public Prefix Command Access Test Suite...\n');
 
@@ -101,6 +101,32 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
             executedCount++;
         }
     });
+
+    // This mirrors standalone admin modules such as emergency-nuke: their
+    // SlashCommandBuilder declares permissions, but they have no prefix
+    // permissions array.
+    const defaultRestrictedCommand = {
+        data: new SlashCommandBuilder()
+            .setName('defaultrestricted')
+            .setDescription('Test command protected only by slash default permissions')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        async execute() {
+            executedCount++;
+        }
+    };
+    registry.commands.set('defaultrestricted', defaultRestrictedCommand);
+    assert.strictEqual(
+        getCommandDefaultMemberPermissions(defaultRestrictedCommand),
+        PermissionFlagsBits.Administrator,
+        'Default slash permissions must be readable by the prefix dispatcher'
+    );
+
+    const emergencyNukeCommand = require('../src/commands/moderation/emergency-nuke');
+    assert.strictEqual(
+        getCommandDefaultMemberPermissions(emergencyNukeCommand),
+        PermissionFlagsBits.Administrator,
+        'The actual emergency-nuke command must expose its Administrator default to the prefix guard'
+    );
 
     const mockClient = new EventEmitter();
     mockClient.isPrimary = true;
@@ -260,7 +286,46 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
     assert.strictEqual(executedCount, 1, 'Bot owners retain the existing owner override for restricted commands');
     assert.strictEqual(noticeSent, false, 'Bot owners must not receive a permission denial');
 
-    // Case F: Regular user mentions bot (<@111111111111111111> ask what is 2+2)
+    // Case F: Slash default_member_permissions must also gate prefix execution.
+    executedCount = 0;
+    noticeSent = false;
+    const defaultDeniedMessage = {
+        id: 'msg_regular_default_permission_denied',
+        content: ',defaultrestricted',
+        author: { id: '999999999999999995', tag: 'RegularMember#0005', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: () => false } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', defaultDeniedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 0, 'Members without the slash default Administrator permission must not execute the prefix command');
+    assert.strictEqual(noticeSent, true, 'Members denied by slash default permissions must receive a denial');
+
+    executedCount = 0;
+    noticeSent = false;
+    const defaultAllowedMessage = {
+        id: 'msg_admin_default_permission_allowed',
+        content: ',defaultrestricted',
+        author: { id: '999999999999999994', tag: 'ServerAdmin#0006', bot: false },
+        guild: { id: 'guild_123', name: 'Test Guild' },
+        member: { permissions: { has: permission => permission === PermissionFlagsBits.Administrator } },
+        channel: { id: 'channel_123', isDMBased: () => false },
+        reply: async () => {
+            noticeSent = true;
+            return { delete: async () => {} };
+        }
+    };
+    mockClient.emit('messageCreate', defaultAllowedMessage);
+    await new Promise(r => setTimeout(r, 60));
+    assert.strictEqual(executedCount, 1, 'Members with the slash default Administrator permission must execute the prefix command');
+    assert.strictEqual(noticeSent, false, 'Authorized administrators must not receive a permission denial');
+
+    // Case G: Regular user mentions bot (<@111111111111111111> ask what is 2+2)
     // Mentions are NOT prefix commands and must NOT be blocked by owner-only prefix policy!
     executedCount = 0;
     noticeSent = false;
@@ -281,7 +346,7 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
     assert.strictEqual(noticeSent, false, 'Mentioning bot must NOT trigger prefix owner block notice');
     console.log('  ✅ Regular user mentioning bot (<@BOT_ID> ask ...) executed without prefix block');
 
-    // Case G: Regular user in DMs talking to Starry AI naturally (without prefix)
+    // Case H: Regular user in DMs talking to Starry AI naturally (without prefix)
     executedCount = 0;
     noticeSent = false;
     const dmMessage = {
@@ -300,6 +365,6 @@ console.log('\n▶ Test 2: Verifying prefix dispatching for regular members and 
     assert.strictEqual(noticeSent, false, 'DM natural conversation must NOT trigger prefix owner block notice');
     console.log('  ✅ Regular user natural AI conversation in DMs executed without prefix block');
 
-    console.log('\n✨ ALL PUBLIC PREFIX ACCESS TESTS PASSED (100% Pass Rate)!');
+    console.log('\n✨ ALL PUBLIC PREFIX ACCESS AND DEFAULT-PERMISSION TESTS PASSED!');
     process.exit(0);
 })();

@@ -119,6 +119,40 @@ function isPrimaryBotClient(client) {
     return true;
 }
 
+const INVALID_DEFAULT_MEMBER_PERMISSIONS = Symbol('invalid-default-member-permissions');
+const defaultMemberPermissionsCache = new WeakMap();
+
+/**
+ * Read the Discord slash-command default permission bitfield so prefix
+ * dispatch enforces the same restriction. Slash defaults do not protect
+ * message-based invocations.
+ */
+function getCommandDefaultMemberPermissions(command) {
+    if (!command || typeof command !== 'object') return null;
+    if (defaultMemberPermissionsCache.has(command)) {
+        return defaultMemberPermissionsCache.get(command);
+    }
+
+    let result = null;
+    try {
+        const definition = typeof command.data?.toJSON === 'function'
+            ? command.data.toJSON()
+            : command.data;
+        const raw = definition?.default_member_permissions;
+        if (raw !== undefined && raw !== null && raw !== '' && raw !== '0' && raw !== 0 && raw !== 0n) {
+            const permissions = BigInt(raw);
+            result = permissions > 0n ? permissions : INVALID_DEFAULT_MEMBER_PERMISSIONS;
+        }
+    } catch (_) {
+        // Fail closed for malformed permission metadata rather than exposing
+        // a command whose declared access policy cannot be read.
+        result = INVALID_DEFAULT_MEMBER_PERMISSIONS;
+    }
+
+    defaultMemberPermissionsCache.set(command, result);
+    return result;
+}
+
 // Load Master Bundles
 const musicCommands = require('../commands/bundles/musicCommands');
 const moderationCommands = require('../commands/bundles/moderationCommands');
@@ -470,14 +504,26 @@ NaN
             }
 
             try {
-                // Check permissions if in a guild
-                if (message.guild && command.permissions && Array.isArray(command.permissions)) {
-                    if (!config.isBotOwner(message.author.id, client)) {
-                        for (const perm of command.permissions) {
-                            if (!message.member?.permissions?.has(perm)) {
-                                return ctx.reply('❌ You do not have sufficient permissions to execute this command.');
-                            }
+                // Enforce explicit prefix permissions and the SlashCommandBuilder default
+                // permission bitfield. Discord applies the latter to slash invocations only;
+                // without this check, ordinary members can prefix-call admin-only modules.
+                if (message.guild && !config.isBotOwner(message.author.id, client)) {
+                    const memberPermissions = message.member?.permissions;
+                    const hasPermission = (permission) => {
+                        try {
+                            return Boolean(memberPermissions?.has?.(permission));
+                        } catch (_) {
+                            return false;
                         }
+                    };
+                    const declaredPermissions = Array.isArray(command.permissions) ? command.permissions : [];
+                    const missingDeclaredPermission = declaredPermissions.some(permission => !hasPermission(permission));
+                    const defaultPermissions = getCommandDefaultMemberPermissions(command);
+                    const missingDefaultPermission = defaultPermissions === INVALID_DEFAULT_MEMBER_PERMISSIONS ||
+                        (defaultPermissions !== null && !hasPermission(defaultPermissions));
+
+                    if (missingDeclaredPermission || missingDefaultPermission) {
+                        return ctx.reply('❌ You do not have sufficient permissions to execute this command.');
                     }
                 }
 
@@ -1784,6 +1830,7 @@ module.exports.guildPrefixCache = guildPrefixCache;
 module.exports.getGuildPrefix = getGuildPrefix;
 module.exports.setCachedPrefix = setCachedPrefix;
 module.exports.CommandRegistry = CommandRegistry;
+module.exports.getCommandDefaultMemberPermissions = getCommandDefaultMemberPermissions;
 
 const { getGuildLanguage, getGuildLanguageSync, setGuildLanguage, t } = require('../utils/i18n');
 module.exports.getGuildLanguage = getGuildLanguage;
