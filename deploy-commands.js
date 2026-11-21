@@ -120,10 +120,8 @@ if (raidModule && raidModule.data) {
 
 // catchup is intentionally excluded from global slash-command deployment.
 
-const pentestModule = safeRequire(['./src/commands/utility/pentest', './commands/utility/pentest']);
-if (pentestModule && pentestModule.data) {
-    masterPayloads.push(pentestModule.data.toJSON ? pentestModule.data.toJSON() : pentestModule.data);
-}
+const massRolesModule = safeRequire(['./src/commands/moderation/massroles', './commands/moderation/massroles']);
+if (massRolesModule && massRolesModule.data) masterPayloads.push(massRolesModule.data.toJSON ? massRolesModule.data.toJSON() : massRolesModule.data);
 
 const chronosModule = safeRequire(['./src/commands/utility/chronos', './commands/utility/chronos']);
 if (chronosModule && chronosModule.data) {

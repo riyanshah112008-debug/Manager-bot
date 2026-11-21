@@ -705,39 +705,7 @@ const commands = [
         }
     },
 
-    // 28. ROLEALL
-    {
-        name: 'roleall',
-        aliases: ['massrole'],
-        category: 'Moderation',
-        description: 'Give a role to all human members or bots in server.',
-        usage: ',roleall <humans/bots/all> <@role>',
-        permissions: [PermissionFlagsBits.Administrator],
-        async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
-            }
-            const targetType = ctx.args[0]?.toLowerCase();
-            const roleQuery = ctx.args.slice(1).join(' ').replace(/[^0-9]/g, '');
-            const role = ctx.guild.roles.cache.get(roleQuery);
-            if (!role) return ctx.reply('❌ Usage: `,roleall humans @role` or `,roleall bots @role`');
-
-            ctx.reply(`⏳ **Applying role <@&${role.id}> to ${targetType}...**`);
-            const members = await ctx.guild.members.fetch();
-            let count = 0;
-            for (const m of members.values()) {
-                if (targetType === 'humans' && m.user.bot) continue;
-                if (targetType === 'bots' && !m.user.bot) continue;
-                if (!m.roles.cache.has(role.id)) {
-                    await m.roles.add(role).catch(() => {});
-                    count++;
-                }
-            }
-            return ctx.channel.send(`✅ **Finished mass role:** Added <@&${role.id}> to **${count}** members.`);
-        }
-    },
-
-    // 29. VCKICK
+    // 28. VCKICK
     {
         name: 'vckick',
         aliases: ['voicedisconnect'],
