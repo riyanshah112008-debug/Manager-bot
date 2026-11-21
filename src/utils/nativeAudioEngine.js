@@ -44,7 +44,7 @@ const FILTER_ARGS = {
     clear: ['-af', 'volume=1.0'],
     flat: ['-af', 'volume=1.0'],
     // Matches the gentle Lavalink Studio master: restrained low lift, vocal presence, smooth air.
-    empowering: ['-af', 'volume=1.0,highpass=f=25,equalizer=f=63:width_type=q:w=1.0:g=1.0,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.6,equalizer=f=2500:width_type=q:w=1.0:g=0.8,equalizer=f=10000:width_type=q:w=0.8:g=0.5,acompressor=threshold=-18dB:ratio=1.35:attack=20:release=250:makeup=1.5dB,alimiter=limit=0.98:attack=5:release=120:level=false'],
+    empowering: ['-af', 'volume=1.0,highpass=f=25,equalizer=f=40:width_type=q:w=1.0:g=1.2,equalizer=f=63:width_type=q:w=1.0:g=1.4,equalizer=f=110:width_type=q:w=1.0:g=0.8,equalizer=f=250:width_type=q:w=1.1:g=-0.8,equalizer=f=1600:width_type=q:w=1.0:g=0.5,equalizer=f=2500:width_type=q:w=1.0:g=0.4,equalizer=f=10000:width_type=q:w=0.8:g=0.3,acompressor=threshold=-20dB:ratio=1.5:attack=15:release=220:makeup=2dB,alimiter=limit=0.96:attack=5:release=140:level=false'],
     bass: ['-af', 'volume=0.70,bass=g=2.0:f=65:w=0.7,equalizer=f=250:width_type=q:w=1.1:g=-1.0,alimiter=limit=0.94:attack=5:release=160:level=false'],
     '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.65:offset_l=0:offset_r=0.5,alimiter=limit=0.96:attack=5:release=120:level=false'],
     nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-0.8,alimiter=limit=0.96:attack=5:release=120:level=false'],
