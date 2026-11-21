@@ -53,6 +53,10 @@ function isValidDiscordSnowflake(value) {
     return true;
 }
 
+function buildSettingsFilter(guildId) {
+    return { guildId: String(guildId) };
+}
+
 function daysBetween(from, to = Date.now()) {
     const timestamp = new Date(from).getTime();
     const endTimestamp = new Date(to).getTime();
@@ -525,7 +529,7 @@ module.exports = (client) => {
                 configuredBy: interaction.user.id
             };
             const settings = await SusAccountSettings.findOneAndUpdate(
-                {},
+                buildSettingsFilter(guildId),
                 { $set: patch, $setOnInsert: { guildId } },
                 { upsert: true, new: true, setDefaultsOnInsert: true, sanitizeFilter: true }
             )
@@ -719,4 +723,4 @@ module.exports = (client) => {
 
 module.exports.SusAccountSettings = SusAccountSettings;
 module.exports.SusAccountMember = SusAccountMember;
-module.exports._internals = { daysBetween, buildInactivityAlertNonce, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake };
+module.exports._internals = { daysBetween, buildInactivityAlertNonce, hasReachedInactivityThreshold, isSameMembership, isClaimRecoverable, isValidDiscordSnowflake, buildSettingsFilter };
