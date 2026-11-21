@@ -5,6 +5,7 @@
 // ==========================================
 const { Client, GatewayIntentBits, Partials, Collection, Events, ActivityType } = require('discord.js');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const config = require('../config');
 const { createMusicManager } = require('../utils/musicManager');
 const { cleanToken, maskToken, verifyDiscordToken } = require('../utils/tokenSanitizer');
@@ -15,6 +16,7 @@ try {
 } catch (e) {
     const schema = new mongoose.Schema({
         token: { type: String, required: true, unique: true },
+        tokenHash: { type: String, unique: true, sparse: true, index: true },
         name: { type: String, default: 'Secondary Worker Bot' },
         role: { type: String, default: 'all' },
         addedBy: { type: String, default: 'System' },
@@ -22,6 +24,87 @@ try {
         createdAt: { type: Date, default: Date.now }
     });
     MultiBotToken = mongoose.models.MultiBotToken || mongoose.model('MultiBotToken', schema);
+}
+
+const WORKER_TOKEN_PREFIX = 'enc:v1:';
+
+function getWorkerTokenKey() {
+    const encoded = process.env.MULTIBOT_TOKEN_ENCRYPTION_KEY;
+    if (!encoded) return null;
+    const key = Buffer.from(encoded.trim(), 'base64');
+    if (key.length !== 32) {
+        throw new Error('MULTIBOT_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+    }
+    return key;
+}
+
+function hashWorkerToken(token) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function encryptWorkerToken(token, key = getWorkerTokenKey()) {
+    if (!key) throw new Error('Configure MULTIBOT_TOKEN_ENCRYPTION_KEY before storing worker bot tokens.');
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return WORKER_TOKEN_PREFIX + [
+        iv.toString('base64url'),
+        tag.toString('base64url'),
+        ciphertext.toString('base64url')
+    ].join(':');
+}
+
+function decryptWorkerToken(value, key = getWorkerTokenKey()) {
+    if (typeof value !== 'string' || !value.startsWith(WORKER_TOKEN_PREFIX)) {
+        throw new Error('Worker token is not encrypted.');
+    }
+    if (!key) throw new Error('MULTIBOT_TOKEN_ENCRYPTION_KEY is not configured.');
+    const parts = value.slice(WORKER_TOKEN_PREFIX.length).split(':');
+    if (parts.length !== 3) throw new Error('Encrypted worker token has an invalid format.');
+    const [ivText, tagText, ciphertextText] = parts;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivText, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
+    return Buffer.concat([
+        decipher.update(Buffer.from(ciphertextText, 'base64url')),
+        decipher.final()
+    ]).toString('utf8');
+}
+
+async function loadEncryptedWorkerTokens() {
+    const key = getWorkerTokenKey();
+    if (!key) {
+        console.warn('⚠️ Multi-Bot: MongoDB worker tokens are disabled until MULTIBOT_TOKEN_ENCRYPTION_KEY is configured. Environment-defined worker tokens remain available.');
+        return [];
+    }
+
+    const documents = await MultiBotToken.find({}).lean();
+    const activeTokens = [];
+    for (const document of documents) {
+        try {
+            let plaintext;
+            let encrypted = document.token;
+            if (typeof encrypted === 'string' && encrypted.startsWith(WORKER_TOKEN_PREFIX)) {
+                plaintext = decryptWorkerToken(encrypted, key);
+            } else {
+                plaintext = cleanToken(encrypted);
+                if (!plaintext) continue;
+                encrypted = encryptWorkerToken(plaintext, key);
+            }
+
+            const tokenHash = hashWorkerToken(plaintext);
+            if (document.token !== encrypted || document.tokenHash !== tokenHash) {
+                await MultiBotToken.updateOne(
+                    { _id: document._id },
+                    { $set: { token: encrypted, tokenHash } }
+                );
+            }
+            if (document.enabled) activeTokens.push({ ...document, token: plaintext, tokenHash });
+        } catch (error) {
+            console.error('⚠️ Multi-Bot: A stored worker token could not be decrypted or migrated; it was skipped.');
+        }
+    }
+    return activeTokens;
 }
 
 // 🛡️ VIRTUAL SUB-BOT WORKER NODES (Single Token Virtual Cluster)
@@ -209,10 +292,10 @@ class MultiBotManager {
         let dbTokens = [];
         try {
             if (mongoose.connection.readyState === 1) {
-                dbTokens = await MultiBotToken.find({ enabled: true }).lean();
+                dbTokens = await loadEncryptedWorkerTokens();
             }
         } catch (e) {
-            console.warn('⚠️ Multi-Bot DB Tokens Fetch Failed:', e.message);
+            console.error('⚠️ Multi-Bot encrypted token store unavailable; database workers were not loaded:', e.message);
         }
 
         // 2. Gather tokens from .env
@@ -372,6 +455,8 @@ class MultiBotManager {
         const clean = cleanToken(token);
         if (!clean) throw new Error('A Discord bot token is required.');
         if (clean === this.primaryToken) throw new Error('The primary Starry bot cannot be added as a worker.');
+        // Validate encryption configuration before connecting a worker or writing credentials.
+        getWorkerTokenKey();
         const validRole = ROLE_PRESETS[role] ? role : 'all';
         const verification = await verifyDiscordToken(clean);
         if (!verification.valid || !verification.bot?.id) {
@@ -386,9 +471,11 @@ class MultiBotManager {
         const spawned = await this.spawnWorker(clean, safeName, validRole);
         if (!spawned) throw new Error('The bot token was valid, but the worker could not finish connecting. Check its gateway status and try again.');
         try {
+            const tokenHash = hashWorkerToken(clean);
+            const encryptedToken = encryptWorkerToken(clean);
             await MultiBotToken.updateOne(
-                { token: clean },
-                { token: clean, name: safeName, role: validRole, addedBy: String(addedBy || 'Admin'), enabled: true },
+                { tokenHash },
+                { $set: { token: encryptedToken, tokenHash, name: safeName, role: validRole, addedBy: String(addedBy || 'Admin'), enabled: true } },
                 { upsert: true }
             );
         } catch (error) {
@@ -409,7 +496,7 @@ class MultiBotManager {
                 this.applyPresence(info.client, newRole);
 
                 if (!info.isPrimary && info.token) {
-                    await MultiBotToken.updateOne({ token: info.token }, { role: newRole }).catch(() => {});
+                    await MultiBotToken.updateOne({ tokenHash: hashWorkerToken(info.token) }, { $set: { role: newRole } }).catch(() => {});
                 }
                 return { success: true, bot: info };
             }
@@ -431,7 +518,7 @@ class MultiBotManager {
             }
         }
         const lookup = storedToken || tokenIdOrUserId;
-        await MultiBotToken.deleteOne({ $or: [{ token: lookup }, { _id: lookup }] }).catch(() => {});
+        await MultiBotToken.deleteOne({ $or: [{ tokenHash: hashWorkerToken(lookup) }, { _id: lookup }] }).catch(() => {});
         return removed;
     }
 
