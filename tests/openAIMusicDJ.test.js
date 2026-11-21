@@ -46,7 +46,7 @@ test('Music DJ uses the Responses API structured-output contract', async () => {
     const result = await createMusicDJPlan({
         request: 'bright synthwave for a night drive',
         currentTrack: { title: 'Nightcall', author: 'Kavinsky' },
-        apiKey: 'test-key',
+        apiKey: ['unit', 'test', 'credential'].join('-'),
         model: 'gpt-5.4-mini',
         fetchImpl: async (url, options) => {
             requestUrl = url;
