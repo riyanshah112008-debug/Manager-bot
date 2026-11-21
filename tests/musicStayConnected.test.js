@@ -54,5 +54,5 @@ test('Lavalink 24/7 sessions cleanly stop when the bot is manually disconnected'
 
 test('source resolver prefers 192 kbps audio when available and falls back to best audio', () => {
     const source = fs.readFileSync(require.resolve('../src/utils/streamResolver.py'), 'utf8');
-    assert.match(source, /bestaudio\[abr>=192\]\/bestaudio\/best/);
+    assert.match(source, /bestaudio\[abr>=320\]\/bestaudio\[abr>=256\]\/bestaudio\[abr>=192\]\/bestaudio\/best/);
 });
