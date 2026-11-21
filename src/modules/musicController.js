@@ -21,6 +21,7 @@ const db = require('../utils/database');
 const MusicController = require('../models/MusicController');
 const { StarryAudioEngine, formatTime } = require('../utils/nativeAudioEngine');
 const { getGuildLanguageSync, t } = require('../utils/i18n');
+const { isStayConnected: getStayConnected, setStayConnected } = require('../utils/musicStayConnected');
 
 const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -92,6 +93,7 @@ class MusicControllerEngine {
         const isPlaying = !!(player && player.currentTrack);
         const isPaused = !!(player && player.paused);
         const isAutoplay = !!(player && player.autoplay);
+        const stayConnected = getStayConnected(player);
         const targetGuildId = guildId || player?.guildId;
         const lang = targetGuildId ? getGuildLanguageSync(targetGuildId) : 'en';
 
@@ -224,7 +226,8 @@ class MusicControllerEngine {
                 .setEmoji('👍')
                 .setLabel(t(lang, 'music.btn_vote'))
                 .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('music_equalizer').setEmoji('🎚️').setLabel('Equalizer').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('ctrl_247').setEmoji('🌙').setLabel(stayConnected ? '24/7: ON' : '24/7: OFF').setStyle(stayConnected ? ButtonStyle.Success : ButtonStyle.Secondary)
         );
 
         return [row1, row2, row3, row4, row5];
@@ -344,7 +347,7 @@ class MusicControllerEngine {
                 }
             }
             if (!player) {
-                player = StarryAudioEngine.getPlayer(guildId);
+                player = StarryAudioEngine.getPlayer(guildId, client);
             }
 
             const embed = this.buildEmbed(player, client, guildId);
@@ -661,6 +664,39 @@ class MusicControllerEngine {
         }
         const voiceChannel = interaction.member?.voice?.channel;
 
+        // Toggle continuous voice presence and automatic queue continuation.
+        if (customId === 'ctrl_247') {
+            const enabled = !getStayConnected(player);
+            if (enabled && !voiceChannel) {
+                return interaction.reply({ content: 'Join a voice channel first to enable 24/7 mode.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            }
+            if (enabled && !player) {
+                player = StarryAudioEngine.getOrCreatePlayer(client, guildId, voiceChannel, interaction.channel);
+            }
+            if (!player) {
+                return interaction.reply({ content: 'No music session is available to change.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            }
+            setStayConnected(player, enabled);
+            if (enabled && isKazagumo) {
+                const { triggerAutoplayBuffer } = require('../utils/musicManager');
+                if (player.queue?.length === 0 && !player.playing) {
+                    triggerAutoplayBuffer(player, true).catch(() => {});
+                }
+            } else if (enabled) {
+                await player.connect().catch(() => {});
+                if (!player.currentTrack && player.queue.length === 0 && player.previousTrack) {
+                    player.playNext().catch(() => {});
+                }
+            }
+            await this.update(guildId, client);
+            return interaction.reply({
+                content: enabled
+                    ? '🌙 **24/7 mode enabled.** Starry will stay in voice, continue with recommended music after the queue ends, and wait in the channel if recommendations are unavailable.'
+                    : '⏹️ **24/7 mode disabled.** Starry will no longer auto-continue. Use Stop to disconnect.',
+                flags: [EPHEMERAL_FLAG]
+            }).catch(() => {});
+        }
+
         // 1. Connect Bot
         if (customId === 'ctrl_connect') {
             if (!voiceChannel) {
@@ -965,7 +1001,7 @@ class MusicControllerEngine {
         // 12. Stop
         if (customId === 'ctrl_stop') {
             if (isKazagumo) await player.destroy();
-            else player.stop();
+            else player.destroy();
             await this.update(guildId, client);
             return interaction.reply({ content: '⏹️ **Stopped music playback and cleared the queue.**', flags: [EPHEMERAL_FLAG] }).catch(() => {});
         }
