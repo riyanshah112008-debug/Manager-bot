@@ -33,7 +33,6 @@ test('native engine uses automatic studio mastering and preserves 24/7 voice ses
     const source = fs.readFileSync('src/utils/nativeAudioEngine.js', 'utf8');
     assert.match(source, /this\.filter = 'empowering'/);
     assert.match(source, /if \(!this\.is247\)\s*\{\s*this\.disconnectTimeout = setTimeout/);
-    assert.match(source, /if \(!this\.is247\)\s*\{\s*this\.disconnectTimeout = setTimeout/);
     assert.match(source, /_reconnectPromise/);
 });
 
