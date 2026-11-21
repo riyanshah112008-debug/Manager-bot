@@ -21,6 +21,8 @@ const suites = [
   ['Color blend', 'tests/colorBlend.test.js'],
   ['Media permissions', 'tests/mediaPerms.test.js'],
   ['Owner prefix policy', 'tests/ownerPrefixPolicy.test.js'],
+  ['Emoji and sticker steal input', '--test', 'tests/stealInput.test.js'],
+  ['Emoji and sticker steal module syntax', '--check', 'src/modules/steal.js'],
   ['Tickets', 'tests/tickets.test.js'],
   ['Command execution contract', 'tests/commandExecutionContract.test.js'],
   ['Phone database browser syntax', '--check', 'public/phone-database.js'],

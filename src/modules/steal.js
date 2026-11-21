@@ -17,10 +17,93 @@ const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 6;
 
 const config = require('../config');
 
-module.exports = (client) => {
-    const PREFIX = config.DEFAULT_PREFIX || ',';
+const COMMAND_PREFIXES = Array.from(new Set([config.DEFAULT_PREFIX || ',', ',', '!']));
+const CUSTOM_EMOJI_REGEX = /<(a?):([a-zA-Z0-9_]+):(\d+)>/g;
 
-    const runStealUI = async (textToScan, stickers, member, guild, replyFunction, user) => {
+function parseStealCommand(content = '') {
+    const input = String(content).trim();
+    for (const prefix of COMMAND_PREFIXES) {
+        if (!input.toLowerCase().startsWith(prefix.toLowerCase() + 'steal')) continue;
+        const boundary = input.charAt(prefix.length + 5);
+        if (boundary && !/\s/.test(boundary)) continue;
+        return input.slice(prefix.length + 5).trim();
+    }
+    return null;
+}
+
+function extractStealItems(text = '', stickers = null, attachments = null) {
+    const items = [];
+    const seen = new Set();
+    const add = item => {
+        const key = item.id || item.url;
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        items.push(item);
+    };
+
+    if (stickers && typeof stickers.forEach === 'function') {
+        stickers.forEach(sticker => add({
+            id: sticker.id,
+            name: sticker.name,
+            url: sticker.url,
+            type: 'sticker'
+        }));
+    }
+
+    let match;
+    const content = String(text || '');
+    CUSTOM_EMOJI_REGEX.lastIndex = 0;
+    while ((match = CUSTOM_EMOJI_REGEX.exec(content)) !== null) {
+        add({
+            id: match[3],
+            name: match[2],
+            url: `https://cdn.discordapp.com/emojis/${match[3]}.${match[1] === 'a' ? 'gif' : 'png'}`,
+            type: 'emoji'
+        });
+    }
+
+    const urls = content.match(/https?:\/\/[^\s<>]+/gi) || [];
+    for (const rawUrl of urls) {
+        const url = rawUrl.replace(/[),.!?]+$/, '');
+        try {
+            const parsed = new URL(url);
+            if (!['http:', 'https:'].includes(parsed.protocol)) continue;
+            add({
+                id: url,
+                name: decodeURIComponent(parsed.pathname.split('/').pop() || 'stolen_image').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 32) || 'stolen_image',
+                url,
+                type: 'emoji'
+            });
+        } catch (_) {
+            // Ignore malformed URLs; valid custom emoji and sticker items remain usable.
+        }
+    }
+
+    if (attachments && typeof attachments.forEach === 'function') {
+        attachments.forEach(file => {
+            const isImage = String(file.contentType || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)(?:\?|$)/i.test(file.url || '');
+            if (isImage) {
+                add({
+                    id: file.id || file.url,
+                    name: String(file.name || 'stolen_image').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 32) || 'stolen_image',
+                    url: file.url,
+                    type: 'emoji'
+                });
+            }
+        });
+    }
+
+    return items;
+}
+
+function normalizeAssetName(name, fallback = 'stolen_emoji') {
+    let value = String(name || fallback).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 32);
+    if (value.length < 2) value = (value + '_').slice(0, 2);
+    return value;
+}
+
+module.exports = (client) => {
+    const runStealUI = async (textToScan, stickers, member, guild, replyFunction, user, attachments = null) => {
         // 1. External / DM Context Check
         if (!guild) {
             return replyFunction({ 
@@ -49,29 +132,11 @@ module.exports = (client) => {
             return replyFunction({ content: '❌ I need `Manage Emojis and Stickers` permission in this server to upload emojis.', flags: [EPHEMERAL_FLAG] });
         }
 
-        // 4. Extract Emojis and Stickers
-        const itemsToSteal = [];
-        if (stickers && stickers.size > 0) {
-            stickers.forEach(sticker => itemsToSteal.push({ id: sticker.id, name: sticker.name, url: sticker.url, type: 'sticker' }));
-        }
-
-        if (textToScan) {
-            const emojiRegex = /<(a?):([a-zA-Z0-9_]+):(\d+)>/g;
-            let match;
-            while ((match = emojiRegex.exec(textToScan)) !== null) {
-                if (!itemsToSteal.find(item => item.id === match[3])) {
-                    itemsToSteal.push({
-                        id: match[3],
-                        name: match[2],
-                        url: `https://cdn.discordapp.com/emojis/${match[3]}.${match[1] === 'a' ? 'gif' : 'png'}`,
-                        type: 'emoji'
-                    });
-                }
-            }
-        }
-
+        // 4. Extract custom emojis, stickers and direct image URLs.
+        const itemsToSteal = extractStealItems(textToScan, stickers, attachments);
+        
         if (itemsToSteal.length === 0) {
-            return replyFunction({ content: '❌ No custom emojis or stickers were found in that message/text!', flags: [EPHEMERAL_FLAG] });
+            return replyFunction({ content: 'ℹ️ Nothing to import was found. Reply to a message containing a custom emoji/sticker, or use `,steal <:name:id>` / `,steal https://image-url`.', flags: [EPHEMERAL_FLAG] });
         }
 
         // 5. Build Interactive UI
@@ -108,10 +173,10 @@ module.exports = (client) => {
                 const item = itemsToSteal[currentIndex];
                 try {
                     if (item.type === 'emoji') {
-                        const createdEmoji = await guild.emojis.create({ attachment: item.url, name: item.name });
+                        const createdEmoji = await guild.emojis.create({ attachment: item.url, name: normalizeAssetName(item.name) });
                         await i.reply({ content: `✅ Successfully uploaded emoji ${createdEmoji} (\`:${item.name}:\`) to **${guild.name}**!`, flags: [EPHEMERAL_FLAG] });
                     } else {
-                        const createdSticker = await guild.stickers.create({ file: item.url, name: item.name, tags: 'stolen' });
+                        const createdSticker = await guild.stickers.create({ file: item.url, name: normalizeAssetName(item.name, 'stolen_sticker').slice(0, 30), tags: '⭐' });
                         await i.reply({ content: `✅ Successfully uploaded sticker **${createdSticker.name}** to **${guild.name}**!`, flags: [EPHEMERAL_FLAG] });
                     }
                 } catch (e) { 
@@ -123,10 +188,27 @@ module.exports = (client) => {
     };
     // Prefix Trigger (.steal) - Works in servers where bot is present
     client.on('messageCreate', async message => {
-        if (message.author.bot || (!message.content.startsWith(PREFIX + 'steal') && !message.content.startsWith(',steal'))) return;
+        if (message.author.bot) return;
+        const commandInput = parseStealCommand(message.content);
+        if (commandInput === null) return;
         if (!config.isBotOwner(message.author.id, client)) return;
-        const target = message.reference ? await message.channel.messages.fetch(message.reference.messageId).catch(() => message) : message;
-        await runStealUI(target.content + message.content, target.stickers, message.member, message.guild, (p) => message.reply(p), message.author);
+
+        const target = message.reference?.messageId
+            ? await message.channel.messages.fetch(message.reference.messageId).catch(() => null)
+            : null;
+        const scanText = [target?.content || '', commandInput].filter(Boolean).join(' ');
+        const stickers = target?.stickers || message.stickers;
+        const attachments = target?.attachments || message.attachments;
+
+        await runStealUI(
+            scanText,
+            stickers,
+            message.member,
+            message.guild,
+            payload => message.reply(payload),
+            message.author,
+            attachments
+        );
     });
 
     // Interaction Listener (Slash Command & Context Menu) - Works EVERYWHERE via User App!
@@ -139,7 +221,8 @@ module.exports = (client) => {
                 interaction.member, 
                 interaction.guild, 
                 (p) => interaction.reply(p), 
-                interaction.user
+                interaction.user,
+                interaction.targetMessage.attachments
             );
         }
 
@@ -151,8 +234,13 @@ module.exports = (client) => {
                 interaction.member, 
                 interaction.guild, 
                 (p) => interaction.reply(p), 
-                interaction.user
+                interaction.user,
+                null
             );
         }
     });
 };
+
+module.exports.parseStealCommand = parseStealCommand;
+module.exports.extractStealItems = extractStealItems;
+module.exports.normalizeAssetName = normalizeAssetName;
