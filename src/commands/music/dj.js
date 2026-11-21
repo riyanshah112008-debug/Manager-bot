@@ -9,6 +9,7 @@ const {
 const { createMusicDJPlan } = require('../../utils/openAIMusicDJ');
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 const { applyPremiumVoiceBitrate } = require('../../utils/musicManager');
+const { setStayConnected } = require('../../utils/musicStayConnected');
 
 const EPHEMERAL_FLAG = MessageFlags?.Ephemeral ?? 64;
 const MAX_TRACKS = 5;
@@ -106,6 +107,7 @@ module.exports = {
                     return interaction.editReply('Starry could not resolve any tracks from that mix. Try a more specific mood, artist or genre.');
                 }
 
+                setStayConnected(player, true);
                 player.data.set('djMode', true);
                 player.data.set('djRequest', request);
                 player.data.set('autoplay', true);
@@ -121,7 +123,7 @@ module.exports = {
             let player;
             try {
                 player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guildId, voiceChannel, interaction.channel);
-                player.autoplay = true;
+                setStayConnected(player, true);
                 player.djRequest = request;
                 player.djMode = true;
                 await player.connect();
@@ -147,7 +149,7 @@ module.exports = {
                         player.queue.push(track);
                     }
                 }
-                if (!player.currentTrack) await player.playNext();
+                if (!player.currentTrack) player.playNext().catch(error => console.warn('[Starry AI DJ] Native start error:', error.message || error));
             } catch (error) {
                 console.warn('[Starry AI DJ] Native engine setup failed:', error.message || error);
                 return interaction.editReply('The music engine could not start the AI mix. Please try /dj again in a moment.');
@@ -158,7 +160,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle(`🎧 Starry AI DJ • ${plan.mood || 'Your mix'}`)
-            .setDescription(`${plan.summary}\n\n${queued.map((track, index) => `**${index + 1}.** ${track.title || track.name || 'Recommended track'} — ${track.author || track.artist || 'Artist'}`).join('\n')}\n\n**AI autoplay is enabled.** Starry will keep the mix going with verified provider results.`)
+            .setDescription(`${plan.summary}\n\n${queued.map((track, index) => `**${index + 1}.** ${track.title || track.name || 'Recommended track'} — ${track.author || track.artist || 'Artist'}`).join('\n')}\n\n**AI autoplay + 24/7 stay-connected are enabled.** Starry will keep the mix going with verified provider results. Use `/stay` to disable stay-connected or `/stop` to leave.`)
             .setFooter({ text: `Requested by ${requester.tag} • Manual Equalizer remains available` });
         return interaction.editReply({ embeds: [embed] });
     }
