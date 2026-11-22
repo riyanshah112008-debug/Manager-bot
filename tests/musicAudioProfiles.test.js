@@ -77,7 +77,7 @@ test('automatic studio master reserves headroom for cumulative EQ peaks', async 
     assert.equal(await applyKazagumoFilter(stub.player, 'empowering'), true);
     const filters = stub.getApplied();
     const positiveBoostSum = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-    const expectedHeadroomDb = Math.min(4, 0.5 + positiveBoostSum * 2.5);
+    const expectedHeadroomDb = Math.min(6, 2 + positiveBoostSum * 2);
     const expectedVolume = Math.pow(10, -expectedHeadroomDb / 20);
     assert.ok(Math.abs(filters.volume - expectedVolume) < 1e-10,
         'preamp must account for combined EQ boosts rather than only the strongest band');
