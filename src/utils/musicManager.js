@@ -420,12 +420,12 @@ async function applyKazagumoFilter(player, filterName) {
                         gain: Math.max(-0.25, Math.min(0.65, Number.isFinite(gain) ? gain : 0))
                     };
                 });
-            // EQ bands overlap in the low end and presence region. A reserve based only
-            // on the single largest band can leave the combined signal clipping. Estimate
+            // EQ bands overlap in the low end and presence region. Reserve a fixed transient margin
+            // plus cumulative boost headroom so vocal transients do not hit the encoder hot. Estimate
             // cumulative boost and apply a modest preamp reduction before voice encoding.
             const positiveBoostSum = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
             const peakHeadroomDb = positiveBoostSum > 0
-                ? Math.min(4, 0.5 + (positiveBoostSum * 2.5))
+                ? Math.min(6, 2 + (positiveBoostSum * 2))
                 : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const rawVolume = Number(filters.volume ?? 1);
@@ -909,7 +909,7 @@ async function applyKazagumoEqualizer(player,gains={}) {
   // Account for overlapping low-frequency bands: reserve headroom for the sum of positive gains.
   // Do not floor this attenuation; doing so would reintroduce clipping on aggressive custom profiles.
   const positiveGainSum=keys.reduce((sum,key)=>sum+Math.max(0,clean[key]),0);
-  const preampDb=positiveGainSum > 0 ? positiveGainSum + 1.5 : 0;
+  const preampDb=positiveGainSum > 0 ? positiveGainSum + 2.5 : 0;
   const safeVolume=Math.pow(10,-preampDb/20);
   await player.shoukaku.setFilters({volume:Math.max(0.01,Math.min(1,safeVolume)),equalizer,timescale:null,karaoke:null,rotation:null,tremolo:null,vibrato:null,lowPass:null,channelMix:null,distortion:null});
   player.data?.set?.('customEqualizer',clean); player.data?.set?.('activeFilter','custom-eq');
