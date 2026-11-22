@@ -45,4 +45,21 @@ assert.match(
     /if \(!this\.isSlash\)\s*\{\s*payload = withPrefixReplyPolicy\(payload\);/
 );
 
+
+for (const clientPath of [
+    'src/index.js',
+    'src/modules/multiBot.js',
+    'src/modules/botStudio.js'
+]) {
+    const clientSource = fs.readFileSync(
+        path.join(__dirname, '..', clientPath),
+        'utf8'
+    );
+    assert.match(
+        clientSource,
+        /allowedMentions:\s*\{\s*parse:\s*\['users',\s*'roles',\s*'everyone'\],\s*repliedUser:\s*false\s*\}/,
+        clientPath + ' must suppress reply-author notifications by default'
+    );
+}
+
 console.log('Prefix reply notification policy regression tests passed.');
