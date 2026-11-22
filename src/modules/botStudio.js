@@ -282,6 +282,7 @@ const config = require('./config');
 const { initStarryGateway } = require('./modules/starryLink');
 
 const client = new Client({
+    allowedMentions: { parse: ['users', 'roles', 'everyone'], repliedUser: false },
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
