@@ -250,9 +250,19 @@ test('native custom EQ reserves cumulative boost plus transient headroom', () =>
         100,
         { subBass: 6, bass: 4, mids: 0, presence: -2, treble: 0 }
     );
-    const match = filterGraph.match(/volume=([0-9]*\\.?[0-9]+)/);
-    assert.ok(match, 'native filter graph must contain a volume preamp');
+    const volumeStage = filterGraph.split(',').find(stage => stage.startsWith('volume='));
+    assert.ok(volumeStage, 'native filter graph must contain a volume preamp');
     const expected = 0.90 * Math.pow(10, -12.5 / 20);
-    assert.ok(Math.abs(Number(match[1]) - Number(expected.toFixed(3))) < 1e-10,
+    assert.ok(Math.abs(Number(volumeStage.slice('volume='.length)) - Number(expected.toFixed(3))) < 1e-10,
         'combined EQ gain must be attenuated before filtering');
+});
+
+
+test('native automatic master does not add makeup compression or a second limiter', () => {
+    const fs = require('node:fs');
+    const nativeSource = fs.readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
+    const master = nativeSource.match(/empowering: \['-af', '([^']+)'/);
+    assert.ok(master, 'automatic studio master must exist');
+    assert.doesNotMatch(master[1], /acompressor|alimiter/i,
+        'the native master must not compress vocals or stack a profile limiter');
 });
