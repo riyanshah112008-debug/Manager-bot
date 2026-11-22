@@ -127,7 +127,7 @@ class MultiBotManager {
 
     createClientInstance(token, name = 'Worker Bot', isPrimary = false, role = 'all') {
         const client = new Client({
-    allowedMentions: { parse: ['users', 'roles', 'everyone'], repliedUser: false },
+            allowedMentions: { parse: ['users', 'roles', 'everyone'], repliedUser: false },
             intents: [
                 GatewayIntentBits.Guilds,
                 GatewayIntentBits.GuildMessages,
