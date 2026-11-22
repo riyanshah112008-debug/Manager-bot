@@ -33,6 +33,7 @@ const suites = [
   ['Emoji and sticker steal module syntax', '--check', 'src/modules/steal.js'],
   ['Tickets', 'tests/tickets.test.js'],
   ['Command execution contract', 'tests/commandExecutionContract.test.js'],
+  ['Prefix reply notification policy', '--test', 'tests/prefixReplyNotifications.test.js'],
   ['Phone database browser syntax', '--check', 'public/phone-database.js'],
   ['Phone sync', 'tests/phoneSync.test.js'],
   ['Phone sync module syntax', '--check', 'src/modules/phoneSync.js'],
