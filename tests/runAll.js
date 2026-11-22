@@ -26,6 +26,7 @@ const suites = [
   ['Color blend', 'tests/colorBlend.test.js'],
   ['Media permissions', 'tests/mediaPerms.test.js'],
   ['Owner prefix policy', 'tests/ownerPrefixPolicy.test.js'],
+  ['Unknown prefix command guard', '--test', 'tests/unknownPrefixCommand.test.js'],
   ['AFK prefix dispatcher', '--test', 'tests/afkPrefixDispatcher.test.js'],
   ['AFK command handler syntax', '--check', 'src/modules/afk.js'],
   ['AFK dispatcher syntax', '--check', 'src/modules/commandHandler.js'],

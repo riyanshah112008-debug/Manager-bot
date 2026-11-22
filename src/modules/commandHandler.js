@@ -25,6 +25,7 @@ const { buildCategoryEmbed, createHelpComponents } = require('../utils/helpHelpe
 const User = require('../models/User');
 const { buildBirthdayFilter } = require('../utils/discordSnowflake');
 const { registerInteractionHandler } = require('../utils/interactionHandler');
+const { isExecutableCommand } = require('../utils/prefixCommandGuard');
 
 // Guild Prefix In-Memory Cache
 const guildPrefixCache = new Map();
@@ -454,6 +455,9 @@ class CommandRegistry {
                     args.unshift(commandKey); // Prepend word back to prompt
                 }
             }
+
+            // Ignore unknown commands before reading category, permissions, or execute.
+            if (!isExecutableCommand(command)) return;
 
 NaN
             if (executedMessageIds.has(message.id)) return;
