@@ -33,7 +33,7 @@ const {
 } = require('discord.js');
 const { getGuildLanguageSync, localizePayload, t } = require('./i18n');
 const config = require('../config');
-const { buildAudioFilterArgs } = require('./audioFilterPipeline');
+const { buildAudioFilterArgs, DEFAULT_STUDIO_MASTER_FILTER, DEFAULT_BASS_FILTER } = require('./audioFilterPipeline');
 
 const MUSIC_BASE_URL = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`).replace(/\/+$/, '');
 const MUSIC_DASHBOARD_URL = `${MUSIC_BASE_URL}/music.html`;
@@ -47,9 +47,8 @@ const FILTER_ARGS = {
     // Matches the gentle Lavalink Studio master: restrained low lift, vocal presence, smooth air.
     // Clean studio master: modest low-end weight, vocal presence without upper-mid edge.
     // No makeup compressor or per-profile limiter; the shared output guard handles peaks once.
-    empowering: ['-af', 'volume=0.90,highpass=f=28,equalizer=f=40:width_type=q:w=1.0:g=0.9,equalizer=f=63:width_type=q:w=1.0:g=1.0,equalizer=f=110:width_type=q:w=1.0:g=0.4,equalizer=f=250:width_type=q:w=1.1:g=-1.0,equalizer=f=1000:width_type=q:w=1.0:g=0.1,equalizer=f=1600:width_type=q:w=1.0:g=0.35,equalizer=f=2500:width_type=q:w=1.0:g=0.1,equalizer=f=4000:width_type=q:w=1.0:g=-0.2,equalizer=f=8000:width_type=q:w=0.9:g=-0.2,equalizer=f=10000:width_type=q:w=0.8:g=0.1'],
-    // Controlled sub-bass / kick lift; avoids the heavy low-frequency gain that can crack vocals.
-    bass: ['-af', 'volume=0.78,bass=g=1.6:f=58:w=0.8,equalizer=f=250:width_type=q:w=1.1:g=-1.0'],
+    empowering: ['-af', DEFAULT_STUDIO_MASTER_FILTER],
+    bass: ['-af', DEFAULT_BASS_FILTER],
     '8d': ['-af', 'volume=0.92,apulsator=mode=sine:hz=0.125:amount=0.65:offset_l=0:offset_r=0.5,alimiter=limit=0.96:attack=5:release=120:level=false'],
     nightcore: ['-af', 'volume=0.90,asetrate=48000*1.25,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,equalizer=f=6000:width_type=q:w=1.0:g=-0.8,alimiter=limit=0.96:attack=5:release=120:level=false'],
     daycore: ['-af', 'volume=0.86,asetrate=48000*0.85,aresample=48000:resampler=swr:filter_size=32,atempo=1.0,bass=g=1.0:f=65:w=0.7,alimiter=limit=0.96:attack=5:release=120:level=false'],
