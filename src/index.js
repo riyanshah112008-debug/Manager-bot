@@ -316,6 +316,7 @@ app.listen(port, '0.0.0.0', () => {
 
 // Create Primary Bot Client
 const client = new Client({
+    allowedMentions: { repliedUser: false },
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

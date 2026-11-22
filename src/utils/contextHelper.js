@@ -6,6 +6,7 @@
 // ==========================================
 const { MessageFlags, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
+const { withPrefixReplyPolicy } = require('./prefixReplyPolicy');
 const { getGuildLanguage, getGuildLanguageSync, localizePayload } = require('./i18n');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -181,6 +182,10 @@ class CommandContext {
                 });
             }
         } else {
+            // Prefix replies disable the automatic reply-author notification.
+            // Explicit user and role mention permissions are preserved.
+            payload = withPrefixReplyPolicy(payload);
+
             // Check if another client is targeted (Multi-Bot routing)
             if (this.client && this.source.client && this.client.user?.id !== this.source.client.user?.id) {
                 try {
