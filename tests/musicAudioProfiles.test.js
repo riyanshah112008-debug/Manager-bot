@@ -1,7 +1,7 @@
 process.env.STARRY_DISABLE_STREAM_RESOLVER = '1';
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildAudioFilterArgs } = require('../src/utils/audioFilterPipeline');
+const { buildAudioFilterArgs, DEFAULT_STUDIO_MASTER_FILTER } = require('../src/utils/audioFilterPipeline');
 const LAVALINK_MIN_GAIN = -1 / 4;
 const LAVALINK_HALF_GAIN = 1 / 2;
 const {
@@ -244,25 +244,19 @@ test('native FFmpeg pipeline uses one final limiter after 48 kHz resampling', ()
         'the common final limiter must reserve codec headroom');
 });
 
+
 test('native custom EQ reserves cumulative boost plus transient headroom', () => {
     const [, filterGraph] = buildAudioFilterArgs(
-        'volume=0.90,highpass=f=28',
+        'volume=0.9,highpass=f=28',
         100,
         { subBass: 6, bass: 4, mids: 0, presence: -2, treble: 0 }
     );
     const volumeStage = filterGraph.split(',').find(stage => stage.startsWith('volume='));
-    assert.ok(volumeStage, 'native filter graph must contain a volume preamp');
-    const expected = 0.90 * Math.pow(10, -12.5 / 20);
-    assert.ok(Math.abs(Number(volumeStage.slice('volume='.length)) - Number(expected.toFixed(3))) < 1e-10,
+    assert.equal(volumeStage, 'volume=0.213',
         'combined EQ gain must be attenuated before filtering');
 });
 
-
-test('native automatic master does not add makeup compression or a second limiter', () => {
-    const fs = require('node:fs');
-    const nativeSource = fs.readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
-    const master = nativeSource.match(/empowering: \['-af', '([^']+)'/);
-    assert.ok(master, 'automatic studio master must exist');
-    assert.doesNotMatch(master[1], /acompressor|alimiter/i,
-        'the native master must not compress vocals or stack a profile limiter');
+test('native automatic master avoids makeup compression and stacked limiting', () => {
+    assert.doesNotMatch(DEFAULT_STUDIO_MASTER_FILTER, /acompressor|alimiter/i,
+        'the default master must use the shared final limiter without vocal makeup compression');
 });
