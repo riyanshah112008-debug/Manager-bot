@@ -6,6 +6,7 @@
 // ==========================================
 const { MessageFlags, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
+const { withPrefixReplyPolicy } = require('./prefixReplyPolicy');
 const { getGuildLanguage, getGuildLanguageSync, localizePayload } = require('./i18n');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -170,6 +171,12 @@ class CommandContext {
                     }
                 }
             } catch (e) {}
+        }
+
+        if (!this.isSlash) {
+            // Prefix commands should reply without notifying the command author.
+            // Keep explicitly allowed user/role mentions intact.
+            payload = withPrefixReplyPolicy(payload);
         }
 
         if (this.isSlash) {
