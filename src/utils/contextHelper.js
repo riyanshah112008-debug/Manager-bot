@@ -173,12 +173,6 @@ class CommandContext {
             } catch (e) {}
         }
 
-        if (!this.isSlash) {
-            // Prefix commands should reply without notifying the command author.
-            // Keep explicitly allowed user/role mentions intact.
-            payload = withPrefixReplyPolicy(payload);
-        }
-
         if (this.isSlash) {
             if (this.source.deferred || this.source.replied) {
                 this.replyMessage = await this.source.editReply(payload).catch(() => null);
@@ -188,6 +182,10 @@ class CommandContext {
                 });
             }
         } else {
+            // Prefix replies disable the automatic reply-author notification.
+            // Explicit user and role mention permissions are preserved.
+            payload = withPrefixReplyPolicy(payload);
+
             // Check if another client is targeted (Multi-Bot routing)
             if (this.client && this.source.client && this.client.user?.id !== this.source.client.user?.id) {
                 try {
