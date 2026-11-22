@@ -25,6 +25,7 @@ const { buildCategoryEmbed, createHelpComponents } = require('../utils/helpHelpe
 const User = require('../models/User');
 const { buildBirthdayFilter } = require('../utils/discordSnowflake');
 const { registerInteractionHandler } = require('../utils/interactionHandler');
+const { isExecutableCommand } = require('../utils/prefixCommandGuard');
 
 // Guild Prefix In-Memory Cache
 const guildPrefixCache = new Map();
@@ -307,6 +308,10 @@ class CommandRegistry {
             if (!message || message.author?.bot || !message.content) return;
 
             // Instant in-memory check to discard rapid re-delivery within the same process
+            // Valid prefixes can be followed by arbitrary text or punctuation.
+            // Ignore unresolved commands before reading category, permissions, or execute.
+            if (!isExecutableCommand(command)) return;
+
             if (executedMessageIds.has(message.id)) return;
 
             const isPrimary = isPrimaryBotClient(client);
