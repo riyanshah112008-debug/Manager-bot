@@ -839,11 +839,11 @@ async function applyKazagumoFilter(player, filterName) {
                         { band: 7, gain: 0.01 },  // 630 Hz: Neutral body
                         { band: 8, gain: 0.04 },  // 1.0 kHz: Vocal intelligibility
                         { band: 9, gain: 0.04 },  // 1.6 kHz: Vocal presence
-                        { band: 10, gain: 0.03 }, // 2.5 kHz: Clarity without harshness
-                        { band: 11, gain: 0.03 }, // 4.0 kHz: Transient detail
-                        { band: 12, gain: 0.01 }, // 6.3 kHz: Smooth highs
-                        { band: 13, gain: 0.03 }, // 10.0 kHz: Air
-                        { band: 14, gain: 0.02 }  // 16.0 kHz: Gentle sparkle
+                        { band: 10, gain: 0.01 }, // 2.5 kHz: Restrained presence
+                        { band: 11, gain: 0.00 }, // 4.0 kHz: Avoid edgy transients
+                        { band: 12, gain: 0.00 }, // 6.3 kHz: Smooth highs
+                        { band: 13, gain: 0.01 }, // 10.0 kHz: Subtle air
+                        { band: 14, gain: 0.00 }  // 16.0 kHz: Neutral sparkle
                     ],
                     channelMix: null,
                     timescale: null,
