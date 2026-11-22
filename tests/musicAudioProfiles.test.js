@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const LAVALINK_MIN_GAIN = -1 / 4;
 const LAVALINK_HALF_GAIN = 1 / 2;
+const { getFilterArgs, FILTER_ARGS } = require('../src/utils/audioDsp');
 const {
     applyKazagumoFilter,
     applyKazagumoEqualizer,
@@ -76,7 +77,7 @@ test('automatic studio master reserves headroom for cumulative EQ peaks', async 
     assert.equal(await applyKazagumoFilter(stub.player, 'empowering'), true);
     const filters = stub.getApplied();
     const positiveBoostSum = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-    const expectedHeadroomDb = Math.min(4, 0.5 + positiveBoostSum * 2.5);
+    const expectedHeadroomDb = Math.min(4.5, 1.0 + positiveBoostSum * 3.5);
     const expectedVolume = Math.pow(10, -expectedHeadroomDb / 20);
     assert.ok(Math.abs(filters.volume - expectedVolume) < 1e-10,
         'preamp must account for combined EQ boosts rather than only the strongest band');
@@ -226,4 +227,32 @@ test('custom EQ clamps values and neutral reset restores unity',async()=>{
  assert.equal(stub.getApplied().equalizer[0].gain, LAVALINK_HALF_GAIN);assert.equal(stub.getApplied().equalizer[2].gain, LAVALINK_MIN_GAIN);
  assert.equal(await applyKazagumoEqualizer(stub.player,{}),true);
  assert.ok(stub.getApplied().equalizer.every(b=>b.gain===0));assert.equal(stub.getApplied().volume,1);
+});
+
+
+test('native audio profiles use a single final limiter with no makeup-gain compressor', () => {
+    for (const profile of Object.keys(FILTER_ARGS)) {
+        const chain = getFilterArgs(profile)[1];
+        assert.equal((chain.match(/alimiter=/g) || []).length, 1,
+            profile + ' must use exactly one final limiter');
+        assert.match(chain, /aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo/,
+            profile + ' must normalize audio format before processing');
+    }
+
+    assert.doesNotMatch(FILTER_ARGS.empowering[1], /acompressor=/,
+        'default vocal master must not add compressor makeup gain');
+    assert.doesNotMatch(FILTER_ARGS.empowering[1], /alimiter=/,
+        'preset must not insert a limiter before the shared final peak limiter');
+    assert.match(FILTER_ARGS.empowering[1], /highpass=f=28:order=2/);
+    assert.match(FILTER_ARGS.bass[1], /bass=g=1\.5:f=62:w=0\.7/,
+        'bass profile should retain controlled low-frequency weight');
+});
+
+test('native default master retains headroom while preserving natural vocal bands', () => {
+    const chain = getFilterArgs('empowering', 100)[1];
+    const volumeMatch = chain.match(/,volume=([0-9.]+)/);
+    assert.ok(volumeMatch, 'master chain must include a gain stage');
+    assert.ok(Number(volumeMatch[1]) <= 0.82,
+        'master must attenuate before EQ instead of relying on limiting alone');
+    assert.match(chain, /alimiter=limit=0\.96:attack=5:release=180:level=false:latency=true/);
 });

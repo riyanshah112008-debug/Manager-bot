@@ -420,12 +420,11 @@ async function applyKazagumoFilter(player, filterName) {
                         gain: Math.max(-0.25, Math.min(0.65, Number.isFinite(gain) ? gain : 0))
                     };
                 });
-            // EQ bands overlap in the low end and presence region. A reserve based only
-            // on the single largest band can leave the combined signal clipping. Estimate
-            // cumulative boost and apply a modest preamp reduction before voice encoding.
+            // EQ bands overlap in the low end and vocal-presence region. Reserve additional
+            // preamp headroom for their combined peaks before Lavalink encodes voice audio.
             const positiveBoostSum = equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
             const peakHeadroomDb = positiveBoostSum > 0
-                ? Math.min(4, 0.5 + (positiveBoostSum * 2.5))
+                ? Math.min(4.5, 1.0 + (positiveBoostSum * 3.5))
                 : 0;
             const peakSafePreamp = Math.pow(10, -peakHeadroomDb / 20);
             const rawVolume = Number(filters.volume ?? 1);
@@ -825,7 +824,7 @@ async function applyKazagumoFilter(player, filterName) {
             case 'master':
             case 'studio':
                 // ⭐ Automatic Premium-style master: fuller bass, natural vocal body, controlled presence.
-                // Keep boosts modest; the shared limiter reserve prevents clipping on loud masters.
+                // Keep boosts modest; the shared preamp reserve reduces stacked-EQ clipping risk.
                 await setFilters({
                     volume: 1.0,
                     equalizer: [
