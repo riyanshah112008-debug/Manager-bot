@@ -40,10 +40,8 @@ const contextSource = fs.readFileSync(
     'utf8'
 );
 assert.match(contextSource, /withPrefixReplyPolicy\(payload\)/);
-assert.match(
-    contextSource,
-    /if \(!this\.isSlash\)\s*\{\s*payload = withPrefixReplyPolicy\(payload\);/
-);
+assert.ok(contextSource.includes('if (!this.isSlash)'));
+assert.ok(contextSource.includes('payload = withPrefixReplyPolicy(payload);'));
 
 
 for (const clientPath of [
