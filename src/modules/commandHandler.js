@@ -308,10 +308,6 @@ class CommandRegistry {
             if (!message || message.author?.bot || !message.content) return;
 
             // Instant in-memory check to discard rapid re-delivery within the same process
-            // Valid prefixes can be followed by arbitrary text or punctuation.
-            // Ignore unresolved commands before reading category, permissions, or execute.
-            if (!isExecutableCommand(command)) return;
-
             if (executedMessageIds.has(message.id)) return;
 
             const isPrimary = isPrimaryBotClient(client);
@@ -459,6 +455,9 @@ class CommandRegistry {
                     args.unshift(commandKey); // Prepend word back to prompt
                 }
             }
+
+            // Ignore unknown commands before reading category, permissions, or execute.
+            if (!isExecutableCommand(command)) return;
 
 NaN
             if (executedMessageIds.has(message.id)) return;
