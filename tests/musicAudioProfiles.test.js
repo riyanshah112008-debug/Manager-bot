@@ -1,6 +1,7 @@
 process.env.STARRY_DISABLE_STREAM_RESOLVER = '1';
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { buildAudioFilterArgs, DEFAULT_STUDIO_MASTER_FILTER } = require('../src/utils/audioFilterPipeline');
 const LAVALINK_MIN_GAIN = -1 / 4;
 const LAVALINK_HALF_GAIN = 1 / 2;
 const {
@@ -76,7 +77,7 @@ test('automatic studio master reserves headroom for cumulative EQ peaks', async 
     assert.equal(await applyKazagumoFilter(stub.player, 'empowering'), true);
     const filters = stub.getApplied();
     const positiveBoostSum = filters.equalizer.reduce((sum, band) => sum + Math.max(0, band.gain), 0);
-    const expectedHeadroomDb = Math.min(4, 0.5 + positiveBoostSum * 2.5);
+    const expectedHeadroomDb = Math.min(6, 2 + positiveBoostSum * 2);
     const expectedVolume = Math.pow(10, -expectedHeadroomDb / 20);
     assert.ok(Math.abs(filters.volume - expectedVolume) < 1e-10,
         'preamp must account for combined EQ boosts rather than only the strongest band');
@@ -152,7 +153,7 @@ test('bass EQ retains strong low-frequency energy with controlled preamp headroo
     assert.equal(await applyKazagumoFilter(stub.player, 'bass'), true);
     const filters = stub.getApplied();
     const volumePercent = Math.round(filters.volume * 100);
-    assert.ok(volumePercent > 65 && volumePercent < 85,
+    assert.ok(volumePercent > 55 && volumePercent < 75,
         'bass profile should preserve useful overall loudness while retaining headroom');
     assert.ok(filters.equalizer.some(band => band.band === 1 && Math.round(band.gain * 100) >= 13),
         '40 Hz low-bass band must retain a controlled audible boost');
@@ -217,7 +218,7 @@ test('bass profile reserves headroom for stacked low-frequency boosts',async()=>
  const stub=createPlayer();
  assert.equal(await applyKazagumoEqualizer(stub.player,{subBass:3,bass:2,mids:-1,presence:0,treble:0}),true);
  const filters=stub.getApplied();
- const expected=Math.pow(10,-6.5/20);
+ const expected=Math.pow(10,-7.5/20);
  assert.ok(Math.abs(filters.volume-expected)<1e-10);
  assert.ok(filters.volume<Math.pow(10,-3/20),'headroom must account for both positive bass bands plus safety margin');
 });
@@ -226,4 +227,36 @@ test('custom EQ clamps values and neutral reset restores unity',async()=>{
  assert.equal(stub.getApplied().equalizer[0].gain, LAVALINK_HALF_GAIN);assert.equal(stub.getApplied().equalizer[2].gain, LAVALINK_MIN_GAIN);
  assert.equal(await applyKazagumoEqualizer(stub.player,{}),true);
  assert.ok(stub.getApplied().equalizer.every(b=>b.gain===0));assert.equal(stub.getApplied().volume,1);
+});
+
+
+test('native FFmpeg pipeline uses one final limiter after 48 kHz resampling', () => {
+    const [, filterGraph] = buildAudioFilterArgs(
+        'volume=0.90,highpass=f=28,equalizer=f=63:width_type=q:w=1:g=1.0,alimiter=limit=0.96:attack=5:release=140:level=false',
+        100
+    );
+    const stages = filterGraph.split(',');
+    assert.equal(stages.filter(stage => /^alimiter=/i.test(stage)).length, 1,
+        'profile limiters must be removed so compression is not stacked');
+    assert.ok(stages.at(-2).startsWith('aresample=48000'),
+        'resampling must happen before the final peak guard');
+    assert.ok(stages.at(-1).startsWith('alimiter=limit=0.90'),
+        'the common final limiter must reserve codec headroom');
+});
+
+
+test('native custom EQ reserves cumulative boost plus transient headroom', () => {
+    const [, filterGraph] = buildAudioFilterArgs(
+        'volume=0.9,highpass=f=28',
+        100,
+        { subBass: 6, bass: 4, mids: 0, presence: -2, treble: 0 }
+    );
+    const volumeStage = filterGraph.split(',').find(stage => stage.startsWith('volume='));
+    assert.equal(volumeStage, 'volume=0.213',
+        'combined EQ gain must be attenuated before filtering');
+});
+
+test('native automatic master avoids makeup compression and stacked limiting', () => {
+    assert.doesNotMatch(DEFAULT_STUDIO_MASTER_FILTER, /acompressor|alimiter/i,
+        'the default master must use the shared final limiter without vocal makeup compression');
 });
