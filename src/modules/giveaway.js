@@ -54,11 +54,19 @@ module.exports = (client) => {
 
     function getGiveawaysFromFile() {
         try {
-            if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
             const rows = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
             return Array.isArray(rows) ? rows : [];
-        } catch {
-            return [];
+        } catch (error) {
+            if (error?.code === 'ENOENT') {
+                // Exclusive creation avoids an existsSync/read race when multiple workers start.
+                try {
+                    fs.writeFileSync(dbPath, '[]', { flag: 'wx' });
+                } catch (createError) {
+                    if (createError?.code !== 'EEXIST') throw createError;
+                }
+                return [];
+            }
+            throw error;
         }
     }
 
