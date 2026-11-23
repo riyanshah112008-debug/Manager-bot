@@ -161,13 +161,10 @@ async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
  * @param {string} [guildId]
  */
 async function resetChannelSettings(channelId, guildId = null) {
-    if (!channelId) return null;
+    if (!channelId || !guildId) throw new Error('channelId and guildId are required');
+    if (!isDbConnected()) throw new Error('AutoMod MongoDB storage is unavailable.');
+    await AutomodChannel.findOneAndDelete({ channelId, guildId });
     channelCache.set(channelId, { links: false, emojis: false });
-    try {
-        await AutomodChannel.findOneAndDelete({ channelId });
-    } catch (err) {
-        console.error('❌ [AutoMod] Failed to reset channel settings:', err.message);
-    }
     return {
         channelId,
         guildId,
