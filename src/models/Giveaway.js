@@ -12,6 +12,7 @@ const giveawaySchema = new mongoose.Schema({
     hostId: { type: String, required: true },
     status: { type: String, enum: ['active', 'processing', 'ended', 'cancelled'], default: 'active', index: true },
     winnerIds: { type: [String], default: [] },
+    outcomeCommitted: { type: Boolean, default: false },
     endedAt: { type: Date, default: null }
 }, { timestamps: true, versionKey: false });
 
