@@ -322,6 +322,7 @@ $("#saveSecurity")?.addEventListener("click",async()=>{
  const whitelistedUsers=parseIds("nukeWhitelistedUsers"),whitelistedRoles=parseIds("nukeWhitelistedRoles"),validId=/^\d{17,20}$/;
  if(whitelistedUsers.length>100||whitelistedRoles.length>100||[...whitelistedUsers,...whitelistedRoles].some(id=>!validId.test(id))){feedback("Whitelist accepts up to 100 valid Discord IDs per list.","bad");return}
  await saveGroup("antinuke",{blockUnapprovedBots:"bool",blockWebhookCreation:"bool",maxChannelDeletions:"number",maxRoleDeletions:"number",maxBans:"number",maxKicks:"number",quarantineRoleId:"text"},{enabled:$("#nukeEnabled").checked,action:$("#antinukeAction").value,whitelistedUsers,whitelistedRoles});
+ await loadSecurityStatus();
 });
 $("#saveVerification")?.addEventListener("click",async()=>{
  const age=Number($("#vAge").value);
