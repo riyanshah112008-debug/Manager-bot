@@ -2163,7 +2163,7 @@ function setupDashboardRoutes(app, client) {
         const state = typeof req.query.state === 'string' ? req.query.state : '';
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const providerError = typeof req.query.error === 'string' ? req.query.error : '';
-        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\\/+$/, '');
+        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
         const returnToMusic = outcome => {
             const target = new URL('/music.html', frontendBase);
             target.searchParams.set('spotify', outcome);
