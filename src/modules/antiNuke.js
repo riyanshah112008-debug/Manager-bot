@@ -84,6 +84,75 @@ async function executeResponse(guild, executorId, policy, reason) {
     return false;
 }
 
+async function applyPanicLockdown(guild, reason) {
+    const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageChannels)) return 0;
+    const channels = guild.channels.cache
+        .filter(channel => channel.isTextBased() && channel.permissionOverwrites)
+        .first(100);
+    let locked = 0;
+    for (const channel of channels) {
+        const current = channel.permissionOverwrites.cache.get(guild.id);
+        if (current?.deny?.has(PermissionFlagsBits.SendMessages)) continue;
+        try {
+            await channel.permissionOverwrites.edit(guild.roles.everyone, {
+                SendMessages: false
+            }, reason);
+            locked += 1;
+        } catch (error) {
+            console.warn('[AntiNuke] Panic lockdown could not lock channel:', error.message);
+        }
+    }
+    return locked;
+}
+
+async function handleWebhookCreation(channel, client) {
+    if (!channel?.guild || !channel.isTextBased?.()) return;
+    let policy;
+    try { policy = await getPolicy(channel.guild.id); } catch (_) { return; }
+    if (!policy || policy.enabled !== true || policy.blockWebhookCreation !== true) return;
+
+    let entries;
+    try {
+        const logs = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.WebhookCreate, limit: 8 });
+        entries = [...logs.entries.values()];
+    } catch (error) {
+        console.warn('[AntiNuke] Webhook audit log lookup failed:', error.message);
+        return;
+    }
+    const now = Date.now();
+    const entry = entries.find(item => {
+        const created = Number(item.createdTimestamp || item.createdAt?.getTime?.() || 0);
+        const auditChannelId = item.extra?.channel?.id || item.target?.channelId || '';
+        return created > 0 && now >= created && now - created <= 15000 && auditChannelId === channel.id;
+    });
+    const executorId = entry?.executor?.id;
+    if (!executorId || await isTrustedExecutor(channel.guild, executorId, policy)) return;
+
+    const executor = await channel.guild.members.fetch(executorId).catch(() => null);
+    if (isWhitelisted(executorId, executor?.roles?.cache?.map(role => role.id) || [], policy)) return;
+    const botMember = channel.guild.members.me || await channel.guild.members.fetchMe().catch(() => null);
+    if (!botMember?.permissions.has(PermissionFlagsBits.ManageWebhooks)) return;
+
+    const webhookId = entry.target?.id;
+    try {
+        const webhooks = await channel.fetchWebhooks();
+        const createdWebhook = webhookId ? webhooks.get(webhookId) : webhooks.find(hook => hook.owner?.id === executorId);
+        if (createdWebhook) {
+            await createdWebhook.delete('Starry Anti-Nuke: unapproved webhook creation.');
+        }
+    } catch (error) {
+        console.warn('[AntiNuke] Could not remove unapproved webhook:', error.message);
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor('#ED4245')
+        .setTitle('Unapproved webhook creation detected')
+        .setDescription('Starry detected a webhook created by <@' + executorId + '> in <#' + channel.id + '>.')
+        .setTimestamp();
+    await notifyGuild(client, channel.guild.id, 'securityAlert', { embeds: [embed] }).catch(() => {});
+}
+
 async function handleDestructiveEvent(guild, type, targetId, action) {
     let policy;
     try {
@@ -109,6 +178,7 @@ async function handleDestructiveEvent(guild, type, targetId, action) {
 
     const reason = 'Starry Anti-Nuke: ' + count + ' suspicious ' + action + ' events within ' + (WINDOW_MS / 1000) + ' seconds.';
     const punished = await executeResponse(guild, executorId, policy, reason);
+    const lockedChannels = policy.panicLockdown === true ? await applyPanicLockdown(guild, reason) : 0;
     const embed = new EmbedBuilder()
         .setColor(punished ? '#ED4245' : '#F1C40F')
         .setTitle(punished ? 'Starry Anti-Nuke Response Executed' : 'Starry Anti-Nuke Alert')
@@ -117,14 +187,15 @@ async function handleDestructiveEvent(guild, type, targetId, action) {
             '**Detected activity:** ' + action,
             '**Threshold:** ' + threshold,
             '**Recent events:** ' + count,
-            '**Response:** ' + (punished ? policy.action : 'No action completed; check bot permissions and role hierarchy.')
+            '**Response:** ' + (punished ? policy.action : 'No action completed; check bot permissions and role hierarchy.'),
+            '**Panic lockdown:** ' + (lockedChannels > 0 ? lockedChannels + ' text channels locked' : (policy.panicLockdown === true ? 'Configured, but no channels were changed' : 'Disabled'))
         ].join('\n'))
         .setTimestamp();
     await notifyGuild(guild.client, guild.id, 'securityAlert', { embeds: [embed] }).catch(() => {});
     auditCounts.set([guild.id, executorId, action].join(':'), []);
 }
 
-async function handleBotJoin(member) {
+async function handleBotJoin(member, client) {
     if (!member.user?.bot) return;
     let policy;
     try { policy = await getPolicy(member.guild.id); } catch (_) { return; }
@@ -133,7 +204,7 @@ async function handleBotJoin(member) {
     const entry = await findAuditEntry(member.guild, AuditLogEvent.BotAdd, member.id);
     const executorId = entry?.executor?.id;
     const allowedIds = Array.isArray(policy.whitelistedUsers) ? policy.whitelistedUsers : [];
-    if (member.id === member.guild.client.user.id || allowedIds.includes(member.id)) return;
+    if (member.id === client.user.id || allowedIds.includes(member.id)) return;
     if (!executorId || executorId === member.guild.ownerId || config.isBotOwner(executorId) || allowedIds.includes(executorId)) return;
 
     const executor = await member.guild.members.fetch(executorId).catch(() => null);
@@ -162,10 +233,13 @@ module.exports = client => {
     client.on(Events.GuildMemberRemove, member => {
         handleDestructiveEvent(member.guild, AuditLogEvent.MemberKick, member.id, 'kick');
     });
-    client.on(Events.GuildMemberAdd, handleBotJoin);
+    client.on(Events.GuildMemberAdd, member => handleBotJoin(member, client));
+    client.on(Events.WebhooksUpdate, channel => handleWebhookCreation(channel, client));
     console.log('🛡️ Audit-log Anti-Nuke monitor loaded.');
 };
 
 module.exports.getPolicy = getPolicy;
 module.exports.recordAction = recordAction;
 module.exports.executeResponse = executeResponse;
+module.exports.applyPanicLockdown = applyPanicLockdown;
+module.exports.handleWebhookCreation = handleWebhookCreation;
