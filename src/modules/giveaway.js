@@ -1,5 +1,6 @@
 const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
@@ -101,7 +102,11 @@ module.exports = (client) => {
             prize: prize,
             winners: winnerCount,
             endsAt: endsAt,
-            hostId: author.id
+            hostId: author.id,
+            status: 'active',
+            createdAt: Date.now(),
+            participantCount: 0,
+            winnerIds: []
         });
         saveGiveaways(giveaways);
 
@@ -137,7 +142,7 @@ module.exports = (client) => {
         const winners = [];
         for (let i = 0; i < winnerCount; i++) {
             if (validUsers.length === 0) break;
-            const randomIndex = Math.floor(Math.random() * validUsers.length);
+            const randomIndex = crypto.randomInt(validUsers.length);
             winners.push(validUsers[randomIndex]);
             validUsers.splice(randomIndex, 1);
         }
@@ -167,6 +172,67 @@ module.exports = (client) => {
 
         return '✅ Winner rerolled successfully!';
     }
+
+    // Single service facade used by both Discord commands and the dashboard API.
+    client.starryGiveawayEngine = {
+        list: async guildId => {
+            const records = getGiveaways().filter(item => item.guildId === String(guildId));
+            return Promise.all(records.map(async item => {
+                let participantCount = Number(item.participantCount || 0);
+                if (item.status === 'active') {
+                    const guild = client.guilds.cache.get(item.guildId);
+                    const channel = guild?.channels.cache.get(item.channelId);
+                    const message = await channel?.messages.fetch(item.messageId).catch(() => null);
+                    const reaction = message?.reactions.cache.get('🎉');
+                    if (reaction) {
+                        const users = await reaction.users.fetch({ limit: 100 }).catch(() => null);
+                        if (users) participantCount = users.filter(user => !user.bot).size;
+                    }
+                }
+                return {
+                    messageId: item.messageId, channelId: item.channelId, guildId: item.guildId,
+                    prize: item.prize, winners: item.winners, endsAt: item.endsAt, hostId: item.hostId,
+                    status: item.status || (item.endsAt > Date.now() ? 'active' : 'processing'),
+                    participantCount, winnerIds: item.winnerIds || [],
+                    createdAt: item.createdAt || null, completedAt: item.completedAt || null
+                };
+            }));
+        },
+        create: async (channel, author, duration, winnerCount, prize) => {
+            const response = await startGiveaway(channel, author, duration, winnerCount, prize);
+            if (String(response).includes('❌')) throw new Error(String(response).replace(/\*\*/g, ''));
+            const record = getGiveaways().filter(item =>
+                item.guildId === channel.guild.id && item.hostId === author.id && item.prize === prize
+            ).slice(-1)[0];
+            if (!record) throw new Error('Giveaway message was sent but its record could not be verified.');
+            return { message: response, giveaway: record };
+        },
+        find: (guildId, messageId) => getGiveaways().find(item =>
+            item.guildId === String(guildId) && item.messageId === String(messageId)
+        ) || null,
+        end: async (guildId, messageId) => {
+            const records = getGiveaways();
+            const record = records.find(item => item.guildId === String(guildId) && item.messageId === String(messageId));
+            if (!record) throw new Error('Giveaway does not exist in this server.');
+            if (record.status === 'completed' || record.status === 'failed') throw new Error('This giveaway has already ended.');
+            record.endsAt = Date.now();
+            record.status = 'active';
+            saveGiveaways(records);
+            await checkGiveaways();
+            const updated = getGiveaways().find(item => item.messageId === String(messageId));
+            return { success: updated?.status === 'completed', giveaway: updated || record };
+        },
+        reroll: async (guildId, messageId, winnerCount, executor) => {
+            const record = getGiveaways().find(item => item.guildId === String(guildId) && item.messageId === String(messageId));
+            if (!record) throw new Error('Giveaway does not exist in this server.');
+            const guild = client.guilds.cache.get(String(guildId));
+            const channel = guild?.channels.cache.get(record.channelId);
+            if (!channel) throw new Error('The giveaway channel is unavailable.');
+            const response = await rerollGiveaway(channel, String(messageId), winnerCount || record.winners || 1, executor);
+            if (String(response).includes('❌')) throw new Error(String(response).replace(/\*\*/g, ''));
+            return { success: true, message: response };
+        }
+    };
 
     // ==========================================
     // 💬 LISTENERS (Slash & Prefix)
@@ -259,83 +325,78 @@ module.exports = (client) => {
     // ==========================================
     // 🏁 3. CONCLUDED GIVEAWAY AUTOMATION ENGINE
     // ==========================================
+    let giveawayCheckRunning = false;
     async function checkGiveaways() {
-        let giveaways = getGiveaways();
-        if (!giveaways.length) return;
+        if (giveawayCheckRunning) return;
+        giveawayCheckRunning = true;
+        try {
+            const giveaways = getGiveaways();
+            if (!giveaways.length) return;
+            const now = Date.now();
+            const due = giveaways.filter(item => item.status !== 'completed' && item.status !== 'failed' && Number(item.endsAt) <= now);
+            for (const giveaway of due) {
+                try {
+                    giveaway.status = 'processing';
+                    saveGiveaways(giveaways);
 
-        const now = Date.now();
-        const ended = giveaways.filter(g => g.endsAt <= now);
-        const active = giveaways.filter(g => g.endsAt > now);
+                    const guild = client.guilds.cache.get(giveaway.guildId);
+                    const channel = guild?.channels.cache.get(giveaway.channelId);
+                    const message = await channel?.messages.fetch(giveaway.messageId).catch(() => null);
+                    if (!guild || !channel || !message) {
+                        giveaway.status = 'failed';
+                        giveaway.completedAt = Date.now();
+                        giveaway.failureReason = 'Giveaway message is no longer available.';
+                        saveGiveaways(giveaways);
+                        continue;
+                    }
 
-        if (ended.length > 0) saveGiveaways(active);
+                    const reaction = message.reactions.cache.get('🎉');
+                    const users = reaction ? await reaction.users.fetch({ limit: 100 }).catch(() => null) : null;
+                    const participants = users ? users.filter(user => !user.bot).map(user => user.id) : [];
+                    giveaway.participantCount = participants.length;
 
-        for (const giveaway of ended) {
-            try {
-                const guild = client.guilds.cache.get(giveaway.guildId);
-                if (!guild) continue;
-
-                const channel = guild.channels.cache.get(giveaway.channelId);
-                if (!channel) continue;
-
-                const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
-                if (!message) continue;
-
-                const reaction = message.reactions.cache.get('🎉');
-                if (!reaction) continue;
-
-                const users = await reaction.users.fetch();
-                const validUsers = users.filter(u => !u.bot).map(u => u.id);
-
-                if (validUsers.length === 0) {
-                    const failEmbed = new EmbedBuilder()
-                        .setColor('#ED4245')
-                        .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
-                        .setTitle(`🎁 ${giveaway.prize}`)
-                        .setDescription([
-                            `>>> Could not pick a winner because nobody entered!`,
-                            ``,
-                            `👑 **Host:** <@${giveaway.hostId}>`
-                        ].join('\n'))
-                        .setFooter({ text: 'Giveaway Ended • No Participants' })
-                        .setTimestamp();
-
-                    await message.edit({ embeds: [failEmbed] }).catch(() => {});
-                    await channel.send(`📢 The giveaway for **${giveaway.prize}** ended, but nobody entered!`).catch(() => {});
-                    continue;
+                    if (!participants.length) {
+                        const failEmbed = new EmbedBuilder()
+                            .setColor('#ED4245')
+                            .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
+                            .setTitle('🎁 ' + giveaway.prize)
+                            .setDescription('Nobody entered this giveaway.\n\n👑 **Host:** <@' + giveaway.hostId + '>')
+                            .setFooter({ text: 'Giveaway Ended • No Participants' })
+                            .setTimestamp();
+                        await message.edit({ embeds: [failEmbed] }).catch(() => {});
+                        await channel.send('📢 The giveaway for **' + giveaway.prize + '** ended, but nobody entered!').catch(() => {});
+                        giveaway.winnerIds = [];
+                    } else {
+                        const pool = [...participants];
+                        const winners = [];
+                        for (let i = 0; i < Math.min(Number(giveaway.winners) || 1, pool.length); i++) {
+                            winners.push(pool.splice(crypto.randomInt(pool.length), 1)[0]);
+                        }
+                        giveaway.winnerIds = winners;
+                        const winnersText = winners.map(id => '<@' + id + '>').join(', ');
+                        const winEmbed = new EmbedBuilder()
+                            .setColor('#00F5D4')
+                            .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
+                            .setTitle('🏆 ' + giveaway.prize)
+                            .setDescription('🥳 **Winner(s):** ' + winnersText + '\n👑 **Host:** <@' + giveaway.hostId + '>')
+                            .setImage(ASSETS.WINNER_BANNER)
+                            .setFooter({ text: 'Giveaway Ended • Winner Selected', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
+                            .setTimestamp();
+                        await message.edit({ embeds: [winEmbed] }).catch(() => {});
+                        await channel.send('🎉 **CONGRATULATIONS** ' + winnersText + '! You won **' + giveaway.prize + '**!').catch(() => {});
+                    }
+                    giveaway.status = 'completed';
+                    giveaway.completedAt = Date.now();
+                    delete giveaway.failureReason;
+                    saveGiveaways(giveaways);
+                } catch (error) {
+                    console.error('Error ending giveaway:', error.message);
+                    giveaway.status = 'active';
+                    saveGiveaways(giveaways);
                 }
-
-                const winners = [];
-                for (let i = 0; i < giveaway.winners; i++) {
-                    if (validUsers.length === 0) break;
-                    const randomIndex = Math.floor(Math.random() * validUsers.length);
-                    winners.push(validUsers[randomIndex]);
-                    validUsers.splice(randomIndex, 1);
-                }
-
-                const winnersText = winners.map(id => `<@${id}>`).join(', ');
-
-                const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4')
-                    .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
-                    .setTitle(`🏆 ${giveaway.prize}`)
-                    .setDescription([
-                        `> Cheers to the lucky champion(s)!`,
-                        ``,
-                        `🥳 **Winner(s):** ${winnersText}`,
-                        `👑 **Host:** <@${giveaway.hostId}>`,
-                        ``,
-                        `*“Here’s to the ones who dream, and the ones who win.”* 🍾`
-                    ].join('\n'))
-                    .setImage(ASSETS.WINNER_BANNER)
-                    .setFooter({ text: 'Giveaway Ended • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
-                    .setTimestamp();
-
-                await message.edit({ embeds: [winEmbed] }).catch(() => {});
-                await channel.send(`🎉 **CHEERS & CONGRATULATIONS** ${winnersText}! You won **${giveaway.prize}**! 🚀🥂`).catch(() => {});
-
-            } catch (error) {
-                console.error('Error ending giveaway:', error);
             }
+        } finally {
+            giveawayCheckRunning = false;
         }
     }
 };
