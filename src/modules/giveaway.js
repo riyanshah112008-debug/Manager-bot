@@ -1,5 +1,9 @@
 const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
+const mongoose = require('mongoose');
+const crypto = require('node:crypto');
+const Giveaway = require('../models/Giveaway');
+const { notifyGuild } = require('../utils/guildNotifications');
 const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
@@ -17,13 +21,19 @@ module.exports = (client) => {
     const config = require('../config');
     const PREFIX = config.DEFAULT_PREFIX || ',';
 
-    // ==========================================
-    // 📁 JSON DATABASE HELPERS
-    // ==========================================
-    function getGiveaways() {
+    // MongoDB is the durable source of truth in hosted deployments.
+    // The JSON file remains a temporary fallback for offline operation and is migrated on reconnect.
+    async function getGiveaways(guildId = null) {
+        if (mongoose.connection.readyState === 1) {
+            const query = { status: 'active' };
+            if (guildId) query.guildId = guildId;
+            const docs = await Giveaway.find(query).sort({ endsAt: 1 }).limit(250).lean();
+            return docs.map(doc => ({ ...doc, endsAt: new Date(doc.endsAt).getTime() }));
+        }
         try {
             if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
-            return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+            const rows = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+            return Array.isArray(rows) ? rows.filter(row => !guildId || row.guildId === guildId) : [];
         } catch {
             return [];
         }
@@ -31,6 +41,43 @@ module.exports = (client) => {
 
     function saveGiveaways(data) {
         fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    }
+
+    async function migrateLegacyGiveaways() {
+        if (mongoose.connection.readyState !== 1) return;
+        try {
+            const legacy = getGiveawaysFromFile();
+            for (const item of legacy) {
+                if (!item?.messageId || !item.guildId || !item.channelId || !item.endsAt) continue;
+                await Giveaway.updateOne(
+                    { messageId: String(item.messageId) },
+                    { $setOnInsert: {
+                        guildId: String(item.guildId),
+                        channelId: String(item.channelId),
+                        messageId: String(item.messageId),
+                        prize: String(item.prize || 'Community giveaway').slice(0, 150),
+                        winners: Math.min(20, Math.max(1, Number(item.winners) || 1)),
+                        endsAt: new Date(Number(item.endsAt)),
+                        hostId: String(item.hostId || client.user.id),
+                        status: 'active'
+                    } },
+                    { upsert: true }
+                );
+            }
+            fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
+        } catch (error) {
+            console.warn('[Giveaway] Legacy JSON migration deferred:', error.message);
+        }
+    }
+
+    function getGiveawaysFromFile() {
+        try {
+            if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
+            const rows = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+            return Array.isArray(rows) ? rows : [];
+        } catch {
+            return [];
+        }
     }
 
     function parseTime(timeStr) {
@@ -49,18 +96,23 @@ module.exports = (client) => {
     // ==========================================
     // ⏰ BACKGROUND CHECKER ENGINE
     // ==========================================
-    client.once(Events.ClientReady || 'clientReady', () => {
-        setInterval(checkGiveaways, 8000);
+    client.once(Events.ClientReady || 'clientReady', async () => {
+        await migrateLegacyGiveaways();
+        setInterval(() => checkGiveaways().catch(error => console.warn('[Giveaway] Scheduler cycle failed:', error.message)), 8000);
         console.log('✅ Supreme Starry Giveaway Engine Active');
     });
 
     // ==========================================
     // 🚀 1. ACTIVE GIVEAWAY EMBED (TONY STARK EDITION)
     // ==========================================
-    async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
+    async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize, returnMeta = false) {
         const msDuration = parseTime(durationStr);
-        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`, `1d`)*.';
-        if (winnerCount < 1) return '❌ **Invalid winners!** Must specify at least 1 winner.';
+        const fail = message => returnMeta ? { success: false, message } : message;
+        if (!msDuration || msDuration < 60000 || msDuration > 30 * 24 * 60 * 60 * 1000) return fail('❌ **Invalid duration.** Choose between 1 minute and 30 days.');
+        if (!Number.isInteger(Number(winnerCount)) || Number(winnerCount) < 1 || Number(winnerCount) > 20) return fail('❌ **Invalid winners!** Choose from 1 to 20 winners.');
+        if (typeof prize !== 'string' || !prize.trim() || prize.trim().length > 150) return fail('❌ **Invalid prize.** Enter a prize between 1 and 150 characters.');
+        if (!channel?.guild || !channel.isTextBased?.() || typeof channel.send !== 'function') return fail('❌ Choose a text channel inside a Discord server.');
+        if (mongoose.connection.readyState !== 1) return fail('❌ Giveaway database is unavailable. Please retry when the database reconnects.');
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
@@ -91,21 +143,26 @@ module.exports = (client) => {
         const message = await channel.send({ embeds: [embed] }).catch(() => null);
         if (!message) return '❌ Failed to send giveaway message. Verify channel bot permissions!';
 
-        await message.react('🎉').catch(() => {});
+        try {
+            await message.react('🎉');
+            await Giveaway.create({
+                messageId: message.id,
+                channelId: channel.id,
+                guildId: channel.guild.id,
+                prize: prize.trim(),
+                winners: Number(winnerCount),
+                endsAt: new Date(endsAt),
+                hostId: author.id,
+                status: 'active'
+            });
+        } catch (error) {
+            await message.delete().catch(() => {});
+            console.error('[Giveaway] Could not persist giveaway:', error.message);
+            return fail('❌ Starry could not save this giveaway. No giveaway was left running.');
+        }
 
-        const giveaways = getGiveaways();
-        giveaways.push({
-            messageId: message.id,
-            channelId: channel.id,
-            guildId: channel.guild.id,
-            prize: prize,
-            winners: winnerCount,
-            endsAt: endsAt,
-            hostId: author.id
-        });
-        saveGiveaways(giveaways);
-
-        return '✅ Supreme Giveaway launched successfully!';
+        const result = { success: true, message: 'Giveaway launched successfully.', messageId: message.id, channelId: channel.id, guildId: channel.guild.id, prize: prize.trim(), winners: Number(winnerCount), endsAt };
+        return returnMeta ? result : '✅ Supreme Giveaway launched successfully!';
     }
 
     // ==========================================
@@ -121,6 +178,7 @@ module.exports = (client) => {
         const fetchedUsers = await reaction.users.fetch({ limit: 100 });
         let validUsers = fetchedUsers.filter(u => !u.bot).map(u => u.id);
 
+        if (!Number.isInteger(Number(winnerCount)) || Number(winnerCount) < 1 || Number(winnerCount) > 20) return '❌ Choose between 1 and 20 winners.';
         if (validUsers.length === 0) {
             return '❌ **Cannot reroll!** There are no human participants in the reactions.';
         }
@@ -137,7 +195,7 @@ module.exports = (client) => {
         const winners = [];
         for (let i = 0; i < winnerCount; i++) {
             if (validUsers.length === 0) break;
-            const randomIndex = Math.floor(Math.random() * validUsers.length);
+            const randomIndex = crypto.randomInt(0, validUsers.length);
             winners.push(validUsers[randomIndex]);
             validUsers.splice(randomIndex, 1);
         }
@@ -260,82 +318,128 @@ module.exports = (client) => {
     // 🏁 3. CONCLUDED GIVEAWAY AUTOMATION ENGINE
     // ==========================================
     async function checkGiveaways() {
-        let giveaways = getGiveaways();
-        if (!giveaways.length) return;
+        if (mongoose.connection.readyState !== 1) return;
+        const due = await Giveaway.find({ status: 'active', endsAt: { $lte: new Date() } })
+            .sort({ endsAt: 1 }).limit(25).lean();
 
-        const now = Date.now();
-        const ended = giveaways.filter(g => g.endsAt <= now);
-        const active = giveaways.filter(g => g.endsAt > now);
+        for (const candidate of due) {
+            // Atomic claim prevents two scheduler processes from announcing different winners.
+            const giveaway = await Giveaway.findOneAndUpdate(
+                { messageId: candidate.messageId, status: 'active', endsAt: { $lte: new Date() } },
+                { $set: { status: 'processing' } },
+                { new: true }
+            ).lean();
+            if (!giveaway) continue;
 
-        if (ended.length > 0) saveGiveaways(active);
-
-        for (const giveaway of ended) {
             try {
                 const guild = client.guilds.cache.get(giveaway.guildId);
-                if (!guild) continue;
-
-                const channel = guild.channels.cache.get(giveaway.channelId);
-                if (!channel) continue;
-
-                const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
-                if (!message) continue;
-
-                const reaction = message.reactions.cache.get('🎉');
-                if (!reaction) continue;
-
-                const users = await reaction.users.fetch();
-                const validUsers = users.filter(u => !u.bot).map(u => u.id);
-
-                if (validUsers.length === 0) {
-                    const failEmbed = new EmbedBuilder()
-                        .setColor('#ED4245')
-                        .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
-                        .setTitle(`🎁 ${giveaway.prize}`)
-                        .setDescription([
-                            `>>> Could not pick a winner because nobody entered!`,
-                            ``,
-                            `👑 **Host:** <@${giveaway.hostId}>`
-                        ].join('\n'))
-                        .setFooter({ text: 'Giveaway Ended • No Participants' })
-                        .setTimestamp();
-
-                    await message.edit({ embeds: [failEmbed] }).catch(() => {});
-                    await channel.send(`📢 The giveaway for **${giveaway.prize}** ended, but nobody entered!`).catch(() => {});
+                const channel = guild?.channels?.cache?.get(giveaway.channelId);
+                const message = channel ? await channel.messages.fetch(giveaway.messageId).catch(() => null) : null;
+                if (!guild || !channel || !message) {
+                    await Giveaway.updateOne({ messageId: giveaway.messageId, status: 'processing' }, {
+                        $set: { status: 'cancelled', endedAt: new Date() }
+                    });
                     continue;
                 }
 
+                const reaction = message.reactions.cache.get('🎉');
+                const users = reaction ? await reaction.users.fetch().catch(() => null) : null;
+                const participants = users
+                    ? users.filter(user => !user.bot).map(user => user.id)
+                    : [];
                 const winners = [];
-                for (let i = 0; i < giveaway.winners; i++) {
-                    if (validUsers.length === 0) break;
-                    const randomIndex = Math.floor(Math.random() * validUsers.length);
-                    winners.push(validUsers[randomIndex]);
-                    validUsers.splice(randomIndex, 1);
+                while (participants.length && winners.length < giveaway.winners) {
+                    const index = crypto.randomInt(0, participants.length);
+                    winners.push(participants.splice(index, 1)[0]);
                 }
 
-                const winnersText = winners.map(id => `<@${id}>`).join(', ');
+                if (winners.length === 0) {
+                    const failEmbed = new EmbedBuilder()
+                        .setColor('#ED4245')
+                        .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
+                        .setTitle('🎁 ' + giveaway.prize)
+                        .setDescription('Nobody entered this giveaway.')
+                        .setFooter({ text: 'Giveaway Ended • No Participants' })
+                        .setTimestamp();
+                    await message.edit({ embeds: [failEmbed] });
+                    await channel.send('📢 The giveaway for **' + giveaway.prize + '** ended, but nobody entered!').catch(() => {});
+                } else {
+                    const winnersText = winners.map(id => '<@' + id + '>').join(', ');
+                    const winEmbed = new EmbedBuilder()
+                        .setColor('#00F5D4')
+                        .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
+                        .setTitle('🏆 ' + giveaway.prize)
+                        .setDescription([
+                            '> Cheers to the lucky champion(s)!',
+                            '',
+                            '🥳 **Winner(s):** ' + winnersText,
+                            '👑 **Host:** <@' + giveaway.hostId + '>',
+                            '',
+                            '*“Here’s to the ones who dream, and the ones who win.”* 🍾'
+                        ].join('\n'))
+                        .setImage(ASSETS.WINNER_BANNER)
+                        .setFooter({ text: 'Giveaway Ended • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
+                        .setTimestamp();
+                    await message.edit({ embeds: [winEmbed] });
+                    await channel.send({
+                        content: '🎉 **CHEERS & CONGRATULATIONS** ' + winnersText + '! You won **' + giveaway.prize + '**! 🚀🥂',
+                        allowedMentions: { parse: [], users: winners }
+                    });
+                    await notifyGuild(client, guild.id, 'giveawayResult', {
+                        content: 'Giveaway **' + giveaway.prize + '** ended. Winner(s): ' + winnersText
+                    }).catch(() => {});
+                }
 
-                const winEmbed = new EmbedBuilder()
-                    .setColor('#00F5D4')
-                    .setAuthor({ name: '🥂 GRAND GIVEAWAY CONCLUDED 🥂' })
-                    .setTitle(`🏆 ${giveaway.prize}`)
-                    .setDescription([
-                        `> Cheers to the lucky champion(s)!`,
-                        ``,
-                        `🥳 **Winner(s):** ${winnersText}`,
-                        `👑 **Host:** <@${giveaway.hostId}>`,
-                        ``,
-                        `*“Here’s to the ones who dream, and the ones who win.”* 🍾`
-                    ].join('\n'))
-                    .setImage(ASSETS.WINNER_BANNER)
-                    .setFooter({ text: 'Giveaway Ended • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
-                    .setTimestamp();
-
-                await message.edit({ embeds: [winEmbed] }).catch(() => {});
-                await channel.send(`🎉 **CHEERS & CONGRATULATIONS** ${winnersText}! You won **${giveaway.prize}**! 🚀🥂`).catch(() => {});
-
+                await Giveaway.updateOne(
+                    { messageId: giveaway.messageId, status: 'processing' },
+                    { $set: { status: 'ended', winnerIds: winners, endedAt: new Date() } }
+                );
             } catch (error) {
                 console.error('Error ending giveaway:', error);
+                // Release the claim so a transient Discord/API failure can be retried.
+                await Giveaway.updateOne(
+                    { messageId: giveaway.messageId, status: 'processing' },
+                    { $set: { status: 'active' } }
+                ).catch(() => {});
             }
         }
     }
+
+    async function listActiveGiveaways(guildId) {
+        if (!guildId || mongoose.connection.readyState !== 1) {
+            throw new Error('Giveaway database is unavailable.');
+        }
+        return Giveaway.find({ guildId, status: 'active' })
+            .sort({ endsAt: 1 })
+            .limit(100)
+            .lean();
+    }
+
+    async function cancelGiveaway(guildId, messageId) {
+        if (!guildId || !messageId || mongoose.connection.readyState !== 1) {
+            throw new Error('Giveaway database is unavailable.');
+        }
+        const cancelled = await Giveaway.findOneAndUpdate(
+            { guildId, messageId, status: 'active' },
+            { $set: { status: 'cancelled', endedAt: new Date() } },
+            { new: true }
+        ).lean();
+        if (!cancelled) return false;
+        const guild = client.guilds.cache.get(guildId);
+        const channel = guild?.channels?.cache?.get(cancelled.channelId);
+        const message = channel ? await channel.messages.fetch(messageId).catch(() => null) : null;
+        if (message) {
+            const embed = EmbedBuilder.from(message.embeds[0] || new EmbedBuilder())
+                .setColor('#6B7280')
+                .setFooter({ text: 'Giveaway cancelled by a server administrator.' });
+            await message.edit({ embeds: [embed] }).catch(() => {});
+        }
+        return true;
+    }
+
+    client.giveawayManager = {
+        listActive: listActiveGiveaways,
+        start: (channel, author, duration, winners, prize) => startGiveaway(channel, author, duration, winners, prize, true),
+        cancel: cancelGiveaway
+    };
 };
