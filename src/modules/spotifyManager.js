@@ -6,6 +6,7 @@
 const fetch = globalThis.fetch;
 const spotifyUrlInfo = require('spotify-url-info')(fetch);
 const UserSpotify = require('../models/UserSpotify');
+const { encryptToken, decryptToken, isEncryptedToken } = require('../utils/spotifyTokenVault');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
@@ -43,7 +44,8 @@ class SpotifyManager {
         return null;
     }
 
-    getOAuthUrl(userId, redirectUri) {
+    getOAuthUrl(redirectUri, state, codeChallenge) {
+        if (!SPOTIFY_CLIENT_ID) throw new Error('Spotify client ID is not configured.');
         const scopes = [
             'playlist-read-private',
             'playlist-read-collaborative',
@@ -57,15 +59,22 @@ class SpotifyManager {
             response_type: 'code',
             redirect_uri: redirectUri,
             scope: scopes,
-            state: userId,
+            state,
+            code_challenge_method: 'S256',
+            code_challenge: codeChallenge,
             show_dialog: 'true'
         });
 
         return `https://accounts.spotify.com/authorize?${params.toString()}`;
     }
 
-    async handleOAuthCallback(code, redirectUri, stateUserId) {
-        if (!code || !stateUserId) throw new Error('Missing authorization code or user state.');
+    async handleOAuthCallback(code, redirectUri, stateUserId, codeVerifier) {
+        if (!code || !stateUserId || !codeVerifier) {
+            throw new Error('Missing Spotify authorization code, account binding or PKCE verifier.');
+        }
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
+            throw new Error('Spotify application credentials are not configured.');
+        }
 
         const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
         const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
@@ -77,44 +86,54 @@ class SpotifyManager {
             body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 code,
-                redirect_uri: redirectUri
+                redirect_uri: redirectUri,
+                code_verifier: codeVerifier
             }).toString()
         });
 
-        const tokenData = await tokenRes.json();
-        if (!tokenData.access_token) {
-            throw new Error(tokenData.error_description || tokenData.error || 'Failed to obtain access token from Spotify.');
+        const tokenData = await tokenRes.json().catch(() => ({}));
+        if (!tokenRes.ok || !tokenData.access_token) {
+            throw new Error('Spotify rejected the authorization code. Please reconnect your account.');
         }
 
-        // Fetch User Profile
         const profRes = await fetch('https://api.spotify.com/v1/me', {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
         });
-        const profile = await profRes.json();
+        const profile = await profRes.json().catch(() => ({}));
+        if (!profRes.ok || !profile.id) throw new Error('Spotify account profile could not be verified.');
 
         const expiresAt = new Date(Date.now() + ((tokenData.expires_in || 3600) * 1000));
-
-        const userDoc = await UserSpotify.findOneAndUpdate(
+        await UserSpotify.findOneAndUpdate(
             { userId: stateUserId },
             {
-                spotifyId: profile.id || '',
-                displayName: profile.display_name || profile.id || 'Spotify User',
-                profileUrl: profile.external_urls?.spotify || `https://open.spotify.com/user/${profile.id}`,
-                avatarUrl: profile.images?.[0]?.url || '',
-                accessToken: tokenData.access_token,
-                refreshToken: tokenData.refresh_token || '',
-                tokenExpiresAt: expiresAt,
-                updatedAt: new Date()
+                $set: {
+                    spotifyId: profile.id,
+                    displayName: String(profile.display_name || profile.id || 'Spotify User').slice(0, 100),
+                    profileUrl: profile.external_urls?.spotify || `https://open.spotify.com/user/${profile.id}`,
+                    avatarUrl: profile.images?.[0]?.url || '',
+                    accessToken: encryptToken(tokenData.access_token),
+                    refreshToken: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : '',
+                    tokenExpiresAt: expiresAt,
+                    updatedAt: new Date()
+                }
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
-        return { userDoc, profile };
+        return {
+            profile: {
+                id: profile.id,
+                display_name: String(profile.display_name || profile.id).slice(0, 100),
+                external_urls: profile.external_urls || {},
+                images: Array.isArray(profile.images) ? profile.images.slice(0, 1) : []
+            }
+        };
     }
 
     async refreshUserToken(userDoc) {
         if (!userDoc || !userDoc.refreshToken) return null;
         try {
+            const refreshToken = decryptToken(userDoc.refreshToken);
             const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
             const res = await fetch('https://accounts.spotify.com/api/token', {
                 method: 'POST',
@@ -124,16 +143,17 @@ class SpotifyManager {
                 },
                 body: new URLSearchParams({
                     grant_type: 'refresh_token',
-                    refresh_token: userDoc.refreshToken
+                    refresh_token: refreshToken
                 }).toString()
             });
-            const data = await res.json();
-            if (data.access_token) {
-                userDoc.accessToken = data.access_token;
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.access_token) {
+                userDoc.accessToken = encryptToken(data.access_token);
                 userDoc.tokenExpiresAt = new Date(Date.now() + ((data.expires_in || 3600) * 1000));
-                if (data.refresh_token) userDoc.refreshToken = data.refresh_token;
+                if (data.refresh_token) userDoc.refreshToken = encryptToken(data.refresh_token);
+                else if (!isEncryptedToken(userDoc.refreshToken)) userDoc.refreshToken = encryptToken(refreshToken);
                 await userDoc.save();
-                return userDoc.accessToken;
+                return data.access_token;
             }
         } catch (e) {
             console.warn('⚠️ [SpotifyManager] Refresh token failed:', e.message);
@@ -263,21 +283,32 @@ class SpotifyManager {
     }
 
     async getUserPlaylists(userId) {
-        const userDoc = await UserSpotify.findOne({ userId });
+        const userDoc = await UserSpotify.findOne({ userId }).select('+accessToken +refreshToken');
         const result = {
             isLinked: Boolean(userDoc && userDoc.accessToken),
             displayName: userDoc?.displayName || '',
+            spotifyId: userDoc?.spotifyId || '',
             profileUrl: userDoc?.profileUrl || '',
             avatarUrl: userDoc?.avatarUrl || '',
             savedPlaylists: userDoc?.savedPlaylists || [],
             oauthPlaylists: []
         };
 
-        // If user linked via OAuth, fetch live Spotify account playlists
         if (userDoc && userDoc.accessToken) {
-            let token = userDoc.accessToken;
+            let token = decryptToken(userDoc.accessToken);
             if (userDoc.tokenExpiresAt && new Date() >= userDoc.tokenExpiresAt) {
                 token = await this.refreshUserToken(userDoc);
+            } else {
+                let needsSave = false;
+                if (!isEncryptedToken(userDoc.accessToken)) {
+                    userDoc.accessToken = encryptToken(token);
+                    needsSave = true;
+                }
+                if (userDoc.refreshToken && !isEncryptedToken(userDoc.refreshToken)) {
+                    userDoc.refreshToken = encryptToken(decryptToken(userDoc.refreshToken));
+                    needsSave = true;
+                }
+                if (needsSave) await userDoc.save();
             }
 
             if (token) {
@@ -285,7 +316,9 @@ class SpotifyManager {
                     const res = await fetch('https://api.spotify.com/v1/me/playlists?limit=25', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
-                    if (res.ok) {
+                    if (res.status === 401) {
+                        token = await this.refreshUserToken(userDoc);
+                    } else if (res.ok) {
                         const json = await res.json();
                         result.oauthPlaylists = (json.items || []).map(p => ({
                             id: p.id,
