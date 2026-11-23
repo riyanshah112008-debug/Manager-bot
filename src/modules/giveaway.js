@@ -331,6 +331,7 @@ module.exports = (client) => {
             ).lean();
             if (!giveaway) continue;
 
+            let outcomeCommitted = false;
             try {
                 const guild = client.guilds.cache.get(giveaway.guildId);
                 const channel = guild?.channels?.cache?.get(giveaway.channelId);
@@ -352,6 +353,15 @@ module.exports = (client) => {
                     const index = crypto.randomInt(0, participants.length);
                     winners.push(participants.splice(index, 1)[0]);
                 }
+
+                // Commit the outcome before sending Discord messages. A transient send/edit
+                // failure must never select a different winner on the next scheduler pass.
+                const committed = await Giveaway.updateOne(
+                    { messageId: giveaway.messageId, status: 'processing' },
+                    { $set: { status: 'ended', winnerIds: winners, endedAt: new Date() } }
+                );
+                if (!committed.modifiedCount) continue;
+                outcomeCommitted = true;
 
                 if (winners.length === 0) {
                     const failEmbed = new EmbedBuilder()
@@ -389,18 +399,15 @@ module.exports = (client) => {
                         content: 'Giveaway **' + giveaway.prize + '** ended. Winner(s): ' + winnersText
                     }).catch(() => {});
                 }
-
-                await Giveaway.updateOne(
-                    { messageId: giveaway.messageId, status: 'processing' },
-                    { $set: { status: 'ended', winnerIds: winners, endedAt: new Date() } }
-                );
             } catch (error) {
                 console.error('Error ending giveaway:', error);
-                // Release the claim so a transient Discord/API failure can be retried.
-                await Giveaway.updateOne(
-                    { messageId: giveaway.messageId, status: 'processing' },
-                    { $set: { status: 'active' } }
-                ).catch(() => {});
+                // Only release a claim if no outcome has been committed yet.
+                if (!outcomeCommitted) {
+                    await Giveaway.updateOne(
+                        { messageId: giveaway.messageId, status: 'processing' },
+                        { $set: { status: 'active' } }
+                    ).catch(() => {});
+                }
             }
         }
     }
