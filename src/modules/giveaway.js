@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const dbPath = path.join(__dirname, 'giveaways.json');
+const { parseGiveawayDuration, validateGiveawayInput } = require('../utils/giveawayPolicy');
 
 // 🎬 DIRECT GIPHY CDN ASSETS (DISCORD PROXY GUARANTEED)
 const ASSETS = {
@@ -37,16 +38,7 @@ module.exports = (client) => {
     }
 
     function parseTime(timeStr) {
-        const match = timeStr.match(/^(\d+)(s|m|h|d|w)$/i);
-        if (!match) return null;
-        const val = parseInt(match[1]);
-        const unit = match[2].toLowerCase();
-        if (unit === 's') return val * 1000;
-        if (unit === 'm') return val * 60 * 1000;
-        if (unit === 'h') return val * 60 * 60 * 1000;
-        if (unit === 'd') return val * 24 * 60 * 60 * 1000;
-        if (unit === 'w') return val * 7 * 24 * 60 * 60 * 1000;
-        return null;
+        return parseGiveawayDuration(timeStr);
     }
 
     // ==========================================
@@ -61,11 +53,11 @@ module.exports = (client) => {
     // 🚀 1. ACTIVE GIVEAWAY EMBED (TONY STARK EDITION)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
-        const msDuration = parseTime(durationStr);
-        if (!msDuration || msDuration > 30 * 24 * 60 * 60 * 1000) return '❌ **Invalid duration!** Use `s`, `m`, `h`, `d`, or `w` up to 30 days.';
-        if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 10) return '❌ **Invalid winners!** Choose between 1 and 10 winners.';
-        if (typeof prize !== 'string' || !prize.trim() || prize.trim().length > 200) return '❌ **Invalid prize!** Enter a prize from 1 to 200 characters.';
-        prize = prize.trim();
+        const validation = validateGiveawayInput({ duration: durationStr, winners: winnerCount, prize });
+        if (!validation.valid) return '❌ ' + validation.error;
+        const msDuration = validation.durationMs;
+        winnerCount = validation.winners;
+        prize = validation.prize;
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
