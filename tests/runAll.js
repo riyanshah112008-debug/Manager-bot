@@ -11,6 +11,7 @@ const suites = [
   ['Discord snowflake validation', 'tests/discordSnowflake.test.js'],
   ['Birthday role cleanup', 'tests/birthdayRoleCleanup.test.js'],
   ['Dashboard origins', 'tests/dashboardOrigins.test.js'],
+  ['Premium order access control', '--test', 'tests/paymentOrderAccess.test.js'],
   ['Spotify OAuth redirect URI', '--test', 'tests/spotifyOAuthRedirect.test.js'],
   ['Verification', 'tests/verification.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
