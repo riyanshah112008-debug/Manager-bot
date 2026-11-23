@@ -830,6 +830,110 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Giveaway management is backed by MongoDB and the existing Discord giveaway engine.
+    app.get('/api/guild/:id/giveaways', requireGuildAdmin, async (req, res) => {
+        try {
+            if (mongoose.connection.readyState !== 1) {
+                return res.status(503).json({ success: false, error: 'Giveaway storage is unavailable.' });
+            }
+            const manager = client.giveawayManager;
+            if (!manager || typeof manager.listActive !== 'function') {
+                return res.status(503).json({ success: false, error: 'The giveaway engine is not ready.' });
+            }
+            const items = await manager.listActive(req.guild.id);
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                giveaways: items.map(item => ({
+                    messageId: item.messageId,
+                    channelId: item.channelId,
+                    prize: item.prize,
+                    winners: item.winners,
+                    endsAt: new Date(item.endsAt).toISOString(),
+                    hostId: item.hostId,
+                    status: item.status
+                }))
+            });
+        } catch (error) {
+            console.error('Dashboard giveaway list failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not load active giveaways.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            if (mongoose.connection.readyState !== 1) {
+                return res.status(503).json({ success: false, error: 'Giveaway storage is unavailable.' });
+            }
+            const body = req.body || {};
+            if (Object.keys(body).some(key => !['channelId', 'prize', 'duration', 'winners'].includes(key))) {
+                return res.status(400).json({ success: false, error: 'Unexpected giveaway fields.' });
+            }
+            const channelId = typeof body.channelId === 'string' ? body.channelId : '';
+            const channel = req.guild.channels.cache.get(channelId);
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+            }
+            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
+            if (!prize || prize.length > 150) {
+                return res.status(400).json({ success: false, error: 'Prize must contain 1 to 150 characters.' });
+            }
+            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
+            const match = duration.match(/^([1-9][0-9]{0,4})(s|m|h|d|w)$/i);
+            if (!match) return res.status(400).json({ success: false, error: 'Duration must use a format such as 10m, 2h or 1d.' });
+            const value = Number(match[1]);
+            const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+            const durationMs = value * multipliers[match[2].toLowerCase()];
+            if (!Number.isFinite(durationMs) || durationMs < 60000 || durationMs > 30 * 86400000) {
+                return res.status(400).json({ success: false, error: 'Giveaway duration must be between 1 minute and 30 days.' });
+            }
+            const winners = Number(body.winners);
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) {
+                return res.status(400).json({ success: false, error: 'Choose from 1 to 20 winners.' });
+            }
+            const manager = client.giveawayManager;
+            if (!manager || typeof manager.start !== 'function') {
+                return res.status(503).json({ success: false, error: 'The giveaway engine is not ready.' });
+            }
+            const host = await client.users.fetch(req.session.user.id);
+            const result = await manager.start(channel, host, duration, winners, prize);
+            if (!result?.success) return res.status(400).json({ success: false, error: result?.message || 'Could not start giveaway.' });
+            return res.status(201).json({
+                success: true,
+                message: result.message,
+                giveaway: {
+                    messageId: result.messageId,
+                    channelId: result.channelId,
+                    prize: result.prize,
+                    winners: result.winners,
+                    endsAt: new Date(result.endsAt).toISOString()
+                }
+            });
+        } catch (error) {
+            console.error('Dashboard giveaway creation failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not create this giveaway. Check Starry permissions and database status.' });
+        }
+    });
+
+    app.delete('/api/guild/:id/giveaways/:messageId', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const messageId = String(req.params.messageId || '');
+            if (!/^\d{17,20}$/.test(messageId)) {
+                return res.status(400).json({ success: false, error: 'Invalid giveaway message ID.' });
+            }
+            const manager = client.giveawayManager;
+            if (!manager || typeof manager.cancel !== 'function') {
+                return res.status(503).json({ success: false, error: 'The giveaway engine is not ready.' });
+            }
+            const cancelled = await manager.cancel(req.guild.id, messageId);
+            if (!cancelled) return res.status(404).json({ success: false, error: 'Active giveaway not found.' });
+            return res.json({ success: true, message: 'Giveaway cancelled.' });
+        } catch (error) {
+            console.error('Dashboard giveaway cancellation failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not cancel this giveaway.' });
+        }
+    });
+
     // Worker tokens are global cluster credentials, not per-server settings.
     // Only Starry bot owners may view or mutate the shared worker pool.
     const requireClusterManager = (req, res, next) => {
