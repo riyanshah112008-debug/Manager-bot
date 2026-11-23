@@ -792,9 +792,14 @@ class MusicControllerEngine {
 
                 const port = process.env.PORT || 10000;
                 const { getPublicUrl } = require('../utils/tunnelManager');
-                const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-                const redirectUri = `${publicUrl}/api/spotify/callback`;
-                const authUrl = spotifyManager.getOAuthUrl(interaction.user.id, redirectUri);
+                const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
+                const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://localhost:${port}`;
+                const redirectUri = getSpotifyRedirectUri(publicUrl);
+                const authUrl = await require('../utils/spotifyAuthorization').createSpotifyAuthorizationUrl(
+                    interaction.user.id,
+                    redirectUri,
+                    spotifyManager
+                );
 
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
@@ -810,8 +815,8 @@ class MusicControllerEngine {
             const embed = new EmbedBuilder()
                 .setColor('#1DB954')
                 .setAuthor({ name: `${interaction.user.username}'s Spotify Library`, iconURL: data.avatarUrl || interaction.user.displayAvatarURL() })
-                .setTitle(`🟢 Choose a Spotify Playlist to Stream (${total} available)`)
-                .setDescription('Select any of your saved or personal Spotify playlists below to stream immediately into your voice channel:');
+                .setTitle(`🟢 Choose a Spotify Playlist (${total} available)`)
+                .setDescription('Select any of your saved or personal Spotify playlists below to queue from Starry’s supported audio sources into your voice channel:');
 
             const options = [];
             data.savedPlaylists.slice(0, 15).forEach(p => {
