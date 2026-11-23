@@ -14,6 +14,7 @@ const PaymentOrder = require('../models/PaymentOrder');
 const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
 const UserSettings = require('../models/UserSettings');
+const { validateGiveawayInput } = require('../utils/giveawayPolicy');
 const UserSpotify = require('../models/UserSpotify');
 const SpotifyOAuthState = require('../models/SpotifyOAuthState');
 const { createSpotifyState, hashSpotifyState } = require('../utils/spotifyOAuthState');
@@ -1512,21 +1513,17 @@ function setupDashboardRoutes(app, client) {
             if (!manager) return res.status(503).json({ success: false, error: 'Giveaway engine is not ready.' });
             const body = req.body || {};
             const channel = req.guild.channels.cache.get(String(body.channelId || ''));
-            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
-            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
-            const winners = Number(body.winners);
+            const validation = validateGiveawayInput(body);
             if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
                 return res.status(400).json({ success: false, error: 'Choose a text channel in the selected server.' });
             }
-            if (!prize || prize.length > 200 || !Number.isInteger(winners) || winners < 1 || winners > 10 || !duration || duration.length > 12) {
-                return res.status(400).json({ success: false, error: 'Enter a prize (1–200 characters), duration and 1–10 winners.' });
-            }
+            if (!validation.valid) return res.status(400).json({ success: false, error: validation.error });
             const botMember = req.guild.members.me;
             const required = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions, PermissionFlagsBits.ReadMessageHistory];
             if (!botMember || !required.every(permission => channel.permissionsFor(botMember)?.has(permission))) {
                 return res.status(403).json({ success: false, error: 'Starry needs View Channel, Send Messages, Embed Links, Add Reactions and Read Message History in the selected channel.' });
             }
-            const message = await manager.start(channel, req.member.user, duration, winners, prize);
+            const message = await manager.start(channel, req.member.user, body.duration, validation.winners, validation.prize);
             if (typeof message !== 'string' || message.startsWith('❌')) return res.status(400).json({ success: false, error: message || 'Giveaway could not be started.' });
             const latest = manager.listGuild(req.guild.id).sort((a, b) => Number(b.createdAt || b.endsAt) - Number(a.createdAt || a.endsAt))[0];
             return res.json({ success: true, message, giveaway: latest ? {
