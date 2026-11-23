@@ -2022,20 +2022,12 @@ function setupDashboardRoutes(app, client) {
                 return res.status(503).json({ success: false, error: 'Spotify token encryption is not configured on the backend.' });
             }
 
-            const authState = createSpotifyOAuthState();
-            const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-            await SpotifyOAuthState.create({
-                stateHash: authState.stateHash,
-                userId: req.session.user.id,
-                codeVerifier: authState.codeVerifier,
-                expiresAt
-            });
             const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || 'https://' + req.get('host');
             const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const authorizationUrl = require('./spotifyManager').getOAuthUrl(
+            const authorizationUrl = await require('../utils/spotifyAuthorization').createSpotifyAuthorizationUrl(
+                req.session.user.id,
                 redirectUri,
-                authState.state,
-                authState.codeChallenge
+                require('./spotifyManager')
             );
             res.set('Cache-Control', 'no-store');
             return res.json({ success: true, authorizationUrl });
