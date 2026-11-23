@@ -7,6 +7,7 @@ const fetch = globalThis.fetch;
 const spotifyUrlInfo = require('spotify-url-info')(fetch);
 const UserSpotify = require('../models/UserSpotify');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
+const { encryptSpotifyToken, decryptSpotifyToken, isEncryptedSpotifyToken } = require('../utils/spotifyTokenCrypto');
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
@@ -43,7 +44,8 @@ class SpotifyManager {
         return null;
     }
 
-    getOAuthUrl(userId, redirectUri) {
+    getOAuthUrl(state, redirectUri) {
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) throw new Error('Spotify OAuth is not configured. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.');
         const scopes = [
             'playlist-read-private',
             'playlist-read-collaborative',
@@ -57,7 +59,7 @@ class SpotifyManager {
             response_type: 'code',
             redirect_uri: redirectUri,
             scope: scopes,
-            state: userId,
+            state,
             show_dialog: 'true'
         });
 
@@ -90,7 +92,9 @@ class SpotifyManager {
         const profRes = await fetch('https://api.spotify.com/v1/me', {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
         });
+        if (!profRes.ok) throw new Error('Spotify account profile could not be verified.');
         const profile = await profRes.json();
+        if (!profile || typeof profile.id !== 'string') throw new Error('Spotify returned an invalid account profile.');
 
         const expiresAt = new Date(Date.now() + ((tokenData.expires_in || 3600) * 1000));
 
@@ -101,8 +105,8 @@ class SpotifyManager {
                 displayName: profile.display_name || profile.id || 'Spotify User',
                 profileUrl: profile.external_urls?.spotify || `https://open.spotify.com/user/${profile.id}`,
                 avatarUrl: profile.images?.[0]?.url || '',
-                accessToken: tokenData.access_token,
-                refreshToken: tokenData.refresh_token || '',
+                accessToken: encryptSpotifyToken(tokenData.access_token),
+                refreshToken: encryptSpotifyToken(tokenData.refresh_token || ''),
                 tokenExpiresAt: expiresAt,
                 updatedAt: new Date()
             },
@@ -124,16 +128,16 @@ class SpotifyManager {
                 },
                 body: new URLSearchParams({
                     grant_type: 'refresh_token',
-                    refresh_token: userDoc.refreshToken
+                    refresh_token: decryptSpotifyToken(userDoc.refreshToken)
                 }).toString()
             });
             const data = await res.json();
             if (data.access_token) {
-                userDoc.accessToken = data.access_token;
+                userDoc.accessToken = encryptSpotifyToken(data.access_token);
                 userDoc.tokenExpiresAt = new Date(Date.now() + ((data.expires_in || 3600) * 1000));
-                if (data.refresh_token) userDoc.refreshToken = data.refresh_token;
+                if (data.refresh_token) userDoc.refreshToken = encryptSpotifyToken(data.refresh_token);
                 await userDoc.save();
-                return userDoc.accessToken;
+                return data.access_token;
             }
         } catch (e) {
             console.warn('⚠️ [SpotifyManager] Refresh token failed:', e.message);
@@ -263,7 +267,7 @@ class SpotifyManager {
     }
 
     async getUserPlaylists(userId) {
-        const userDoc = await UserSpotify.findOne({ userId });
+        const userDoc = await UserSpotify.findOne({ userId }).select('+accessToken +refreshToken');
         const result = {
             isLinked: Boolean(userDoc && userDoc.accessToken),
             displayName: userDoc?.displayName || '',
@@ -275,7 +279,12 @@ class SpotifyManager {
 
         // If user linked via OAuth, fetch live Spotify account playlists
         if (userDoc && userDoc.accessToken) {
-            let token = userDoc.accessToken;
+            let token = decryptSpotifyToken(userDoc.accessToken);
+            if (!isEncryptedSpotifyToken(userDoc.accessToken)) {
+                userDoc.accessToken = encryptSpotifyToken(token);
+                if (userDoc.refreshToken) userDoc.refreshToken = encryptSpotifyToken(userDoc.refreshToken);
+                await userDoc.save();
+            }
             if (userDoc.tokenExpiresAt && new Date() >= userDoc.tokenExpiresAt) {
                 token = await this.refreshUserToken(userDoc);
             }
