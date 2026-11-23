@@ -4,7 +4,7 @@ const MAX_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function parseGiveawayDuration(input) {
     if (typeof input !== 'string') return null;
-    const match = input.trim().match(/^(\\d{1,6})(s|m|h|d|w)$/i);
+    const match = input.trim().match(/^(\d{1,6})(s|m|h|d|w)$/i);
     if (!match) return null;
     const value = Number(match[1]);
     const unit = match[2].toLowerCase();
