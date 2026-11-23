@@ -106,7 +106,8 @@ module.exports = (client) => {
             prize: prize,
             winners: winnerCount,
             endsAt: endsAt,
-            hostId: author.id
+            hostId: author.id,
+            createdAt: Date.now()
         });
         saveGiveaways(giveaways);
 
