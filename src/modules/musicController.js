@@ -790,10 +790,13 @@ class MusicControllerEngine {
                         `Once added, you can 1-click play any of your playlists right from this controller!`
                     );
 
-                const port = process.env.PORT || 10000;
                 const { getPublicUrl } = require('../utils/tunnelManager');
-                const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-                const redirectUri = `${publicUrl}/api/spotify/callback`;
+                const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
+                const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || 'https://manager-bot-1-6167.onrender.com';
+                const redirectUri = getSpotifyRedirectUri(publicUrl);
+                if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+                    return interaction.reply({ content: 'Spotify is not configured on the Starry server yet.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                }
                 const { createSpotifyState, hashSpotifyState } = require('../utils/spotifyOAuthState');
                 const SpotifyOAuthState = require('../models/SpotifyOAuthState');
                 const state = createSpotifyState();
