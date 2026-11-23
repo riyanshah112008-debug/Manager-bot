@@ -51,19 +51,25 @@ const suites = [
 ];
 
 const timeoutMs = Number(process.env.TEST_SUITE_TIMEOUT_MS) || 60000;
-let passed = 0;
-
-for (const [name, ...args] of suites) {
-  console.log('\n===== START: ' + name + ' =====');
-  const started = Date.now();
-  const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...process.env, STARRY_DISABLE_STREAM_RESOLVER: '1' }, timeout: timeoutMs, windowsHide: true });
-  const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  if (result.error || result.status !== 0) {
-    if (result.error && result.error.code === 'ETIMEDOUT') console.error('\nFAILED: ' + name + ' exceeded ' + (timeoutMs / 1000) + 's and was terminated.');
-    else { console.error('\nFAILED: ' + name + ' (exit=' + result.status + ', signal=' + (result.signal || 'none') + ')'); if (result.error) console.error(result.error); }
-    process.exit(1);
-  }
-  passed += 1;
-  console.log('===== PASS: ' + name + ' (' + elapsed + 's) =====');
+const repetitions = Number.parseInt(process.env.STARRY_TEST_REPETITIONS || '1', 10);
+if (!Number.isInteger(repetitions) || repetitions < 1 || repetitions > 10) {
+  throw new Error('STARRY_TEST_REPETITIONS must be an integer from 1 to 10.');
 }
-console.log('\nAll ' + passed + ' deterministic verification suites passed.');
+
+let passed = 0;
+for (let pass = 1; pass <= repetitions; pass += 1) {
+  for (const [name, ...args] of suites) {
+    console.log('\n===== START: ' + name + ' (pass ' + pass + '/' + repetitions + ') =====');
+    const started = Date.now();
+    const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...process.env, STARRY_DISABLE_STREAM_RESOLVER: '1' }, timeout: timeoutMs, windowsHide: true });
+    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+    if (result.error || result.status !== 0) {
+      if (result.error && result.error.code === 'ETIMEDOUT') console.error('\nFAILED: ' + name + ' exceeded ' + (timeoutMs / 1000) + 's during pass ' + pass + '.');
+      else { console.error('\nFAILED: ' + name + ' (pass=' + pass + ', exit=' + result.status + ', signal=' + (result.signal || 'none') + ')'); if (result.error) console.error(result.error); }
+      process.exit(1);
+    }
+    passed += 1;
+    console.log('===== PASS: ' + name + ' (' + elapsed + 's; pass ' + pass + '/' + repetitions + ') =====');
+  }
+}
+console.log('\nAll ' + passed + ' deterministic suite executions passed across ' + repetitions + ' complete pass(es).');
