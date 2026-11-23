@@ -24,6 +24,7 @@ const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
+const { validateGuildNotifications } = require('../utils/guildNotificationPolicy');
 const config = require('../config');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
@@ -1295,6 +1296,11 @@ function setupDashboardRoutes(app, client) {
                 }
                 if (v.enabled && v.roleId && guild.roles.cache.get(v.roleId).position >= (guild.members.me || {}).roles?.highest?.position) return res.status(400).json({ success: false, error: 'Move Starry above the verified role before enabling verification.' });
             }
+            if (payload.notifications !== undefined) {
+                const result = validateGuildNotifications(payload.notifications, guild);
+                if (!result.valid) return res.status(400).json({ success: false, error: result.error });
+            }
+
             if (payload.antinuke !== undefined) {
                 const policy = payload.antinuke;
                 const boolKeys = ['enabled', 'blockUnapprovedBots', 'blockWebhookCreation', 'panicLockdown'];
@@ -1369,6 +1375,7 @@ function setupDashboardRoutes(app, client) {
             if (payload.triggerWord !== undefined) settings.triggerWord = payload.triggerWord.trim();
             if (payload.embedTheme) settings.embedTheme = { ...(settings.embedTheme?.toObject?.() || settings.embedTheme || {}), ...payload.embedTheme };
             if (payload.antinuke) settings.antinuke = { ...settings.antinuke.toObject(), ...payload.antinuke };
+            if (payload.notifications) settings.notifications = { ...(settings.notifications?.toObject?.() || settings.notifications || {}), ...payload.notifications };
             if (payload.automod) settings.automod = { ...settings.automod.toObject(), ...payload.automod };
             if (payload.verification) settings.verification = { ...settings.verification.toObject(), ...payload.verification };
             if (payload.autorole) settings.autorole = { ...settings.autorole.toObject(), ...payload.autorole };
