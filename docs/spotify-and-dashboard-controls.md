@@ -17,7 +17,7 @@ Generate the two dedicated secrets independently. Keep them only in the hosting 
 
 Add the exact value of `SPOTIFY_REDIRECT_URI` to the Spotify application's Redirect URIs. The callback must point to the backend service, not the Firebase website root and not `https://starry.com` unless that domain actually routes to this backend callback.
 
-The frontend begins account linking through an authenticated dashboard POST. Starry signs a short-lived state value, binds it to the Discord user ID and a Secure, HttpOnly, SameSite=Lax cookie, and verifies both on callback. The Discord user ID is never accepted from a query parameter.
+The frontend begins account linking through an authenticated dashboard POST. Starry signs a short-lived state value, binds it to the Discord user ID and a Secure, HttpOnly, SameSite=Lax cookie, stores only a SHA-256 state hash with a TTL in MongoDB, and atomically consumes that record on callback to reject replay. The Discord user ID is never accepted from a query parameter.
 
 ## What account linking enables
 
