@@ -95,7 +95,7 @@ function renderMusic(){
  '<div class="music-workspace-grid"><section class="music-panel music-search-panel"><div class="music-panel-heading"><div><span class="music-kicker">DISCOVER</span><h3>Add to the queue</h3><p>Search by song, artist or paste a supported URL.</p></div><span class="music-panel-icon">⌕</span></div><div class="music-search-box"><span>⌕</span><input id="query" type="search" placeholder="What do you want to hear?" autocomplete="off"><button class="btn primary" id="playMusic">Add track <span>＋</span></button></div><div class="music-channel-grid">'+select("voiceChannelId","Play in voice channel",[["","Choose a voice channel"],...channels("voice")],"")+select("textChannelId","Request channel",[["","Use default text channel"],...channels("text")],"")+'</div><div id="playFeedback"></div></section>'+
  '<section class="music-panel music-queue-panel"><div class="music-panel-heading"><div><span class="music-kicker">UP NEXT</span><h3>Your queue <span class="music-count">'+Number(p.queueLength??queue.length)+'</span></h3><p>Tracks waiting for their turn.</p></div><button class="music-icon-button" id="refreshMusicQueue" title="Refresh queue" aria-label="Refresh queue">↻</button></div><div class="music-queue-list">'+upcoming+'</div><div class="music-queue-foot">Showing up to 25 upcoming tracks</div></section>'+
  '<section class="music-panel music-settings-panel"><div class="music-panel-heading"><div><span class="music-kicker">PERSONALISE</span><h3>Playback settings</h3><p>Fine-tune how music sounds in your server.</p></div><span class="music-panel-icon">✧</span></div><div class="music-setting-row"><div><strong>Volume</strong><small>Adjust playback level</small></div><output id="volumeValue">'+Number(p.volume??100)+'%</output></div><input class="music-volume-slider" id="volume" type="range" min="1" max="150" step="1" value="'+Number(p.volume??100)+'"><div class="music-settings-fields">'+select("filter","Audio profile",filters,p.filter||"clear")+select("loop","Repeat",[[ "none","Off" ],[ "track","Repeat track" ],[ "queue","Repeat queue" ]],p.loop||"none")+select("autoplay","Smart autoplay",[[ "off","Off" ],[ "on","On" ]],p.autoplay?"on":"off")+'</div><label class="music-247-toggle" for="is247"><span><strong>Stay in voice channel</strong><small>Keep the music session connected when enabled.</small></span><input id="is247" type="checkbox" '+(p.is247?"checked":"")+'></label><button class="btn primary music-apply-btn" id="applyMusic">Save playback settings</button><div id="feedback"></div></section>'+
- '<section class="music-panel music-help-panel"><span class="music-panel-icon">✦</span><div><span class="music-kicker">MADE FOR YOUR COMMUNITY</span><h3>One shared listening room.</h3><p>Members can request tracks in Discord while moderators manage playback here. Starry uses the connected music worker that is available in your server.</p><div class="music-help-tags"><span>Shared queue</span><span>Worker routing</span><span>Server controls</span></div></div></section></div><section class="music-panel spotify-discover-panel"><div class="music-panel-heading"><div><span class="music-kicker">TRACK DISCOVERY</span><h3>Find your next track</h3><p>Search Starry’s configured playable provider, or paste a supported YouTube, SoundCloud or Spotify track link.</p></div><span class="music-panel-icon">♫</span></div><div class="music-search-box"><span>⌕</span><input id="spotifySearchQuery" type="search" placeholder="Search a song, artist or paste a music URL" autocomplete="off"><button class="btn primary" id="spotifySearchBtn">Find playable tracks</button></div><div id="spotifySearchResults" class="spotify-results"><div class="music-queue-empty"><span>♫</span><strong>Music from across platforms</strong><small>Search once, compare playable matches, then add one to your server queue.</small></div></div><p class="spotify-footnote">YouTube and SoundCloud results use Starry’s configured audio provider. Spotify links are resolved using public track or playlist metadata, then matched to playable audio from Starry’s configured YouTube provider. Spotify audio is never streamed, and Spotify Premium is not required. Apple Music catalogue search is not currently enabled.</p></section></div></div>';
+ '<section class="music-panel spotify-account-panel"><div class="music-panel-heading"><div><span class="music-kicker">YOUR ACCOUNT</span><h3>Connect Spotify</h3><p>Link your Spotify account to view your personal and private playlists in Starry. This does not stream Spotify audio.</p></div><span class="music-panel-icon">●</span></div><div id="spotifyAccountStatus"><div class="empty">Checking Spotify connection…</div></div><div class="actions"><button class="btn primary" id="spotifyConnect">Connect Spotify account</button><button class="btn danger" id="spotifyDisconnect" hidden>Disconnect Spotify</button></div><p class="muted">Starry requests profile and playlist-read access only. Your tokens stay on the Starry server and are encrypted at rest. Disconnecting removes saved Spotify credentials but keeps playlist bookmarks.</p></section><section class="music-panel music-help-panel"><span class="music-panel-icon">✦</span><div><span class="music-kicker">MADE FOR YOUR COMMUNITY</span><h3>One shared listening room.</h3><p>Members can request tracks in Discord while moderators manage playback here. Starry uses the connected music worker that is available in your server.</p><div class="music-help-tags"><span>Shared queue</span><span>Worker routing</span><span>Server controls</span></div></div></section></div><section class="music-panel spotify-discover-panel"><div class="music-panel-heading"><div><span class="music-kicker">TRACK DISCOVERY</span><h3>Find your next track</h3><p>Search Starry’s configured playable provider, or paste a supported YouTube, SoundCloud or Spotify track link.</p></div><span class="music-panel-icon">♫</span></div><div class="music-search-box"><span>⌕</span><input id="spotifySearchQuery" type="search" placeholder="Search a song, artist or paste a music URL" autocomplete="off"><button class="btn primary" id="spotifySearchBtn">Find playable tracks</button></div><div id="spotifySearchResults" class="spotify-results"><div class="music-queue-empty"><span>♫</span><strong>Music from across platforms</strong><small>Search once, compare playable matches, then add one to your server queue.</small></div></div><p class="spotify-footnote">YouTube and SoundCloud results use Starry’s configured audio provider. Spotify links are resolved using public track or playlist metadata, then matched to playable audio from Starry’s configured YouTube provider. Spotify audio is never streamed, and Spotify Premium is not required. Apple Music catalogue search is not currently enabled.</p></section></div></div>';
 }
 function renderMultiBot(){return pageHeader("Multi-Bot cluster","Manage Starry’s connected worker bots, assign specializations and monitor the virtual service nodes. Bot tokens are accepted only for connection and are never displayed again.")+'<div class="cluster-grid"><div id="clusterStats" class="cluster-stats"><div class="empty">Loading cluster status…</div></div>'+card("Connect a worker bot","Add a Discord bot account to Starry’s physical cluster. Create the bot in the Discord Developer Portal and invite it to the same servers before assigning work.",'<div class="form-grid">'+input("workerName","Display name","","text","Starry Music Worker")+input("workerToken","Bot token","","password","Paste token — it will not be shown again")+select("workerRole","Worker specialization",[["all","All-in-one"],["moderation","Moderation & security"],["music","Music & audio"],["utility","Utilities"],["economy","Economy"],["social","Social & community"]],"music")+'</div><div class="settings-note">Only the bot owner or selected server owner can change the global cluster. Never paste a user token. Use a bot token from Discord Developer Portal → Bot.</div><div class="actions"><button class="btn primary" id="addWorker">Connect worker bot</button></div><div id="workerFeedback"></div>',"full")+card("Physical bot instances","Live Discord bot accounts connected to this process.",'<div id="physicalBots"><div class="empty">Loading connected bots…</div></div>',"full")+card("Virtual service nodes","Logical Starry modules hosted by the primary bot. These are not separate Discord accounts.",'<div id="virtualNodes"><div class="empty">Loading service nodes…</div></div>',"full")+'</div>'}
 async function loadMultiBot(){try{const d=await request("/api/guild/"+guildId+"/multibot");const stats=d.stats||{};const summary=[["Physical bots",stats.totalPhysicalBots||0],["Virtual modules",stats.totalVirtualNodes||0],["Servers served",Number(stats.totalGuilds||0).toLocaleString()],["Members covered",Number(stats.totalUsers||0).toLocaleString()]];$("#clusterStats").innerHTML=summary.map(([k,v])=>'<div class="cluster-stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join("");const roleList=d.roles||[];$("#physicalBots").innerHTML=(stats.physicalBots||[]).map(bot=>'<div class="worker-card"><div class="worker-main"><div class="worker-avatar">'+(bot.isPrimary?"✦":"🤖")+'</div><div><strong>'+esc(bot.name||bot.tag)+'</strong><small>'+esc(bot.tag||"Discord bot")+' · '+(bot.isPrimary?"Primary node":"Worker node")+'</small><small>'+esc(bot.status||"Unknown status")+' · '+Number(bot.ping||0)+' ms ping</small></div></div><div class="worker-metrics"><span>'+Number(bot.guilds||0)+' servers</span><span>'+Number(bot.users||0).toLocaleString()+' members</span><span>'+Number(bot.activeMusicPlayers||0)+' music sessions</span></div>'+(bot.isPrimary?'<span class="pill">PRIMARY · PROTECTED</span>':'<div class="worker-controls"><select data-worker-role="'+esc(bot.id)+'">'+roleList.map(r=>'<option value="'+esc(r.value)+'" '+(r.value===bot.role?"selected":"")+'>'+esc(r.label)+'</option>').join("")+'</select><button class="btn danger" data-remove-worker="'+esc(bot.id)+'">Disconnect</button></div>')+'</div>').join("")||'<div class="empty">No active Discord bot instances found.</div>';$("#virtualNodes").innerHTML=(stats.virtualNodes||[]).map(node=>'<div class="node-row"><span class="node-emoji">'+esc(node.emoji||"✦")+'</span><div><strong>'+esc(node.name)+'</strong><small>'+esc(node.role||"Starry service")+' · '+esc(node.commands||"")+'</small></div><span class="pill">LOGICAL NODE</span></div>').join("")||'<div class="empty">No virtual nodes reported.</div>'}catch(e){$("#clusterStats").innerHTML=status(e.message,"bad");$("#physicalBots").innerHTML=status(e.message,"bad");$("#virtualNodes").innerHTML='<div class="empty">Cluster details are unavailable.</div>'}}
@@ -113,6 +113,62 @@ function renderSettings(){const s=settings||{};return pageHeader("General settin
 function renderLogging(){const l=settings.logging||{};return pageHeader("Audit logging","Route moderation, message, voice, member and server events to dedicated Discord text channels.")+'<div class="settings-stack">'+card("Event destinations","Select a text channel for each event category. Choose Auto-detect to use Starry’s existing channel-name discovery.",'<div class="settings-intro"><span class="pill">AUDIT ROUTING</span><span class="muted">'+channels("text").length+' text channels available in this server</span></div><div class="form-grid">'+select("modLogChannel","Moderation events",channelOptions("text"),l.modLogChannel||"")+select("messageLogChannel","Message edits & deletions",channelOptions("text"),l.messageLogChannel||"")+select("voiceLogChannel","Voice activity",channelOptions("text"),l.voiceLogChannel||"")+select("memberLogChannel","Member joins & leaves",channelOptions("text"),l.memberLogChannel||"")+select("serverLogChannel","Server & channel changes",channelOptions("text"),l.serverLogChannel||"")+'</div><div class="settings-note">Only text channels belonging to the selected server are accepted. Starry also needs permission to view and send messages in each destination.</div><div class="actions"><button class="btn primary" id="saveLogs">Save logging destinations</button></div><div id="feedback"></div>',"full")+'</div>'}
 function renderRoles(){const a=settings.autorole||{},roles=(guild?.roles||[]).filter(r=>!r.managed);return pageHeader("Role automation","Configure automatic member and bot roles, and review the roles available in this server.")+'<div class="grid">'+card("Auto-role settings","Enter role IDs separated by commas.",check("stickyRoles","Sticky roles","Restore member roles when supported by the bot",a.stickyRoles)+'<div class="form-grid">'+input("memberRoles","Member role IDs",(a.memberRoles||[]).join(", "))+input("botRoles","Bot role IDs",(a.botRoles||[]).join(", "))+'</div><div class="actions"><button class="btn primary" id="saveRoles">Save role settings</button></div><div id="feedback"></div>',"full")+card("Available server roles",roles.length+" roles returned by Discord.",'<div class="muted">'+roles.map(r=>'<div class="check-row"><div><strong>'+esc(r.name)+'</strong><small>'+esc(r.id)+'</small></div><span class="pill">'+(r.managed?"MANAGED":"ROLE")+'</span></div>').join("")+'</div>',"full")+'</div>'}
 function renderUtility(){return pageHeader("Server utilities","Live read-only details from the selected Discord server.")+'<div class="grid">'+card("Server snapshot","Basic server information returned by Starry.",'<div class="stat">'+Number(guild?.memberCount||0).toLocaleString()+'</div><div class="muted">Members</div><div class="check-row"><strong>Server</strong><span>'+esc(guild?.name||"—")+'</span></div><div class="check-row"><strong>Channels</strong><span>'+((guild?.channels||[]).length)+'</span></div><div class="check-row"><strong>Roles</strong><span>'+((guild?.roles||[]).length)+'</span></div><div class="check-row"><strong>Server ID</strong><span>'+esc(guild?.id||"—")+'</span></div>',"full")+'</div>'}
+async function loadAutomod(){
+ const host=$("#automodOverrides");
+ if(!host)return;
+ try{
+  const d=await request("/api/guild/"+guildId+"/automod");
+  if($("#automodServerEnabled"))$("#automodServerEnabled").checked=d.enabled===true;
+  const overrides=d.overrides||[],channelNames=new Map((d.channels||[]).map(ch=>[ch.id,ch.name]));
+  host.innerHTML=overrides.length?overrides.map(item=>'<div class="check-row"><div><strong>#'+esc(channelNames.get(item.channelId)||item.channelId)+'</strong><small>'+esc(item.channelId)+'</small></div><span class="pill">'+(item.links?'LINKS OFF':'LINKS ON')+' · '+(item.emojis?'EMOJI OFF':'EMOJI ON')+'</span></div>').join(''):'<div class="empty">No channel overrides. All channels use the server defaults.</div>';
+ }catch(error){host.innerHTML=status(error.message,"bad")}
+}
+async function loadGiveaways(){
+ const host=$("#giveawayList");if(!host)return;
+ try{
+  const d=await request("/api/guild/"+guildId+"/giveaways"),items=d.giveaways||[];
+  host.innerHTML=items.length?items.sort((a,b)=>Number(b.endsAt)-Number(a.endsAt)).map(item=>'<div class="check-row"><div><strong>'+esc(item.prize)+'</strong><small>Ends '+new Date(Number(item.endsAt)).toLocaleString()+' · '+Number(item.winners)+' winner(s)</small><small>Channel '+esc(item.channelId)+' · Message '+esc(item.messageId)+'</small></div><div><span class="pill">'+(item.active?'ACTIVE':'ENDED')+'</span><button class="btn" data-giveaway-reroll="'+esc(item.messageId)+'">Reroll</button></div></div>').join(''):'<div class="empty">There are no giveaways for this server yet.</div>';
+  host.querySelectorAll("[data-giveaway-reroll]").forEach(button=>button.addEventListener("click",async()=>{
+   button.disabled=true;button.textContent="Rerolling…";
+   try{const result=await request("/api/guild/"+guildId+"/giveaways/"+encodeURIComponent(button.dataset.giveawayReroll)+"/reroll",{method:"POST",body:JSON.stringify({winners:1})});$("#giveawayFeedback").innerHTML=status(result.message||"Winner rerolled.","good")}
+   catch(error){$("#giveawayFeedback").innerHTML=status(error.message,"bad")}
+   finally{button.disabled=false;button.textContent="Reroll"}
+  }));
+ }catch(error){host.innerHTML=status(error.message,"bad")}
+}
+async function loadNotificationPreferences(){
+ try{
+  const d=await request("/api/notifications/preferences");
+  if($("#notificationsEnabled"))$("#notificationsEnabled").checked=d.preferences?.notifications!==false;
+ }catch(error){const host=$("#notificationFeedback");if(host)host.innerHTML=status(error.message,"bad")}
+}
+async function loadSpotifyAccount(){
+ const host=$("#spotifyAccountStatus");if(!host)return;
+ try{
+  const d=await request("/api/spotify/status"),account=d.account;
+  if(!d.connected||!account){
+   host.innerHTML='<div class="status">Your Spotify account is not connected to Starry.</div>';
+   $("#spotifyConnect")?.removeAttribute("hidden");$("#spotifyDisconnect")?.setAttribute("hidden","");
+   return;
+  }
+  host.innerHTML='<div class="check-row"><div><strong>'+esc(account.displayName||"Spotify account")+'</strong><small>Connected Spotify account · '+Number(account.savedPlaylistCount||0)+' saved playlist bookmark(s)</small></div><span class="pill">CONNECTED</span></div>'+(account.profileUrl?'<a class="btn" href="'+esc(account.profileUrl)+'" target="_blank" rel="noopener">Open Spotify profile ↗</a>':"");
+  $("#spotifyConnect")?.setAttribute("hidden","");$("#spotifyDisconnect")?.removeAttribute("hidden");
+ }catch(error){host.innerHTML=status(error.message,"bad")}
+}
+function loadSpotifyCallbackNotice(){
+ const outcome=new URLSearchParams(window.location.search).get("spotify");
+ if(!outcome)return;
+ const host=$("#spotifyAccountStatus");
+ const messages={
+  connected:["Spotify account connected successfully.","good"],
+  denied:["Spotify authorization was declined. No account was linked.","bad"],
+  "invalid-state":["Spotify connection expired or was already used. Please start again.","bad"],
+  error:["Spotify could not complete the connection. Check server Spotify configuration and retry.","bad"]
+ };
+ const item=messages[outcome];
+ if(host&&item)host.insertAdjacentHTML("afterbegin",status(item[0],item[1]));
+ const url=new URL(window.location.href);url.searchParams.delete("spotify");window.history.replaceState({},document.title,url.pathname+url.search+url.hash);
+}
 function renderUnavailable(title,desc,feature){return pageHeader(title,desc)+'<div class="grid">'+card(feature+" module","This page is part of the Starry workspace.",'<div class="status">The current backend does not expose a verified dashboard API for '+esc(feature.toLowerCase())+' controls yet. I have not added pretend switches or save buttons. This page will become interactive when the corresponding bot module is connected to a supported API.</div><span class="pill">WEB CONTROLS NOT CONNECTED</span>',"full")+'</div>'}
 function renderBotInfo(){return pageHeader("About Starry","Information about the bot connected to this server.")+'<div class="grid">'+card("Starry bot","Connected server workspace.",'<div class="stat">Starry</div><div class="check-row"><strong>Selected server</strong><span>'+esc(guild?.name||"—")+'</span></div><div class="check-row"><strong>Members</strong><span>'+Number(guild?.memberCount||0).toLocaleString()+'</span></div><div class="check-row"><strong>Server ID</strong><span>'+esc(guild?.id||"—")+'</span></div><div class="actions"><a class="btn" href="https://discord.com/oauth2/authorize?client_id=1513589513648345368&amp;permissions=8&amp;scope=bot%20applications.commands" target="_blank" rel="noopener">Add Starry to another server ↗</a></div>',"full")+'</div>'}
 function renderCommands(){return pageHeader("Command library","Search every command registered by the Starry bot. Open a command in Discord and use the syntax shown below.")+'<div class="grid">'+card("Find a command","Filter by name, description, category or alias.",'<div class="command-toolbar"><input id="commandSearch" type="search" placeholder="Search commands…"><select id="commandCategory"><option value="">All categories</option></select></div><div id="commandCount" class="muted"></div><div id="commandList" class="command-list"><div class="empty">Loading registered commands…</div></div>',"full")+'</div>'}
@@ -231,7 +287,13 @@ if(page==="support"){
 
 
 ["title","color","author","authorIcon","description","thumbnail","image","footer","footerIcon"].forEach(id=>$("#"+id)?.addEventListener("input",updateEmbedPreview));updateEmbedPreview();
-$("#saveSecurity")?.addEventListener("click",()=>{for(const id of ["maxChannelDeletions","maxRoleDeletions","maxBans","maxKicks"]){const n=Number($("#"+id).value);if(!Number.isInteger(n)||n<1||n>50){feedback("All protection thresholds must be whole numbers from 1 to 50.","bad");return}}saveGroup("antinuke",{enabled:"bool",blockUnapprovedBots:"bool",blockWebhookCreation:"bool",panicLockdown:"bool",maxChannelDeletions:"number",maxRoleDeletions:"number",maxBans:"number",maxKicks:"number",action:"text",quarantineRoleId:"text"})});
+$("#saveSecurity")?.addEventListener("click",async()=>{
+ for(const id of ["maxChannelDeletions","maxRoleDeletions","maxBans","maxKicks"]){const n=Number($("#"+id).value);if(!Number.isInteger(n)||n<1||n>50){feedback("All protection thresholds must be whole numbers from 1 to 50.","bad");return}}
+ const parseIds=id=>$("#"+id).value.split(/[\\s,]+/).map(value=>value.trim()).filter(Boolean);
+ const whitelistedUsers=parseIds("nukeWhitelistedUsers"),whitelistedRoles=parseIds("nukeWhitelistedRoles"),validId=/^\\d{17,20}$/;
+ if(whitelistedUsers.length>100||whitelistedRoles.length>100||[...whitelistedUsers,...whitelistedRoles].some(id=>!validId.test(id))){feedback("Whitelist accepts up to 100 valid Discord IDs per list.","bad");return}
+ await saveGroup("antinuke",{enabled:"bool",blockUnapprovedBots:"bool",blockWebhookCreation:"bool",maxChannelDeletions:"number",maxRoleDeletions:"number",maxBans:"number",maxKicks:"number",action:"text",quarantineRoleId:"text"},{action:$("#antinukeAction").value,whitelistedUsers,whitelistedRoles});
+});
 $("#saveVerification")?.addEventListener("click",async()=>{
  const age=Number($("#vAge").value);
  if(!Number.isInteger(age)||age<0||age>3650){feedback("Minimum account age must be a whole number from 0 to 3650.","bad");return}
@@ -241,7 +303,59 @@ $("#saveVerification")?.addEventListener("click",async()=>{
  if(body.enabled&&!Object.values(body.methods).some(Boolean)){feedback("Enable at least one verification method.","bad");return}
  try{const d=await request("/api/guild/"+guildId+"/settings",{method:"POST",body:JSON.stringify({verification:body})});settings=d.settings||settings;feedback("Verification settings saved.","good")}catch(e){feedback(e.message,"bad")}
 });
-$("#saveAutomod")?.addEventListener("click",()=>saveGroup("automod",{enabled:"bool",antiSpam:"bool",antiMassPing:"bool",antiInvite:"bool",antiLink:"bool",antiScam:"bool",antiCaps:"bool",antiEmojiSpam:"bool",ghostPingDetector:"bool",spamThreshold:"number",pingLimit:"number",capsThreshold:"number",emojiLimit:"number",punishment:"text"}));
+if(page==="automod"){
+ $("#saveAutomodServer")?.addEventListener("click",async()=>{
+  const button=$("#saveAutomodServer");button.disabled=true;
+  try{await request("/api/guild/"+guildId+"/automod",{method:"POST",body:JSON.stringify({enabled:$("#automodServerEnabled").checked})});$("#automodServerFeedback").innerHTML=status("Server AutoMod state saved.","good");await loadAutomod()}
+  catch(error){$("#automodServerFeedback").innerHTML=status(error.message,"bad")}
+  finally{button.disabled=false}
+ });
+ $("#saveAutomodChannel")?.addEventListener("click",async()=>{
+  const channelId=$("#automodChannel").value;if(!channelId){$("#automodChannelFeedback").innerHTML=status("Choose a text channel first.","bad");return}
+  const button=$("#saveAutomodChannel");button.disabled=true;
+  try{await request("/api/guild/"+guildId+"/automod",{method:"POST",body:JSON.stringify({channelId,filter:$("#automodFilter").value,enabled:$("#automodFilterEnabled").value==="true"})});$("#automodChannelFeedback").innerHTML=status("Channel protection override saved.","good");await loadAutomod()}
+  catch(error){$("#automodChannelFeedback").innerHTML=status(error.message,"bad")}
+  finally{button.disabled=false}
+ });
+ $("#resetAutomodChannel")?.addEventListener("click",async()=>{
+  const channelId=$("#automodChannel").value;if(!channelId){$("#automodChannelFeedback").innerHTML=status("Choose a text channel first.","bad");return}
+  try{await request("/api/guild/"+guildId+"/automod",{method:"POST",body:JSON.stringify({channelId,reset:true})});$("#automodChannelFeedback").innerHTML=status("Channel override reset.","good");await loadAutomod()}
+  catch(error){$("#automodChannelFeedback").innerHTML=status(error.message,"bad")}
+ });
+}
+if(page==="giveaways"){
+ $("#createGiveaway")?.addEventListener("click",async()=>{
+  const body={channelId:$("#giveawayChannel").value,prize:$("#giveawayPrize").value.trim(),duration:$("#giveawayDuration").value.trim(),winners:Number($("#giveawayWinners").value)};
+  if(!body.channelId||!body.prize||!body.duration||!Number.isInteger(body.winners)||body.winners<1||body.winners>10){$("#giveawayFeedback").innerHTML=status("Complete every field and choose 1–10 winners.","bad");return}
+  const button=$("#createGiveaway");button.disabled=true;button.textContent="Creating…";
+  try{const d=await request("/api/guild/"+guildId+"/giveaways",{method:"POST",body:JSON.stringify(body)});$("#giveawayFeedback").innerHTML=status(d.message||"Giveaway started.","good");await loadGiveaways()}
+  catch(error){$("#giveawayFeedback").innerHTML=status(error.message,"bad")}
+  finally{button.disabled=false;button.textContent="Start giveaway"}
+ });
+}
+if(page==="notifications"){
+ $("#saveNotificationPreferences")?.addEventListener("click",async()=>{
+  const button=$("#saveNotificationPreferences");button.disabled=true;
+  try{await request("/api/notifications/preferences",{method:"POST",body:JSON.stringify({notifications:$("#notificationsEnabled").checked})});$("#notificationFeedback").innerHTML=status("Reminder notification preference saved.","good")}
+  catch(error){$("#notificationFeedback").innerHTML=status(error.message,"bad")}
+  finally{button.disabled=false}
+ });
+}
+if(page==="music"){
+ $("#spotifyConnect")?.addEventListener("click",async()=>{
+  const button=$("#spotifyConnect");button.disabled=true;button.textContent="Opening Spotify…";
+  try{const d=await request("/api/spotify/connect",{method:"POST",body:"{}"});if(!d.authorizationUrl)throw new Error("Spotify authorization URL was not returned.");window.location.assign(d.authorizationUrl)}
+  catch(error){$("#spotifyAccountStatus").innerHTML=status(error.message,"bad");button.disabled=false;button.textContent="Connect Spotify account"}
+ });
+ $("#spotifyDisconnect")?.addEventListener("click",async()=>{
+  if(!confirm("Disconnect your Spotify account from Starry? Your saved playlist bookmarks will remain."))return;
+  const button=$("#spotifyDisconnect");button.disabled=true;
+  try{const d=await request("/api/spotify/disconnect",{method:"POST",body:"{}"});$("#spotifyAccountStatus").innerHTML=status(d.message||"Spotify disconnected.","good");await loadSpotifyAccount()}
+  catch(error){$("#spotifyAccountStatus").innerHTML=status(error.message,"bad")}
+  finally{button.disabled=false}
+ });
+}
+
 $("#saveTickets")?.addEventListener("click",()=>saveGroup("tickets",{enabled:"bool",categoryId:"text",supportRoleId:"text",panelChannelId:"text",transcriptsChannel:"text"}));
 $("#eventType")?.addEventListener("change",()=>{const voice=$("#eventType").value==="voice";$("#eventLocationWrap").hidden=voice;$("#eventChannelWrap").hidden=!voice});
 $("#saveBirthdays")?.addEventListener("click",async()=>{const body={enabled:$("#birthdayEnabled").checked,channelId:$("#birthdayChannel").value,mentionRoleId:$("#birthdayRolePing").value,autoRoleEnabled:$("#birthdayAutoRole").checked,roleName:$("#birthdayRoleName").value.trim(),roleColor:$("#birthdayRoleColor").value,message:$("#birthdayMessage").value,timezone:$("#birthdayTimezone").value.trim()};if(body.enabled&&!body.channelId){$("#birthdayFeedback").innerHTML=status("Choose a celebration channel before enabling birthdays.","bad");return}if(body.autoRoleEnabled&&(!body.roleName||body.roleName.length>100)){$("#birthdayFeedback").innerHTML=status("Enter a birthday role name between 1 and 100 characters.","bad");return}try{const d=await request("/api/guild/"+guildId+"/settings",{method:"POST",body:JSON.stringify({birthdays:body})});settings.birthdays=d.settings?.birthdays||body;$("#birthdayFeedback").innerHTML=status("Your wholesome birthday setup has been saved.","good")}catch(e){$("#birthdayFeedback").innerHTML=status(e.message,"bad")}});
