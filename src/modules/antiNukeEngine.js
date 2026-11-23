@@ -60,7 +60,8 @@ async function enforce(client, guild, executorId, policy, reason) {
             if (!botMember.permissions.has(PermissionFlagsBits.BanMembers)) return;
             await member.ban({ reason, deleteMessageSeconds: 0 });
         }
-        await writeSecurityLog(client, guild, '🛡️ Anti-Nuke response: <@' + member.id + '> was ' + action + 'ed after suspicious server activity.');
+        const actionLabel = ({ quarantine: 'quarantined', timeout: 'timed out', kick: 'kicked', ban: 'banned' })[action] || 'restricted';
+        await writeSecurityLog(client, guild, '🛡️ Anti-Nuke response: <@' + member.id + '> was ' + actionLabel + ' after suspicious server activity.');
     } catch (error) {
         console.error('[Anti-Nuke] Enforcement failed:', error.message);
         await writeSecurityLog(client, guild, '⚠️ Anti-Nuke detected suspicious activity but enforcement failed. Check Starry permissions and role hierarchy.');
