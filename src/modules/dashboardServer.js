@@ -1434,8 +1434,12 @@ function setupDashboardRoutes(app, client) {
                     policy.quarantineRoleId = roleId;
                 }
                 for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
-                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].some(value => typeof value !== 'string'))) {
-                        return res.status(400).json({ success: false, error: key + ' must be a list of Discord IDs.' });
+                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].length > 100 || policy[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value)))) {
+                        return res.status(400).json({ success: false, error: key + ' must contain up to 100 valid Discord IDs.' });
+                    }
+                    if (key === 'whitelistedRoles' && policy[key] !== undefined &&
+                        policy[key].some(roleId => !guild.roles.cache.has(roleId) || guild.roles.cache.get(roleId).managed || roleId === guild.id)) {
+                        return res.status(400).json({ success: false, error: 'Each trusted role must be a regular role in this server.' });
                     }
                 }
             }
