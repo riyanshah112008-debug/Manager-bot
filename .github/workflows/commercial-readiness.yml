@@ -37,9 +37,7 @@ jobs:
           set -euo pipefail
           for pass in {1..10}; do
             echo "=== JavaScript syntax pass ${pass}/10 ==="
-            find src public -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
-              node --check "$file"
-            done
+            find src public -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
             node --check deploy-commands.js
           done
       - name: Run all deterministic suites ten times
