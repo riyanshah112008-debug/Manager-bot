@@ -163,7 +163,7 @@ async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
 async function resetChannelSettings(channelId, guildId = null) {
     if (!channelId || !guildId) throw new Error('channelId and guildId are required');
     if (!isDbConnected()) throw new Error('AutoMod MongoDB storage is unavailable.');
-    await AutomodChannel.findOneAndDelete({ channelId, guildId });
+    await AutomodChannel.findOneAndDelete({ channelId, $or: [{ guildId }, { guildId: { $exists: false } }, { guildId: null }] });
     channelCache.set(channelId, { links: false, emojis: false });
     return {
         channelId,
