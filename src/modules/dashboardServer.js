@@ -20,6 +20,7 @@ const { getPublicUrl } = require('../utils/tunnelManager');
 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
 const { createSpotifyOAuthState, verifySpotifyOAuthState } = require('../utils/spotifyOAuthState');
 const UserSpotify = require('../models/UserSpotify');
+const SpotifyOAuthState = require('../models/SpotifyOAuthState');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
@@ -1972,8 +1973,9 @@ function setupDashboardRoutes(app, client) {
         res.setHeader('Set-Cookie', 'starry_spotify_state=; Max-Age=0; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
     };
 
-    app.post('/api/spotify/login', actionLimiter, requireAuth, (req, res) => {
+    app.post('/api/spotify/login', actionLimiter, requireAuth, async (req, res) => {
         try {
+            if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'Spotify account linking is temporarily unavailable because secure session storage is offline.' });
             const userId = String(req.session?.user?.id || '');
             const secret = getSpotifyStateSecret();
             const state = createSpotifyOAuthState(userId, secret);
@@ -1981,12 +1983,14 @@ function setupDashboardRoutes(app, client) {
             const redirectUri = getSpotifyRedirectUri(publicUrl);
             const spotifyManager = require('./spotifyManager');
             const authorizationUrl = spotifyManager.getOAuthUrl(state, redirectUri);
+            const stateHash = crypto.createHash('sha256').update(state).digest('hex');
+            await SpotifyOAuthState.create({ stateHash, userId, expiresAt: new Date(Date.now() + 10 * 60 * 1000) });
             res.setHeader('Cache-Control', 'no-store');
             res.setHeader('Set-Cookie', 'starry_spotify_state=' + state + '; Max-Age=600; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
             return res.json({ success: true, authorizationUrl });
         } catch (error) {
             console.error('Spotify OAuth initiation failed:', error.message);
-            return res.status(503).json({ success: false, error: 'Spotify account linking is not configured. Verify the Spotify client credentials and callback URL.' });
+            return res.status(503).json({ success: false, error: 'Spotify account linking is not configured. Verify the Spotify credentials, secure storage and callback URL.' });
         }
     });
 
@@ -2002,9 +2006,16 @@ function setupDashboardRoutes(app, client) {
         }
 
         const userId = verifySpotifyOAuthState(state, cookieState, getSpotifyStateSecret());
-        if (!userId) return res.status(403).send('Spotify authorization state expired or did not match this browser. Return to Starry and reconnect.');
+        if (!userId || mongoose.connection.readyState !== 1) return res.status(403).send('Spotify authorization state expired or did not match this browser. Return to Starry and reconnect.');
 
         try {
+            const stateHash = crypto.createHash('sha256').update(state).digest('hex');
+            const consumedState = await SpotifyOAuthState.findOneAndDelete({
+                stateHash,
+                userId,
+                expiresAt: { $gt: new Date() }
+            }).lean();
+            if (!consumedState) return res.status(403).send('Spotify authorization state was already used or has expired. Return to Starry and reconnect.');
             const spotifyManager = require('./spotifyManager');
             const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || ('https://' + req.get('host'));
             const redirectUri = getSpotifyRedirectUri(publicUrl);
