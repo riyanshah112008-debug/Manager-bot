@@ -1497,7 +1497,7 @@ function setupDashboardRoutes(app, client) {
             }
             const message = await manager.start(channel, req.member.user, duration, winners, prize);
             if (typeof message !== 'string' || message.startsWith('❌')) return res.status(400).json({ success: false, error: message || 'Giveaway could not be started.' });
-            const latest = manager.listGuild(req.guild.id).sort((a, b) => Number(b.endsAt) - Number(a.endsAt))[0];
+            const latest = manager.listGuild(req.guild.id).sort((a, b) => Number(b.createdAt || b.endsAt) - Number(a.createdAt || a.endsAt))[0];
             return res.json({ success: true, message, giveaway: latest ? {
                 messageId: latest.messageId, channelId: latest.channelId, prize: latest.prize,
                 winners: latest.winners, endsAt: latest.endsAt, hostId: latest.hostId, active: true
