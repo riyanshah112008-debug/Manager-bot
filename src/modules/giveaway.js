@@ -34,6 +34,25 @@ module.exports = (client) => {
         fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
     }
 
+    async function fetchHumanParticipants(reaction) {
+        const participants = new Set();
+        let after;
+        // Discord returns at most 100 users per request. Page so large giveaways
+        // do not silently ignore members beyond the first page.
+        for (let page = 0; page < 100; page++) {
+            const options = { limit: 100 };
+            if (after) options.after = after;
+            const users = await reaction.users.fetch(options);
+            if (!users?.size) break;
+            for (const user of users.values()) if (user && !user.bot) participants.add(user.id);
+            if (users.size < 100) break;
+            const lastUser = users.last();
+            if (!lastUser || lastUser.id === after) break;
+            after = lastUser.id;
+        }
+        return [...participants];
+    }
+
     function parseTime(timeStr) {
         const match = timeStr.match(/^(\d+)(s|m|h|d|w)$/i);
         if (!match) return null;
@@ -123,31 +142,38 @@ module.exports = (client) => {
         const reaction = message.reactions.cache.get('🎉');
         if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
 
-        const fetchedUsers = await reaction.users.fetch({ limit: 100 });
-        let validUsers = fetchedUsers.filter(u => !u.bot).map(u => u.id);
+        const validUsers = await fetchHumanParticipants(reaction);
 
         if (validUsers.length === 0) {
             return '❌ **Cannot reroll!** There are no human participants in the reactions.';
         }
 
-        // Exclude previous winners if possible
+        // Prefer recorded winners. Legacy entries fall back to embed mentions,
+        // excluding the host so the host is never mistaken for a previous winner.
+        const records = getGiveaways();
+        const record = records.find(item => item.messageId === String(messageId) && item.guildId === channel.guild.id);
         const previousWinnerMentions = message.embeds[0]?.description?.match(/<@!?(\d+)>/g) || [];
-        const previousWinnerIds = previousWinnerMentions.map(m => m.replace(/<@!?|>/g, ''));
-
+        const previousWinnerIds = Array.isArray(record?.winnerIds) && record.winnerIds.length
+            ? record.winnerIds
+            : previousWinnerMentions.map(m => m.replace(/<@!?|>/g, '')).filter(id => id !== record?.hostId);
         const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
-        if (filteredUsers.length >= winnerCount) {
-            validUsers = filteredUsers;
-        }
+        const eligibleUsers = filteredUsers.length >= winnerCount ? filteredUsers : [...validUsers];
 
         const winners = [];
         for (let i = 0; i < winnerCount; i++) {
-            if (validUsers.length === 0) break;
-            const randomIndex = crypto.randomInt(validUsers.length);
-            winners.push(validUsers[randomIndex]);
-            validUsers.splice(randomIndex, 1);
+            if (eligibleUsers.length === 0) break;
+            const randomIndex = crypto.randomInt(eligibleUsers.length);
+            winners.push(eligibleUsers[randomIndex]);
+            eligibleUsers.splice(randomIndex, 1);
         }
 
         const winnersText = winners.map(id => `<@${id}>`).join(', ');
+        if (record) {
+            record.winnerIds = winners;
+            record.lastRerolledAt = Date.now();
+            record.rerollCount = Number(record.rerollCount || 0) + 1;
+            saveGiveaways(records);
+        }
 
         const rerollEmbed = new EmbedBuilder()
             .setColor('#00F5D4')
@@ -185,8 +211,8 @@ module.exports = (client) => {
                     const message = await channel?.messages.fetch(item.messageId).catch(() => null);
                     const reaction = message?.reactions.cache.get('🎉');
                     if (reaction) {
-                        const users = await reaction.users.fetch({ limit: 100 }).catch(() => null);
-                        if (users) participantCount = users.filter(user => !user.bot).size;
+                        const users = await fetchHumanParticipants(reaction).catch(() => null);
+                        if (users) participantCount = users.length;
                     }
                 }
                 return {
@@ -199,11 +225,13 @@ module.exports = (client) => {
             }));
         },
         create: async (channel, author, duration, winnerCount, prize) => {
+            const previousIds = new Set(getGiveaways().map(item => item.messageId));
             const response = await startGiveaway(channel, author, duration, winnerCount, prize);
             if (String(response).includes('❌')) throw new Error(String(response).replace(/\*\*/g, ''));
-            const record = getGiveaways().filter(item =>
-                item.guildId === channel.guild.id && item.hostId === author.id && item.prize === prize
-            ).slice(-1)[0];
+            const record = getGiveaways().find(item =>
+                item.guildId === channel.guild.id && item.hostId === author.id &&
+                item.prize === prize && !previousIds.has(item.messageId)
+            );
             if (!record) throw new Error('Giveaway message was sent but its record could not be verified.');
             return { message: response, giveaway: record };
         },
@@ -351,8 +379,7 @@ module.exports = (client) => {
                     }
 
                     const reaction = message.reactions.cache.get('🎉');
-                    const users = reaction ? await reaction.users.fetch({ limit: 100 }).catch(() => null) : null;
-                    const participants = users ? users.filter(user => !user.bot).map(user => user.id) : [];
+                    const participants = reaction ? await fetchHumanParticipants(reaction).catch(() => []) : [];
                     giveaway.participantCount = participants.length;
 
                     if (!participants.length) {
