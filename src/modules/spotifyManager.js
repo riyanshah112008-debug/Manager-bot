@@ -18,6 +18,7 @@ class SpotifyManager {
     constructor() {
         this.appToken = null;
         this.appTokenExpires = 0;
+        this.userRefreshes = new Map();
     }
 
     async getAppToken() {
@@ -152,33 +153,52 @@ class SpotifyManager {
 
     async refreshUserToken(userDoc) {
         if (!userDoc || !userDoc.refreshToken) return null;
-        try {
-            const refreshToken = decryptToken(userDoc.refreshToken);
-            if (!refreshToken) return null;
-            const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
-            const res = await fetch('https://accounts.spotify.com/api/token', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Basic ${creds}`,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: new URLSearchParams({
-                    grant_type: 'refresh_token',
-                    refresh_token: refreshToken
-                }).toString()
-            });
-            const data = await res.json();
-            if (data.access_token) {
+        const userId = String(userDoc.userId || '');
+        if (userId && this.userRefreshes.has(userId)) return this.userRefreshes.get(userId);
+
+        const refreshPromise = (async () => {
+            try {
+                const refreshToken = decryptToken(userDoc.refreshToken);
+                if (!refreshToken) return null;
+                const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
+                const res = await fetch('https://accounts.spotify.com/api/token', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${creds}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        grant_type: 'refresh_token',
+                        refresh_token: refreshToken
+                    }).toString()
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.access_token) {
+                    if (res.status === 400 || res.status === 401) {
+                        console.warn('[SpotifyManager] Stored authorization is no longer valid; reconnect is required.');
+                    }
+                    return null;
+                }
                 userDoc.accessToken = encryptToken(data.access_token);
                 userDoc.tokenExpiresAt = new Date(Date.now() + ((data.expires_in || 3600) * 1000));
+                // Spotify may omit refresh_token during refresh. Preserve the existing one.
                 if (data.refresh_token) userDoc.refreshToken = encryptToken(data.refresh_token);
                 await userDoc.save();
                 return data.access_token;
+            } catch (error) {
+                console.warn('[SpotifyManager] Spotify token refresh failed:', error.message);
+                return null;
             }
-        } catch (e) {
-            console.warn('⚠️ [SpotifyManager] Refresh token failed:', e.message);
+        })();
+
+        if (userId) this.userRefreshes.set(userId, refreshPromise);
+        try {
+            return await refreshPromise;
+        } finally {
+            if (userId && this.userRefreshes.get(userId) === refreshPromise) {
+                this.userRefreshes.delete(userId);
+            }
         }
-        return null;
     }
 
     async fetchPlaylistDetails(urlOrId) {
@@ -303,17 +323,29 @@ class SpotifyManager {
     }
 
     async getAccountStatus(userId) {
-        const userDoc = await UserSpotify.findOne({ userId })
-            .select('spotifyId displayName profileUrl avatarUrl tokenExpiresAt savedPlaylists')
-            .lean();
+        const userDoc = await UserSpotify.findOne({ userId });
+        if (!userDoc) {
+            return { isLinked: false, spotifyId: '', displayName: '', profileUrl: '', avatarUrl: '', tokenExpiresAt: null, savedPlaylistCount: 0 };
+        }
+        // Encrypt legacy plaintext tokens on first authenticated account visit.
+        let migrated = false;
+        if (userDoc.accessToken && !String(userDoc.accessToken).startsWith('enc:v1:')) {
+            userDoc.accessToken = encryptToken(userDoc.accessToken);
+            migrated = true;
+        }
+        if (userDoc.refreshToken && !String(userDoc.refreshToken).startsWith('enc:v1:')) {
+            userDoc.refreshToken = encryptToken(userDoc.refreshToken);
+            migrated = true;
+        }
+        if (migrated) await userDoc.save();
         return {
-            isLinked: Boolean(userDoc?.spotifyId),
-            spotifyId: userDoc?.spotifyId || '',
-            displayName: userDoc?.displayName || '',
-            profileUrl: userDoc?.profileUrl || '',
-            avatarUrl: userDoc?.avatarUrl || '',
-            tokenExpiresAt: userDoc?.tokenExpiresAt || null,
-            savedPlaylistCount: Array.isArray(userDoc?.savedPlaylists) ? userDoc.savedPlaylists.length : 0
+            isLinked: Boolean(userDoc.spotifyId),
+            spotifyId: userDoc.spotifyId || '',
+            displayName: userDoc.displayName || '',
+            profileUrl: userDoc.profileUrl || '',
+            avatarUrl: userDoc.avatarUrl || '',
+            tokenExpiresAt: userDoc.tokenExpiresAt || null,
+            savedPlaylistCount: Array.isArray(userDoc.savedPlaylists) ? userDoc.savedPlaylists.length : 0
         };
     }
 
@@ -336,6 +368,11 @@ class SpotifyManager {
         // If user linked via OAuth, fetch live Spotify account playlists
         if (userDoc && userDoc.accessToken) {
             let token = decryptToken(userDoc.accessToken);
+            if (userDoc.accessToken && !String(userDoc.accessToken).startsWith('enc:v1:')) {
+                userDoc.accessToken = encryptToken(userDoc.accessToken);
+                if (userDoc.refreshToken && !String(userDoc.refreshToken).startsWith('enc:v1:')) userDoc.refreshToken = encryptToken(userDoc.refreshToken);
+                await userDoc.save();
+            }
             if (userDoc.tokenExpiresAt && new Date() >= userDoc.tokenExpiresAt) {
                 token = await this.refreshUserToken(userDoc);
             }
