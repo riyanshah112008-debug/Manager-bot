@@ -794,7 +794,15 @@ class MusicControllerEngine {
                 const { getPublicUrl } = require('../utils/tunnelManager');
                 const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
                 const redirectUri = `${publicUrl}/api/spotify/callback`;
-                const authUrl = spotifyManager.getOAuthUrl(interaction.user.id, redirectUri);
+                const { createSpotifyState, hashSpotifyState } = require('../utils/spotifyOAuthState');
+                const SpotifyOAuthState = require('../models/SpotifyOAuthState');
+                const state = createSpotifyState();
+                await SpotifyOAuthState.create({
+                    stateHash: hashSpotifyState(state),
+                    userId: interaction.user.id,
+                    expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+                });
+                const authUrl = spotifyManager.getOAuthUrl(state, redirectUri);
 
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
