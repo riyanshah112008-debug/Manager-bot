@@ -3,6 +3,9 @@
 // File Path: src/modules/spotifyManager.js
 // Access Personal Spotify Accounts, Saved Playlists, OAuth2 Sync & Instant Voice Enqueue
 // ==========================================
+const crypto = require('crypto');
+const SpotifyOAuthState = require('../models/SpotifyOAuthState');
+const { encryptToken, decryptToken } = require('../utils/spotifyTokenCrypto');
 const fetch = globalThis.fetch;
 const spotifyUrlInfo = require('spotify-url-info')(fetch);
 const UserSpotify = require('../models/UserSpotify');
@@ -43,7 +46,7 @@ class SpotifyManager {
         return null;
     }
 
-    getOAuthUrl(userId, redirectUri) {
+    getOAuthUrl(state, redirectUri, codeChallenge) {
         const scopes = [
             'playlist-read-private',
             'playlist-read-collaborative',
@@ -57,15 +60,48 @@ class SpotifyManager {
             response_type: 'code',
             redirect_uri: redirectUri,
             scope: scopes,
-            state: userId,
+            state,
+            code_challenge_method: 'S256',
+            code_challenge: codeChallenge,
             show_dialog: 'true'
         });
 
         return `https://accounts.spotify.com/authorize?${params.toString()}`;
     }
 
-    async handleOAuthCallback(code, redirectUri, stateUserId) {
-        if (!code || !stateUserId) throw new Error('Missing authorization code or user state.');
+    async createAuthorizationRequest(userId, redirectUri) {
+        if (!userId || !redirectUri) throw new Error('A signed-in Discord user and Spotify redirect URI are required.');
+        if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) throw new Error('Spotify OAuth credentials are not configured.');
+        const state = crypto.randomBytes(32).toString('hex');
+        const verifier = crypto.randomBytes(48).toString('base64url');
+        const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+        await SpotifyOAuthState.create({
+            stateHash: crypto.createHash('sha256').update(state).digest('hex'),
+            userId: String(userId),
+            codeVerifierEncrypted: encryptToken(verifier),
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+        });
+        return { state, authorizeUrl: this.getOAuthUrl(state, redirectUri, challenge) };
+    }
+
+    async consumeAuthorizationState(state) {
+        if (typeof state !== 'string' || !/^[a-f0-9]{64}$/i.test(state)) {
+            throw new Error('Spotify authorization state is invalid or expired. Start the connection again.');
+        }
+        const stateHash = crypto.createHash('sha256').update(state).digest('hex');
+        const record = await SpotifyOAuthState.findOneAndDelete({
+            stateHash,
+            expiresAt: { $gt: new Date() }
+        }).lean();
+        if (!record) throw new Error('Spotify authorization state is invalid, expired or already used. Start the connection again.');
+        return {
+            userId: record.userId,
+            codeVerifier: decryptToken(record.codeVerifierEncrypted)
+        };
+    }
+
+    async handleOAuthCallback(code, redirectUri, userId, codeVerifier) {
+        if (!code || !userId || !codeVerifier) throw new Error('Missing Spotify authorization details.');
 
         const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
         const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
@@ -77,7 +113,8 @@ class SpotifyManager {
             body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 code,
-                redirect_uri: redirectUri
+                redirect_uri: redirectUri,
+                code_verifier: codeVerifier
             }).toString()
         });
 
@@ -90,6 +127,7 @@ class SpotifyManager {
         const profRes = await fetch('https://api.spotify.com/v1/me', {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
         });
+        if (!profRes.ok) throw new Error('Spotify could not verify the authorized account. Please reconnect and try again.');
         const profile = await profRes.json();
 
         const expiresAt = new Date(Date.now() + ((tokenData.expires_in || 3600) * 1000));
@@ -101,8 +139,8 @@ class SpotifyManager {
                 displayName: profile.display_name || profile.id || 'Spotify User',
                 profileUrl: profile.external_urls?.spotify || `https://open.spotify.com/user/${profile.id}`,
                 avatarUrl: profile.images?.[0]?.url || '',
-                accessToken: tokenData.access_token,
-                refreshToken: tokenData.refresh_token || '',
+                accessToken: encryptToken(tokenData.access_token),
+                refreshToken: encryptToken(tokenData.refresh_token || ''),
                 tokenExpiresAt: expiresAt,
                 updatedAt: new Date()
             },
@@ -115,6 +153,8 @@ class SpotifyManager {
     async refreshUserToken(userDoc) {
         if (!userDoc || !userDoc.refreshToken) return null;
         try {
+            const refreshToken = decryptToken(userDoc.refreshToken);
+            if (!refreshToken) return null;
             const creds = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
             const res = await fetch('https://accounts.spotify.com/api/token', {
                 method: 'POST',
@@ -124,16 +164,16 @@ class SpotifyManager {
                 },
                 body: new URLSearchParams({
                     grant_type: 'refresh_token',
-                    refresh_token: userDoc.refreshToken
+                    refresh_token: refreshToken
                 }).toString()
             });
             const data = await res.json();
             if (data.access_token) {
-                userDoc.accessToken = data.access_token;
+                userDoc.accessToken = encryptToken(data.access_token);
                 userDoc.tokenExpiresAt = new Date(Date.now() + ((data.expires_in || 3600) * 1000));
-                if (data.refresh_token) userDoc.refreshToken = data.refresh_token;
+                if (data.refresh_token) userDoc.refreshToken = encryptToken(data.refresh_token);
                 await userDoc.save();
-                return userDoc.accessToken;
+                return data.access_token;
             }
         } catch (e) {
             console.warn('⚠️ [SpotifyManager] Refresh token failed:', e.message);
@@ -262,6 +302,26 @@ class SpotifyManager {
         return { success: true, removedPlaylist: removed, remainingCount: userDoc.savedPlaylists.length };
     }
 
+    async getAccountStatus(userId) {
+        const userDoc = await UserSpotify.findOne({ userId })
+            .select('spotifyId displayName profileUrl avatarUrl tokenExpiresAt savedPlaylists')
+            .lean();
+        return {
+            isLinked: Boolean(userDoc?.spotifyId),
+            spotifyId: userDoc?.spotifyId || '',
+            displayName: userDoc?.displayName || '',
+            profileUrl: userDoc?.profileUrl || '',
+            avatarUrl: userDoc?.avatarUrl || '',
+            tokenExpiresAt: userDoc?.tokenExpiresAt || null,
+            savedPlaylistCount: Array.isArray(userDoc?.savedPlaylists) ? userDoc.savedPlaylists.length : 0
+        };
+    }
+
+    async disconnectAccount(userId) {
+        await UserSpotify.deleteOne({ userId });
+        return { success: true };
+    }
+
     async getUserPlaylists(userId) {
         const userDoc = await UserSpotify.findOne({ userId });
         const result = {
@@ -275,7 +335,7 @@ class SpotifyManager {
 
         // If user linked via OAuth, fetch live Spotify account playlists
         if (userDoc && userDoc.accessToken) {
-            let token = userDoc.accessToken;
+            let token = decryptToken(userDoc.accessToken);
             if (userDoc.tokenExpiresAt && new Date() >= userDoc.tokenExpiresAt) {
                 token = await this.refreshUserToken(userDoc);
             }
