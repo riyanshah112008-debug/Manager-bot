@@ -67,7 +67,20 @@ function getGuildStatus(guildId) {
  */
 async function setGuildStatus(guildId, enabled) {
     if (!guildId || typeof enabled !== 'boolean') throw new Error('Valid guild ID and enabled state are required.');
-    if (!isDbConnected()) throw new Error('AutoMod MongoDB storage is unavailable.');
+
+    // Keep the local persistent store as an offline fallback. The cache is only
+    // updated after one durable store has accepted the setting.
+    if (!isDbConnected()) {
+        if (!db.updateGuildSettings || !db.getGuildSettings) {
+            throw new Error('AutoMod storage is unavailable.');
+        }
+        const current = db.getGuildSettings(guildId) || {};
+        const automod = { ...(current.automod || {}), enabled };
+        db.updateGuildSettings(guildId, { automod });
+        guildCache.set(guildId, enabled);
+        return enabled;
+    }
+
     await AutomodGuild.findOneAndUpdate(
         { guildId },
         { $set: { enabled } },
