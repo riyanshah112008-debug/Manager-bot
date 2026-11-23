@@ -238,6 +238,153 @@ function setupDashboardRoutes(app, client) {
     setupSupportDeskRoutes(app, { requireAuth, client, config });
     setupPhoneSyncRoutes(app, { requireAuth });
 
+    // Live AutoMod controls: only the link/emoji filters currently enforced by automod.js are exposed.
+    app.get('/api/guild/:id/automod', requireGuildAdmin, async (req, res) => {
+        try {
+            const helper = require('../utils/automodHelper');
+            const channels = req.guild.channels.cache.filter(channel => channel.isTextBased() && typeof channel.send === 'function');
+            const overrides = await Promise.all(channels.map(async channel => ({
+                channelId: channel.id,
+                channelName: channel.name,
+                ...(await helper.getChannelSettings(channel.id, req.guild.id))
+            })));
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, enabled: helper.getGuildStatus(req.guild.id), channels: overrides });
+        } catch (error) {
+            console.error('Dashboard AutoMod read failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod settings are temporarily unavailable.' });
+        }
+    });
+
+    app.patch('/api/guild/:id/automod', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const allowed = new Set(['enabled', 'channelId', 'linksActive', 'emojisActive']);
+            if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.has(key))) {
+                return res.status(400).json({ success: false, error: 'Invalid AutoMod update.' });
+            }
+            if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return res.status(400).json({ success: false, error: 'Server AutoMod must be true or false.' });
+            for (const key of ['linksActive', 'emojisActive']) if (body[key] !== undefined && typeof body[key] !== 'boolean') {
+                return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+            }
+            if (body.enabled === undefined && body.channelId === undefined) return res.status(400).json({ success: false, error: 'Choose a server setting or channel filter to update.' });
+            if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'AutoMod storage is offline. No changes were applied.' });
+            const helper = require('../utils/automodHelper');
+            if (body.enabled !== undefined) {
+                await helper.setGuildStatus(req.guild.id, body.enabled);
+                const { AutomodGuild } = require('../models/AutomodSchema');
+                const stored = await AutomodGuild.findOne({ guildId: req.guild.id }).lean();
+                if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
+            }
+            if (body.channelId !== undefined) {
+                const channelId = String(body.channelId || '');
+                const channel = req.guild.channels.cache.get(channelId);
+                if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                    return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+                }
+                const { AutomodChannel } = require('../models/AutomodSchema');
+                if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
+                if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
+                const stored = await AutomodChannel.findOne({ channelId, guildId: req.guild.id }).lean();
+                const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
+                const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
+                if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
+                    (expectedEmojis !== undefined && stored?.emojis !== expectedEmojis)) {
+                    return res.status(503).json({ success: false, error: 'AutoMod channel filter could not be confirmed in storage.' });
+                }
+            }
+            return res.json({ success: true, message: 'AutoMod settings saved and synced to the live filter cache.' });
+        } catch (error) {
+            console.error('Dashboard AutoMod update failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod update failed. Retry after checking database connectivity.' });
+        }
+    });
+
+    // Read-only security audit using Starry CyberSec's existing server auditor.
+    app.get('/api/guild/:id/security/audit', requireGuildAdmin, async (req, res) => {
+        try {
+            const cyberSec = require('./cyberSec');
+            const report = await cyberSec.auditServerSecurity(req.guild, req.session.user);
+            const embed = report?.embed?.toJSON ? report.embed.toJSON() : null;
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                score: Number(report?.score ?? report?.securityScore ?? 0),
+                grade: String(report?.grade || report?.verdict || 'Audit complete'),
+                vulnerabilities: Array.isArray(report?.vulnerabilities) ? report.vulnerabilities : [],
+                hardeningSteps: Array.isArray(report?.hardeningSteps) ? report.hardeningSteps : [],
+                embed
+            });
+        } catch (error) {
+            console.error('Dashboard security audit failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Security audit could not complete. Check Starry permissions and retry.' });
+        }
+    });
+
+    // Giveaway dashboard uses the same service and persistence as Discord commands.
+    app.get('/api/guild/:id/giveaways', requireGuildAdmin, (req, res) => {
+        const service = client.giveawayManager;
+        if (!service) return res.status(503).json({ success: false, error: 'Giveaway service is not ready on this bot instance.' });
+        return res.json({ success: true, giveaways: service.list(req.guild.id) });
+    });
+
+    app.post('/api/guild/:id/giveaways', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
+            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
+            const winnerCount = Number(body.winners || 1);
+            const channelId = String(body.channelId || '');
+            const channel = req.guild.channels.cache.get(channelId);
+            if (!prize || prize.length > 120) return res.status(400).json({ success: false, error: 'Prize must be 1–120 characters.' });
+            if (!/^[1-9]\d{0,3}(s|m|h|d|w)$/i.test(duration)) return res.status(400).json({ success: false, error: 'Duration must use s, m, h, d or w (for example 30m or 2d).' });
+            const amount = Number(duration.match(/^\d+/)[0]);
+            const unit = duration.slice(-1).toLowerCase();
+            const durationMs = amount * ({ s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 }[unit]);
+            if (durationMs < 10000 || durationMs > 30 * 86400000) return res.status(400).json({ success: false, error: 'Giveaway duration must be between 10 seconds and 30 days.' });
+            if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+            const me = req.guild.members.me;
+            if (!me?.permissionsIn(channel).has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions, PermissionFlagsBits.ReadMessageHistory])) {
+                return res.status(403).json({ success: false, error: 'Starry needs View Channel, Send Messages, Embed Links, Add Reactions and Read Message History in that channel.' });
+            }
+            const service = client.giveawayManager;
+            if (!service) return res.status(503).json({ success: false, error: 'Giveaway service is not ready on this bot instance.' });
+            const author = {
+                id: req.session.user.id,
+                tag: req.session.user.username || 'Dashboard Admin',
+                displayAvatarURL: () => req.session.user.avatar || undefined
+            };
+            const result = await service.start(channel, author, duration, winnerCount, prize);
+            if (typeof result !== 'string' || !result.startsWith('✅')) return res.status(502).json({ success: false, error: result || 'Giveaway could not be started.' });
+            return res.status(201).json({ success: true, message: result, giveaway: service.list(req.guild.id).slice(-1)[0] || null });
+        } catch (error) {
+            console.error('Dashboard giveaway creation failed:', error.message);
+            return res.status(502).json({ success: false, error: 'Giveaway could not be created. Check the bot permissions in that channel.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const messageId = String(req.params.messageId || '');
+            if (!/^\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'Invalid giveaway message ID.' });
+            const service = client.giveawayManager;
+            const giveaway = service?.list(req.guild.id).find(item => item.messageId === messageId);
+            if (!giveaway) return res.status(404).json({ success: false, error: 'Active giveaway was not found in this server.' });
+            const channel = await req.guild.channels.fetch(giveaway.channelId).catch(() => null);
+            if (!channel || !channel.isTextBased()) return res.status(404).json({ success: false, error: 'Giveaway channel is no longer available.' });
+            const winners = Number(req.body?.winners || giveaway.winners || 1);
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be between 1 and 20.' });
+            const executor = { id: req.session.user.id };
+            const result = await service.reroll(channel, messageId, winners, executor);
+            if (typeof result !== 'string' || !result.startsWith('✅')) return res.status(502).json({ success: false, error: result || 'Reroll failed.' });
+            return res.json({ success: true, message: result });
+        } catch (error) {
+            console.error('Dashboard giveaway reroll failed:', error.message);
+            return res.status(502).json({ success: false, error: 'Giveaway reroll failed.' });
+        }
+    });
+
     // Multi-platform discovery via Starry's configured Lavalink provider. No Spotify API credentials required.
     app.get('/api/guild/:id/music/search', requireGuildMember, async (req, res) => {
         try {
@@ -1178,14 +1325,19 @@ function setupDashboardRoutes(app, client) {
                 if (b.enabled && !b.channelId) return res.status(400).json({ success: false, error: 'Select an announcement channel before enabling birthdays.' });
             }
             if (payload.logging !== undefined) {
-                const allowedLogKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                const allowedLogKeys = new Set(['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled', 'modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
                 if (!payload.logging || typeof payload.logging !== 'object' || Array.isArray(payload.logging) ||
                     Object.keys(payload.logging).some(key => !allowedLogKeys.has(key))) {
                     return res.status(400).json({ success: false, error: 'Invalid logging settings.' });
                 }
-                for (const [key, rawId] of Object.entries(payload.logging)) {
-                    if (typeof rawId !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
-                    const channelId = rawId.trim();
+                const booleanLogKeys = new Set(['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled']);
+                for (const [key, rawValue] of Object.entries(payload.logging)) {
+                    if (booleanLogKeys.has(key)) {
+                        if (typeof rawValue !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+                        continue;
+                    }
+                    if (typeof rawValue !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
+                    const channelId = rawValue.trim();
                     if (channelId) {
                         const channel = guild.channels.cache.get(channelId);
                         if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
