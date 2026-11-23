@@ -13,6 +13,7 @@ const ServerSettings = require('../models/ServerSettings');
 const PaymentOrder = require('../models/PaymentOrder');
 const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
+const UserSettings = require('../models/UserSettings');
 const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
@@ -1316,6 +1317,169 @@ function setupDashboardRoutes(app, client) {
             res.json({ success: true, message: 'Settings saved successfully!', settings });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // Personal notification preferences affect direct-message reminder delivery only.
+    app.get('/api/notifications/preferences', requireAuth, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const preferences = await UserSettings.findOneAndUpdate(
+                { userId: req.session.user.id },
+                { $setOnInsert: { notifications: true } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            ).select('notifications').lean();
+            return res.json({ success: true, preferences: { notifications: preferences.notifications !== false } });
+        } catch (error) {
+            console.error('Notification preferences lookup failed:', error);
+            return res.status(503).json({ success: false, error: 'Notification preferences are temporarily unavailable.' });
+        }
+    });
+
+    app.post('/api/notifications/preferences', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            const body = req.body || {};
+            if (Object.keys(body).length !== 1 || typeof body.notifications !== 'boolean') {
+                return res.status(400).json({ success: false, error: 'Provide a boolean notifications preference.' });
+            }
+            const preferences = await UserSettings.findOneAndUpdate(
+                { userId: req.session.user.id },
+                { $set: { notifications: body.notifications } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            ).select('notifications').lean();
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, preferences: { notifications: preferences.notifications !== false } });
+        } catch (error) {
+            console.error('Notification preferences update failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not save notification preferences.' });
+        }
+    });
+
+    // AutoMod dashboard controls call the same live engine used by Discord message enforcement.
+    app.get('/api/guild/:id/automod', requireGuildAdmin, async (req, res) => {
+        try {
+            const automod = client.automod || require('../utils/automodHelper');
+            const channels = req.guild.channels.cache.filter(channel => channel.isTextBased()).map(channel => ({
+                id: channel.id,
+                name: channel.name
+            }));
+            const overrides = await automod.listGuildOverrides(req.guild.id);
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                enabled: automod.getGuildStatus(req.guild.id),
+                channels,
+                overrides
+            });
+        } catch (error) {
+            console.error('Dashboard AutoMod read failed:', error);
+            return res.status(503).json({ success: false, error: 'AutoMod state is temporarily unavailable.' });
+        }
+    });
+
+    app.post('/api/guild/:id/automod', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const automod = client.automod || require('../utils/automodHelper');
+            if (typeof body.enabled === 'boolean' && Object.keys(body).length === 1) {
+                await automod.setGuildStatus(req.guild.id, body.enabled);
+                return res.json({ success: true, enabled: automod.getGuildStatus(req.guild.id), message: 'Server AutoMod state saved.' });
+            }
+
+            const channelId = String(body.channelId || '');
+            const channel = req.guild.channels.cache.get(channelId);
+            if (!channel || !channel.isTextBased()) {
+                return res.status(400).json({ success: false, error: 'Choose a text channel in the selected server.' });
+            }
+            if (body.reset === true && Object.keys(body).every(key => ['channelId', 'reset'].includes(key))) {
+                await automod.resetChannelSettings(channel.id, req.guild.id);
+                return res.json({ success: true, message: 'Channel AutoMod override reset to the server default.' });
+            }
+            if (!['links', 'emojis', 'all'].includes(body.filter) || typeof body.enabled !== 'boolean' ||
+                Object.keys(body).some(key => !['channelId', 'filter', 'enabled'].includes(key))) {
+                return res.status(400).json({ success: false, error: 'Select link or emoji protection and choose an enabled state.' });
+            }
+            const settings = await automod.setChannelFilter(channel.id, req.guild.id, body.filter, body.enabled);
+            return res.json({ success: true, settings, message: 'Channel AutoMod override saved.' });
+        } catch (error) {
+            console.error('Dashboard AutoMod update failed:', error);
+            const status = /database|MongoDB/i.test(String(error.message)) ? 503 : 400;
+            return res.status(status).json({ success: false, error: status === 503 ? 'AutoMod storage is unavailable; no change was confirmed.' : error.message });
+        }
+    });
+
+    // Giveaway controls operate through the same engine as Discord's existing giveaway commands.
+    app.get('/api/guild/:id/giveaways', requireGuildAdmin, (req, res) => {
+        try {
+            const manager = client.giveawayManager;
+            if (!manager) return res.status(503).json({ success: false, error: 'Giveaway engine is not ready.' });
+            const giveaways = manager.listGuild(req.guild.id).map(item => ({
+                messageId: item.messageId,
+                channelId: item.channelId,
+                prize: item.prize,
+                winners: item.winners,
+                endsAt: item.endsAt,
+                hostId: item.hostId,
+                active: Number(item.endsAt) > Date.now()
+            }));
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, giveaways });
+        } catch (error) {
+            console.error('Dashboard giveaway list failed:', error);
+            return res.status(503).json({ success: false, error: 'Giveaway data is temporarily unavailable.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const manager = client.giveawayManager;
+            if (!manager) return res.status(503).json({ success: false, error: 'Giveaway engine is not ready.' });
+            const body = req.body || {};
+            const channel = req.guild.channels.cache.get(String(body.channelId || ''));
+            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
+            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
+            const winners = Number(body.winners);
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                return res.status(400).json({ success: false, error: 'Choose a text channel in the selected server.' });
+            }
+            if (!prize || prize.length > 200 || !Number.isInteger(winners) || winners < 1 || winners > 10 || !duration || duration.length > 12) {
+                return res.status(400).json({ success: false, error: 'Enter a prize (1–200 characters), duration and 1–10 winners.' });
+            }
+            const botMember = req.guild.members.me;
+            const required = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions, PermissionFlagsBits.ReadMessageHistory];
+            if (!botMember || !required.every(permission => channel.permissionsFor(botMember)?.has(permission))) {
+                return res.status(403).json({ success: false, error: 'Starry needs View Channel, Send Messages, Embed Links, Add Reactions and Read Message History in the selected channel.' });
+            }
+            const message = await manager.start(channel, req.member.user, duration, winners, prize);
+            if (typeof message !== 'string' || message.startsWith('❌')) return res.status(400).json({ success: false, error: message || 'Giveaway could not be started.' });
+            const latest = manager.listGuild(req.guild.id).sort((a, b) => Number(b.endsAt) - Number(a.endsAt))[0];
+            return res.json({ success: true, message, giveaway: latest ? {
+                messageId: latest.messageId, channelId: latest.channelId, prize: latest.prize,
+                winners: latest.winners, endsAt: latest.endsAt, hostId: latest.hostId, active: true
+            } : null });
+        } catch (error) {
+            console.error('Dashboard giveaway create failed:', error);
+            return res.status(500).json({ success: false, error: 'Giveaway could not be started.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const manager = client.giveawayManager;
+            if (!manager) return res.status(503).json({ success: false, error: 'Giveaway engine is not ready.' });
+            const record = manager.listGuild(req.guild.id).find(item => item.messageId === req.params.messageId);
+            if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
+            const winners = Number(req.body?.winners ?? 1);
+            if (!Number.isInteger(winners) || winners < 1 || winners > 10) {
+                return res.status(400).json({ success: false, error: 'Choose between 1 and 10 winners.' });
+            }
+            const channel = req.guild.channels.cache.get(record.channelId);
+            if (!channel || !channel.isTextBased()) return res.status(404).json({ success: false, error: 'Giveaway channel is no longer available.' });
+            const message = await manager.reroll(channel, record.messageId, winners, req.member.user);
+            return res.json({ success: !String(message).startsWith('❌'), message });
+        } catch (error) {
+            console.error('Dashboard giveaway reroll failed:', error);
+            return res.status(500).json({ success: false, error: 'Giveaway could not be rerolled.' });
         }
     });
 
