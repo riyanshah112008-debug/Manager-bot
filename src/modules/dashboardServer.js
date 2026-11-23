@@ -20,6 +20,7 @@ const { getPublicUrl } = require('../utils/tunnelManager');
 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
+const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
 const config = require('../config');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
@@ -1757,18 +1758,22 @@ function setupDashboardRoutes(app, client) {
     });
 
     // GET /api/premium/order/:orderId - Check Live Order Status (Polling endpoint)
-    app.get('/api/premium/order/:orderId', async (req, res) => {
+    app.get('/api/premium/order/:orderId', requireAuth, async (req, res) => {
         try {
             const { orderId } = req.params;
             const order = await getOrderStatus(orderId);
             if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
 
-            res.json({
-                success: true,
-                order
-            });
+            if (!canAccessPremiumOrder(order, req.session, config.BOT_OWNERS || [])) {
+                return res.status(404).json({ success: false, error: 'Order not found.' });
+            }
+
+            const { ownerUserId, ...publicOrder } = order;
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, order: publicOrder });
         } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            console.error('Premium order status lookup failed:', e);
+            return res.status(500).json({ success: false, error: 'Unable to retrieve order status.' });
         }
     });
 

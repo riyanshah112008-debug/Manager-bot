@@ -19,6 +19,7 @@ async function getOrderStatus(orderId) {
 
     return {
         orderId: order.orderId,
+        ownerUserId: order.userId || null,
         status: order.status,
         tier: order.tier,
         tierName: order.tierName,
@@ -27,9 +28,6 @@ async function getOrderStatus(orderId) {
         amountUsd: order.amountUsd,
         method: order.method,
         cryptoCoin: order.cryptoCoin,
-        utr: order.utr,
-        notes: order.notes,
-        paymentDetails: order.paymentDetails,
         guildId: order.guildId,
         createdAt: order.createdAt,
         submittedAt: order.submittedAt,
