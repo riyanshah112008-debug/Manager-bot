@@ -2112,6 +2112,52 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    app.get('/api/spotify/playlists', requireAuth, async (req, res) => {
+        try {
+            const spotifyManager = require('./spotifyManager');
+            const data = await spotifyManager.getUserPlaylists(req.session.user.id);
+            const safeUrl = value => {
+                if (typeof value !== 'string') return '';
+                try {
+                    const parsed = new URL(value);
+                    return parsed.protocol === 'https:' && parsed.hostname === 'open.spotify.com'
+                        ? parsed.toString()
+                        : '';
+                } catch (_) {
+                    return '';
+                }
+            };
+            const playlists = [
+                ...(data.oauthPlaylists || []).map(item => ({
+                    id: String(item.id || ''),
+                    name: String(item.name || 'Spotify playlist').slice(0, 200),
+                    url: safeUrl(item.url),
+                    trackCount: Math.max(0, Number(item.trackCount) || 0),
+                    owner: String(item.owner || 'Spotify').slice(0, 80),
+                    source: 'Spotify account'
+                })),
+                ...(data.savedPlaylists || []).map(item => ({
+                    id: String(item.id || ''),
+                    name: String(item.name || 'Saved playlist').slice(0, 200),
+                    url: safeUrl(item.url),
+                    trackCount: Math.max(0, Number(item.trackCount) || 0),
+                    owner: 'Saved by you',
+                    source: 'Starry bookmark'
+                }))
+            ].filter(item => item.id && item.url);
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                connected: Boolean(data.isLinked),
+                displayName: String(data.displayName || ''),
+                playlists
+            });
+        } catch (error) {
+            console.error('Spotify playlist library lookup failed:', error);
+            return res.status(503).json({ success: false, error: 'Spotify playlists are temporarily unavailable.' });
+        }
+    });
+
     // Spotify's callback consumes a one-time state record tied to the authenticated Starry user.
     app.get('/api/spotify/callback', actionLimiter, async (req, res) => {
         const state = typeof req.query.state === 'string' ? req.query.state : '';
