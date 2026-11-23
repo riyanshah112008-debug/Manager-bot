@@ -336,7 +336,7 @@ function setupDashboardRoutes(app, client) {
             const body = req.body || {};
             const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
             const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
-            const winnerCount = Number(body.winners || 1);
+            const winnerCount = body.winners === undefined ? 1 : Number(body.winners);
             const channelId = String(body.channelId || '');
             const channel = req.guild.channels.cache.get(channelId);
             if (!prize || prize.length > 120) return res.status(400).json({ success: false, error: 'Prize must be 1–120 characters.' });
@@ -376,7 +376,7 @@ function setupDashboardRoutes(app, client) {
             if (!giveaway) return res.status(404).json({ success: false, error: 'Active giveaway was not found in this server.' });
             const channel = await req.guild.channels.fetch(giveaway.channelId).catch(() => null);
             if (!channel || !channel.isTextBased()) return res.status(404).json({ success: false, error: 'Giveaway channel is no longer available.' });
-            const winners = Number(req.body?.winners || giveaway.winners || 1);
+            const winners = req.body?.winners === undefined ? giveaway.winners : Number(req.body.winners);
             if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be between 1 and 20.' });
             const executor = { id: req.session.user.id };
             const result = await service.reroll(channel, messageId, winners, executor);
