@@ -787,6 +787,7 @@ const MODULE_INITIALIZERS = [
     { name: 'Server Logs', fn: () => require('./modules/logs.js')(client, app) },
     { name: 'Giveaway', fn: () => require('./modules/giveaway.js')(client, app) },
     { name: 'Counting Game', fn: () => require('./modules/count.js')(client, app) },
+    { name: 'Anti-Nuke Audit Shield', fn: () => require('./modules/antiNuke.js')(client, app) },
     { name: 'Advanced Mod & Security', fn: () => require('./modules/advancedMod.js')(client, app) },
     { name: 'Interactive Mod Panel', fn: () => require('./modules/modPanel.js')(client, app) },
     { name: 'Reputation System', fn: () => require('./modules/rep.js')(client, app) },
