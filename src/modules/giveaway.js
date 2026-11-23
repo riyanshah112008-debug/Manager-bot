@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
+const rerollLocks = new Set();
 
 // 🎬 DIRECT GIPHY CDN ASSETS (DISCORD PROXY GUARANTEED)
 const ASSETS = {
@@ -136,67 +137,70 @@ module.exports = (client) => {
     // 🔄 2. REROLL WINNER FUNCTION
     // ==========================================
     async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
-        const message = await channel.messages.fetch(messageId).catch(() => null);
-        if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
+        const lockKey = String(channel.guild.id) + ':' + String(messageId);
+        if (rerollLocks.has(lockKey)) return '❌ This giveaway is already being rerolled. Please retry shortly.';
+        rerollLocks.add(lockKey);
+        try {
+            const message = await channel.messages.fetch(messageId).catch(() => null);
+            if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
 
-        const reaction = message.reactions.cache.get('🎉');
-        if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
+            const reaction = message.reactions.cache.get('🎉');
+            if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
 
-        const validUsers = await fetchHumanParticipants(reaction);
+            const validUsers = await fetchHumanParticipants(reaction);
+            if (validUsers.length === 0) return '❌ **Cannot reroll!** There are no human participants in the reactions.';
 
-        if (validUsers.length === 0) {
-            return '❌ **Cannot reroll!** There are no human participants in the reactions.';
+            const records = getGiveaways();
+            const record = records.find(item => item.messageId === String(messageId) && item.guildId === channel.guild.id);
+            const previousWinnerMentions = message.embeds[0]?.description?.match(/<@!?(\d+)>/g) || [];
+            const previousWinnerIds = Array.isArray(record?.winnerIds) && record.winnerIds.length
+                ? record.winnerIds
+                : previousWinnerMentions.map(m => m.replace(/<@!?|>/g, '')).filter(id => id !== record?.hostId);
+            const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
+            const eligibleUsers = filteredUsers.length >= winnerCount ? filteredUsers : [...validUsers];
+
+            const winners = [];
+            for (let i = 0; i < winnerCount; i++) {
+                if (eligibleUsers.length === 0) break;
+                winners.push(eligibleUsers.splice(crypto.randomInt(eligibleUsers.length), 1)[0]);
+            }
+            if (!winners.length) return '❌ No eligible participants could be selected.';
+
+            const winnersText = winners.map(id => `<@${id}>`).join(', ');
+            if (record) {
+                record.winnerIds = winners;
+                record.lastRerolledAt = Date.now();
+                record.rerollCount = Number(record.rerollCount || 0) + 1;
+                saveGiveaways(records);
+            }
+
+            const rerollEmbed = new EmbedBuilder()
+                .setColor('#00F5D4')
+                .setAuthor({ name: '🔄 GIVEAWAY WINNER REROLLED 🔄' })
+                .setTitle(message.embeds[0]?.title || '🎁 Prize Reroll')
+                .setDescription([
+                    `> A new winner has been selected by request!`,
+                    ` `,
+                    `🥳 **New Winner(s):** ${winnersText}`,
+                    `👑 **Rerolled By:** <@${executor.id}>`,
+                    ` `,
+                    `*“Here’s to the new champion!”* 🥂`
+                ].join('\n'))
+                .setImage(ASSETS.WINNER_BANNER)
+                .setFooter({ text: 'Reroll Complete • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
+                .setTimestamp();
+
+            await channel.send({
+                content: `🎉 **NEW REROLLED WINNER(S):** ${winnersText}! Congratulations! 🚀🥂`,
+                embeds: [rerollEmbed]
+            });
+            return '✅ Winner rerolled successfully!';
+        } catch (error) {
+            console.error('Giveaway reroll failed:', error.message);
+            return '❌ Could not reroll this giveaway right now. Please retry.';
+        } finally {
+            rerollLocks.delete(lockKey);
         }
-
-        // Prefer recorded winners. Legacy entries fall back to embed mentions,
-        // excluding the host so the host is never mistaken for a previous winner.
-        const records = getGiveaways();
-        const record = records.find(item => item.messageId === String(messageId) && item.guildId === channel.guild.id);
-        const previousWinnerMentions = message.embeds[0]?.description?.match(/<@!?(\d+)>/g) || [];
-        const previousWinnerIds = Array.isArray(record?.winnerIds) && record.winnerIds.length
-            ? record.winnerIds
-            : previousWinnerMentions.map(m => m.replace(/<@!?|>/g, '')).filter(id => id !== record?.hostId);
-        const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
-        const eligibleUsers = filteredUsers.length >= winnerCount ? filteredUsers : [...validUsers];
-
-        const winners = [];
-        for (let i = 0; i < winnerCount; i++) {
-            if (eligibleUsers.length === 0) break;
-            const randomIndex = crypto.randomInt(eligibleUsers.length);
-            winners.push(eligibleUsers[randomIndex]);
-            eligibleUsers.splice(randomIndex, 1);
-        }
-
-        const winnersText = winners.map(id => `<@${id}>`).join(', ');
-        if (record) {
-            record.winnerIds = winners;
-            record.lastRerolledAt = Date.now();
-            record.rerollCount = Number(record.rerollCount || 0) + 1;
-            saveGiveaways(records);
-        }
-
-        const rerollEmbed = new EmbedBuilder()
-            .setColor('#00F5D4')
-            .setAuthor({ name: '🔄 GIVEAWAY WINNER REROLLED 🔄' })
-            .setTitle(message.embeds[0]?.title || '🎁 Prize Reroll')
-            .setDescription([
-                `> A new winner has been selected by request!`,
-                ``,
-                `🥳 **New Winner(s):** ${winnersText}`,
-                `👑 **Rerolled By:** <@${executor.id}>`,
-                ``,
-                `*“Here’s to the new champion!”* 🥂`
-            ].join('\n'))
-            .setImage(ASSETS.WINNER_BANNER)
-            .setFooter({ text: 'Reroll Complete • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
-            .setTimestamp();
-
-        await channel.send({ 
-            content: `🎉 **NEW REROLLED WINNER(S):** ${winnersText}! Congratulations! 🚀🥂`, 
-            embeds: [rerollEmbed] 
-        }).catch(() => {});
-
-        return '✅ Winner rerolled successfully!';
     }
 
     // Single service facade used by both Discord commands and the dashboard API.
