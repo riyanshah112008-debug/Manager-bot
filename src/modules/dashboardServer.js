@@ -1210,6 +1210,27 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    app.get('/api/guild/:id/security/status', requireGuildAdmin, async (req, res) => {
+        try {
+            const guild = req.guild;
+            const settings = await ServerSettings.findOne({ guildId: guild.id }).select('antinuke').lean();
+            const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+            const engineReady = client.antiNukeReady === true;
+            const canReadAuditLog = Boolean(botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog));
+            res.set('Cache-Control', 'no-store, private');
+            res.json({
+                success: true,
+                engineReady,
+                canReadAuditLog,
+                effectiveEnabled: Boolean(engineReady && canReadAuditLog && settings?.antinuke?.enabled),
+                settings: settings?.antinuke || {}
+            });
+        } catch (error) {
+            console.error('Security status lookup failed:', error.message);
+            res.status(503).json({ success: false, error: 'Could not verify Anti-Nuke runtime status.' });
+        }
+    });
+
     // POST /api/guild/:id/settings - Save updated Starry settings (Admin Guarded)
     app.post('/api/guild/:id/settings', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
@@ -1316,9 +1337,45 @@ function setupDashboardRoutes(app, client) {
                     policy.quarantineRoleId = roleId;
                 }
                 for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
-                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].some(value => typeof value !== 'string'))) {
-                        return res.status(400).json({ success: false, error: key + ' must be a list of Discord IDs.' });
+                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].length > 50 ||
+                        policy[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value)))) {
+                        return res.status(400).json({ success: false, error: key + ' must contain up to 50 valid Discord IDs.' });
                     }
+                    if (policy[key] !== undefined) policy[key] = [...new Set(policy[key])];
+                }
+                if (policy.whitelistedRoles !== undefined) {
+                    for (const roleId of policy.whitelistedRoles) {
+                        const role = guild.roles.cache.get(roleId);
+                        if (!role || role.id === guild.id || role.managed) {
+                            return res.status(400).json({ success: false, error: 'Every trusted role must be a normal role in this server.' });
+                        }
+                    }
+                }
+                if (policy.whitelistedUsers !== undefined) {
+                    for (const userId of policy.whitelistedUsers) {
+                        const member = await guild.members.fetch(userId).catch(() => null);
+                        if (!member) return res.status(400).json({ success: false, error: 'Every trusted user must currently belong to this server.' });
+                    }
+                }
+                if (policy.enabled === true) {
+                    if (client.antiNukeReady !== true) return res.status(503).json({ success: false, error: 'Anti-Nuke runtime is not initialized.' });
+                    const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+                    if (!botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
+                        return res.status(400).json({ success: false, error: 'Grant Starry View Audit Log permission before enabling Anti-Nuke.' });
+                    }
+                    const action = policy.action || 'quarantine';
+                    if (action === 'quarantine') {
+                        const role = policy.quarantineRoleId ? guild.roles.cache.get(policy.quarantineRoleId) : null;
+                        if (!role || role.managed || role.position >= botMember.roles.highest.position ||
+                            !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                            return res.status(400).json({ success: false, error: 'Select a quarantine role below Starry’s highest role and grant Manage Roles permission.' });
+                        }
+                    }
+                    if (action === 'timeout' && !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Moderate Members permission for the timeout response.' });
+                    if (action === 'kick' && !botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Kick Members permission for the kick response.' });
+                    if (action === 'ban' && !botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Ban Members permission for the ban response.' });
+                    if (policy.blockUnapprovedBots === true && !botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Kick Members permission to block unapproved bots.' });
+                    if (policy.blockWebhookCreation === true && !botMember.permissions.has(PermissionFlagsBits.ManageWebhooks)) return res.status(400).json({ success: false, error: 'Grant Starry Manage Webhooks permission to block webhook creation.' });
                 }
             }
             if (payload.embedTheme !== undefined) {
@@ -1376,6 +1433,17 @@ function setupDashboardRoutes(app, client) {
             if (payload.mediaPerms) settings.mediaPerms = { ...settings.mediaPerms?.toObject(), ...payload.mediaPerms };
 
             await settings.save();
+            if (payload.antinuke) {
+                const logChannel = typeof client.getLogChannel === 'function'
+                    ? await client.getLogChannel(guild, 'moderate').catch(() => null)
+                    : null;
+                if (logChannel?.isTextBased?.()) {
+                    await logChannel.send({
+                        content: '🛡️ Anti-Nuke configuration updated by <@' + req.session.user.id + '>.',
+                        allowedMentions: { parse: [], users: [] }
+                    }).catch(() => {});
+                }
+            }
             if (payload.embedTheme) {
                 const { setCachedTheme } = require('./embedVisuality');
                 setCachedTheme(guild.id, settings.embedTheme?.toObject?.() || settings.embedTheme);
