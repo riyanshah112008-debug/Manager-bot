@@ -137,7 +137,7 @@ class SpotifyManager {
                 userDoc.tokenExpiresAt = new Date(Date.now() + ((data.expires_in || 3600) * 1000));
                 if (data.refresh_token) userDoc.refreshToken = encryptToken(data.refresh_token);
                 await userDoc.save();
-                return userDoc.accessToken;
+                return decryptToken(userDoc.accessToken);
             }
         } catch (e) {
             console.warn('⚠️ [SpotifyManager] Refresh token failed:', e.message);
