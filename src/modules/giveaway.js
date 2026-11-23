@@ -319,19 +319,30 @@ module.exports = (client) => {
     // ==========================================
     async function checkGiveaways() {
         if (mongoose.connection.readyState !== 1) return;
-        const due = await Giveaway.find({ status: 'active', endsAt: { $lte: new Date() } })
-            .sort({ endsAt: 1 }).limit(25).lean();
+        const now = new Date();
+        const staleBefore = new Date(Date.now() - 2 * 60 * 1000);
+        const candidates = await Giveaway.find({
+            $or: [
+                { status: 'active', endsAt: { $lte: now } },
+                { status: 'processing', updatedAt: { $lte: staleBefore } }
+            ]
+        }).sort({ endsAt: 1 }).limit(25).lean();
 
-        for (const candidate of due) {
-            // Atomic claim prevents two scheduler processes from announcing different winners.
+        for (const candidate of candidates) {
+            // Claim active jobs, or safely resume a stale processing job after a crash.
             const giveaway = await Giveaway.findOneAndUpdate(
-                { messageId: candidate.messageId, status: 'active', endsAt: { $lte: new Date() } },
-                { $set: { status: 'processing' } },
+                {
+                    messageId: candidate.messageId,
+                    $or: [
+                        { status: 'active', endsAt: { $lte: now } },
+                        { status: 'processing', updatedAt: { $lte: staleBefore } }
+                    ]
+                },
+                { $set: { status: 'processing', updatedAt: new Date() } },
                 { new: true }
             ).lean();
             if (!giveaway) continue;
 
-            let outcomeCommitted = false;
             try {
                 const guild = client.guilds.cache.get(giveaway.guildId);
                 const channel = guild?.channels?.cache?.get(giveaway.channelId);
@@ -343,27 +354,33 @@ module.exports = (client) => {
                     continue;
                 }
 
-                const reaction = message.reactions.cache.get('🎉');
-                const users = reaction ? await reaction.users.fetch().catch(() => null) : null;
-                const participants = users
-                    ? users.filter(user => !user.bot).map(user => user.id)
-                    : [];
-                const winners = [];
-                while (participants.length && winners.length < giveaway.winners) {
-                    const index = crypto.randomInt(0, participants.length);
-                    winners.push(participants.splice(index, 1)[0]);
+                let winners;
+                if (giveaway.outcomeCommitted === true) {
+                    // Reuse the committed winner set after a restart; never reroll on retry.
+                    winners = Array.isArray(giveaway.winnerIds) ? giveaway.winnerIds : [];
+                } else {
+                    const reaction = message.reactions.cache.get('🎉');
+                    const users = reaction ? await reaction.users.fetch().catch(() => null) : null;
+                    const participants = users
+                        ? users.filter(user => !user.bot).map(user => user.id)
+                        : [];
+                    winners = [];
+                    while (participants.length && winners.length < giveaway.winners) {
+                        const index = crypto.randomInt(0, participants.length);
+                        winners.push(participants.splice(index, 1)[0]);
+                    }
+
+                    const committed = await Giveaway.updateOne(
+                        { messageId: giveaway.messageId, status: 'processing', outcomeCommitted: { $ne: true } },
+                        { $set: { winnerIds: winners, outcomeCommitted: true, updatedAt: new Date() } }
+                    );
+                    if (!committed.modifiedCount) continue;
                 }
 
-                // Commit the outcome before sending Discord messages. A transient send/edit
-                // failure must never select a different winner on the next scheduler pass.
-                const committed = await Giveaway.updateOne(
-                    { messageId: giveaway.messageId, status: 'processing' },
-                    { $set: { status: 'ended', winnerIds: winners, endedAt: new Date() } }
-                );
-                if (!committed.modifiedCount) continue;
-                outcomeCommitted = true;
-
-                if (winners.length === 0) {
+                // The Discord giveaway post is the source-visible completion marker.
+                // If it was already edited before a restart, do not duplicate winner posts.
+                const alreadyConcluded = String(message.embeds[0]?.footer?.text || '').includes('Giveaway Ended');
+                if (!alreadyConcluded && winners.length === 0) {
                     const failEmbed = new EmbedBuilder()
                         .setColor('#ED4245')
                         .setAuthor({ name: '❌ GIVEAWAY EXPIRED' })
@@ -373,7 +390,7 @@ module.exports = (client) => {
                         .setTimestamp();
                     await message.edit({ embeds: [failEmbed] });
                     await channel.send('📢 The giveaway for **' + giveaway.prize + '** ended, but nobody entered!').catch(() => {});
-                } else {
+                } else if (!alreadyConcluded) {
                     const winnersText = winners.map(id => '<@' + id + '>').join(', ');
                     const winEmbed = new EmbedBuilder()
                         .setColor('#00F5D4')
@@ -399,15 +416,19 @@ module.exports = (client) => {
                         content: 'Giveaway **' + giveaway.prize + '** ended. Winner(s): ' + winnersText
                     }).catch(() => {});
                 }
+
+                await Giveaway.updateOne(
+                    { messageId: giveaway.messageId, status: 'processing', outcomeCommitted: true },
+                    { $set: { status: 'ended', endedAt: new Date() } }
+                );
             } catch (error) {
                 console.error('Error ending giveaway:', error);
-                // Only release a claim if no outcome has been committed yet.
-                if (!outcomeCommitted) {
-                    await Giveaway.updateOne(
-                        { messageId: giveaway.messageId, status: 'processing' },
-                        { $set: { status: 'active' } }
-                    ).catch(() => {});
-                }
+                // Leave the committed result in processing so the same winner set is retried.
+                // A later scheduler cycle reclaims it after the stale-job safety window.
+                await Giveaway.updateOne(
+                    { messageId: giveaway.messageId, status: 'processing' },
+                    { $set: { updatedAt: new Date() } }
+                ).catch(() => {});
             }
         }
     }
