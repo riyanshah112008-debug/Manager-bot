@@ -760,6 +760,8 @@ client.on(Events.GuildCreate, async (guild) => {
 // Module Initializers (Background systems)
 const MODULE_INITIALIZERS = [
     { name: 'Automod', fn: () => require('./modules/automod.js')(client, app) },
+    { name: 'Anti-Nuke Audit Monitor', fn: () => require('./modules/antiNuke.js')(client, app) },
+    { name: 'Guild Notifications', fn: () => require('./modules/notifications.js')(client, app) },
     { name: 'Premium', fn: () => require('./modules/premium.js')(client, app) },
     { name: 'Translator', fn: () => require('./modules/translator.js')(client, app) },
     { name: 'Reaction Roles', fn: () => require('./modules/reactionRoles.js')(client, app) },
