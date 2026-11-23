@@ -4,10 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { encryptSpotifyToken, decryptSpotifyToken, isEncryptedSpotifyToken } = require('../src/utils/spotifyTokenCrypto');
 
-const original = process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY;
+const testKey = 'test-spotify-token-encryption-secret-32-bytes-minimum';
 
 test('Spotify tokens are authenticated-encrypted at rest', () => {
-    process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY = 'test-spotify-token-encryption-secret-32-bytes-minimum';
+    process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY = testKey;
     const plaintext = 'spotify-access-token-secret';
     const encrypted = encryptSpotifyToken(plaintext);
     assert.notEqual(encrypted, plaintext);
@@ -27,6 +27,3 @@ test('legacy plaintext Spotify tokens remain readable for migration', () => {
     assert.equal(decryptSpotifyToken('legacy-token-value'), 'legacy-token-value');
     assert.equal(isEncryptedSpotifyToken('legacy-token-value'), false);
 });
-
-if (original === undefined) delete process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY;
-else process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY = original;
