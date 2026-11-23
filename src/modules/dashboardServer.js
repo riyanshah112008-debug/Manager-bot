@@ -1757,18 +1757,40 @@ function setupDashboardRoutes(app, client) {
     });
 
     // GET /api/premium/order/:orderId - Check Live Order Status (Polling endpoint)
-    app.get('/api/premium/order/:orderId', async (req, res) => {
+    app.get('/api/premium/order/:orderId', requireAuth, async (req, res) => {
         try {
             const { orderId } = req.params;
             const order = await getOrderStatus(orderId);
             if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
 
-            res.json({
-                success: true,
-                order
-            });
+            const requesterId = req.session.user?.id;
+            const isBotOwner = (config.BOT_OWNERS || []).includes(requesterId);
+            const isOrderUser = Boolean(requesterId && order.ownerUserId === requesterId);
+            const guild = order.guildId
+                ? (req.session.guilds || []).find(entry => entry.id === order.guildId)
+                : null;
+            let canManageGuild = false;
+            if (guild) {
+                try {
+                    const permissions = BigInt(guild.permissions || 0);
+                    canManageGuild = Boolean(guild.owner) ||
+                        (permissions & BigInt(8)) === BigInt(8) ||
+                        (permissions & BigInt(32)) === BigInt(32);
+                } catch (_) {
+                    canManageGuild = false;
+                }
+            }
+
+            if (!isBotOwner && !isOrderUser && !canManageGuild) {
+                return res.status(404).json({ success: false, error: 'Order not found.' });
+            }
+
+            const { ownerUserId, ...publicOrder } = order;
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, order: publicOrder });
         } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            console.error('Premium order status lookup failed:', e);
+            return res.status(500).json({ success: false, error: 'Unable to retrieve order status.' });
         }
     });
 
