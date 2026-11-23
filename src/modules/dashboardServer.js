@@ -20,6 +20,7 @@ const { getPublicUrl } = require('../utils/tunnelManager');
 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
+const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
 const config = require('../config');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
@@ -1763,25 +1764,7 @@ function setupDashboardRoutes(app, client) {
             const order = await getOrderStatus(orderId);
             if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
 
-            const requesterId = req.session.user?.id;
-            const isBotOwner = (config.BOT_OWNERS || []).includes(requesterId);
-            const isOrderUser = Boolean(requesterId && order.ownerUserId === requesterId);
-            const guild = order.guildId
-                ? (req.session.guilds || []).find(entry => entry.id === order.guildId)
-                : null;
-            let canManageGuild = false;
-            if (guild) {
-                try {
-                    const permissions = BigInt(guild.permissions || 0);
-                    canManageGuild = Boolean(guild.owner) ||
-                        (permissions & BigInt(8)) === BigInt(8) ||
-                        (permissions & BigInt(32)) === BigInt(32);
-                } catch (_) {
-                    canManageGuild = false;
-                }
-            }
-
-            if (!isBotOwner && !isOrderUser && !canManageGuild) {
+            if (!canAccessPremiumOrder(order, req.session, config.BOT_OWNERS || [])) {
                 return res.status(404).json({ success: false, error: 'Order not found.' });
             }
 
