@@ -1246,8 +1246,12 @@ function setupDashboardRoutes(app, client) {
                 if (policy.quarantineRoleId !== undefined) {
                     if (typeof policy.quarantineRoleId !== 'string') return res.status(400).json({ success: false, error: 'Quarantine role must be a role ID.' });
                     const roleId = policy.quarantineRoleId.trim();
+                    const botMember = guild.members.me;
                     if (roleId && (!guild.roles.cache.has(roleId) || guild.roles.cache.get(roleId).managed || roleId === guild.id)) {
-                        return res.status(400).json({ success: false, error: 'Choose a manageable role from this server for quarantine.' });
+                        return res.status(400).json({ success: false, error: 'Choose a normal role from this server for quarantine.' });
+                    }
+                    if (roleId && botMember && guild.roles.cache.get(roleId).position >= botMember.roles.highest.position) {
+                        return res.status(400).json({ success: false, error: 'Move Starry above the quarantine role before saving.' });
                     }
                     policy.quarantineRoleId = roleId;
                 }
@@ -1385,7 +1389,6 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/guild/:id/security/status', requireGuildAdmin, (req, res) => {
         const botMember = req.guild.members.me;
         const permissions = botMember?.permissions;
-        const policy = req.guild ? (req.guild.available ? null : null) : null;
         return res.json({
             success: true,
             auditLogEvents: Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog)),
