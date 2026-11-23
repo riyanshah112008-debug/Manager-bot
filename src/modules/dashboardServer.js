@@ -280,11 +280,26 @@ function setupDashboardRoutes(app, client) {
             res.set('Cache-Control', 'no-store, private');
             const spotifyManager = require('./spotifyManager');
             const data = await spotifyManager.getUserPlaylists(String(req.session.user.id));
+            const safePlaylist = playlist => {
+                try {
+                    const url = new URL(String(playlist?.url || ''));
+                    if (url.protocol !== 'https:' || url.hostname !== 'open.spotify.com') return null;
+                    return {
+                        id: String(playlist.id || '').slice(0, 128),
+                        name: String(playlist.name || 'Spotify playlist').slice(0, 160),
+                        url: url.href,
+                        trackCount: Math.max(0, Number(playlist.trackCount) || 0),
+                        owner: String(playlist.owner || 'Spotify').slice(0, 80)
+                    };
+                } catch (_) {
+                    return null;
+                }
+            };
             res.json({
                 success: true,
                 isLinked: Boolean(data.isLinked),
-                savedPlaylists: data.savedPlaylists || [],
-                playlists: data.oauthPlaylists || []
+                savedPlaylists: (data.savedPlaylists || []).map(safePlaylist).filter(Boolean),
+                playlists: (data.oauthPlaylists || []).map(safePlaylist).filter(Boolean)
             });
         } catch (error) {
             console.error('Spotify playlist lookup failed:', error.message);
