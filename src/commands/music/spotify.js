@@ -279,7 +279,11 @@ module.exports = {
             const port = process.env.PORT || 10000;
             const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://localhost:${port}`;
             const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const authUrl = spotifyManager.getOAuthUrl(ctx.user.id, redirectUri);
+            const authUrl = await require('../../utils/spotifyAuthorization').createSpotifyAuthorizationUrl(
+                ctx.user.id,
+                redirectUri,
+                spotifyManager
+            );
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -297,7 +301,7 @@ module.exports = {
                     `Click the secure button below to link your Spotify account.\n\n` +
                     `✨ **What you unlock:**\n` +
                     `• Direct 1-click access to all your **private and public playlists**\n` +
-                    `• Seamless streaming from your Spotify library into Discord voice\n` +
+                    `• One-click playlist discovery and playback matching through Starry’s supported audio sources\n` +
                     `• 100% encrypted & secure authentication\n\n` +
                     `*This link is exclusively for ${ctx.user} and expires in 10 minutes.*`
                 )
