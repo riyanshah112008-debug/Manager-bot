@@ -117,6 +117,8 @@ async function loadSecurityStatus(){
  const host=$("#securityRuntimeStatus");if(!host)return;
  try{
   const d=await request("/api/guild/"+guildId+"/security/status");
+  const policyState=d.enabled?(d.ready?"<span class=\\"pill\\">ENABLED · READY</span>":"<span class=\\"pill\\">ENABLED · ACTION BLOCKED</span>"):"<span class=\\"pill\\">DISABLED</span>";
+  host.insertAdjacentHTML("afterbegin",'<div class="check-row"><strong>Anti-Nuke policy</strong>'+policyState+'</div>'+(!d.ready&&d.enabled?'<div class="status bad">'+esc(d.readinessIssue||"Anti-Nuke is not ready to enforce the selected policy.")+'</div>':""));
   const entries=[
    ["View Audit Log",d.auditLogEvents],
    ["Moderate Members",d.canTimeout],
@@ -304,8 +306,8 @@ if(page==="support"){
 ["title","color","author","authorIcon","description","thumbnail","image","footer","footerIcon"].forEach(id=>$("#"+id)?.addEventListener("input",updateEmbedPreview));updateEmbedPreview();
 $("#saveSecurity")?.addEventListener("click",async()=>{
  for(const id of ["maxChannelDeletions","maxRoleDeletions","maxBans","maxKicks"]){const n=Number($("#"+id).value);if(!Number.isInteger(n)||n<1||n>50){feedback("All protection thresholds must be whole numbers from 1 to 50.","bad");return}}
- const parseIds=id=>$("#"+id).value.split(/[\\s,]+/).map(value=>value.trim()).filter(Boolean);
- const whitelistedUsers=parseIds("nukeWhitelistedUsers"),whitelistedRoles=parseIds("nukeWhitelistedRoles"),validId=/^\\d{17,20}$/;
+ const parseIds=id=>$("#"+id).value.split(/[\s,]+/).map(value=>value.trim()).filter(Boolean);
+ const whitelistedUsers=parseIds("nukeWhitelistedUsers"),whitelistedRoles=parseIds("nukeWhitelistedRoles"),validId=/^\d{17,20}$/;
  if(whitelistedUsers.length>100||whitelistedRoles.length>100||[...whitelistedUsers,...whitelistedRoles].some(id=>!validId.test(id))){feedback("Whitelist accepts up to 100 valid Discord IDs per list.","bad");return}
  await saveGroup("antinuke",{blockUnapprovedBots:"bool",blockWebhookCreation:"bool",maxChannelDeletions:"number",maxRoleDeletions:"number",maxBans:"number",maxKicks:"number",quarantineRoleId:"text"},{enabled:$("#nukeEnabled").checked,action:$("#antinukeAction").value,whitelistedUsers,whitelistedRoles});
 });
