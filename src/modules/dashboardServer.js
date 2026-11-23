@@ -1252,9 +1252,33 @@ function setupDashboardRoutes(app, client) {
                     policy.quarantineRoleId = roleId;
                 }
                 for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
-                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].some(value => typeof value !== 'string'))) {
-                        return res.status(400).json({ success: false, error: key + ' must be a list of Discord IDs.' });
+                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].length > 100 ||
+                        policy[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value)))) {
+                        return res.status(400).json({ success: false, error: key + ' must contain up to 100 valid Discord IDs.' });
                     }
+                }
+                if (policy.whitelistedRoles !== undefined && policy.whitelistedRoles.some(id => {
+                    const role = guild.roles.cache.get(id);
+                    return !role || role.managed || role.id === guild.id;
+                })) return res.status(400).json({ success: false, error: 'Every whitelisted role must be a normal role from this server.' });
+                if (policy.enabled === true) {
+                    const botMember = guild.members.me;
+                    if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
+                        return res.status(403).json({ success: false, error: 'Starry needs View Audit Log before Anti-Nuke can be enabled.' });
+                    }
+                    const action = policy.action || 'quarantine';
+                    if (action === 'quarantine') {
+                        const roleId = policy.quarantineRoleId || '';
+                        const role = roleId ? guild.roles.cache.get(roleId) : null;
+                        if (!role) return res.status(400).json({ success: false, error: 'Choose a quarantine role before enabling this response.' });
+                        if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles) || role.position >= botMember.roles.highest.position) {
+                            return res.status(403).json({ success: false, error: 'Starry needs Manage Roles and must be above the quarantine role.' });
+                        }
+                    }
+                    if (action === 'timeout' && !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) return res.status(403).json({ success: false, error: 'Starry needs Moderate Members for the selected response.' });
+                    if (action === 'kick' && !botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(403).json({ success: false, error: 'Starry needs Kick Members for the selected response.' });
+                    if (action === 'ban' && !botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(403).json({ success: false, error: 'Starry needs Ban Members for the selected response.' });
+                    if (policy.blockUnapprovedBots === true && !botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(403).json({ success: false, error: 'Starry needs Kick Members to block unapproved bot invitations.' });
                 }
             }
             if (payload.embedTheme !== undefined) {
@@ -1356,6 +1380,21 @@ function setupDashboardRoutes(app, client) {
             console.error('Notification preferences update failed:', error);
             return res.status(503).json({ success: false, error: 'Could not save notification preferences.' });
         }
+    });
+
+    app.get('/api/guild/:id/security/status', requireGuildAdmin, (req, res) => {
+        const botMember = req.guild.members.me;
+        const permissions = botMember?.permissions;
+        const policy = req.guild ? (req.guild.available ? null : null) : null;
+        return res.json({
+            success: true,
+            auditLogEvents: Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog)),
+            canTimeout: Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers)),
+            canKick: Boolean(permissions?.has(PermissionFlagsBits.KickMembers)),
+            canBan: Boolean(permissions?.has(PermissionFlagsBits.BanMembers)),
+            canManageRoles: Boolean(permissions?.has(PermissionFlagsBits.ManageRoles)),
+            rolePosition: botMember?.roles?.highest?.position ?? null
+        });
     });
 
     // AutoMod dashboard controls call the same live engine used by Discord message enforcement.
