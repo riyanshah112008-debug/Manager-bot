@@ -66,31 +66,27 @@ function getGuildStatus(guildId) {
  * @param {boolean} enabled
  */
 async function setGuildStatus(guildId, enabled) {
-    if (!guildId) return false;
-    guildCache.set(guildId, enabled);
-
-    // Save to local JSON database for persistent offline resilience
-    try {
-        if (db.updateGuildSettings && db.getGuildSettings) {
-            const current = db.getGuildSettings(guildId) || {};
-            const automod = current.automod || {};
-            automod.enabled = enabled;
-            db.updateGuildSettings(guildId, { automod });
-        }
-    } catch (_) {}
-
-    // Save to MongoDB if online
+    if (!guildId || typeof enabled !== 'boolean') throw new Error('A guild ID and boolean enabled state are required.');
     if (isDbConnected()) {
         try {
             await AutomodGuild.findOneAndUpdate(
                 { guildId },
-                { enabled },
-                { upsert: true, new: true }
+                { $set: { enabled } },
+                { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
             );
         } catch (err) {
-            console.error('❌ [AutoMod] Error saving guild status:', err.message);
+            throw new Error('Could not persist the AutoMod server setting: ' + err.message);
+        }
+    } else {
+        try {
+            const current = db.getGuildSettings ? db.getGuildSettings(guildId) || {} : {};
+            if (!db.updateGuildSettings) throw new Error('Persistent settings storage is unavailable.');
+            db.updateGuildSettings(guildId, { automod: { ...(current.automod || {}), enabled } });
+        } catch (err) {
+            throw new Error('Could not persist the AutoMod server setting: ' + err.message);
         }
     }
+    guildCache.set(guildId, enabled);
     return enabled;
 }
 
@@ -138,51 +134,47 @@ async function getChannelSettings(channelId, guildId = null) {
  * @param {'links'|'emojis'|'all'} filterType 
  * @param {boolean} shouldEnable - true = AutoMod active (blocking); false = AutoMod disabled (ignored/allowed)
  */
-async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
-    if (!channelId) throw new Error('channelId is required');
-
-    const current = await getChannelSettings(channelId, guildId);
-
-    // In DB schema: true = ignored / filter disabled; false = filter active / blocked
-    let newLinks = current.links;
-    let newEmojis = current.emojis;
-
-    if (filterType === 'links' || filterType === 'all') {
-        newLinks = !shouldEnable;
+async function setChannelFilters(channelId, guildId, options = {}) {
+    if (!channelId || !guildId) throw new Error('A channel ID and guild ID are required.');
+    if (typeof options.linksEnabled !== 'boolean' || typeof options.emojisEnabled !== 'boolean') {
+        throw new Error('Link and emoji filter states must be boolean values.');
     }
-    if (filterType === 'emojis' || filterType === 'all') {
-        newEmojis = !shouldEnable;
-    }
-
-    // Update in-memory cache immediately
-    channelCache.set(channelId, { links: newLinks, emojis: newEmojis });
-
-    // Write atomically to MongoDB
+    if (!isDbConnected()) throw new Error('MongoDB is required to save dashboard AutoMod changes.');
+    const updateData = {
+        guildId,
+        links: !options.linksEnabled,
+        emojis: !options.emojisEnabled,
+        updatedAt: new Date()
+    };
     try {
-        const updateData = {
-            links: newLinks,
-            emojis: newEmojis,
-            updatedAt: new Date()
-        };
-        if (guildId) updateData.guildId = guildId;
-
         await AutomodChannel.findOneAndUpdate(
             { channelId },
             { $set: updateData },
-            { upsert: true, new: true }
+            { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
         );
     } catch (err) {
-        console.error('❌ [AutoMod] Failed to persist channel filter:', err.message);
+        throw new Error('Could not persist channel AutoMod filters: ' + err.message);
     }
-
+    channelCache.set(channelId, { links: updateData.links, emojis: updateData.emojis });
     return {
         channelId,
         guildId,
-        links: newLinks,
-        emojis: newEmojis,
-        linksActive: !newLinks,
-        emojisActive: !newEmojis
+        links: updateData.links,
+        emojis: updateData.emojis,
+        linksActive: options.linksEnabled,
+        emojisActive: options.emojisEnabled
     };
+}
+
+async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
+    if (!['links', 'emojis', 'all'].includes(filterType) || typeof shouldEnable !== 'boolean') {
+        throw new Error('Choose a valid AutoMod filter and boolean enabled state.');
+    }
+    const current = await getChannelSettings(channelId, guildId);
+    return setChannelFilters(channelId, guildId, {
+        linksEnabled: filterType === 'links' ? shouldEnable : filterType === 'all' ? shouldEnable : current.linksActive,
+        emojisEnabled: filterType === 'emojis' ? shouldEnable : filterType === 'all' ? shouldEnable : current.emojisActive
+    });
 }
 
 /**
@@ -453,6 +445,7 @@ module.exports = {
     setGuildStatus,
     getChannelSettings,
     setChannelFilter,
+    setChannelFilters,
     resetChannelSettings,
     listGuildOverrides,
     canManageAutomod,

@@ -12,6 +12,23 @@ const suites = [
   ['Birthday role cleanup', 'tests/birthdayRoleCleanup.test.js'],
   ['Dashboard origins', 'tests/dashboardOrigins.test.js'],
   ['Premium order access control', '--test', 'tests/paymentOrderAccess.test.js'],
+  ['Spotify token vault', '--test', 'tests/spotifyTokenVault.test.js'],
+  ['Spotify OAuth state and PKCE', '--test', 'tests/spotifyOAuthState.test.js'],
+  ['Spotify manager syntax', '--check', 'src/modules/spotifyManager.js'],
+  ['Spotify dashboard route syntax', '--check', 'src/modules/dashboardServer.js'],
+  ['Spotify authorization launcher syntax', '--check', 'src/utils/spotifyAuthorization.js'],
+  ['Spotify command syntax', '--check', 'src/commands/music/spotify.js'],
+  ['Spotify controller syntax', '--check', 'src/modules/musicController.js'],
+  ['Spotify dashboard page syntax', '--check', 'public/workspace.js'],
+  ['Anti-Nuke policy', '--test', 'tests/antiNukePolicy.test.js'],
+  ['Guild notification policy', '--test', 'tests/guildNotificationPolicy.test.js'],
+  ['Dashboard module integration contract', '--test', 'tests/dashboardModulesIntegration.test.js'],
+  ['AutoMod helper syntax', '--check', 'src/utils/automodHelper.js'],
+  ['AutoMod runtime syntax', '--check', 'src/modules/automod.js'],
+  ['Anti-Nuke monitor syntax', '--check', 'src/modules/antiNuke.js'],
+  ['Guild notifications syntax', '--check', 'src/modules/notifications.js'],
+  ['Guild notification sender syntax', '--check', 'src/utils/guildNotifications.js'],
+  ['Giveaway runtime syntax', '--check', 'src/modules/giveaway.js'],
   ['Spotify OAuth redirect URI', '--test', 'tests/spotifyOAuthRedirect.test.js'],
   ['Verification', 'tests/verification.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
@@ -44,6 +61,7 @@ const suites = [
   ['Music audio profiles', '--test', 'tests/musicAudioProfiles.test.js'],
   ['Premium audio quality policy', '--test', 'tests/audioQuality.test.js'],
   ['Leveling control panel', '--test', 'tests/levelingControlPanel.test.js'],
+  ['Logging control panel', '--test', 'tests/loggingControlPanel.test.js'],
   ['Leveling module syntax', '--check', 'src/modules/leveling.js'],
   ['Suspicious-account monitor syntax', '--check', 'src/modules/susAccount.js'],
   ['Suspicious-member monitoring policy', '--test', 'tests/susAccountMonitoring.test.js'],
@@ -51,19 +69,25 @@ const suites = [
 ];
 
 const timeoutMs = Number(process.env.TEST_SUITE_TIMEOUT_MS) || 60000;
-let passed = 0;
-
-for (const [name, ...args] of suites) {
-  console.log('\n===== START: ' + name + ' =====');
-  const started = Date.now();
-  const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...process.env, STARRY_DISABLE_STREAM_RESOLVER: '1' }, timeout: timeoutMs, windowsHide: true });
-  const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  if (result.error || result.status !== 0) {
-    if (result.error && result.error.code === 'ETIMEDOUT') console.error('\nFAILED: ' + name + ' exceeded ' + (timeoutMs / 1000) + 's and was terminated.');
-    else { console.error('\nFAILED: ' + name + ' (exit=' + result.status + ', signal=' + (result.signal || 'none') + ')'); if (result.error) console.error(result.error); }
-    process.exit(1);
-  }
-  passed += 1;
-  console.log('===== PASS: ' + name + ' (' + elapsed + 's) =====');
+const repetitions = Number.parseInt(process.env.STARRY_TEST_REPETITIONS || '1', 10);
+if (!Number.isInteger(repetitions) || repetitions < 1 || repetitions > 10) {
+  throw new Error('STARRY_TEST_REPETITIONS must be an integer from 1 to 10.');
 }
-console.log('\nAll ' + passed + ' deterministic verification suites passed.');
+
+let passed = 0;
+for (let pass = 1; pass <= repetitions; pass += 1) {
+  for (const [name, ...args] of suites) {
+    console.log('\n===== START: ' + name + ' (pass ' + pass + '/' + repetitions + ') =====');
+    const started = Date.now();
+    const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...process.env, STARRY_DISABLE_STREAM_RESOLVER: '1' }, timeout: timeoutMs, windowsHide: true });
+    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+    if (result.error || result.status !== 0) {
+      if (result.error && result.error.code === 'ETIMEDOUT') console.error('\nFAILED: ' + name + ' exceeded ' + (timeoutMs / 1000) + 's during pass ' + pass + '.');
+      else { console.error('\nFAILED: ' + name + ' (pass=' + pass + ', exit=' + result.status + ', signal=' + (result.signal || 'none') + ')'); if (result.error) console.error(result.error); }
+      process.exit(1);
+    }
+    passed += 1;
+    console.log('===== PASS: ' + name + ' (' + elapsed + 's; pass ' + pass + '/' + repetitions + ') =====');
+  }
+}
+console.log('\nAll ' + passed + ' deterministic suite executions passed across ' + repetitions + ' complete pass(es).');

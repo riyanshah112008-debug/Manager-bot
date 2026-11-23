@@ -4,7 +4,8 @@ function canAccessPremiumOrder(order, session, botOwners = []) {
     if (!order || !session || !session.user || !session.user.id) return false;
     const userId = session.user.id;
     if (botOwners.includes(userId)) return true;
-    if (order.userId && order.userId === userId) return true;
+    const orderOwnerId = order.ownerUserId || order.userId;
+    if (orderOwnerId && orderOwnerId === userId) return true;
     if (!order.guildId || !Array.isArray(session.guilds)) return false;
 
     const guild = session.guilds.find(entry => entry && entry.id === order.guildId);

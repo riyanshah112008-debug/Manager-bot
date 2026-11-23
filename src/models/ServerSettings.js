@@ -9,7 +9,7 @@ const serverSettingsSchema = new mongoose.Schema({
     
     // 🛡️ Starry Anti-Nuke & Security Guard Shield
     antinuke: {
-        enabled: { type: Boolean, default: true },
+        enabled: { type: Boolean, default: false },
         maxChannelDeletions: { type: Number, default: 3 },
         maxRoleDeletions: { type: Number, default: 3 },
         maxBans: { type: Number, default: 3 },
@@ -41,6 +41,19 @@ const serverSettingsSchema = new mongoose.Schema({
         ignoredChannels: { type: [String], default: [] },
         ignoredRoles: { type: [String], default: [] },
         punishment: { type: String, default: 'timeout' } // 'timeout' | 'delete' | 'warn' | 'kick' | 'ban'
+    },
+
+    // 🔔 Dashboard-managed guild notification routing.
+    notifications: {
+        enabled: { type: Boolean, default: false },
+        memberJoins: { type: Boolean, default: false },
+        memberLeaves: { type: Boolean, default: false },
+        giveawayResults: { type: Boolean, default: false },
+        securityAlerts: { type: Boolean, default: false },
+        memberChannelId: { type: String, default: '' },
+        staffChannelId: { type: String, default: '' },
+        giveawayChannelId: { type: String, default: '' },
+        staffRoleId: { type: String, default: '' }
     },
 
     // 👑 Starry Verification & Gatekeeper Gateway

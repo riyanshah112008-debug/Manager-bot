@@ -1,0 +1,106 @@
+name: Commercial readiness and 10-pass verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  repeated-verification:
+    name: Ten-pass full verification and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - name: Apply non-breaking dependency security updates
+        run: npm audit fix --package-lock-only --legacy-peer-deps || true
+      - name: Install remediated production lockfile
+        run: npm ci --omit=dev --legacy-peer-deps
+      - name: Syntax-check every feature file ten times
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pass in {1..10}; do
+            echo "=== JavaScript syntax pass ${pass}/10 ==="
+            find src public -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+            node --check deploy-commands.js
+          done
+      - name: Run all deterministic suites ten times
+        env:
+          STARRY_TEST_REPETITIONS: '10'
+          TEST_SUITE_TIMEOUT_MS: '120000'
+        run: npm test
+      - name: Capture production dependency audit report
+        if: always()
+        run: npm audit --omit=dev --json > npm-audit.json || true
+      - name: Preserve remediated lockfile and audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-dependency-audit
+          path: |
+            package-lock.json
+            npm-audit.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Fail release gate if any production advisory remains
+        if: always()
+        run: |
+          node -e "
+            const fs = require('node:fs');
+            const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+            const counts = report.metadata?.vulnerabilities || {};
+            const total = Number(counts.info || 0) + Number(counts.low || 0) + Number(counts.moderate || 0) + Number(counts.high || 0) + Number(counts.critical || 0);
+            console.log('Production dependency advisories:', counts);
+            if (total > 0) process.exit(1);
+          "
+
+  secret-scan:
+    name: Scan repository history for leaked secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL security analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          build-mode: none
+      - name: Analyze source
+        uses: github/codeql-action/analyze@v4

@@ -1,0 +1,30 @@
+language: en-US
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  path_instructions:
+    - path: "src/modules/dashboardServer.js"
+      instructions: |
+        Treat every route as an untrusted public boundary. Verify authentication and resource-level authorization on every read and mutation. Check object-level authorization against the authenticated Discord user and guild permissions. Validate IDs, query parameters and body sizes. Prevent IDOR, XSS, CSRF, open redirects, sensitive response fields, cache leaks, timing leaks and verbose error disclosure. Mutations must be idempotent where retries are possible.
+    - path: "src/modules/**"
+      instructions: |
+        Check permission boundaries, bot role hierarchy, missing Discord member/guild/cache state, concurrency races, event deduplication, API rate limits and fail-closed behavior. Database or cache failures must not accidentally grant access or disable critical protection. Avoid swallowing errors that affect security or entitlements.
+    - path: "src/commands/**"
+      instructions: |
+        Verify each command's server-only constraints, permission checks, owner checks, target validation, bot permissions, hierarchy checks, cooldowns and safe error handling. Never trust command registration metadata as a replacement for authorization inside sensitive operations.
+    - path: "src/models/**"
+      instructions: |
+        Check schema types, required fields, enum validation, unique indexes, TTL semantics, tenant isolation, sensitive-field storage, expiry handling and race-safe query patterns. Flag unbounded or unindexed access to user-controlled values.
+    - path: "src/utils/**"
+      instructions: |
+        Check strict input validation, safe defaults, timing-safe cryptographic comparisons, encryption boundaries, secret exposure, resource cleanup, deterministic behavior and fail-closed authorization. Validate all callers when changing shared helpers.
+    - path: "public/**"
+      instructions: |
+        Treat all browser data and DOM strings as untrusted. Check XSS-safe DOM updates, URL validation, token handling, storage of sensitive values, origin restrictions, CORS assumptions and that no provider secret is shipped to the browser.
+    - path: "tests/**"
+      instructions: |
+        Require positive, negative, boundary, malformed-input, authorization-bypass, retry, concurrency and failure-path tests. Assertions must test observable behavior, not only implementation text. Avoid fragile floating-point comparisons and dynamically constructed filesystem paths.
+    - path: ".github/workflows/**"
+      instructions: |
+        Check least-privilege permissions, untrusted pull-request context, action version freshness, secret exposure, artifact trust, shell injection and fail-closed scan behavior.
