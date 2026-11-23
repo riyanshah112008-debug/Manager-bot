@@ -117,7 +117,7 @@ async function loadSecurityStatus(){
  const host=$("#securityRuntimeStatus");if(!host)return;
  try{
   const d=await request("/api/guild/"+guildId+"/security/status");
-  const policyState=d.enabled?(d.ready?"<span class=\\"pill\\">ENABLED · READY</span>":"<span class=\\"pill\\">ENABLED · ACTION BLOCKED</span>"):"<span class=\\"pill\\">DISABLED</span>";
+  const policyState=d.enabled?(d.ready?'<span class="pill">ENABLED · READY</span>':'<span class="pill">ENABLED · ACTION BLOCKED</span>'):'<span class="pill">DISABLED</span>';
   host.insertAdjacentHTML("afterbegin",'<div class="check-row"><strong>Anti-Nuke policy</strong>'+policyState+'</div>'+(!d.ready&&d.enabled?'<div class="status bad">'+esc(d.readinessIssue||"Anti-Nuke is not ready to enforce the selected policy.")+'</div>':""));
   const entries=[
    ["View Audit Log",d.auditLogEvents],
