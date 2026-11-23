@@ -1386,18 +1386,49 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
-    app.get('/api/guild/:id/security/status', requireGuildAdmin, (req, res) => {
-        const botMember = req.guild.members.me;
-        const permissions = botMember?.permissions;
-        return res.json({
-            success: true,
-            auditLogEvents: Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog)),
-            canTimeout: Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers)),
-            canKick: Boolean(permissions?.has(PermissionFlagsBits.KickMembers)),
-            canBan: Boolean(permissions?.has(PermissionFlagsBits.BanMembers)),
-            canManageRoles: Boolean(permissions?.has(PermissionFlagsBits.ManageRoles)),
-            rolePosition: botMember?.roles?.highest?.position ?? null
-        });
+    app.get('/api/guild/:id/security/status', requireGuildAdmin, async (req, res) => {
+        try {
+            const botMember = req.guild.members.me;
+            const permissions = botMember?.permissions;
+            const serverSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('antinuke').lean();
+            const policy = serverSettings?.antinuke || {};
+            const action = policy.action || 'quarantine';
+            const quarantineRole = policy.quarantineRoleId ? req.guild.roles.cache.get(policy.quarantineRoleId) : null;
+            const auditLogEvents = Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog));
+            const actionPermission = action === 'timeout'
+                ? Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers))
+                : action === 'kick'
+                    ? Boolean(permissions?.has(PermissionFlagsBits.KickMembers))
+                    : action === 'ban'
+                        ? Boolean(permissions?.has(PermissionFlagsBits.BanMembers))
+                        : Boolean(permissions?.has(PermissionFlagsBits.ManageRoles) && quarantineRole &&
+                            quarantineRole.position < (botMember?.roles?.highest?.position ?? -1));
+            const ready = auditLogEvents && actionPermission &&
+                (policy.blockUnapprovedBots !== true || Boolean(permissions?.has(PermissionFlagsBits.KickMembers)));
+            let readinessIssue = '';
+            if (!auditLogEvents) readinessIssue = 'Starry needs View Audit Log to monitor security events.';
+            else if (!actionPermission) readinessIssue = action === 'quarantine'
+                ? 'Create or select a quarantine role below Starry’s highest role, and grant Manage Roles.'
+                : 'Starry is missing the Discord permission required by the selected response.';
+            else if (policy.blockUnapprovedBots === true && !permissions?.has(PermissionFlagsBits.KickMembers)) {
+                readinessIssue = 'Starry needs Kick Members to block unapproved bot invitations.';
+            }
+            return res.json({
+                success: true,
+                enabled: policy.enabled === true,
+                ready,
+                readinessIssue,
+                auditLogEvents,
+                canTimeout: Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers)),
+                canKick: Boolean(permissions?.has(PermissionFlagsBits.KickMembers)),
+                canBan: Boolean(permissions?.has(PermissionFlagsBits.BanMembers)),
+                canManageRoles: Boolean(permissions?.has(PermissionFlagsBits.ManageRoles)),
+                rolePosition: botMember?.roles?.highest?.position ?? null
+            });
+        } catch (error) {
+            console.error('Anti-Nuke runtime status check failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not verify current Anti-Nuke runtime permissions.' });
+        }
     });
 
     // AutoMod dashboard controls call the same live engine used by Discord message enforcement.
