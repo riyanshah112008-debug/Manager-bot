@@ -9,7 +9,7 @@ const serverSettingsSchema = new mongoose.Schema({
     
     // 🛡️ Starry Anti-Nuke & Security Guard Shield
     antinuke: {
-        enabled: { type: Boolean, default: true },
+        enabled: { type: Boolean, default: false },
         maxChannelDeletions: { type: Number, default: 3 },
         maxRoleDeletions: { type: Number, default: 3 },
         maxBans: { type: Number, default: 3 },
