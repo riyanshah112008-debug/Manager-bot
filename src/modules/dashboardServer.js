@@ -319,6 +319,53 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    app.get('/api/me/preferences', requireAuth, async (req, res) => {
+        try {
+            const DashboardPreferences = require('../models/DashboardPreferences');
+            const preferences = await DashboardPreferences.findOne({ userId: String(req.session.user.id) }).lean();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({
+                success: true,
+                preferences: {
+                    showSuccessFeedback: preferences?.showSuccessFeedback !== false,
+                    showErrorFeedback: preferences?.showErrorFeedback !== false
+                }
+            });
+        } catch (error) {
+            console.error('Dashboard preferences lookup failed:', error.message);
+            res.status(503).json({ success: false, error: 'Personal dashboard preferences are temporarily unavailable.' });
+        }
+    });
+
+    app.put('/api/me/preferences', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const allowed = new Set(['showSuccessFeedback', 'showErrorFeedback']);
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).length === 0 || Object.keys(body).some(key => !allowed.has(key)) ||
+                Object.values(body).some(value => typeof value !== 'boolean')) {
+                return res.status(400).json({ success: false, error: 'Provide one or more valid personal dashboard preference switches.' });
+            }
+            const DashboardPreferences = require('../models/DashboardPreferences');
+            const preferences = await DashboardPreferences.findOneAndUpdate(
+                { userId: String(req.session.user.id) },
+                { $set: body, $setOnInsert: { userId: String(req.session.user.id) } },
+                { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
+            ).lean();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({
+                success: true,
+                preferences: {
+                    showSuccessFeedback: preferences.showSuccessFeedback !== false,
+                    showErrorFeedback: preferences.showErrorFeedback !== false
+                }
+            });
+        } catch (error) {
+            console.error('Dashboard preferences save failed:', error.message);
+            res.status(500).json({ success: false, error: 'Could not save personal dashboard preferences.' });
+        }
+    });
+
     // Multi-platform discovery via Starry's configured Lavalink provider. No Spotify API credentials required.
     app.get('/api/guild/:id/music/search', requireGuildMember, async (req, res) => {
         try {
