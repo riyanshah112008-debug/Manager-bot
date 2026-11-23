@@ -2,6 +2,7 @@ const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const dbPath = path.join(__dirname, 'giveaways.json');
 
 // 🎬 DIRECT GIPHY CDN ASSETS (DISCORD PROXY GUARANTEED)
@@ -30,7 +31,9 @@ module.exports = (client) => {
     }
 
     function saveGiveaways(data) {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+        const temporaryPath = dbPath + '.tmp';
+        fs.writeFileSync(temporaryPath, JSON.stringify(data, null, 2));
+        fs.renameSync(temporaryPath, dbPath);
     }
 
     function parseTime(timeStr) {
@@ -59,8 +62,10 @@ module.exports = (client) => {
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
         const msDuration = parseTime(durationStr);
-        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`, `1d`)*.';
-        if (winnerCount < 1) return '❌ **Invalid winners!** Must specify at least 1 winner.';
+        if (!msDuration || msDuration > 30 * 24 * 60 * 60 * 1000) return '❌ **Invalid duration!** Use `s`, `m`, `h`, `d`, or `w` up to 30 days.';
+        if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 10) return '❌ **Invalid winners!** Choose between 1 and 10 winners.';
+        if (typeof prize !== 'string' || !prize.trim() || prize.trim().length > 200) return '❌ **Invalid prize!** Enter a prize from 1 to 200 characters.';
+        prize = prize.trim();
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
@@ -88,7 +93,7 @@ module.exports = (client) => {
             })
             .setTimestamp(endsAt);
 
-        const message = await channel.send({ embeds: [embed] }).catch(() => null);
+        const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [], users: [author.id] } }).catch(() => null);
         if (!message) return '❌ Failed to send giveaway message. Verify channel bot permissions!';
 
         await message.react('🎉').catch(() => {});
@@ -112,6 +117,9 @@ module.exports = (client) => {
     // 🔄 2. REROLL WINNER FUNCTION
     // ==========================================
     async function rerollGiveaway(channel, messageId, winnerCount = 1, executor) {
+        if (typeof messageId !== 'string' || !/^\\d{17,20}$/.test(messageId) || !Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 10) {
+            return '❌ **Invalid giveaway message or winner count.**';
+        }
         const message = await channel.messages.fetch(messageId).catch(() => null);
         if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
 
@@ -137,7 +145,7 @@ module.exports = (client) => {
         const winners = [];
         for (let i = 0; i < winnerCount; i++) {
             if (validUsers.length === 0) break;
-            const randomIndex = Math.floor(Math.random() * validUsers.length);
+            const randomIndex = crypto.randomInt(validUsers.length);
             winners.push(validUsers[randomIndex]);
             validUsers.splice(randomIndex, 1);
         }
@@ -255,6 +263,13 @@ module.exports = (client) => {
             }
         }
     });
+
+    // Expose the same in-process engine to the authenticated dashboard API.
+    client.giveawayManager = {
+        listGuild: guildId => getGiveaways().filter(item => item.guildId === String(guildId)),
+        start: startGiveaway,
+        reroll: rerollGiveaway
+    };
 
     // ==========================================
     // 🏁 3. CONCLUDED GIVEAWAY AUTOMATION ENGINE
