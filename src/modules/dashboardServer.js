@@ -14,6 +14,9 @@ const PaymentOrder = require('../models/PaymentOrder');
 const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
 const UserSettings = require('../models/UserSettings');
+const UserSpotify = require('../models/UserSpotify');
+const SpotifyOAuthState = require('../models/SpotifyOAuthState');
+const { createSpotifyState, hashSpotifyState } = require('../utils/spotifyOAuthState');
 const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
@@ -1961,77 +1964,113 @@ function setupDashboardRoutes(app, client) {
     // Payment approval and key-generation endpoints have been removed.
     // Premium entitlements will only be granted by verified provider webhooks.
 
-    // GET /api/spotify/login - Initiate Spotify OAuth2 Authorization
+    // Legacy public userId-based Spotify connect is disabled; OAuth must start from an authenticated account.
     app.get('/api/spotify/login', (req, res) => {
-        const userId = req.query.userId;
-        if (!userId) return res.status(400).send('<h1>❌ Missing userId parameter</h1>');
-        const spotifyManager = require('./spotifyManager');
-        const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
-        const redirectUri = getSpotifyRedirectUri(publicUrl);
-        const authUrl = spotifyManager.getOAuthUrl(userId, redirectUri);
-        res.redirect(authUrl);
+        res.set('Cache-Control', 'no-store');
+        return res.status(410).json({ success: false, error: 'Start Spotify connection from your authenticated Starry dashboard or Discord account.' });
     });
 
-    // GET /api/spotify/callback - Handle Spotify OAuth2 Redirect
-    app.get('/api/spotify/callback', async (req, res) => {
-        const { code, state, error } = req.query;
-        if (error) {
-            return res.send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Spotify Authorization Denied</h2>
-            <p>${error}</p><p>You can close this tab and return to Discord.</p>
-            </body></html>`);
-        }
-
-        if (!code || !state) {
-            return res.status(400).send('<h1>❌ Missing code or state from Spotify</h1>');
-        }
-
+    app.get('/api/spotify/status', requireAuth, async (req, res) => {
         try {
-            const spotifyManager = require('./spotifyManager');
-            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
-            const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const { profile } = await spotifyManager.handleOAuthCallback(code, redirectUri, state);
+            const doc = await UserSpotify.findOne({ userId: req.session.user.id })
+                .select('spotifyId displayName profileUrl avatarUrl savedPlaylists')
+                .lean();
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                connected: Boolean(doc?.spotifyId),
+                account: doc ? {
+                    spotifyId: doc.spotifyId,
+                    displayName: doc.displayName || 'Spotify account',
+                    profileUrl: doc.profileUrl || '',
+                    avatarUrl: doc.avatarUrl || '',
+                    savedPlaylistCount: Array.isArray(doc.savedPlaylists) ? doc.savedPlaylists.length : 0
+                } : null
+            });
+        } catch (error) {
+            console.error('Spotify account status lookup failed:', error);
+            return res.status(503).json({ success: false, error: 'Spotify account status is temporarily unavailable.' });
+        }
+    });
 
-            res.send(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Spotify Connected • Starry</title>
-                <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
-                <style>
-                    body { background: #080A10; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; background-image: radial-gradient(circle at 50% 50%, rgba(29, 185, 84, 0.15), transparent 60%); }
-                    .card { background: rgba(18, 24, 38, 0.95); border: 1px solid rgba(29, 185, 84, 0.3); border-radius: 20px; padding: 40px; text-align: center; max-width: 440px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-                    .sp-icon { width: 70px; height: 70px; margin-bottom: 20px; }
-                    h2 { margin: 0 0 10px; font-weight: 800; color: #1DB954; font-size: 1.6rem; }
-                    p { color: #9CA3AF; line-height: 1.6; margin-bottom: 25px; }
-                    .user-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(29, 185, 84, 0.1); border: 1px solid rgba(29, 185, 84, 0.3); padding: 8px 16px; border-radius: 30px; font-weight: 700; color: #1DB954; margin-bottom: 20px; }
-                    .btn { display: inline-block; padding: 12px 28px; background: #1DB954; color: #fff; font-weight: 700; text-decoration: none; border-radius: 12px; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <img src="https://cdn-icons-png.flaticon.com/512/174/174872.png" class="sp-icon" alt="Spotify">
-                    <div class="user-badge">🟢 Connected as ${profile.display_name || profile.id}</div>
-                    <h2>Spotify Connected!</h2>
-                    <p>Starry has successfully authorized your Spotify account. You can now use <strong>,spotify myplaylists</strong> or <strong>,spotify play</strong> in Discord!</p>
-                    <p style="color:#6B7280; font-size:0.85rem;">You may now safely close this window and return to Discord.</p>
-                </div>
-            </body>
-            </html>
-            `);
-        } catch (err) {
-            res.status(500).send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Connection Error</h2>
-            <p>${err.message}</p>
-            </body></html>`);
+    app.post('/api/spotify/connect', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+                return res.status(503).json({ success: false, error: 'Spotify integration is not configured on the Starry server.' });
+            }
+            if (mongoose.connection.readyState !== 1) {
+                return res.status(503).json({ success: false, error: 'Spotify connection storage is unavailable.' });
+            }
+            const spotifyState = createSpotifyState();
+            await SpotifyOAuthState.create({
+                stateHash: hashSpotifyState(spotifyState),
+                userId: req.session.user.id,
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+            });
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || 'https://manager-bot-1-6167.onrender.com';
+            const redirectUri = getSpotifyRedirectUri(publicUrl);
+            const spotifyManager = require('./spotifyManager');
+            const authorizationUrl = spotifyManager.getOAuthUrl(spotifyState, redirectUri);
+            res.set('Cache-Control', 'no-store');
+            return res.json({ success: true, authorizationUrl });
+        } catch (error) {
+            console.error('Spotify OAuth start failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not start Spotify authorization. Please retry.' });
+        }
+    });
+
+    app.post('/api/spotify/disconnect', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            await UserSpotify.updateOne(
+                { userId: req.session.user.id },
+                { $set: {
+                    spotifyId: '',
+                    displayName: '',
+                    profileUrl: '',
+                    avatarUrl: '',
+                    accessToken: '',
+                    refreshToken: '',
+                    tokenExpiresAt: null,
+                    updatedAt: new Date()
+                } }
+            );
+            res.set('Cache-Control', 'no-store');
+            return res.json({ success: true, message: 'Spotify account disconnected. Saved playlist bookmarks were kept.' });
+        } catch (error) {
+            console.error('Spotify disconnect failed:', error);
+            return res.status(503).json({ success: false, error: 'Could not disconnect Spotify right now.' });
+        }
+    });
+
+    // Spotify's callback consumes a one-time state record tied to the authenticated Starry user.
+    app.get('/api/spotify/callback', actionLimiter, async (req, res) => {
+        const state = typeof req.query.state === 'string' ? req.query.state : '';
+        const code = typeof req.query.code === 'string' ? req.query.code : '';
+        const providerError = typeof req.query.error === 'string' ? req.query.error : '';
+        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\\/+$/, '');
+        const returnToMusic = outcome => {
+            const target = new URL('/music.html', frontendBase);
+            target.searchParams.set('spotify', outcome);
+            return res.redirect(target.toString());
+        };
+
+        if (!state) return returnToMusic('invalid-state');
+        try {
+            const stateRecord = await SpotifyOAuthState.findOneAndDelete({
+                stateHash: hashSpotifyState(state),
+                expiresAt: { $gt: new Date() }
+            }).lean();
+            if (!stateRecord) return returnToMusic('invalid-state');
+            if (providerError || !code) return returnToMusic('denied');
+
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || 'https://manager-bot-1-6167.onrender.com';
+            const redirectUri = getSpotifyRedirectUri(publicUrl);
+            const spotifyManager = require('./spotifyManager');
+            await spotifyManager.handleOAuthCallback(code, redirectUri, stateRecord.userId);
+            return returnToMusic('connected');
+        } catch (error) {
+            console.error('Spotify OAuth callback failed:', error.message);
+            return returnToMusic('error');
         }
     });
 
