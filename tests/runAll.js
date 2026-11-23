@@ -44,6 +44,7 @@ const suites = [
   ['Music audio profiles', '--test', 'tests/musicAudioProfiles.test.js'],
   ['Premium audio quality policy', '--test', 'tests/audioQuality.test.js'],
   ['Leveling control panel', '--test', 'tests/levelingControlPanel.test.js'],
+  ['Logging control panel', '--test', 'tests/loggingControlPanel.test.js'],
   ['Leveling module syntax', '--check', 'src/modules/leveling.js'],
   ['Suspicious-account monitor syntax', '--check', 'src/modules/susAccount.js'],
   ['Suspicious-member monitoring policy', '--test', 'tests/susAccountMonitoring.test.js'],
