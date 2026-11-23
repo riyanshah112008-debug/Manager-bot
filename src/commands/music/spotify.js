@@ -279,7 +279,13 @@ module.exports = {
             const port = process.env.PORT || 10000;
             const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://localhost:${port}`;
             const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const authUrl = spotifyManager.getOAuthUrl(ctx.user.id, redirectUri);
+            let authUrl;
+            try {
+                const authorization = await spotifyManager.createAuthorizationRequest(ctx.user.id, redirectUri);
+                authUrl = authorization.authorizeUrl;
+            } catch (error) {
+                return ctx.reply('❌ Spotify connection could not be started: ' + String(error.message || 'OAuth setup is unavailable.').slice(0, 240));
+            }
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
