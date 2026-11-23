@@ -1145,7 +1145,7 @@ function setupDashboardRoutes(app, client) {
             }
             for (const key of ['ignoredChannelIds', 'ignoredRoleIds']) {
                 if (body[key] === undefined) continue;
-                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value))) {
+                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !/^\d{17,20}$/.test(value))) {
                     return res.status(400).json({ success: false, error: 'Invalid ' + key + ' selection.' });
                 }
                 const collection = key === 'ignoredChannelIds' ? guild.channels.cache : guild.roles.cache;
@@ -1214,16 +1214,37 @@ function setupDashboardRoutes(app, client) {
         try {
             const guild = req.guild;
             const settings = await ServerSettings.findOne({ guildId: guild.id }).select('antinuke').lean();
+            const policy = settings?.antinuke || {};
             const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
             const engineReady = client.antiNukeReady === true;
-            const canReadAuditLog = Boolean(botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog));
+            const permissions = botMember?.permissions;
+            const canReadAuditLog = Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog));
+            const action = policy.action || 'quarantine';
+            const quarantineRole = policy.quarantineRoleId ? guild.roles.cache.get(policy.quarantineRoleId) : null;
+            const canApplyAction = action === 'quarantine'
+                ? Boolean(quarantineRole && !quarantineRole.managed && botMember?.roles?.highest &&
+                    quarantineRole.position < botMember.roles.highest.position && permissions?.has(PermissionFlagsBits.ManageRoles))
+                : action === 'timeout' ? Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers))
+                : action === 'kick' ? Boolean(permissions?.has(PermissionFlagsBits.KickMembers))
+                : action === 'ban' ? Boolean(permissions?.has(PermissionFlagsBits.BanMembers)) : false;
+            const canBlockBots = policy.blockUnapprovedBots !== true || Boolean(permissions?.has(PermissionFlagsBits.KickMembers));
+            const canBlockWebhooks = policy.blockWebhookCreation !== true || Boolean(permissions?.has(PermissionFlagsBits.ManageWebhooks));
+            const effectiveEnabled = Boolean(policy.enabled === true && engineReady && canReadAuditLog && canApplyAction && canBlockBots && canBlockWebhooks);
+            const missing = [];
+            if (!engineReady) missing.push('Anti-Nuke runtime is not initialized');
+            if (!canReadAuditLog) missing.push('View Audit Log permission is missing');
+            if (!canApplyAction) missing.push('The selected response action is not configured or permitted');
+            if (!canBlockBots) missing.push('Kick Members permission is missing for unapproved bot protection');
+            if (!canBlockWebhooks) missing.push('Manage Webhooks permission is missing for webhook protection');
             res.set('Cache-Control', 'no-store, private');
             res.json({
                 success: true,
                 engineReady,
                 canReadAuditLog,
-                effectiveEnabled: Boolean(engineReady && canReadAuditLog && settings?.antinuke?.enabled),
-                settings: settings?.antinuke || {}
+                canApplyAction,
+                effectiveEnabled,
+                missing,
+                settings: policy
             });
         } catch (error) {
             console.error('Security status lookup failed:', error.message);
@@ -1265,18 +1286,26 @@ function setupDashboardRoutes(app, client) {
                 if (b.enabled && !b.channelId) return res.status(400).json({ success: false, error: 'Select an announcement channel before enabling birthdays.' });
             }
             if (payload.logging !== undefined) {
-                const allowedLogKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                const channelKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                const booleanKeys = new Set(['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled']);
+                const allowedLogKeys = new Set([...channelKeys, ...booleanKeys]);
                 if (!payload.logging || typeof payload.logging !== 'object' || Array.isArray(payload.logging) ||
                     Object.keys(payload.logging).some(key => !allowedLogKeys.has(key))) {
                     return res.status(400).json({ success: false, error: 'Invalid logging settings.' });
                 }
-                for (const [key, rawId] of Object.entries(payload.logging)) {
-                    if (typeof rawId !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
-                    const channelId = rawId.trim();
+                for (const [key, rawValue] of Object.entries(payload.logging)) {
+                    if (booleanKeys.has(key)) {
+                        if (typeof rawValue !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+                        continue;
+                    }
+                    if (typeof rawValue !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
+                    const channelId = rawValue.trim();
                     if (channelId) {
                         const channel = guild.channels.cache.get(channelId);
-                        if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
-                            return res.status(400).json({ success: false, error: 'Each log destination must be a text channel in this server.' });
+                        const botMember = guild.members.me;
+                        if (!channel || !channel.isTextBased() || typeof channel.send !== 'function' ||
+                            !channel.permissionsFor(botMember)?.has(PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages)) {
+                            return res.status(400).json({ success: false, error: 'Each log destination must be a text channel Starry can view and send messages in.' });
                         }
                     }
                     payload.logging[key] = channelId;
@@ -1338,7 +1367,7 @@ function setupDashboardRoutes(app, client) {
                 }
                 for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
                     if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].length > 50 ||
-                        policy[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value)))) {
+                        policy[key].some(value => typeof value !== 'string' || !/^\d{17,20}$/.test(value)))) {
                         return res.status(400).json({ success: false, error: key + ' must contain up to 50 valid Discord IDs.' });
                     }
                     if (policy[key] !== undefined) policy[key] = [...new Set(policy[key])];
