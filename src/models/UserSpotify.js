@@ -20,6 +20,7 @@ const UserSpotifySchema = new mongoose.Schema({
     displayName: { type: String, default: '' },
     profileUrl: { type: String, default: '' },
     avatarUrl: { type: String, default: '' },
+    // AES-256-GCM encrypted using the private SPOTIFY_TOKEN_ENCRYPTION_KEY (or server secret fallback).
     accessToken: { type: String, default: '' },
     refreshToken: { type: String, default: '' },
     tokenExpiresAt: { type: Date, default: null },

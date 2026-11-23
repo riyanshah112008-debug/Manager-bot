@@ -66,31 +66,34 @@ function getGuildStatus(guildId) {
  * @param {boolean} enabled
  */
 async function setGuildStatus(guildId, enabled) {
-    if (!guildId) return false;
-    guildCache.set(guildId, enabled);
+    if (!guildId || typeof enabled !== 'boolean') throw new Error('Valid guild ID and enabled state are required.');
 
-    // Save to local JSON database for persistent offline resilience
+    // Keep the local persistent store as an offline fallback. The cache is only
+    // updated after one durable store has accepted the setting.
+    if (!isDbConnected()) {
+        if (!db.updateGuildSettings || !db.getGuildSettings) {
+            throw new Error('AutoMod storage is unavailable.');
+        }
+        const current = db.getGuildSettings(guildId) || {};
+        const automod = { ...(current.automod || {}), enabled };
+        db.updateGuildSettings(guildId, { automod });
+        guildCache.set(guildId, enabled);
+        return enabled;
+    }
+
+    await AutomodGuild.findOneAndUpdate(
+        { guildId },
+        { $set: { enabled } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    guildCache.set(guildId, enabled);
     try {
         if (db.updateGuildSettings && db.getGuildSettings) {
             const current = db.getGuildSettings(guildId) || {};
-            const automod = current.automod || {};
-            automod.enabled = enabled;
+            const automod = { ...(current.automod || {}), enabled };
             db.updateGuildSettings(guildId, { automod });
         }
     } catch (_) {}
-
-    // Save to MongoDB if online
-    if (isDbConnected()) {
-        try {
-            await AutomodGuild.findOneAndUpdate(
-                { guildId },
-                { enabled },
-                { upsert: true, new: true }
-            );
-        } catch (err) {
-            console.error('❌ [AutoMod] Error saving guild status:', err.message);
-        }
-    }
     return enabled;
 }
 
@@ -139,49 +142,29 @@ async function getChannelSettings(channelId, guildId = null) {
  * @param {boolean} shouldEnable - true = AutoMod active (blocking); false = AutoMod disabled (ignored/allowed)
  */
 async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
-    if (!channelId) throw new Error('channelId is required');
+    if (!channelId || !guildId) throw new Error('channelId and guildId are required');
+    if (!['links', 'emojis', 'all'].includes(filterType) || typeof shouldEnable !== 'boolean') {
+        throw new Error('Invalid AutoMod filter request.');
+    }
+    if (!isDbConnected()) throw new Error('AutoMod MongoDB storage is unavailable.');
 
     const current = await getChannelSettings(channelId, guildId);
-
-    // In DB schema: true = ignored / filter disabled; false = filter active / blocked
     let newLinks = current.links;
     let newEmojis = current.emojis;
+    if (filterType === 'links' || filterType === 'all') newLinks = !shouldEnable;
+    if (filterType === 'emojis' || filterType === 'all') newEmojis = !shouldEnable;
 
-    if (filterType === 'links' || filterType === 'all') {
-        newLinks = !shouldEnable;
-    }
-    if (filterType === 'emojis' || filterType === 'all') {
-        newEmojis = !shouldEnable;
-    }
-
-    // Update in-memory cache immediately
+    const updateData = { links: newLinks, emojis: newEmojis, guildId, updatedAt: new Date() };
+    await AutomodChannel.findOneAndUpdate(
+        { channelId },
+        { $set: updateData },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
     channelCache.set(channelId, { links: newLinks, emojis: newEmojis });
 
-    // Write atomically to MongoDB
-    try {
-        const updateData = {
-            links: newLinks,
-            emojis: newEmojis,
-            updatedAt: new Date()
-        };
-        if (guildId) updateData.guildId = guildId;
-
-        await AutomodChannel.findOneAndUpdate(
-            { channelId },
-            { $set: updateData },
-            { upsert: true, new: true }
-        );
-    } catch (err) {
-        console.error('❌ [AutoMod] Failed to persist channel filter:', err.message);
-    }
-
     return {
-        channelId,
-        guildId,
-        links: newLinks,
-        emojis: newEmojis,
-        linksActive: !newLinks,
-        emojisActive: !newEmojis
+        channelId, guildId, links: newLinks, emojis: newEmojis,
+        linksActive: !newLinks, emojisActive: !newEmojis
     };
 }
 
@@ -191,13 +174,10 @@ async function setChannelFilter(channelId, guildId, filterType, shouldEnable) {
  * @param {string} [guildId]
  */
 async function resetChannelSettings(channelId, guildId = null) {
-    if (!channelId) return null;
+    if (!channelId || !guildId) throw new Error('channelId and guildId are required');
+    if (!isDbConnected()) throw new Error('AutoMod MongoDB storage is unavailable.');
+    await AutomodChannel.findOneAndDelete({ channelId, $or: [{ guildId }, { guildId: { $exists: false } }, { guildId: null }] });
     channelCache.set(channelId, { links: false, emojis: false });
-    try {
-        await AutomodChannel.findOneAndDelete({ channelId });
-    } catch (err) {
-        console.error('❌ [AutoMod] Failed to reset channel settings:', err.message);
-    }
     return {
         channelId,
         guildId,
