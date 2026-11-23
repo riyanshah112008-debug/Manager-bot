@@ -338,4 +338,21 @@ module.exports = (client) => {
             }
         }
     }
+    client.giveawayManager = {
+        list(guildId) {
+            return getGiveaways().filter(item => item && item.guildId === String(guildId) && Number(item.endsAt) > Date.now())
+                .map(item => ({
+                    messageId: String(item.messageId),
+                    channelId: String(item.channelId),
+                    guildId: String(item.guildId),
+                    prize: String(item.prize || '').slice(0, 120),
+                    winners: Math.max(1, Number(item.winners) || 1),
+                    endsAt: Number(item.endsAt),
+                    hostId: String(item.hostId || '')
+                }));
+        },
+        start: startGiveaway,
+        reroll: rerollGiveaway
+    };
+
 };
