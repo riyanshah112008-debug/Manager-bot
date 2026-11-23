@@ -756,6 +756,79 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Dashboard AutoMod controls use the same cache and persistence layer as Discord commands.
+    app.get('/api/guild/:id/automod', requireGuildAdmin, async (req, res) => {
+        try {
+            if (mongoose.connection.readyState !== 1) {
+                return res.status(503).json({ success: false, error: 'AutoMod storage is unavailable.' });
+            }
+            const automod = client.automod;
+            if (!automod || typeof automod.getGuildStatus !== 'function') {
+                return res.status(503).json({ success: false, error: 'The live AutoMod engine is not ready.' });
+            }
+            const channels = req.guild.channels.cache
+                .filter(channel => channel.isTextBased() && typeof channel.send === 'function')
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .first(100);
+            const items = await Promise.all(channels.map(async channel => {
+                const current = await automod.getChannelSettings(channel.id, req.guild.id);
+                return {
+                    id: channel.id,
+                    name: channel.name,
+                    linksEnabled: Boolean(current.linksActive),
+                    emojisEnabled: Boolean(current.emojisActive)
+                };
+            }));
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, enabled: automod.getGuildStatus(req.guild.id), channels: items });
+        } catch (error) {
+            console.error('Dashboard AutoMod load failed:', error);
+            return res.status(500).json({ success: false, error: 'Could not load AutoMod settings.' });
+        }
+    });
+
+    app.post('/api/guild/:id/automod', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            if (mongoose.connection.readyState !== 1) {
+                return res.status(503).json({ success: false, error: 'AutoMod storage is unavailable.' });
+            }
+            const automod = client.automod;
+            if (!automod || typeof automod.setGuildStatus !== 'function' || typeof automod.setChannelFilters !== 'function') {
+                return res.status(503).json({ success: false, error: 'The live AutoMod engine is not ready.' });
+            }
+            const body = req.body || {};
+            if (body.action === 'server') {
+                if (Object.keys(body).some(key => !['action', 'enabled'].includes(key)) || typeof body.enabled !== 'boolean') {
+                    return res.status(400).json({ success: false, error: 'Provide only a boolean server enabled state.' });
+                }
+                await automod.setGuildStatus(req.guild.id, body.enabled);
+                return res.json({ success: true, enabled: body.enabled });
+            }
+            if (body.action === 'channel') {
+                if (Object.keys(body).some(key => !['action', 'channelId', 'linksEnabled', 'emojisEnabled'].includes(key))) {
+                    return res.status(400).json({ success: false, error: 'Unexpected AutoMod channel settings.' });
+                }
+                const channelId = typeof body.channelId === 'string' ? body.channelId : '';
+                const channel = req.guild.channels.cache.get(channelId);
+                if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                    return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+                }
+                if (typeof body.linksEnabled !== 'boolean' || typeof body.emojisEnabled !== 'boolean') {
+                    return res.status(400).json({ success: false, error: 'Link and emoji filter values must be true or false.' });
+                }
+                const result = await automod.setChannelFilters(channel.id, req.guild.id, {
+                    linksEnabled: body.linksEnabled,
+                    emojisEnabled: body.emojisEnabled
+                });
+                return res.json({ success: true, channel: result });
+            }
+            return res.status(400).json({ success: false, error: 'Choose a supported AutoMod action.' });
+        } catch (error) {
+            console.error('Dashboard AutoMod save failed:', error);
+            return res.status(500).json({ success: false, error: 'Could not save AutoMod settings.' });
+        }
+    });
+
     // Worker tokens are global cluster credentials, not per-server settings.
     // Only Starry bot owners may view or mutate the shared worker pool.
     const requireClusterManager = (req, res, next) => {
