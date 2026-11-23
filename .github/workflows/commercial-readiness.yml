@@ -1,0 +1,84 @@
+name: Commercial readiness and 10-pass verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  repeated-verification:
+    name: Ten-pass full verification and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - name: Install locked production dependencies
+        run: npm ci --omit=dev --legacy-peer-deps
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Syntax-check every feature file ten times
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pass in {1..10}; do
+            echo "=== JavaScript syntax pass ${pass}/10 ==="
+            find src public -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
+              node --check "$file"
+            done
+            node --check deploy-commands.js
+          done
+      - name: Run all deterministic suites ten times
+        env:
+          STARRY_TEST_REPETITIONS: '10'
+          TEST_SUITE_TIMEOUT_MS: '120000'
+        run: npm test
+
+  secret-scan:
+    name: Scan repository history for leaked secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL security analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          build-mode: none
+      - name: Analyze source
+        uses: github/codeql-action/analyze@v4
