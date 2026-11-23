@@ -43,6 +43,19 @@ const serverSettingsSchema = new mongoose.Schema({
         punishment: { type: String, default: 'timeout' } // 'timeout' | 'delete' | 'warn' | 'kick' | 'ban'
     },
 
+    // 🔔 Dashboard-managed guild notification routing.
+    notifications: {
+        enabled: { type: Boolean, default: false },
+        memberJoins: { type: Boolean, default: false },
+        memberLeaves: { type: Boolean, default: false },
+        giveawayResults: { type: Boolean, default: false },
+        securityAlerts: { type: Boolean, default: false },
+        memberChannelId: { type: String, default: '' },
+        staffChannelId: { type: String, default: '' },
+        giveawayChannelId: { type: String, default: '' },
+        staffRoleId: { type: String, default: '' }
+    },
+
     // 👑 Starry Verification & Gatekeeper Gateway
     verification: {
         enabled: { type: Boolean, default: false },
