@@ -1972,7 +1972,7 @@ function setupDashboardRoutes(app, client) {
         res.setHeader('Set-Cookie', 'starry_spotify_state=; Max-Age=0; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
     };
 
-    app.get('/api/spotify/login', actionLimiter, requireAuth, (req, res) => {
+    app.post('/api/spotify/login', actionLimiter, requireAuth, (req, res) => {
         try {
             const userId = String(req.session?.user?.id || '');
             const secret = getSpotifyStateSecret();
@@ -1980,10 +1980,10 @@ function setupDashboardRoutes(app, client) {
             const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || ('https://' + req.get('host'));
             const redirectUri = getSpotifyRedirectUri(publicUrl);
             const spotifyManager = require('./spotifyManager');
-            const authUrl = spotifyManager.getOAuthUrl(state, redirectUri);
+            const authorizationUrl = spotifyManager.getOAuthUrl(state, redirectUri);
             res.setHeader('Cache-Control', 'no-store');
             res.setHeader('Set-Cookie', 'starry_spotify_state=' + state + '; Max-Age=600; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
-            return res.redirect(302, authUrl);
+            return res.json({ success: true, authorizationUrl });
         } catch (error) {
             console.error('Spotify OAuth initiation failed:', error.message);
             return res.status(503).json({ success: false, error: 'Spotify account linking is not configured. Verify the Spotify client credentials and callback URL.' });
