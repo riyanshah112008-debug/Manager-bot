@@ -133,7 +133,7 @@ class SpotifyManager {
         const expiresAt = new Date(Date.now() + ((tokenData.expires_in || 3600) * 1000));
 
         const userDoc = await UserSpotify.findOneAndUpdate(
-            { userId: stateUserId },
+            { userId: String(userId) },
             {
                 spotifyId: profile.id || '',
                 displayName: profile.display_name || profile.id || 'Spotify User',
