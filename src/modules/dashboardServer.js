@@ -313,6 +313,8 @@ function setupDashboardRoutes(app, client) {
                 grade: String(report?.grade || report?.verdict || 'Audit complete'),
                 vulnerabilities: Array.isArray(report?.vulnerabilities) ? report.vulnerabilities : [],
                 hardeningSteps: Array.isArray(report?.hardeningSteps) ? report.hardeningSteps : [],
+                memberCacheCount: req.guild.members.cache.size,
+                memberCount: Number(req.guild.memberCount || 0),
                 embed
             });
         } catch (error) {
