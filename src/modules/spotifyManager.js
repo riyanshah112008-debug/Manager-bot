@@ -51,9 +51,7 @@ class SpotifyManager {
         const scopes = [
             'playlist-read-private',
             'playlist-read-collaborative',
-            'user-read-private',
-            'user-top-read',
-            'user-library-read'
+            'user-read-private'
         ].join(' ');
 
         const params = new URLSearchParams({
