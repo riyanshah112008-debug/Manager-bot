@@ -30,6 +30,8 @@ Ten repeated passes measure repeatability of existing checks; they do not create
 
 ## Existing test suites
 
+The deterministic runner now includes the logging-control-panel suite. The audio streaming suite is intentionally not part of the ten-pass CI run: it calls external media resolvers, depends on live providers/network availability and terminates its process. It must be exercised separately against a controlled staging voice server.
+
 - `tests/afkPrefixDispatcher.test.js`
 - `tests/aiVision.test.js`
 - `tests/audioQuality.test.js`
