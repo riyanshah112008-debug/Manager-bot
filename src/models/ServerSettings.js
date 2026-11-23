@@ -9,13 +9,13 @@ const serverSettingsSchema = new mongoose.Schema({
     
     // 🛡️ Starry Anti-Nuke & Security Guard Shield
     antinuke: {
-        enabled: { type: Boolean, default: true },
+        enabled: { type: Boolean, default: false },
         maxChannelDeletions: { type: Number, default: 3 },
         maxRoleDeletions: { type: Number, default: 3 },
         maxBans: { type: Number, default: 3 },
         maxKicks: { type: Number, default: 3 },
-        blockUnapprovedBots: { type: Boolean, default: true },
-        blockWebhookCreation: { type: Boolean, default: true },
+        blockUnapprovedBots: { type: Boolean, default: false },
+        blockWebhookCreation: { type: Boolean, default: false },
         quarantineRoleId: { type: String, default: '' },
         action: { type: String, default: 'quarantine' }, // 'quarantine' | 'timeout' | 'kick' | 'ban'
         whitelistedUsers: { type: [String], default: [] },
