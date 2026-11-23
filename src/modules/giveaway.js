@@ -22,29 +22,9 @@ module.exports = (client) => {
     const PREFIX = config.DEFAULT_PREFIX || ',';
 
     // MongoDB is the durable source of truth in hosted deployments.
-    // The JSON file remains a temporary fallback for offline operation and is migrated on reconnect.
-    async function getGiveaways(guildId = null) {
-        if (mongoose.connection.readyState === 1) {
-            const query = { status: 'active' };
-            if (guildId) query.guildId = guildId;
-            const docs = await Giveaway.find(query).sort({ endsAt: 1 }).limit(250).lean();
-            return docs.map(doc => ({ ...doc, endsAt: new Date(doc.endsAt).getTime() }));
-        }
-        try {
-            if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
-            const rows = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-            return Array.isArray(rows) ? rows.filter(row => !guildId || row.guildId === guildId) : [];
-        } catch {
-            return [];
-        }
-    }
-
-    function saveGiveaways(data) {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-    }
-
+    // The legacy JSON file is migrated after MongoDB reconnects.
     async function migrateLegacyGiveaways() {
-        if (mongoose.connection.readyState !== 1) return;
+        if (mongoose.connection.readyState !== 1) return false;
         try {
             const legacy = getGiveawaysFromFile();
             for (const item of legacy) {
@@ -65,8 +45,10 @@ module.exports = (client) => {
                 );
             }
             fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
+            return true;
         } catch (error) {
             console.warn('[Giveaway] Legacy JSON migration deferred:', error.message);
+            return false;
         }
     }
 
@@ -97,7 +79,12 @@ module.exports = (client) => {
     // ⏰ BACKGROUND CHECKER ENGINE
     // ==========================================
     client.once(Events.ClientReady || 'clientReady', async () => {
-        await migrateLegacyGiveaways();
+        if (!(await migrateLegacyGiveaways())) {
+            const migrationRetry = setInterval(async () => {
+                if (await migrateLegacyGiveaways()) clearInterval(migrationRetry);
+            }, 30000);
+            migrationRetry.unref?.();
+        }
         setInterval(() => checkGiveaways().catch(error => console.warn('[Giveaway] Scheduler cycle failed:', error.message)), 8000);
         console.log('✅ Supreme Starry Giveaway Engine Active');
     });
