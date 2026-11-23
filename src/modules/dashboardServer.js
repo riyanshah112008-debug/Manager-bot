@@ -1252,6 +1252,83 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    // Giveaway dashboard endpoints delegate to the existing giveaway module facade.
+    app.get('/api/guild/:id/giveaways', requireGuildAdmin, async (req, res) => {
+        try {
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const giveaways = await client.starryGiveawayEngine.list(req.guild.id);
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, giveaways });
+        } catch (error) {
+            console.error('Dashboard giveaway list failed:', error.message);
+            res.status(500).json({ success: false, error: 'Could not load giveaways for this server.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const body = req.body || {};
+            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
+            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
+            const winners = Number(body.winners);
+            const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
+            if (!prize || prize.length > 200) return res.status(400).json({ success: false, error: 'Prize must contain 1–200 characters.' });
+            if (!/^[1-9]\d{0,3}[smhdw]$/i.test(duration)) return res.status(400).json({ success: false, error: 'Use a valid duration such as 10m, 2h or 1d.' });
+            const match = duration.match(/^([1-9]\d{0,3})([smhdw])$/i);
+            const amount = Number(match[1]), unit = match[2].toLowerCase();
+            const multiplier = unit === 's' ? 1000 : unit === 'm' ? 60000 : unit === 'h' ? 3600000 : unit === 'd' ? 86400000 : 604800000;
+            const durationMs = amount * multiplier;
+            if (durationMs < 10000 || durationMs > 90 * 86400000) return res.status(400).json({ success: false, error: 'Duration must be between 10 seconds and 90 days.' });
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
+            const channel = req.guild.channels.cache.get(channelId);
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+            const botMember = req.guild.members.me || await req.guild.members.fetch(client.user.id).catch(() => null);
+            const channelPermissions = botMember ? channel.permissionsFor(botMember) : null;
+            const required = PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages |
+                PermissionFlagsBits.EmbedLinks | PermissionFlagsBits.AddReactions | PermissionFlagsBits.ReadMessageHistory;
+            if (!channelPermissions?.has(required)) {
+                return res.status(400).json({ success: false, error: 'Starry needs View Channel, Send Messages, Embed Links, Add Reactions and Read Message History in the selected channel.' });
+            }
+            const author = await client.users.fetch(req.session.user.id).catch(() => null);
+            if (!author) return res.status(503).json({ success: false, error: 'Could not load your Discord profile to host the giveaway.' });
+            const result = await client.starryGiveawayEngine.create(channel, author, duration, winners, prize);
+            res.status(201).json({ success: true, message: result.message, giveaway: result.giveaway });
+        } catch (error) {
+            console.error('Dashboard giveaway creation failed:', error.message);
+            res.status(400).json({ success: false, error: error.message || 'Could not start this giveaway.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/end', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const record = client.starryGiveawayEngine.find(req.guild.id, req.params.messageId);
+            if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
+            const result = await client.starryGiveawayEngine.end(req.guild.id, req.params.messageId);
+            res.json({ success: true, message: result.success ? 'Giveaway ended successfully.' : 'The giveaway was processed; check its stored status.', giveaway: result.giveaway });
+        } catch (error) {
+            res.status(409).json({ success: false, error: error.message || 'Could not end this giveaway.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const record = client.starryGiveawayEngine.find(req.guild.id, req.params.messageId);
+            if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
+            if (record.status !== 'completed') return res.status(409).json({ success: false, error: 'Only completed giveaways can be rerolled.' });
+            const winners = req.body?.winners === undefined ? Number(record.winners) || 1 : Number(req.body.winners);
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
+            const executor = await client.users.fetch(req.session.user.id).catch(() => null);
+            if (!executor) return res.status(503).json({ success: false, error: 'Could not load your Discord profile.' });
+            const result = await client.starryGiveawayEngine.reroll(req.guild.id, req.params.messageId, winners, executor);
+            res.json(result);
+        } catch (error) {
+            res.status(409).json({ success: false, error: error.message || 'Could not reroll this giveaway.' });
+        }
+    });
+
     // POST /api/guild/:id/settings - Save updated Starry settings (Admin Guarded)
     app.post('/api/guild/:id/settings', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
