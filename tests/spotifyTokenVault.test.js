@@ -15,7 +15,8 @@ test('Spotify tokens are encrypted at rest and can be decrypted', () => {
         assert.equal(decryptToken(encrypted), original);
         assert.equal(decryptToken('legacy-plaintext-token'), 'legacy-plaintext-token');
         assert.equal(encryptToken(''), '');
-        assert.throws(() => decryptToken(encrypted.slice(0, -2) + 'aa'));
+        const finalCharacter = encrypted.endsWith('0') ? '1' : '0';
+        assert.throws(() => decryptToken(encrypted.slice(0, -1) + finalCharacter));
     } finally {
         if (previous === undefined) delete process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY;
         else process.env.SPOTIFY_TOKEN_ENCRYPTION_KEY = previous;
