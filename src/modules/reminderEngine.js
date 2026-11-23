@@ -7,6 +7,8 @@ const { EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 const Reminder = require('../models/Reminder');
 const config = require('../config');
+const UserSettings = require('../models/UserSettings');
+const { allowsReminderDm } = require('../utils/notificationPreferences');
 
 let reminderInterval = null;
 
@@ -102,6 +104,14 @@ async function checkDueReminders(client) {
                 }
 
                 if (!sent) {
+                    let userSettings;
+                    try {
+                        userSettings = await UserSettings.findOne({ userId: rem.userId }).select('notifications').lean();
+                    } catch (preferenceError) {
+                        console.warn('[Reminder] Skipping DM because notification preference could not be checked:', preferenceError.message);
+                        continue;
+                    }
+                    if (!allowsReminderDm(userSettings)) continue;
                     await user.send({
                         content: `🔔 Here is your celestial reminder!`,
                         embeds: [embed]
