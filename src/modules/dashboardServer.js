@@ -18,6 +18,8 @@ const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
+const { createSpotifyOAuthState, verifySpotifyOAuthState } = require('../utils/spotifyOAuthState');
+const UserSpotify = require('../models/UserSpotify');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
@@ -1797,77 +1799,113 @@ function setupDashboardRoutes(app, client) {
     // Payment approval and key-generation endpoints have been removed.
     // Premium entitlements will only be granted by verified provider webhooks.
 
-    // GET /api/spotify/login - Initiate Spotify OAuth2 Authorization
-    app.get('/api/spotify/login', (req, res) => {
-        const userId = req.query.userId;
-        if (!userId) return res.status(400).send('<h1>❌ Missing userId parameter</h1>');
-        const spotifyManager = require('./spotifyManager');
-        const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
-        const redirectUri = getSpotifyRedirectUri(publicUrl);
-        const authUrl = spotifyManager.getOAuthUrl(userId, redirectUri);
-        res.redirect(authUrl);
+    // Spotify account linking is tied to the authenticated Discord session.
+    // The user ID is never accepted from a query parameter; state is signed and
+    // bound to an HttpOnly, Secure, SameSite=Lax browser cookie.
+    const getSpotifyStateSecret = () => process.env.SPOTIFY_OAUTH_STATE_SECRET ||
+        process.env.SESSION_ENCRYPTION_KEY || process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET || '';
+
+    const getSpotifyFrontendUrl = () => (process.env.FRONTEND_URL || process.env.PUBLIC_URL ||
+        'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+
+    const getSpotifyCookie = (req) => {
+        const cookieHeader = String(req.headers.cookie || '');
+        const part = cookieHeader.split(';').map(value => value.trim()).find(value => value.startsWith('starry_spotify_state='));
+        return part ? part.slice('starry_spotify_state='.length) : '';
+    };
+
+    const clearSpotifyStateCookie = (res) => {
+        res.setHeader('Set-Cookie', 'starry_spotify_state=; Max-Age=0; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
+    };
+
+    app.get('/api/spotify/login', actionLimiter, requireAuth, (req, res) => {
+        try {
+            const userId = String(req.session?.user?.id || '');
+            const secret = getSpotifyStateSecret();
+            const state = createSpotifyOAuthState(userId, secret);
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || ('https://' + req.get('host'));
+            const redirectUri = getSpotifyRedirectUri(publicUrl);
+            const spotifyManager = require('./spotifyManager');
+            const authUrl = spotifyManager.getOAuthUrl(state, redirectUri);
+            res.setHeader('Cache-Control', 'no-store');
+            res.setHeader('Set-Cookie', 'starry_spotify_state=' + state + '; Max-Age=600; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
+            return res.redirect(302, authUrl);
+        } catch (error) {
+            console.error('Spotify OAuth initiation failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Spotify account linking is not configured. Verify the Spotify client credentials and callback URL.' });
+        }
     });
 
-    // GET /api/spotify/callback - Handle Spotify OAuth2 Redirect
-    app.get('/api/spotify/callback', async (req, res) => {
+    app.get('/api/spotify/callback', actionLimiter, async (req, res) => {
         const { code, state, error } = req.query;
-        if (error) {
-            return res.send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Spotify Authorization Denied</h2>
-            <p>${error}</p><p>You can close this tab and return to Discord.</p>
-            </body></html>`);
+        const cookieState = getSpotifyCookie(req);
+        clearSpotifyStateCookie(res);
+        res.setHeader('Cache-Control', 'no-store');
+        const frontend = getSpotifyFrontendUrl();
+        if (error) return res.redirect(302, frontend + '/music.html?spotify=denied');
+        if (typeof code !== 'string' || !code || typeof state !== 'string' || !state) {
+            return res.status(400).send('Spotify authorization response is incomplete. Return to Starry and reconnect.');
         }
 
-        if (!code || !state) {
-            return res.status(400).send('<h1>❌ Missing code or state from Spotify</h1>');
-        }
+        const userId = verifySpotifyOAuthState(state, cookieState, getSpotifyStateSecret());
+        if (!userId) return res.status(403).send('Spotify authorization state expired or did not match this browser. Return to Starry and reconnect.');
 
         try {
             const spotifyManager = require('./spotifyManager');
-            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || ('https://' + req.get('host'));
             const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const { profile } = await spotifyManager.handleOAuthCallback(code, redirectUri, state);
-
-            res.send(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Spotify Connected • Starry</title>
-                <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
-                <style>
-                    body { background: #080A10; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; background-image: radial-gradient(circle at 50% 50%, rgba(29, 185, 84, 0.15), transparent 60%); }
-                    .card { background: rgba(18, 24, 38, 0.95); border: 1px solid rgba(29, 185, 84, 0.3); border-radius: 20px; padding: 40px; text-align: center; max-width: 440px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-                    .sp-icon { width: 70px; height: 70px; margin-bottom: 20px; }
-                    h2 { margin: 0 0 10px; font-weight: 800; color: #1DB954; font-size: 1.6rem; }
-                    p { color: #9CA3AF; line-height: 1.6; margin-bottom: 25px; }
-                    .user-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(29, 185, 84, 0.1); border: 1px solid rgba(29, 185, 84, 0.3); padding: 8px 16px; border-radius: 30px; font-weight: 700; color: #1DB954; margin-bottom: 20px; }
-                    .btn { display: inline-block; padding: 12px 28px; background: #1DB954; color: #fff; font-weight: 700; text-decoration: none; border-radius: 12px; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <img src="https://cdn-icons-png.flaticon.com/512/174/174872.png" class="sp-icon" alt="Spotify">
-                    <div class="user-badge">🟢 Connected as ${profile.display_name || profile.id}</div>
-                    <h2>Spotify Connected!</h2>
-                    <p>Starry has successfully authorized your Spotify account. You can now use <strong>,spotify myplaylists</strong> or <strong>,spotify play</strong> in Discord!</p>
-                    <p style="color:#6B7280; font-size:0.85rem;">You may now safely close this window and return to Discord.</p>
-                </div>
-            </body>
-            </html>
-            `);
+            await spotifyManager.handleOAuthCallback(code, redirectUri, userId);
+            return res.redirect(302, frontend + '/music.html?spotify=connected');
         } catch (err) {
-            res.status(500).send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Connection Error</h2>
-            <p>${err.message}</p>
-            </body></html>`);
+            console.error('Spotify OAuth callback failed:', err.message);
+            return res.redirect(302, frontend + '/music.html?spotify=error');
+        }
+    });
+
+    app.get('/api/spotify/status', requireAuth, async (req, res) => {
+        try {
+            const record = await UserSpotify.findOne({ userId: req.session.user.id })
+                .select('spotifyId displayName profileUrl avatarUrl updatedAt').lean();
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                connected: Boolean(record?.spotifyId),
+                account: record ? {
+                    id: record.spotifyId,
+                    displayName: record.displayName,
+                    profileUrl: record.profileUrl,
+                    avatarUrl: record.avatarUrl,
+                    updatedAt: record.updatedAt
+                } : null
+            });
+        } catch (error) {
+            console.error('Spotify status lookup failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Spotify connection status is temporarily unavailable.' });
+        }
+    });
+
+    app.get('/api/spotify/playlists', requireAuth, async (req, res) => {
+        try {
+            const spotifyManager = require('./spotifyManager');
+            const data = await spotifyManager.getUserPlaylists(req.session.user.id);
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, playlists: data.oauthPlaylists || [], savedPlaylists: data.savedPlaylists || [] });
+        } catch (error) {
+            console.error('Spotify playlist lookup failed:', error.message);
+            return res.status(502).json({ success: false, error: 'Could not load Spotify playlists. Reconnect your account and retry.' });
+        }
+    });
+
+    app.delete('/api/spotify/connection', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            await UserSpotify.updateOne(
+                { userId: req.session.user.id },
+                { $set: { spotifyId: '', displayName: '', profileUrl: '', avatarUrl: '', accessToken: '', refreshToken: '', tokenExpiresAt: null } }
+            );
+            return res.json({ success: true, connected: false });
+        } catch (error) {
+            console.error('Spotify disconnect failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Could not disconnect Spotify right now.' });
         }
     });
 
