@@ -82,6 +82,24 @@ function assertDiscordAuthorizationUrl(value) {
 }
 
 
+function getTrustedDiscordCallbackUri() {
+    const backendBase = getTrustedSpotifyBackendBaseUrl();
+    const configured = String(process.env.DISCORD_REDIRECT_URI || (backendBase + '/auth/callback')).trim();
+    let parsed;
+    try { parsed = new URL(configured); }
+    catch (_) { throw new Error('The Discord OAuth callback URI is invalid.'); }
+    const base = new URL(backendBase);
+    const localDevelopment = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if ((parsed.protocol !== 'https:' && !(localDevelopment && parsed.protocol === 'http:')) ||
+        parsed.origin !== base.origin || parsed.pathname !== '/auth/callback' ||
+        parsed.search || parsed.hash || parsed.username || parsed.password) {
+        throw new Error('The Discord OAuth callback must match the configured backend /auth/callback URL.');
+    }
+    return parsed.href;
+}
+
+
+
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -323,11 +341,7 @@ function setupDashboardRoutes(app, client) {
 
     app.post('/api/spotify/connect', actionLimiter, requireAuth, async (req, res) => {
         try {
-            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() ||
-                (req.secure || req.headers['x-forwarded-proto'] === 'https'
-                    ? 'https://' + req.get('host')
-                    : 'http://' + req.get('host'));
-            const redirectUri = getSpotifyRedirectUri(publicUrl);
+            const redirectUri = getSpotifyRedirectUri(getTrustedSpotifyBackendBaseUrl());
             const spotifyManager = require('./spotifyManager');
             const authorization = await spotifyManager.createAuthorizationRequest(
                 String(req.session.user.id),
@@ -518,22 +532,9 @@ function setupDashboardRoutes(app, client) {
     // OAuth state is held in a short-lived HttpOnly cookie so it survives a
     // Render restart and works without process-local session state.
     app.get('/auth/login', actionLimiter, (req, res) => {
-        let publicBase;
         let redirectUri;
         try {
-            publicBase = getTrustedSpotifyBackendBaseUrl();
-            const configuredRedirect = String(process.env.DISCORD_REDIRECT_URI || '').trim();
-            const candidate = configuredRedirect || (publicBase + '/auth/callback');
-            const parsedRedirect = new URL(candidate);
-            const parsedBase = new URL(publicBase);
-            if (parsedRedirect.protocol !== 'https:' && parsedRedirect.hostname !== 'localhost' && parsedRedirect.hostname !== '127.0.0.1') {
-                throw new Error('Discord OAuth callback must use HTTPS.');
-            }
-            if (parsedRedirect.origin !== parsedBase.origin || parsedRedirect.pathname !== '/auth/callback' ||
-                parsedRedirect.search || parsedRedirect.hash || parsedRedirect.username || parsedRedirect.password) {
-                throw new Error('Discord OAuth callback must be the configured backend /auth/callback URL.');
-            }
-            redirectUri = parsedRedirect.href;
+            redirectUri = getTrustedDiscordCallbackUri();
         } catch (error) {
             console.error('Discord OAuth configuration rejected:', error.message);
             return res.status(503).send('Discord sign-in is temporarily unavailable. Check the backend callback configuration.');
@@ -574,10 +575,13 @@ function setupDashboardRoutes(app, client) {
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
-        const host = req.get('host');
-        const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
-        const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
+        let redirectUri;
+        try {
+            redirectUri = getTrustedDiscordCallbackUri();
+        } catch (configurationError) {
+            console.error('Discord OAuth callback configuration rejected:', configurationError.message);
+            return res.redirect(`${frontendBase}/?error=oauth_not_configured`);
+        }
 
         try {
             if (!clientSecret) {
