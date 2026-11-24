@@ -87,17 +87,24 @@ const getOAuthEncryptionKey = () => {
 const encryptOAuthSecret = (value) => {
     if (!value) return null;
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv, { authTagLength: 16 });
     const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
     return ['v1', iv.toString('hex'), cipher.getAuthTag().toString('hex'), encrypted.toString('hex')].join(':');
 };
 const decryptOAuthSecret = (value) => {
     if (!value || typeof value !== 'string') return null;
     const [version, ivHex, tagHex, dataHex] = value.split(':');
-    if (version !== 'v1' || !ivHex || !tagHex || !dataHex) throw new Error('Stored Discord session needs a fresh login.');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getOAuthEncryptionKey(), Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-    return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
+    if (version !== 'v1' || !ivHex || !tagHex || !dataHex ||
+        !/^[a-f0-9]+$/i.test(ivHex) || !/^[a-f0-9]+$/i.test(tagHex) || !/^[a-f0-9]*$/i.test(dataHex)) {
+        throw new Error('Stored Discord session needs a fresh login.');
+    }
+    const iv = Buffer.from(ivHex, 'hex');
+    const tag = Buffer.from(tagHex, 'hex');
+    const encrypted = Buffer.from(dataHex, 'hex');
+    if (iv.length !== 12 || tag.length !== 16) throw new Error('Stored Discord session needs a fresh login.');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv, { authTagLength: 16 });
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 };
 
 function bestPlayableMusicMatch(tracks, query) {
