@@ -1392,8 +1392,22 @@ function setupDashboardRoutes(app, client) {
             const canReadAuditLog = Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog));
             const action = policy.action || 'quarantine';
             const quarantineRole = policy.quarantineRoleId ? guild.roles.cache.get(policy.quarantineRoleId) : null;
+            const quarantineDangerousPermissions = [
+                PermissionFlagsBits.Administrator,
+                PermissionFlagsBits.ManageGuild,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.ManageRoles,
+                PermissionFlagsBits.ManageWebhooks,
+                PermissionFlagsBits.BanMembers,
+                PermissionFlagsBits.KickMembers,
+                PermissionFlagsBits.ManageMessages,
+                PermissionFlagsBits.ManageEvents,
+                PermissionFlagsBits.ManageThreads
+            ];
+            const quarantineRoleSafe = Boolean(quarantineRole && !quarantineRole.managed &&
+                !quarantineDangerousPermissions.some(permission => quarantineRole.permissions.has(permission)));
             const canApplyAction = action === 'quarantine'
-                ? Boolean(quarantineRole && !quarantineRole.managed && botMember?.roles?.highest &&
+                ? Boolean(quarantineRoleSafe && botMember?.roles?.highest &&
                     quarantineRole.position < botMember.roles.highest.position && permissions?.has(PermissionFlagsBits.ManageRoles))
                 : action === 'timeout' ? Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers))
                 : action === 'kick' ? Boolean(permissions?.has(PermissionFlagsBits.KickMembers))
@@ -1404,7 +1418,9 @@ function setupDashboardRoutes(app, client) {
             const missing = [];
             if (!engineReady) missing.push('Anti-Nuke runtime is not initialized');
             if (!canReadAuditLog) missing.push('View Audit Log permission is missing');
-            if (!canApplyAction) missing.push('The selected response action is not configured or permitted');
+            if (!canApplyAction) missing.push(action === 'quarantine'
+                ? 'A safe quarantine role without elevated permissions and the required role hierarchy are not configured'
+                : 'The selected response action is not configured or permitted');
             if (!canBlockBots) missing.push('Kick Members permission is missing for unapproved bot protection');
             if (!canBlockWebhooks) missing.push('Manage Webhooks permission is missing for webhook protection');
             res.set('Cache-Control', 'no-store, private');
