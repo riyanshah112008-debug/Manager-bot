@@ -3,16 +3,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 
 // Static, fixed repository paths: no caller-controlled path fragments.
-const dashboard = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'dashboardServer.js'), 'utf8');
-const antiNuke = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'antiNukeEngine.js'), 'utf8');
-const giveaway = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'giveaway.js'), 'utf8');
-const spotifyCrypto = fs.readFileSync(path.join(__dirname, '..', 'src', 'utils', 'spotifyTokenCrypto.js'), 'utf8');
-const spotifyManager = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'spotifyManager.js'), 'utf8');
-const paymentHelper = fs.readFileSync(path.join(__dirname, '..', 'src', 'utils', 'paymentHelper.js'), 'utf8');
-const musicController = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'musicController.js'), 'utf8');
+const dashboard = fs.readFileSync('src/modules/dashboardServer.js', 'utf8');
+const antiNuke = fs.readFileSync('src/modules/antiNukeEngine.js', 'utf8');
+const giveaway = fs.readFileSync('src/modules/giveaway.js', 'utf8');
+const spotifyCrypto = fs.readFileSync('src/utils/spotifyTokenCrypto.js', 'utf8');
+const spotifyManager = fs.readFileSync('src/modules/spotifyManager.js', 'utf8');
+const paymentHelper = fs.readFileSync('src/utils/paymentHelper.js', 'utf8');
+const musicController = fs.readFileSync('src/modules/musicController.js', 'utf8');
 
 test('Guild middleware validates IDs before Discord cache access or Mongo queries', () => {
     const expectedGuildGuard = String.raw`if (!/^\d{17,20}$/.test(guildId))`;
