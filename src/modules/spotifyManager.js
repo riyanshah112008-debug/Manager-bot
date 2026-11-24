@@ -177,11 +177,19 @@ class SpotifyManager {
                     }
                     return null;
                 }
-                userDoc.accessToken = encryptToken(data.access_token);
-                userDoc.tokenExpiresAt = new Date(Date.now() + ((data.expires_in || 3600) * 1000));
+                const update = {
+                    accessToken: encryptToken(data.access_token),
+                    tokenExpiresAt: new Date(Date.now() + ((data.expires_in || 3600) * 1000))
+                };
                 // Spotify may omit refresh_token during refresh. Preserve the existing one.
-                if (data.refresh_token) userDoc.refreshToken = encryptToken(data.refresh_token);
-                await userDoc.save();
+                if (data.refresh_token) update.refreshToken = encryptToken(data.refresh_token);
+                const updated = await UserSpotify.findOneAndUpdate(
+                    { userId: String(userDoc.userId), spotifyId: String(userDoc.spotifyId) },
+                    { $set: update },
+                    { new: true }
+                );
+                // A new Spotify account may have been linked while the refresh request was in flight.
+                if (!updated) return null;
                 return data.access_token;
             } catch (error) {
                 console.warn('[SpotifyManager] Spotify token refresh failed:', error.message);
