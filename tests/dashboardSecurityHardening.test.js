@@ -63,10 +63,10 @@ test('Anti-Nuke verifies effective restriction and retries failed enforcement', 
 });
 
 test('Giveaway persistence uses fixed paths and atomic replacement', () => {
-    assert.match(giveaway, /const dbPath = 'src\\/modules\\/giveaways\\.json'/);
-    assert.match(giveaway, /const temporaryDbPath = 'src\\/modules\\/giveaways\\.json\\.tmp'/);
-    assert.match(giveaway, /fs\\.renameSync\\(temporaryDbPath, dbPath\\)/);
-    assert.doesNotMatch(giveaway, /path\\.join\\(/);
+    assert.ok(giveaway.includes("const dbPath = 'src/modules/giveaways.json';"));
+    assert.ok(giveaway.includes("const temporaryDbPath = 'src/modules/giveaways.json.tmp';"));
+    assert.ok(giveaway.includes("fs.renameSync(temporaryDbPath, dbPath)"));
+    assert.equal(giveaway.includes("path.join("), false);
 });
 
 test('Giveaway creates only after its entry reaction is confirmed', () => {
