@@ -276,6 +276,10 @@ module.exports = {
 
         // 5. CONNECT SPOTIFY ACCOUNT (OAuth2)
         if (sub === 'connect' || sub === 'login' || sub === 'link') {
+            // Prefix replies are public channel messages. Keep user-bound OAuth links private.
+            if (!isSlash) {
+                return ctx.reply('For account security, use the `/spotify connect` slash command. Its private response keeps your personal Spotify authorization link hidden from the channel.');
+            }
             const port = process.env.PORT || 10000;
             const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://localhost:${port}`;
             const redirectUri = getSpotifyRedirectUri(publicUrl);
