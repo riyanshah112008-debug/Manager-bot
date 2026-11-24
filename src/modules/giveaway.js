@@ -2,8 +2,8 @@ const { registerInteractionHandler } = require('../utils/interactionHandler');
 const { EmbedBuilder, PermissionsBitField, Events } = require('discord.js');
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
-const dbPath = path.join(__dirname, 'giveaways.json');
+const dbPath = 'src/modules/giveaways.json';
+const temporaryDbPath = 'src/modules/giveaways.json.tmp';
 const rerollLocks = new Set();
 let giveawayStoreQueue = Promise.resolve();
 let giveawayCheckPromise = null;
@@ -34,9 +34,8 @@ module.exports = (client) => {
     }
 
     function saveGiveaways(data) {
-        const temporaryPath = dbPath + '.tmp';
-        fs.writeFileSync(temporaryPath, JSON.stringify(data, null, 2));
-        fs.renameSync(temporaryPath, dbPath);
+        fs.writeFileSync(temporaryDbPath, JSON.stringify(data, null, 2));
+        fs.renameSync(temporaryDbPath, dbPath);
     }
 
     function withGiveawayStoreLock(operation) {
