@@ -43,9 +43,14 @@ test('Discord OAuth callback URL never falls back to the incoming Host header', 
     const end = dashboard.indexOf("app.get('/auth/callback'", start);
     assert.ok(start >= 0 && end > start);
     const route = dashboard.slice(start, end);
-    assert.match(route, /getTrustedSpotifyBackendBaseUrl\(\)/);
-    assert.match(route, /parsedRedirect\.origin !== parsedBase\.origin/);
-    assert.doesNotMatch(route, /req\.get\('host'\)/);
+    assert.match(route, /getTrustedDiscordCallbackUri\(\)/);
+    const helperStart = dashboard.indexOf('function getTrustedDiscordCallbackUri()');
+    const helperEnd = dashboard.indexOf('// Short-lived cache backed by MongoDB', helperStart);
+    assert.ok(helperStart >= 0 && helperEnd > helperStart);
+    const helper = dashboard.slice(helperStart, helperEnd);
+    assert.match(helper, /parsed\.origin !== base\.origin/);
+    assert.doesNotMatch(dashboard, /req\.get\('host'\)/);
+    assert.doesNotMatch(dashboard, /x-forwarded-proto/);
 });
 
 test('Spotify token encryption uses authenticated GCM with a fixed tag length', () => {
