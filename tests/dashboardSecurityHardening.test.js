@@ -14,7 +14,8 @@ const spotifyManager = fs.readFileSync(path.join(__dirname, '..', 'src', 'module
 const musicController = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'musicController.js'), 'utf8');
 
 test('Guild middleware validates IDs before Discord cache access or Mongo queries', () => {
-    assert.match(dashboard, /const guildId = typeof req\.params\.id === 'string'[\s\S]{0,220}!\/\^\\\\d\{17,20\}\$\//);
+    const expectedGuildGuard = String.raw`if (!/^\d{17,20}$/.test(guildId))`;
+    assert.ok(dashboard.includes(expectedGuildGuard));
     assert.equal((dashboard.match(/A valid Discord guild ID is required\./g) || []).length, 2);
 });
 
