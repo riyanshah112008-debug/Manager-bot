@@ -70,6 +70,18 @@ function assertSpotifyAuthorizationUrl(value) {
     return parsed.href;
 }
 
+function assertDiscordAuthorizationUrl(value) {
+    let parsed;
+    try { parsed = new URL(String(value || '')); }
+    catch (_) { throw new Error('Discord returned an invalid authorization URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'discord.com' ||
+        parsed.pathname !== '/oauth2/authorize' || parsed.username || parsed.password) {
+        throw new Error('Discord returned an unexpected authorization destination.');
+    }
+    return parsed.href;
+}
+
+
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -542,7 +554,7 @@ function setupDashboardRoutes(app, client) {
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('scope', 'identify guilds email');
         authUrl.searchParams.set('state', state);
-        return res.redirect(303, authUrl.href);
+        return res.redirect(303, assertDiscordAuthorizationUrl(authUrl.href));
     });
 
     app.get('/auth/callback', actionLimiter, async (req, res) => {
