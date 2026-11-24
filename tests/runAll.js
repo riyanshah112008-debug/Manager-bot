@@ -16,6 +16,7 @@ const suites = [
   ['Spotify token encryption', '--test', 'tests/spotifyTokenCrypto.test.js'],
   ['Dashboard server syntax', '--check', 'src/modules/dashboardServer.js'],
   ['Dashboard AutoMod integration', '--test', 'tests/dashboardAutoModIntegration.test.js'],
+  ['Dashboard security hardening', '--test', 'tests/dashboardSecurityHardening.test.js'],
   ['Dashboard preference model syntax', '--check', 'src/models/DashboardPreferences.js'],
   ['Spotify OAuth state model syntax', '--check', 'src/models/SpotifyOAuthState.js'],
   ['Spotify token crypto syntax', '--check', 'src/utils/spotifyTokenCrypto.js'],
