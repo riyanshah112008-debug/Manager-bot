@@ -749,7 +749,8 @@ function setupDashboardRoutes(app, client) {
                 return res.status(400).json({ success: false, error: 'Invalid vote webhook payload.' });
             }
             const { user: userId, type, isWeekend } = req.body;
-            if (typeof userId !== 'string' || !/^\\d{17,20}$/.test(userId)) {
+            const safeUserId = typeof userId === 'string' ? userId.trim() : '';
+            if (!/^\\d{17,20}$/.test(safeUserId)) {
                 return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
             }
             if (type !== undefined && !['upvote', 'test'].includes(type)) {
@@ -762,18 +763,19 @@ function setupDashboardRoutes(app, client) {
             const rewardCred = isWeekend === true ? 1000 : 500;
             const rewardXp = isWeekend === true ? 1000 : 500;
 
-            let userDoc = await User.findOne({ userId });
-            if (!userDoc) userDoc = new User({ userId, guildId: 'global' });
+            const userQuery = User.findOne().where('userId').equals(safeUserId);
+            let userDoc = await userQuery.exec();
+            if (!userDoc) userDoc = new User({ userId: safeUserId, guildId: 'global' });
 
             userDoc.credits = (userDoc.credits || 0) + rewardCred;
             userDoc.xp = (userDoc.xp || 0) + rewardXp;
             await userDoc.save();
 
-            console.log(`⭐ [Top.gg Upvote] User ${userId} voted! Awarded +${rewardCred} Credits & +${rewardXp} XP (${isWeekend ? 'Weekend 2x' : 'Standard'}).`);
+            console.log(`⭐ [Top.gg Upvote] User ${safeUserId} voted! Awarded +${rewardCred} Credits & +${rewardXp} XP (${isWeekend ? 'Weekend 2x' : 'Standard'}).`);
 
             // Attempt to DM user if accessible
             try {
-                const discordUser = await client.users.fetch(userId);
+                const discordUser = await client.users.fetch(safeUserId);
                 if (discordUser) {
                     const voteEmbed = new EmbedBuilder()
                         .setColor('#FF79C6')
