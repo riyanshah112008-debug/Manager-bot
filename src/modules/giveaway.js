@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const dbPath = path.join(__dirname, 'giveaways.json');
 const rerollLocks = new Set();
+let giveawayStoreQueue = Promise.resolve();
+let giveawayCheckPromise = null;
 
 // 🎬 DIRECT GIPHY CDN ASSETS (DISCORD PROXY GUARANTEED)
 const ASSETS = {
@@ -32,7 +34,41 @@ module.exports = (client) => {
     }
 
     function saveGiveaways(data) {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+        const temporaryPath = dbPath + '.tmp';
+        fs.writeFileSync(temporaryPath, JSON.stringify(data, null, 2));
+        fs.renameSync(temporaryPath, dbPath);
+    }
+
+    function withGiveawayStoreLock(operation) {
+        const pending = giveawayStoreQueue.then(operation, operation);
+        giveawayStoreQueue = pending.catch(() => {});
+        return pending;
+    }
+
+    async function addGiveawayRecord(record) {
+        return withGiveawayStoreLock(() => {
+            const records = getGiveaways();
+            records.push(record);
+            saveGiveaways(records);
+            return JSON.parse(JSON.stringify(record));
+        });
+    }
+
+    async function updateGiveawayRecord(guildId, messageId, update) {
+        return withGiveawayStoreLock(() => {
+            const records = getGiveaways();
+            const record = records.find(item =>
+                String(item.guildId) === String(guildId) && String(item.messageId) === String(messageId)
+            );
+            if (!record) return null;
+            update(record);
+            saveGiveaways(records);
+            return JSON.parse(JSON.stringify(record));
+        });
+    }
+
+    function isDiscordNotFound(error, code) {
+        return Number(error && (error.code || (error.rawError && error.rawError.code))) === code;
     }
 
     async function fetchHumanParticipants(reaction) {
@@ -79,58 +115,81 @@ module.exports = (client) => {
     // 🚀 1. ACTIVE GIVEAWAY EMBED (TONY STARK EDITION)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
-        const msDuration = parseTime(durationStr);
-        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`, `1d`)*.';
-        if (winnerCount < 1) return '❌ **Invalid winners!** Must specify at least 1 winner.';
+        const msDuration = parseTime(typeof durationStr === 'string' ? durationStr.trim() : '');
+        const normalizedPrize = typeof prize === 'string' ? prize.trim() : '';
+        if (!msDuration || msDuration < 10000 || msDuration > 90 * 24 * 60 * 60 * 1000) {
+            return { success: false, message: '❌ Use a duration between 10 seconds and 90 days (for example, 10m, 2h or 1d).' };
+        }
+        if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 20) {
+            return { success: false, message: '❌ Winner count must be a whole number from 1 to 20.' };
+        }
+        if (!normalizedPrize || normalizedPrize.length > 200) {
+            return { success: false, message: '❌ Prize must contain 1 to 200 characters.' };
+        }
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
-
         const embed = new EmbedBuilder()
-            .setColor('#FF007F') // Supreme Cyber Neon Pink
-            .setAuthor({ 
-                name: '✨ SUPREME OFFICIAL GIVEAWAY ✨', 
-                iconURL: author.displayAvatarURL({ dynamic: true }) 
-            })
-            .setTitle(`🎁 ${prize}`)
+            .setColor('#FF007F')
+            .setAuthor({ name: '✨ SUPREME OFFICIAL GIVEAWAY ✨', iconURL: author.displayAvatarURL({ dynamic: true }) })
+            .setTitle('🎁 ' + normalizedPrize)
             .setDescription([
-                `> React with **🎉** to enter the grand prize drop!`,
-                ``,
-                `⏳ **Ending:** <t:${endTimestamp}:R> (<t:${endTimestamp}:F>)`,
-                `👑 **Hosted By:** <@${author.id}>`,
-                `🏆 **Lucky Winners:** \`${winnerCount}\``,
-                ``,
-                `*“Genius, billionaire, playboy, philanthropist level drop.”* 🚀`
+                '> React with 🎉 to enter the grand prize drop!',
+                '',
+                'Ending: <t:' + endTimestamp + ':R> (<t:' + endTimestamp + ':F>)',
+                'Hosted by: <@' + author.id + '>',
+                'Lucky winners: ' + winnerCount
             ].join('\n'))
             .setImage(ASSETS.ACTIVE_BANNER)
-            .setFooter({ 
-                text: `Hosted by ${author.tag} • Tap 🎉 to enter!`, 
-                iconURL: client.user.displayAvatarURL({ dynamic: true }) 
-            })
+            .setFooter({ text: 'Hosted by ' + author.tag + ' • Tap 🎉 to enter!', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
             .setTimestamp(endsAt);
 
-        const message = await channel.send({ embeds: [embed] }).catch(() => null);
-        if (!message) return '❌ Failed to send giveaway message. Verify channel bot permissions!';
+        let message;
+        try {
+            message = await channel.send({ embeds: [embed] });
+        } catch (error) {
+            console.error('[Giveaway] Message creation failed:', error.message);
+            return { success: false, message: '❌ Failed to send the giveaway message. Check Starry’s channel permissions.' };
+        }
 
-        await message.react('🎉').catch(() => {});
+        try {
+            await message.react('🎉');
+        } catch (error) {
+            try {
+                await message.delete('Giveaway setup failed because the entry reaction could not be added.');
+                return { success: false, message: '❌ Starry could not add the 🎉 entry reaction, so the incomplete giveaway post was removed.' };
+            } catch (cleanupError) {
+                return {
+                    success: false,
+                    message: '❌ Starry could not add the entry reaction or remove the incomplete post. No active record was saved. Ask an administrator to remove message ' +
+                        message.id + ' in channel ' + channel.id + '.'
+                };
+            }
+        }
 
-        const giveaways = getGiveaways();
-        giveaways.push({
+        const record = {
             messageId: message.id,
             channelId: channel.id,
             guildId: channel.guild.id,
-            prize: prize,
+            prize: normalizedPrize,
             winners: winnerCount,
             endsAt: endsAt,
             hostId: author.id,
             status: 'active',
             createdAt: Date.now(),
             participantCount: 0,
-            winnerIds: []
-        });
-        saveGiveaways(giveaways);
+            winnerIds: [],
+            processingResult: null
+        };
+        try {
+            await addGiveawayRecord(record);
+        } catch (error) {
+            try { await message.delete('Giveaway record persistence failed.'); } catch (_) {}
+            console.error('[Giveaway] Could not persist giveaway record:', error.message);
+            return { success: false, message: '❌ The giveaway could not be saved. No active giveaway was registered.' };
+        }
 
-        return '✅ Supreme Giveaway launched successfully!';
+        return { success: true, message: '✅ Supreme Giveaway launched successfully!', giveaway: record };
     }
 
     // ==========================================
