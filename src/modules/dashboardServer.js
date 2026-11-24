@@ -533,8 +533,8 @@ function setupDashboardRoutes(app, client) {
         }
         const state = crypto.randomBytes(24).toString('hex');
         const secureCookie = redirectUri.startsWith('https:') ? '; Secure' : '';
-        res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax`);
-        if (secureCookie) res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax; Secure`);
+        res.set('Set-Cookie', 'starry_oauth_state=' + state +
+            '; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax' + secureCookie);
         res.set('Cache-Control', 'no-store');
         const authUrl = new URL('https://discord.com/oauth2/authorize');
         authUrl.searchParams.set('client_id', String(clientId));
