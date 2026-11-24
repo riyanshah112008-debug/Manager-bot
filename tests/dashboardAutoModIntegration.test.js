@@ -3,11 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 
-const server = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'dashboardServer.js'), 'utf8');
-const workspace = fs.readFileSync(path.join(__dirname, '..', 'public', 'workspace.js'), 'utf8');
-const helper = fs.readFileSync(path.join(__dirname, '..', 'src', 'utils', 'automodHelper.js'), 'utf8');
+const server = fs.readFileSync('src/modules/dashboardServer.js', 'utf8');
+const workspace = fs.readFileSync('public/workspace.js', 'utf8');
+const helper = fs.readFileSync('src/utils/automodHelper.js', 'utf8');
 
 test('AutoMod dashboard routes require live guild-admin authorization', () => {
     assert.match(server, /app\.get\('\/api\/guild\/:id\/automod',\s*requireGuildAdmin/);
