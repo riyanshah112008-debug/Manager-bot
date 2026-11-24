@@ -2077,54 +2077,109 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/mod/action - Member Moderation (Admin Guarded)
     app.post('/api/guild/:id/mod/action', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
-            const guild = req.guild || client.guilds.cache.get(req.params.id);
+            const guild = req.guild;
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body)) {
+                return res.status(400).json({ success: false, error: 'Invalid moderation request.' });
+            }
+            const allowedKeys = new Set(['action', 'targetId', 'reason', 'durationMinutes', 'roleId', 'nickname']);
+            if (Object.keys(body).some(key => !allowedKeys.has(key))) {
+                return res.status(400).json({ success: false, error: 'Unsupported moderation request field.' });
+            }
 
-            const { action, targetId, reason, durationMinutes, roleId, nickname } = req.body;
-            if (!targetId && action !== 'unban') return res.status(400).json({ success: false, error: 'Target member ID is required.' });
+            const action = typeof body.action === 'string' ? body.action : '';
+            const targetId = typeof body.targetId === 'string' ? body.targetId.trim() : '';
+            const reason = body.reason === undefined || body.reason === null || body.reason === ''
+                ? 'Moderation action via Starry Control Center'
+                : (typeof body.reason === 'string' ? body.reason.trim() : null);
+            const validActions = new Set(['kick', 'ban', 'unban', 'timeout', 'role_add', 'role_remove', 'nickname']);
+            if (!validActions.has(action)) return res.status(400).json({ success: false, error: 'Unsupported moderation action.' });
+            if (!/^\d{17,20}$/.test(targetId)) return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
+            if (reason === null || reason.length > 512) return res.status(400).json({ success: false, error: 'Reason must be a text value of up to 512 characters.' });
+
+            const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+            if (!botMember) return res.status(503).json({ success: false, error: 'Starry could not verify its server permissions.' });
 
             const member = await guild.members.fetch(targetId).catch(() => null);
+            const requireManageableMember = () => {
+                if (!member) return res.status(404).json({ success: false, error: 'Member not found in this server.' });
+                if (member.id === guild.ownerId || member.id === client.user.id ||
+                    member.roles.highest.position >= botMember.roles.highest.position) {
+                    return res.status(403).json({ success: false, error: 'Starry cannot moderate this member because of Discord role hierarchy.' });
+                }
+                return null;
+            };
 
             if (action === 'kick') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.kick(reason || 'Kicked via Starry Web Dashboard');
-                return res.json({ success: true, message: `👢 Successfully kicked ${member.user.tag}` });
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                if (!botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(403).json({ success: false, error: 'Starry needs Kick Members permission.' });
+                await member.kick(reason);
+                return res.json({ success: true, message: 'Member kicked successfully.' });
             }
             if (action === 'ban') {
-                await guild.bans.create(targetId, { reason: reason || 'Banned via Starry Web Dashboard' });
-                return res.json({ success: true, message: `🔨 Successfully banned user ID: ${targetId}` });
+                if (!botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(403).json({ success: false, error: 'Starry needs Ban Members permission.' });
+                if (member && (member.id === guild.ownerId || member.id === client.user.id ||
+                    member.roles.highest.position >= botMember.roles.highest.position)) {
+                    return res.status(403).json({ success: false, error: 'Starry cannot ban this member because of Discord role hierarchy.' });
+                }
+                await guild.bans.create(targetId, { reason });
+                return res.json({ success: true, message: 'User banned successfully.' });
             }
             if (action === 'unban') {
-                await guild.bans.remove(targetId, reason || 'Unbanned via Starry Web Dashboard');
-                return res.json({ success: true, message: `🔓 Successfully unbanned user ID: ${targetId}` });
+                if (!botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(403).json({ success: false, error: 'Starry needs Ban Members permission.' });
+                await guild.bans.remove(targetId, reason);
+                return res.json({ success: true, message: 'User unbanned successfully.' });
             }
             if (action === 'timeout') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                const durMs = (Number(durationMinutes) || 60) * 60 * 1000;
-                await member.timeout(durMs, reason || 'Timed out via Starry Web Dashboard');
-                return res.json({ success: true, message: `⏳ Successfully timed out ${member.user.tag} for ${durationMinutes || 60}m` });
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                if (!botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) return res.status(403).json({ success: false, error: 'Starry needs Moderate Members permission.' });
+                const durationValue = body.durationMinutes === undefined || body.durationMinutes === ''
+                    ? 60 : Number(body.durationMinutes);
+                if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 40320) {
+                    return res.status(400).json({ success: false, error: 'Timeout must be between 1 minute and 28 days.' });
+                }
+                await member.timeout(durationValue * 60 * 1000, reason);
+                return res.json({ success: true, message: 'Member timed out for ' + durationValue + ' minute(s).' });
             }
-            if (action === 'role_add') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.roles.add(roleId);
-                return res.json({ success: true, message: `✅ Role added to ${member.user.tag}` });
-            }
-            if (action === 'role_remove') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.roles.remove(roleId);
-                return res.json({ success: true, message: `➖ Role removed from ${member.user.tag}` });
+            if (action === 'role_add' || action === 'role_remove') {
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                const roleId = typeof body.roleId === 'string' ? body.roleId.trim() : '';
+                if (!/^\d{17,20}$/.test(roleId)) return res.status(400).json({ success: false, error: 'A valid server role ID is required.' });
+                const role = guild.roles.cache.get(roleId);
+                if (!role || role.managed || role.id === guild.id ||
+                    role.position >= botMember.roles.highest.position) {
+                    return res.status(400).json({ success: false, error: 'Choose a manageable role from this server.' });
+                }
+                if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) return res.status(403).json({ success: false, error: 'Starry needs Manage Roles permission.' });
+                if (action === 'role_add') {
+                    await member.roles.add(role, reason);
+                    return res.json({ success: true, message: 'Role added successfully.' });
+                }
+                await member.roles.remove(role, reason);
+                return res.json({ success: true, message: 'Role removed successfully.' });
             }
             if (action === 'nickname') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.setNickname(nickname || null);
-                return res.json({ success: true, message: `✏️ Nickname updated for ${member.user.tag}` });
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) return res.status(403).json({ success: false, error: 'Starry needs Manage Nicknames permission.' });
+                const nickname = body.nickname === undefined || body.nickname === null ? '' : body.nickname;
+                if (typeof nickname !== 'string' || nickname.length > 32) {
+                    return res.status(400).json({ success: false, error: 'Nickname must be text with a maximum of 32 characters.' });
+                }
+                await member.setNickname(nickname.trim() || null, reason);
+                return res.json({ success: true, message: 'Nickname updated successfully.' });
             }
 
-            res.status(400).json({ success: false, error: 'Unknown moderation action.' });
-        } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            return res.status(400).json({ success: false, error: 'Unsupported moderation action.' });
+        } catch (error) {
+            console.error('Dashboard moderation action failed:', error.message);
+            return res.status(500).json({ success: false, error: 'The moderation action failed. Verify Starry permissions and try again.' });
         }
-    });
+    });;
 
     // ==========================================
     // 🚀 BOOSTER STUDIO REST API (BOOSTER SYNERGY)
