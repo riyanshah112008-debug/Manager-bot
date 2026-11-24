@@ -219,7 +219,7 @@ function setupDashboardRoutes(app, client) {
         const guildId = typeof req.params.id === 'string'
             ? req.params.id
             : (typeof req.body?.guildId === 'string' ? req.body.guildId : '');
-        if (!/^\\d{17,20}$/.test(guildId)) {
+        if (!/^\d{17,20}$/.test(guildId)) {
             return res.status(400).json({ success: false, error: 'A valid Discord guild ID is required.' });
         }
 
@@ -269,7 +269,7 @@ function setupDashboardRoutes(app, client) {
         const guildId = typeof req.params.id === 'string'
             ? req.params.id
             : (typeof req.body?.guildId === 'string' ? req.body.guildId : '');
-        if (!/^\\d{17,20}$/.test(guildId)) {
+        if (!/^\d{17,20}$/.test(guildId)) {
             return res.status(400).json({ success: false, error: 'A valid Discord guild ID is required.' });
         }
         const guild = client.guilds.cache.get(guildId);
@@ -540,7 +540,7 @@ function setupDashboardRoutes(app, client) {
         }
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
-        if (!/^\\d{17,20}$/.test(String(clientId))) {
+        if (!/^\d{17,20}$/.test(String(clientId))) {
             return res.status(503).send('Discord sign-in is temporarily unavailable. The application ID is invalid.');
         }
         const state = crypto.randomBytes(24).toString('hex');
@@ -750,7 +750,7 @@ function setupDashboardRoutes(app, client) {
             }
             const { user: userId, type, isWeekend } = req.body;
             const safeUserId = typeof userId === 'string' ? userId.trim() : '';
-            if (!/^\\d{17,20}$/.test(safeUserId)) {
+            if (!/^\d{17,20}$/.test(safeUserId)) {
                 return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
             }
             if (type !== undefined && !['upvote', 'test'].includes(type)) {
@@ -1454,7 +1454,7 @@ function setupDashboardRoutes(app, client) {
             const channelId = body.channelId === undefined ? '' : (typeof body.channelId === 'string' ? body.channelId.trim() : '');
             let selectedChannel = null;
             if (body.channelId !== undefined) {
-                if (!/^\\d{17,20}$/.test(channelId)) {
+                if (!/^\d{17,20}$/.test(channelId)) {
                     return res.status(400).json({ success: false, error: 'Choose a valid text channel ID from this server.' });
                 }
                 selectedChannel = req.guild.channels.cache.get(channelId);
@@ -1543,7 +1543,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/giveaways/:messageId/end', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
             const messageId = typeof req.params.messageId === 'string' ? req.params.messageId : '';
-            if (!/^\\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
+            if (!/^\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
             if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
             const record = client.starryGiveawayEngine.find(req.guild.id, messageId);
             if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
@@ -1562,7 +1562,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
             const messageId = typeof req.params.messageId === 'string' ? req.params.messageId : '';
-            if (!/^\\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
+            if (!/^\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
             if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
             const record = client.starryGiveawayEngine.find(req.guild.id, messageId);
             if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
@@ -2200,7 +2200,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/booster-roles/share', actionLimiter, requireGuildMember, async (req, res) => {
         try {
             const { friendId } = req.body || {};
-            if (typeof friendId !== 'string' || !/^\\d{17,20}$/.test(friendId)) {
+            if (typeof friendId !== 'string' || !/^\d{17,20}$/.test(friendId)) {
                 return res.status(400).json({ success: false, error: 'A valid friend Discord user ID is required.' });
             }
 
@@ -2222,7 +2222,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/booster-roles/unshare', actionLimiter, requireGuildMember, async (req, res) => {
         try {
             const { friendId } = req.body || {};
-            if (typeof friendId !== 'string' || !/^\\d{17,20}$/.test(friendId)) {
+            if (typeof friendId !== 'string' || !/^\d{17,20}$/.test(friendId)) {
                 return res.status(400).json({ success: false, error: 'A valid friend Discord user ID is required.' });
             }
 
@@ -2384,7 +2384,7 @@ function setupDashboardRoutes(app, client) {
     // GET /verify/:guildId - External Web Captcha Verification Portal
     app.get('/verify/:guildId', async (req, res) => {
         const guildId = typeof req.params.guildId === 'string' ? req.params.guildId : '';
-        if (!/^\\d{17,20}$/.test(guildId)) {
+        if (!/^\d{17,20}$/.test(guildId)) {
             return res.status(400).send('A valid Discord server ID is required.');
         }
         const guild = client.guilds.cache.get(guildId);
