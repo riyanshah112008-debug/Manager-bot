@@ -88,8 +88,10 @@ async function enforce(client, guild, executorId, policy, reason) {
                     DESTRUCTIVE_PERMISSIONS.some(permission => candidate.permissions.has(permission)))
                 .map(candidate => candidate.id);
 
-            if (dangerousRoleIds.length) {
-                await member.roles.remove(dangerousRoleIds, reason);
+            // Remove each role individually so emergency quarantine does not depend
+            // on bulk-role removal behavior.
+            for (const dangerousRoleId of dangerousRoleIds) {
+                await member.roles.remove(dangerousRoleId, reason);
             }
 
             const refreshed = await guild.members.fetch({ user: member.id, force: true }).catch(() => null);
