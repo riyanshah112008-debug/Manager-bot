@@ -900,7 +900,7 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
 
-            let settings = await ServerSettings.findOne({ guildId: guild.id });
+            let settings = await ServerSettings.findOne().where('guildId').equals(guild.id);
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: guild.id });
             }
@@ -1111,7 +1111,7 @@ function setupDashboardRoutes(app, client) {
         try {
             res.set('Cache-Control', 'no-store, private');
             const { WelcomeSettings } = require('./welcome');
-            const settings = await WelcomeSettings.findOne({ guildId: req.guild.id }).lean();
+            const settings = await WelcomeSettings.findOne().where('guildId').equals(req.guild.id).lean();
             res.json({ success: true, configured: Boolean(settings), settings: settings || {
                 channelId: '', title: '✨ WELCOME TO {server} ✨',
                 description: '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟',
@@ -1269,7 +1269,7 @@ function setupDashboardRoutes(app, client) {
             const leveling = require('./leveling');
             const { LevelSettings, LevelUser } = leveling;
             const guildId = req.guild.id;
-            const settings = await LevelSettings.findOne({ guildId }).lean() || {
+            const settings = await LevelSettings.findOne().where('guildId').equals(guildId).lean() || {
                 enabled: true, announcementChannelId: null, logChannelId: null, title: 'Congratulations {user}!',
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                 color: '#5865F2', image: '', thumbnail: 'avatar',
@@ -1385,7 +1385,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/guild/:id/security/status', requireGuildAdmin, async (req, res) => {
         try {
             const guild = req.guild;
-            const settings = await ServerSettings.findOne({ guildId: guild.id }).select('antinuke').lean();
+            const settings = await ServerSettings.findOne().where('guildId').equals(guild.id).select('antinuke').lean();
             const policy = settings?.antinuke || {};
             const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
             const engineReady = client.antiNukeReady === true;
@@ -1486,14 +1486,14 @@ function setupDashboardRoutes(app, client) {
             if (body.enabled !== undefined) {
                 await helper.setGuildStatus(req.guild.id, body.enabled);
                 const { AutomodGuild } = require('../models/AutomodSchema');
-                const stored = await AutomodGuild.findOne({ guildId: req.guild.id }).lean();
+                const stored = await AutomodGuild.findOne().where('guildId').equals(req.guild.id).lean();
                 if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
             }
             if (selectedChannel) {
                 const { AutomodChannel } = require('../models/AutomodSchema');
                 if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
                 if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
-                const stored = await AutomodChannel.findOne({ channelId, guildId: req.guild.id }).lean();
+                const stored = await AutomodChannel.findOne().where('channelId').equals(channelId).where('guildId').equals(req.guild.id).lean();
                 const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
                 const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
                 if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
@@ -1807,7 +1807,7 @@ function setupDashboardRoutes(app, client) {
                 }
                 if (theme.color !== undefined) theme.color = theme.color.trim();
             }
-            let settings = await ServerSettings.findOne({ guildId: guild.id });
+            let settings = await ServerSettings.findOne().where('guildId').equals(guild.id);
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
             if (payload.prefix !== undefined) {
@@ -1885,7 +1885,7 @@ function setupDashboardRoutes(app, client) {
             if (explicitColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
                 return res.status(400).json({ success: false, error: 'Embed accent color must be a valid hex color.' });
             }
-            const theme = (await ServerSettings.findOne({ guildId: guild.id }))?.embedTheme || {};
+            const theme = (await ServerSettings.findOne().where('guildId').equals(guild.id))?.embedTheme || {};
             const authorName = cleanText(author, 256, 'Embed author') || theme.authorName || '';
             const authorImage = cleanUrl(authorIcon, 'Author icon') || theme.authorIcon || '';
             const footerText = cleanText(footer, 2048, 'Embed footer') || theme.footer || '';
@@ -2193,7 +2193,7 @@ function setupDashboardRoutes(app, client) {
             const isBooster = boosterEngine.isBooster(member);
 
             const settings = await boosterEngine.getSettings(guild.id);
-            const myDoc = await BoosterRole.findOne({ guildId: guild.id, userId: member.id });
+            const myDoc = await BoosterRole.findOne().where('guildId').equals(guild.id).where('userId').equals(member.id);
             let myRole = null;
             if (myDoc) {
                 const r = guild.roles.cache.get(myDoc.roleId);
