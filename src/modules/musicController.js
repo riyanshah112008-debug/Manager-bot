@@ -773,6 +773,11 @@ class MusicControllerEngine {
 
         // Spotify Library Explorer
         if (customId === 'ctrl_spotify') {
+            try {
+                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            } catch (_) {
+                return false;
+            }
             const spotifyManager = require('./spotifyManager');
             const data = await spotifyManager.getUserPlaylists(interaction.user.id);
             const total = data.savedPlaylists.length + data.oauthPlaylists.length;
@@ -795,8 +800,17 @@ class MusicControllerEngine {
                 const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
                 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
                 const redirectUri = getSpotifyRedirectUri(publicUrl);
-                const authorization = await spotifyManager.createAuthorizationRequest(interaction.user.id, redirectUri);
-                const authUrl = authorization.authorizeUrl;
+                let authUrl = '';
+                try {
+                    const authorization = await spotifyManager.createAuthorizationRequest(interaction.user.id, redirectUri);
+                    const parsedAuthorizationUrl = new URL(authorization.authorizeUrl);
+                    if (parsedAuthorizationUrl.protocol !== 'https:' || parsedAuthorizationUrl.hostname !== 'accounts.spotify.com') throw new Error('Unexpected Spotify authorization destination.');
+                    authUrl = parsedAuthorizationUrl.href;
+                } catch (error) {
+                    console.warn('[Spotify] Account authorization unavailable:', error.message);
+                    emptyEmbed.setDescription(emptyEmbed.data.description + '\n\nSpotify account linking is temporarily unavailable. You can still save public playlist links with the Spotify save command.');
+                    return interaction.editReply({ embeds: [emptyEmbed], components: [] }).catch(() => {});
+                }
 
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
@@ -806,7 +820,7 @@ class MusicControllerEngine {
                         .setEmoji('🟢')
                 );
 
-                return interaction.reply({ embeds: [emptyEmbed], components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                return interaction.editReply({ embeds: [emptyEmbed], components: [row] }).catch(() => {});
             }
 
             const embed = new EmbedBuilder()
@@ -841,7 +855,7 @@ class MusicControllerEngine {
                 .addOptions(options);
 
             const row = new ActionRowBuilder().addComponents(menu);
-            return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.editReply({ embeds: [embed], components: [row] }).catch(() => {});
         }
 
         // Spotify Direct Stream from Menu
