@@ -2255,17 +2255,15 @@ function setupDashboardRoutes(app, client) {
     // Payment approval and key-generation endpoints have been removed.
     // Premium entitlements will only be granted by verified provider webhooks.
 
-    // Backwards-compatible login route, now bound to the authenticated Discord session.
-    app.get('/api/spotify/login', requireAuth, async (req, res) => {
-        try {
-            const publicUrl = getTrustedSpotifyBackendBaseUrl();
-            const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const spotifyManager = require('./spotifyManager');
-            const authorization = await spotifyManager.createAuthorizationRequest(String(req.session.user.id), redirectUri);
-            return res.redirect(assertSpotifyAuthorizationUrl(authorization.authorizeUrl));
-        } catch (error) {
-            res.status(503).send('Spotify connection is not configured. Please return to Starry and check the service configuration.');
-        }
+    // Retire the legacy redirect endpoint. Account linking must begin through
+    // the authenticated POST API so the frontend can handle failures safely.
+    app.get('/api/spotify/login', requireAuth, (req, res) => {
+        res.set('Cache-Control', 'no-store, private');
+        return res.status(410).json({
+            success: false,
+            code: 'SPOTIFY_CONNECT_ENDPOINT_CHANGED',
+            error: 'Use the Music workspace Connect Spotify action to start a protected account link.'
+        });
     });
 
     app.get('/api/spotify/callback', async (req, res) => {
@@ -2316,7 +2314,11 @@ function setupDashboardRoutes(app, client) {
 
     // GET /verify/:guildId - External Web Captcha Verification Portal
     app.get('/verify/:guildId', async (req, res) => {
-        const guild = client.guilds.cache.get(req.params.guildId);
+        const guildId = typeof req.params.guildId === 'string' ? req.params.guildId : '';
+        if (!/^\\d{17,20}$/.test(guildId)) {
+            return res.status(400).send('A valid Discord server ID is required.');
+        }
+        const guild = client.guilds.cache.get(guildId);
         const guildName = escapeHtml(guild ? guild.name : 'Discord Server');
         const guildIcon = escapeHtml(guild?.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png');
 
