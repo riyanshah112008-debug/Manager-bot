@@ -16,7 +16,7 @@ function getKey() {
 function encryptToken(value) {
     if (value === undefined || value === null || value === '') return '';
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv, { authTagLength: 16 });
     cipher.setAAD(AAD);
     const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
     return PREFIX + [iv.toString('hex'), cipher.getAuthTag().toString('hex'), encrypted.toString('hex')].join(':');
@@ -37,7 +37,7 @@ function decryptToken(value) {
     const tag = Buffer.from(tagHex, 'hex');
     const encrypted = Buffer.from(dataHex, 'hex');
     if (iv.length !== 12 || tag.length !== 16) throw new Error('Stored Spotify credentials are invalid. Reconnect your Spotify account.');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), iv, { authTagLength: 16 });
     decipher.setAAD(AAD);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
