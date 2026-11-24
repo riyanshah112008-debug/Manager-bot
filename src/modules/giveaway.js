@@ -25,12 +25,22 @@ module.exports = (client) => {
     // 📁 JSON DATABASE HELPERS
     // ==========================================
     function getGiveaways() {
+        let contents;
         try {
-            if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
-            return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
-        } catch {
-            return [];
+            contents = fs.readFileSync(dbPath, 'utf-8');
+        } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+            try {
+                fs.writeFileSync(dbPath, '[]', { flag: 'wx' });
+                contents = '[]';
+            } catch (createError) {
+                if (createError.code !== 'EEXIST') throw createError;
+                contents = fs.readFileSync(dbPath, 'utf-8');
+            }
         }
+        const records = JSON.parse(contents);
+        if (!Array.isArray(records)) throw new Error('Giveaway store must contain a JSON array.');
+        return records;
     }
 
     function saveGiveaways(data) {
@@ -68,6 +78,49 @@ module.exports = (client) => {
 
     function isDiscordNotFound(error, code) {
         return Number(error && (error.code || (error.rawError && error.rawError.code))) === code;
+    }
+
+    async function findMarkerInChannelHistory(channel, marker, boundaryMessageId = null) {
+        let before;
+        let oldestMessageId = null;
+        for (let page = 0; page < 100; page++) {
+            const options = { limit: 100 };
+            if (before) options.before = before;
+            const messages = await channel.messages.fetch(options);
+            if (!messages?.size) {
+                if (boundaryMessageId) throw new Error('Could not reach the saved Discord history boundary; publication remains pending.');
+                return { found: false, oldestMessageId, reachedStart: true };
+            }
+            const values = [...messages.values()];
+            const oldest = values[values.length - 1];
+            if (!oldest) throw new Error('Discord returned an invalid message-history page.');
+            oldestMessageId = oldest.id;
+            const found = messages.some(message =>
+                message.author?.id === client.user.id &&
+                typeof message.content === 'string' &&
+                message.content.includes(marker)
+            );
+            if (found) return { found: true, oldestMessageId, reachedStart: false };
+            if (boundaryMessageId && messages.has(boundaryMessageId)) {
+                return { found: false, oldestMessageId, reachedStart: false };
+            }
+            if (oldest.id === before) throw new Error('Discord message pagination did not advance.');
+            before = oldest.id;
+            if (messages.size < 100) {
+                if (boundaryMessageId) throw new Error('The saved Discord history boundary is no longer reachable; publication remains pending.');
+                return { found: false, oldestMessageId, reachedStart: true };
+            }
+        }
+        throw new Error('Could not verify the complete Discord history window; publication remains pending.');
+    }
+
+    async function newestChannelMessageId(channel) {
+        const messages = await channel.messages.fetch({ limit: 1 });
+        let newest = null;
+        for (const message of messages.values()) {
+            if (!newest || BigInt(message.id) > BigInt(newest)) newest = message.id;
+        }
+        return newest;
     }
 
     async function fetchHumanParticipants(reaction) {
@@ -183,9 +236,20 @@ module.exports = (client) => {
         try {
             await addGiveawayRecord(record);
         } catch (error) {
-            try { await message.delete('Giveaway record persistence failed.'); } catch (_) {}
+            let removed = false;
+            try {
+                await message.delete('Giveaway record persistence failed.');
+                removed = true;
+            } catch (cleanupError) {
+                console.error('[Giveaway] Could not remove orphaned giveaway post:', cleanupError.message);
+            }
             console.error('[Giveaway] Could not persist giveaway record:', error.message);
-            return { success: false, message: '❌ The giveaway could not be saved. No active giveaway was registered.' };
+            return {
+                success: false,
+                message: removed
+                    ? '❌ The giveaway could not be saved, so the incomplete Discord post was removed.'
+                    : '❌ The giveaway record could not be saved or its Discord post removed. Ask an administrator to remove message ' + message.id + ' in channel ' + channel.id + '.'
+            };
         }
 
         return { success: true, message: '✅ Supreme Giveaway launched successfully!', giveaway: record };
@@ -206,17 +270,20 @@ module.exports = (client) => {
                 String(item.messageId) === String(messageId) && String(item.guildId) === String(channel.guild.id)
             );
             if (!record) return '❌ This giveaway is not in Starry’s records.';
+            let pending = record.pendingReroll;
+            if (!pending && record.status !== 'completed') {
+                return '❌ Only completed giveaways can be rerolled.';
+            }
 
             const message = await channel.messages.fetch(String(messageId));
-            const reaction = message.reactions.cache.get('🎉');
-            if (!reaction) return '❌ No 🎉 reactions were found on that giveaway.';
-            const validUsers = await fetchHumanParticipants(reaction);
-            if (!validUsers.length) return '❌ There are no human participants to reroll.';
-
-            let pending = record.pendingReroll;
             if (!pending) {
+                const reaction = message.reactions.cache.get('🎉');
+                if (!reaction) return '❌ No 🎉 reactions were found on that giveaway.';
+                const validUsers = await fetchHumanParticipants(reaction);
+                if (!validUsers.length) return '❌ There are no human participants to reroll.';
+
                 const previousWinnerMentions = message.embeds[0] && message.embeds[0].description
-                    ? message.embeds[0].description.match(/<@!?(\d+)>/g) || []
+                    ? message.embeds[0].description.match(/<@!?(\\d+)>/g) || []
                     : [];
                 const previousWinnerIds = Array.isArray(record.winnerIds) && record.winnerIds.length
                     ? record.winnerIds
@@ -229,14 +296,19 @@ module.exports = (client) => {
                     winners.push(eligibleUsers.splice(crypto.randomInt(eligibleUsers.length), 1)[0]);
                 }
                 if (!winners.length) return '❌ No eligible participants could be selected.';
+
+                const historyBoundaryId = await newestChannelMessageId(channel);
                 const saved = await updateGiveawayRecord(channel.guild.id, String(messageId), current => {
-                    if (!current.pendingReroll) {
+                    if (!current.pendingReroll && current.status === 'completed') {
                         current.pendingReroll = {
                             nonce: crypto.randomBytes(12).toString('hex'),
                             winnerIds: winners,
                             winnerCount,
                             executorId: String(executor.id),
-                            createdAt: Date.now()
+                            createdAt: Date.now(),
+                            historyBoundaryCaptured: true,
+                            historyBoundaryId,
+                            announcementSent: false
                         };
                     }
                 });
@@ -248,7 +320,7 @@ module.exports = (client) => {
 
             const winners = pending.winnerIds;
             const winnersText = winners.map(id => '<@' + id + '>').join(', ');
-            const marker = '\u2063starry-reroll:' + pending.nonce + '\u2063';
+            const marker = '\\u2063starry-reroll:' + pending.nonce + '\\u2063';
             const rerollEmbed = new EmbedBuilder()
                 .setColor('#00F5D4')
                 .setAuthor({ name: '🔄 GIVEAWAY WINNER REROLLED 🔄' })
@@ -260,26 +332,47 @@ module.exports = (client) => {
                     '👑 **Rerolled By:** <@' + pending.executorId + '>',
                     '',
                     '*“Here’s to the new champion!”* 🥂'
-                ].join('\n'))
+                ].join('\\n'))
                 .setImage(ASSETS.WINNER_BANNER)
                 .setFooter({ text: 'Reroll Complete • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
                 .setTimestamp();
 
-            const recentMessages = await channel.messages.fetch({ limit: 50 });
-            const alreadyAnnounced = recentMessages.some(item =>
-                item.author && item.author.id === client.user.id &&
-                typeof item.content === 'string' && item.content.includes(marker)
-            );
-            if (!alreadyAnnounced) {
-                await channel.send({
-                    content: '🎉 **NEW REROLLED WINNER(S):** ' + winnersText + '! Congratulations! 🚀🥂\n' + marker,
-                    embeds: [rerollEmbed],
-                    allowedMentions: { parse: [], users: winners }
+            // Older pending rerolls did not persist a history boundary. Reconcile
+            // all accessible history before deciding whether to publish again.
+            if (pending.historyBoundaryCaptured !== true) {
+                const history = await findMarkerInChannelHistory(channel, marker, null);
+                const migrated = await updateGiveawayRecord(channel.guild.id, String(messageId), current => {
+                    if (current.pendingReroll && current.pendingReroll.nonce === pending.nonce) {
+                        current.pendingReroll.historyBoundaryCaptured = true;
+                        current.pendingReroll.historyBoundaryId = history.oldestMessageId;
+                        current.pendingReroll.announcementSent = history.found;
+                    }
                 });
+                pending = migrated && migrated.pendingReroll;
+                if (!pending) throw new Error('Could not persist the reroll history boundary.');
+            }
+
+            if (pending.announcementSent !== true) {
+                const history = await findMarkerInChannelHistory(channel, marker, pending.historyBoundaryId || null);
+                if (!history.found) {
+                    await channel.send({
+                        content: '🎉 **NEW REROLLED WINNER(S):** ' + winnersText + '! Congratulations! 🚀🥂\\n' + marker,
+                        embeds: [rerollEmbed],
+                        allowedMentions: { parse: [], users: winners }
+                    });
+                }
+                const published = await updateGiveawayRecord(channel.guild.id, String(messageId), current => {
+                    if (current.pendingReroll && current.pendingReroll.nonce === pending.nonce) {
+                        current.pendingReroll.announcementSent = true;
+                    }
+                });
+                pending = published && published.pendingReroll;
+                if (!pending) throw new Error('Could not persist reroll publication state.');
             }
 
             await updateGiveawayRecord(channel.guild.id, String(messageId), current => {
-                if (!current.pendingReroll || current.pendingReroll.nonce !== pending.nonce) return;
+                if (!current.pendingReroll || current.pendingReroll.nonce !== pending.nonce ||
+                    current.pendingReroll.announcementSent !== true) return;
                 current.winnerIds = winners;
                 current.lastRerolledAt = Date.now();
                 current.rerollCount = Number(current.rerollCount || 0) + 1;
@@ -337,9 +430,12 @@ module.exports = (client) => {
             }
             await checkGiveaways(String(messageId));
             const result = client.starryGiveawayEngine.find(guildId, messageId);
+            if (result?.status === 'failed') {
+                throw new Error(result.failureReason || 'Discord could not complete this giveaway.');
+            }
             return {
                 success: result && result.status === 'completed',
-                pending: Boolean(result && result.status !== 'completed' && result.status !== 'failed'),
+                pending: Boolean(result && result.status !== 'completed'),
                 giveaway: result
             };
         },
