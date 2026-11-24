@@ -37,7 +37,38 @@ function hasUnsafeMongoKeys(value, depth = 0) {
     if (Array.isArray(value)) return value.some(item => hasUnsafeMongoKeys(item, depth + 1));
     if (!value || typeof value !== 'object') return false;
     return Object.keys(value).some(key =>
-        !key || key.startsWith('
+        !key || key.startsWith('$') || key.includes('.') ||
+        key === '__proto__' || key === 'prototype' || key === 'constructor' ||
+        hasUnsafeMongoKeys(value[key], depth + 1)
+    );
+}
+
+function getTrustedSpotifyBackendBaseUrl() {
+    const configured = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_WEB_URL || getPublicUrl();
+    if (typeof configured !== 'string' || !configured.trim()) {
+        throw new Error('Set RENDER_EXTERNAL_URL or PUBLIC_WEB_URL before starting Spotify OAuth.');
+    }
+    let parsed;
+    try { parsed = new URL(configured.trim()); }
+    catch (_) { throw new Error('The configured public backend URL is invalid.'); }
+    const localDevelopment = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if (parsed.username || parsed.password ||
+        (parsed.protocol !== 'https:' && !(localDevelopment && parsed.protocol === 'http:'))) {
+        throw new Error('The Spotify backend URL must use HTTPS and cannot contain credentials.');
+    }
+    return parsed.origin;
+}
+
+function assertSpotifyAuthorizationUrl(value) {
+    let parsed;
+    try { parsed = new URL(String(value || '')); }
+    catch (_) { throw new Error('Spotify returned an invalid authorization URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'accounts.spotify.com' ||
+        parsed.username || parsed.password) {
+        throw new Error('Spotify returned an unexpected authorization destination.');
+    }
+    return parsed.href;
+}
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
