@@ -213,7 +213,7 @@ function setupDashboardRoutes(app, client) {
             return { token, ...cached };
         }
         userSessions.delete(token);
-        const stored = await OAuthSession.findOne({ tokenHash, expiresAt: { $gt: new Date(now) } }).lean();
+        const stored = await OAuthSession.findOne().where('tokenHash').equals(tokenHash).where('expiresAt').gt(new Date(now)).lean();
         if (!stored) return null;
         const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], discordRefreshTokenEncrypted: stored.discordRefreshTokenEncrypted || null, expiresAt: new Date(stored.expiresAt).getTime() };
         try { await renewIfNeeded(session); } catch (error) {
@@ -407,7 +407,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/me/preferences', requireAuth, async (req, res) => {
         try {
             const DashboardPreferences = require('../models/DashboardPreferences');
-            const preferences = await DashboardPreferences.findOne({ userId: String(req.session.user.id) }).lean();
+            const preferences = await DashboardPreferences.findOne().where('userId').equals(String(req.session.user.id)).lean();
             res.set('Cache-Control', 'no-store, private');
             res.json({
                 success: true,
@@ -911,11 +911,11 @@ function setupDashboardRoutes(app, client) {
             let effectivePremium = settingsPayload.premium || {};
             try {
                 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
-                const activeGuildPremium = await PremiumModel.findOne({
-                    targetId: guild.id,
-                    isPremium: true,
-                    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
-                }).lean();
+                const activeGuildPremium = await PremiumModel.findOne()
+                    .where('targetId').equals(guild.id)
+                    .where('isPremium').equals(true)
+                    .or([{ expiresAt: null }, { expiresAt: { $gt: new Date() } }])
+                    .lean();
                 if (activeGuildPremium) {
                     const recordExpiry = activeGuildPremium.expiresAt || null;
                     effectivePremium = {
@@ -1050,7 +1050,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
-            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
+            const premiumSettings = await ServerSettings.findOne().where('guildId').equals(req.guild.id).select('premium').lean();
             const premium = premiumSettings?.premium;
             const premiumActive = Boolean(premium?.isPremium) &&
                 (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
