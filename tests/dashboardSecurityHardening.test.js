@@ -11,6 +11,7 @@ const antiNuke = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'a
 const giveaway = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'giveaway.js'), 'utf8');
 const spotifyCrypto = fs.readFileSync(path.join(__dirname, '..', 'src', 'utils', 'spotifyTokenCrypto.js'), 'utf8');
 const spotifyManager = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'spotifyManager.js'), 'utf8');
+const paymentHelper = fs.readFileSync(path.join(__dirname, '..', 'src', 'utils', 'paymentHelper.js'), 'utf8');
 const musicController = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'musicController.js'), 'utf8');
 
 test('Guild middleware validates IDs before Discord cache access or Mongo queries', () => {
@@ -101,6 +102,32 @@ test('Spotify controller acknowledges before network work and handles lookup err
     assert.match(musicController, /await interaction\.deferReply\(\{ flags: \[EPHEMERAL_FLAG\] \}\)/);
     assert.match(musicController, /data = await spotifyManager\.getUserPlaylists\(interaction\.user\.id\)/);
     assert.match(musicController, /Spotify library is temporarily unavailable/);
+});
+
+test('Dashboard moderation validates action, IDs, permissions and bounded inputs', () => {
+    const start = dashboard.indexOf("app.post('/api/guild/:id/mod/action'");
+    const end = dashboard.indexOf("\n    });", start);
+    assert.ok(start >= 0 && end > start);
+    const route = dashboard.slice(start, end);
+    assert.match(route, /const validActions = new Set/);
+    assert.ok(route.includes("A valid Discord user ID is required."));
+    assert.ok(route.includes("A valid server role ID is required."));
+    assert.ok(route.includes("durationValue > 40320"));
+    assert.ok(route.includes("nickname.length > 32"));
+    assert.ok(route.includes("The moderation action failed. Verify Starry permissions and try again."));
+});
+
+test('Booster Studio validates role names and hex colors and rejects unexposed fields', () => {
+    assert.ok(dashboard.includes("Provide only a role name and color."));
+    assert.ok(dashboard.includes("Provide a role name or color to update."));
+    assert.ok(dashboard.includes("Role color must be a valid hexadecimal color."));
+    assert.ok(dashboard.includes("!['name', 'color'].includes(key)"));
+});
+
+test('Premium order lookup validates and binds a scalar order identifier', () => {
+    assert.match(paymentHelper, /const cleanOrderId = orderId\.trim\(\)\.toUpperCase\(\)/);
+    assert.match(paymentHelper, /!\/\^\[A-Z0-9_\-\]\{1,128\}\$\//);
+    assert.match(paymentHelper, /findOne\(\)\.where\('orderId'\)\.equals\(cleanOrderId\)/);
 });
 
 test('Spotify refresh updates only the originally linked account record', () => {
