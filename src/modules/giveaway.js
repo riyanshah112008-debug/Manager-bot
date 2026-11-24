@@ -200,63 +200,98 @@ module.exports = (client) => {
         if (rerollLocks.has(lockKey)) return '❌ This giveaway is already being rerolled. Please retry shortly.';
         rerollLocks.add(lockKey);
         try {
-            const message = await channel.messages.fetch(messageId).catch(() => null);
-            if (!message) return '❌ **Giveaway message not found!** Make sure you provided a valid Message ID from this channel.';
+            if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 20) {
+                return '❌ Winner count must be a whole number from 1 to 20.';
+            }
+            const record = getGiveaways().find(item =>
+                String(item.messageId) === String(messageId) && String(item.guildId) === String(channel.guild.id)
+            );
+            if (!record) return '❌ This giveaway is not in Starry’s records.';
 
+            const message = await channel.messages.fetch(String(messageId));
             const reaction = message.reactions.cache.get('🎉');
-            if (!reaction) return '❌ **No 🎉 reactions found on that message!**';
-
+            if (!reaction) return '❌ No 🎉 reactions were found on that giveaway.';
             const validUsers = await fetchHumanParticipants(reaction);
-            if (validUsers.length === 0) return '❌ **Cannot reroll!** There are no human participants in the reactions.';
+            if (!validUsers.length) return '❌ There are no human participants to reroll.';
 
-            const records = getGiveaways();
-            const record = records.find(item => item.messageId === String(messageId) && item.guildId === channel.guild.id);
-            const previousWinnerMentions = message.embeds[0]?.description?.match(/<@!?(\d+)>/g) || [];
-            const previousWinnerIds = Array.isArray(record?.winnerIds) && record.winnerIds.length
-                ? record.winnerIds
-                : previousWinnerMentions.map(m => m.replace(/<@!?|>/g, '')).filter(id => id !== record?.hostId);
-            const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
-            const eligibleUsers = filteredUsers.length >= winnerCount ? filteredUsers : [...validUsers];
-
-            const winners = [];
-            for (let i = 0; i < winnerCount; i++) {
-                if (eligibleUsers.length === 0) break;
-                winners.push(eligibleUsers.splice(crypto.randomInt(eligibleUsers.length), 1)[0]);
+            let pending = record.pendingReroll;
+            if (!pending) {
+                const previousWinnerMentions = message.embeds[0] && message.embeds[0].description
+                    ? message.embeds[0].description.match(/<@!?(\d+)>/g) || []
+                    : [];
+                const previousWinnerIds = Array.isArray(record.winnerIds) && record.winnerIds.length
+                    ? record.winnerIds
+                    : previousWinnerMentions.map(mention => mention.replace(/<@!?|>/g, '')).filter(id => id !== record.hostId);
+                const filteredUsers = validUsers.filter(id => !previousWinnerIds.includes(id));
+                const eligibleUsers = filteredUsers.length >= winnerCount ? filteredUsers : [...validUsers];
+                const drawLimit = Math.min(winnerCount, eligibleUsers.length);
+                const winners = [];
+                for (let index = 0; index < drawLimit; index++) {
+                    winners.push(eligibleUsers.splice(crypto.randomInt(eligibleUsers.length), 1)[0]);
+                }
+                if (!winners.length) return '❌ No eligible participants could be selected.';
+                const saved = await updateGiveawayRecord(channel.guild.id, String(messageId), current => {
+                    if (!current.pendingReroll) {
+                        current.pendingReroll = {
+                            nonce: crypto.randomBytes(12).toString('hex'),
+                            winnerIds: winners,
+                            winnerCount,
+                            executorId: String(executor.id),
+                            createdAt: Date.now()
+                        };
+                    }
+                });
+                pending = saved && saved.pendingReroll;
             }
-            if (!winners.length) return '❌ No eligible participants could be selected.';
-
-            const winnersText = winners.map(id => `<@${id}>`).join(', ');
-            if (record) {
-                record.winnerIds = winners;
-                record.lastRerolledAt = Date.now();
-                record.rerollCount = Number(record.rerollCount || 0) + 1;
-                saveGiveaways(records);
+            if (!pending || !Array.isArray(pending.winnerIds) || !pending.winnerIds.length) {
+                return '❌ The saved reroll result is unavailable. Please contact support.';
             }
 
+            const winners = pending.winnerIds;
+            const winnersText = winners.map(id => '<@' + id + '>').join(', ');
+            const marker = '\u2063starry-reroll:' + pending.nonce + '\u2063';
             const rerollEmbed = new EmbedBuilder()
                 .setColor('#00F5D4')
                 .setAuthor({ name: '🔄 GIVEAWAY WINNER REROLLED 🔄' })
-                .setTitle(message.embeds[0]?.title || '🎁 Prize Reroll')
+                .setTitle(message.embeds[0] && message.embeds[0].title || '🎁 Prize Reroll')
                 .setDescription([
-                    `> A new winner has been selected by request!`,
-                    ` `,
-                    `🥳 **New Winner(s):** ${winnersText}`,
-                    `👑 **Rerolled By:** <@${executor.id}>`,
-                    ` `,
-                    `*“Here’s to the new champion!”* 🥂`
+                    '> A new winner has been selected by request!',
+                    '',
+                    '🥳 **New Winner(s):** ' + winnersText,
+                    '👑 **Rerolled By:** <@' + pending.executorId + '>',
+                    '',
+                    '*“Here’s to the new champion!”* 🥂'
                 ].join('\n'))
                 .setImage(ASSETS.WINNER_BANNER)
                 .setFooter({ text: 'Reroll Complete • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
                 .setTimestamp();
 
-            await channel.send({
-                content: `🎉 **NEW REROLLED WINNER(S):** ${winnersText}! Congratulations! 🚀🥂`,
-                embeds: [rerollEmbed]
+            const recentMessages = await channel.messages.fetch({ limit: 50 });
+            const alreadyAnnounced = recentMessages.some(item =>
+                item.author && item.author.id === client.user.id &&
+                typeof item.content === 'string' && item.content.includes(marker)
+            );
+            if (!alreadyAnnounced) {
+                await channel.send({
+                    content: '🎉 **NEW REROLLED WINNER(S):** ' + winnersText + '! Congratulations! 🚀🥂\n' + marker,
+                    embeds: [rerollEmbed],
+                    allowedMentions: { parse: [], users: winners }
+                });
+            }
+
+            await updateGiveawayRecord(channel.guild.id, String(messageId), current => {
+                if (!current.pendingReroll || current.pendingReroll.nonce !== pending.nonce) return;
+                current.winnerIds = winners;
+                current.lastRerolledAt = Date.now();
+                current.rerollCount = Number(current.rerollCount || 0) + 1;
+                current.rerollHistory = Array.isArray(current.rerollHistory) ? current.rerollHistory : [];
+                current.rerollHistory.push({ nonce: pending.nonce, winnerIds: winners, at: Date.now() });
+                delete current.pendingReroll;
             });
             return '✅ Winner rerolled successfully!';
         } catch (error) {
             console.error('Giveaway reroll failed:', error.message);
-            return '❌ Could not reroll this giveaway right now. Please retry.';
+            return '❌ Could not publish the saved reroll result right now. Retry to publish the same selected winner(s).';
         } finally {
             rerollLocks.delete(lockKey);
         }
