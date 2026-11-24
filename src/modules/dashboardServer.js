@@ -213,7 +213,7 @@ function setupDashboardRoutes(app, client) {
             return { token, ...cached };
         }
         userSessions.delete(token);
-        const stored = await OAuthSession.findOne().where('tokenHash').equals(tokenHash).where('expiresAt').gt(new Date(now)).lean();
+        const stored = await OAuthSession.findOne({ tokenHash, expiresAt: { $gt: new Date(now) } }).lean();
         if (!stored) return null;
         const session = { user: stored.user, guilds: Array.isArray(stored.guilds) ? stored.guilds : [], discordRefreshTokenEncrypted: stored.discordRefreshTokenEncrypted || null, expiresAt: new Date(stored.expiresAt).getTime() };
         try { await renewIfNeeded(session); } catch (error) {
@@ -407,7 +407,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/me/preferences', requireAuth, async (req, res) => {
         try {
             const DashboardPreferences = require('../models/DashboardPreferences');
-            const preferences = await DashboardPreferences.findOne().where('userId').equals(String(req.session.user.id)).lean();
+            const preferences = await DashboardPreferences.findOne({ userId: String(req.session.user.id) }).lean();
             res.set('Cache-Control', 'no-store, private');
             res.json({
                 success: true,
@@ -768,7 +768,7 @@ function setupDashboardRoutes(app, client) {
             const rewardCred = isWeekend === true ? 1000 : 500;
             const rewardXp = isWeekend === true ? 1000 : 500;
 
-            const userQuery = User.findOne().where('userId').equals(safeUserId);
+            const userQuery = User.findOne({ userId: safeUserId });
             let userDoc = await userQuery.exec();
             if (!userDoc) userDoc = new User({ userId: safeUserId, guildId: 'global' });
 
@@ -900,7 +900,7 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
 
-            let settings = await ServerSettings.findOne().where('guildId').equals(guild.id);
+            let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: guild.id });
             }
@@ -911,11 +911,11 @@ function setupDashboardRoutes(app, client) {
             let effectivePremium = settingsPayload.premium || {};
             try {
                 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
-                const activeGuildPremium = await PremiumModel.findOne()
-                    .where('targetId').equals(guild.id)
-                    .where('isPremium').equals(true)
-                    .or([{ expiresAt: null }, { expiresAt: { $gt: new Date() } }])
-                    .lean();
+                const activeGuildPremium = await PremiumModel.findOne({
+                    targetId: guild.id,
+                    isPremium: true,
+                    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
+                }).lean();
                 if (activeGuildPremium) {
                     const recordExpiry = activeGuildPremium.expiresAt || null;
                     effectivePremium = {
@@ -1050,7 +1050,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
-            const premiumSettings = await ServerSettings.findOne().where('guildId').equals(req.guild.id).select('premium').lean();
+            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
             const premium = premiumSettings?.premium;
             const premiumActive = Boolean(premium?.isPremium) &&
                 (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
@@ -1111,7 +1111,7 @@ function setupDashboardRoutes(app, client) {
         try {
             res.set('Cache-Control', 'no-store, private');
             const { WelcomeSettings } = require('./welcome');
-            const settings = await WelcomeSettings.findOne().where('guildId').equals(req.guild.id).lean();
+            const settings = await WelcomeSettings.findOne({ guildId: req.guild.id }).lean();
             res.json({ success: true, configured: Boolean(settings), settings: settings || {
                 channelId: '', title: '✨ WELCOME TO {server} ✨',
                 description: '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟',
@@ -1269,7 +1269,7 @@ function setupDashboardRoutes(app, client) {
             const leveling = require('./leveling');
             const { LevelSettings, LevelUser } = leveling;
             const guildId = req.guild.id;
-            const settings = await LevelSettings.findOne().where('guildId').equals(guildId).lean() || {
+            const settings = await LevelSettings.findOne({ guildId }).lean() || {
                 enabled: true, announcementChannelId: null, logChannelId: null, title: 'Congratulations {user}!',
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
                 color: '#5865F2', image: '', thumbnail: 'avatar',
@@ -1385,7 +1385,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/guild/:id/security/status', requireGuildAdmin, async (req, res) => {
         try {
             const guild = req.guild;
-            const settings = await ServerSettings.findOne().where('guildId').equals(guild.id).select('antinuke').lean();
+            const settings = await ServerSettings.findOne({ guildId: guild.id }).select('antinuke').lean();
             const policy = settings?.antinuke || {};
             const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
             const engineReady = client.antiNukeReady === true;
@@ -1486,14 +1486,14 @@ function setupDashboardRoutes(app, client) {
             if (body.enabled !== undefined) {
                 await helper.setGuildStatus(req.guild.id, body.enabled);
                 const { AutomodGuild } = require('../models/AutomodSchema');
-                const stored = await AutomodGuild.findOne().where('guildId').equals(req.guild.id).lean();
+                const stored = await AutomodGuild.findOne({ guildId: req.guild.id }).lean();
                 if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
             }
             if (selectedChannel) {
                 const { AutomodChannel } = require('../models/AutomodSchema');
                 if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
                 if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
-                const stored = await AutomodChannel.findOne().where('channelId').equals(channelId).where('guildId').equals(req.guild.id).lean();
+                const stored = await AutomodChannel.findOne({ channelId, guildId: req.guild.id }).lean();
                 const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
                 const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
                 if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
@@ -2193,7 +2193,7 @@ function setupDashboardRoutes(app, client) {
             const isBooster = boosterEngine.isBooster(member);
 
             const settings = await boosterEngine.getSettings(guild.id);
-            const myDoc = await BoosterRole.findOne().where('guildId').equals(guild.id).where('userId').equals(member.id);
+            const myDoc = await BoosterRole.findOne({ guildId: guild.id, userId: member.id });
             let myRole = null;
             if (myDoc) {
                 const r = guild.roles.cache.get(myDoc.roleId);
