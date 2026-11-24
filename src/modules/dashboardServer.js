@@ -2301,7 +2301,10 @@ function setupDashboardRoutes(app, client) {
     // GET /api/premium/order/:orderId - Check Live Order Status (Polling endpoint)
     app.get('/api/premium/order/:orderId', requireAuth, async (req, res) => {
         try {
-            const { orderId } = req.params;
+            const orderId = typeof req.params.orderId === 'string' ? req.params.orderId.trim().toUpperCase() : '';
+            if (!/^[A-Z0-9_-]{1,128}$/.test(orderId)) {
+                return res.status(404).json({ success: false, error: 'Order not found.' });
+            }
             const order = await getOrderStatus(orderId);
             if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
 
