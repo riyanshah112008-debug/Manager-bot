@@ -14,6 +14,38 @@ const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
 
+// Migrate legacy plaintext credentials without overwriting a Spotify account
+// that may have been relinked after the original document was read.
+async function migrateLegacyTokens(userDoc) {
+    if (!userDoc) return null;
+    const originalAccessToken = userDoc.accessToken;
+    const originalRefreshToken = userDoc.refreshToken;
+    const updates = {};
+
+    if (originalAccessToken && !String(originalAccessToken).startsWith('enc:v1:')) {
+        updates.accessToken = encryptToken(originalAccessToken);
+    }
+    if (originalRefreshToken && !String(originalRefreshToken).startsWith('enc:v1:')) {
+        updates.refreshToken = encryptToken(originalRefreshToken);
+    }
+    if (!Object.keys(updates).length) return userDoc;
+
+    const filter = { _id: userDoc._id };
+    if (originalAccessToken !== undefined) filter.accessToken = originalAccessToken;
+    if (originalRefreshToken !== undefined) filter.refreshToken = originalRefreshToken;
+
+    const migrated = await UserSpotify.findOneAndUpdate(
+        filter,
+        { $set: { ...updates, updatedAt: new Date() } },
+        { new: true }
+    );
+    if (migrated) return migrated;
+
+    // The row changed while this migration was in flight. Always use the
+    // latest linked account; never use or persist the stale credentials.
+    return UserSpotify.findOne().where('userId').equals(String(userDoc.userId)).exec();
+}
+
 class SpotifyManager {
     constructor() {
         this.appToken = null;
@@ -329,21 +361,14 @@ class SpotifyManager {
     }
 
     async getAccountStatus(userId) {
-        const userDoc = await UserSpotify.findOne({ userId });
+        let userDoc = await UserSpotify.findOne().where('userId').equals(String(userId)).exec();
         if (!userDoc) {
             return { isLinked: false, spotifyId: '', displayName: '', profileUrl: '', avatarUrl: '', tokenExpiresAt: null, savedPlaylistCount: 0 };
         }
-        // Encrypt legacy plaintext tokens on first authenticated account visit.
-        let migrated = false;
-        if (userDoc.accessToken && !String(userDoc.accessToken).startsWith('enc:v1:')) {
-            userDoc.accessToken = encryptToken(userDoc.accessToken);
-            migrated = true;
+        userDoc = await migrateLegacyTokens(userDoc);
+        if (!userDoc) {
+            return { isLinked: false, spotifyId: '', displayName: '', profileUrl: '', avatarUrl: '', tokenExpiresAt: null, savedPlaylistCount: 0 };
         }
-        if (userDoc.refreshToken && !String(userDoc.refreshToken).startsWith('enc:v1:')) {
-            userDoc.refreshToken = encryptToken(userDoc.refreshToken);
-            migrated = true;
-        }
-        if (migrated) await userDoc.save();
         return {
             isLinked: Boolean(userDoc.spotifyId),
             spotifyId: userDoc.spotifyId || '',
@@ -361,7 +386,8 @@ class SpotifyManager {
     }
 
     async getUserPlaylists(userId) {
-        const userDoc = await UserSpotify.findOne({ userId });
+        let userDoc = await UserSpotify.findOne().where('userId').equals(String(userId)).exec();
+        userDoc = await migrateLegacyTokens(userDoc);
         const result = {
             isLinked: Boolean(userDoc && userDoc.accessToken),
             displayName: userDoc?.displayName || '',
@@ -374,11 +400,6 @@ class SpotifyManager {
         // If user linked via OAuth, fetch live Spotify account playlists
         if (userDoc && userDoc.accessToken) {
             let token = decryptToken(userDoc.accessToken);
-            if (userDoc.accessToken && !String(userDoc.accessToken).startsWith('enc:v1:')) {
-                userDoc.accessToken = encryptToken(userDoc.accessToken);
-                if (userDoc.refreshToken && !String(userDoc.refreshToken).startsWith('enc:v1:')) userDoc.refreshToken = encryptToken(userDoc.refreshToken);
-                await userDoc.save();
-            }
             if (userDoc.tokenExpiresAt && new Date() >= userDoc.tokenExpiresAt) {
                 token = await this.refreshUserToken(userDoc);
             }
