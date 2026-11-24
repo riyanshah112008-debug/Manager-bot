@@ -645,24 +645,43 @@ module.exports = (client) => {
         }
 
         if (!record.processingResult || record.processingResult.announcementSent !== true) {
-            const marker = '\u2063starry-giveaway:' + result.nonce + '\u2063';
-            const recentMessages = await channel.messages.fetch({ limit: 100 });
-            const alreadyAnnounced = recentMessages.some(item =>
-                item.author && item.author.id === client.user.id &&
-                typeof item.content === 'string' && item.content.includes(marker)
-            );
-            if (!alreadyAnnounced) {
+            const marker = '\\u2063starry-giveaway:' + result.nonce + '\\u2063';
+            let shouldSend = record.processingResult.announcementSent !== true;
+
+            if (record.processingResult.announcementBoundaryCaptured !== true) {
+                // Legacy processing records are reconciled against the complete
+                // accessible history before a publication boundary is recorded.
+                const history = await findMarkerInChannelHistory(channel, marker, null);
+                record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
+                    if (current.processingResult && current.processingResult.nonce === result.nonce) {
+                        current.processingResult.announcementBoundaryCaptured = true;
+                        current.processingResult.announcementBoundaryId = history.oldestMessageId;
+                        current.processingResult.announcementSent = history.found;
+                    }
+                });
+                if (!record) throw new Error('Could not persist giveaway history boundary; retrying.');
+                shouldSend = history.found !== true;
+            } else if (shouldSend) {
+                const history = await findMarkerInChannelHistory(
+                    channel,
+                    marker,
+                    record.processingResult.announcementBoundaryId || null
+                );
+                shouldSend = history.found !== true;
+            }
+
+            if (shouldSend) {
                 await channel.send({
-                    content: announcementContent + '\n' + marker,
+                    content: announcementContent + '\\n' + marker,
                     allowedMentions: { parse: [], users: result.winnerIds }
                 });
+                record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
+                    if (current.processingResult && current.processingResult.nonce === result.nonce) {
+                        current.processingResult.announcementSent = true;
+                    }
+                });
+                if (!record) throw new Error('Could not persist giveaway announcement progress; retrying.');
             }
-            record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
-                if (current.processingResult && current.processingResult.nonce === result.nonce) {
-                    current.processingResult.announcementSent = true;
-                }
-            });
-            if (!record) throw new Error('Could not persist giveaway announcement progress; retrying.');
         }
 
         await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
