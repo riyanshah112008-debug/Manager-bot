@@ -2233,10 +2233,21 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/booster-roles/create - Create custom booster role
     app.post('/api/guild/:id/booster-roles/create', actionLimiter, requireGuildMember, async (req, res) => {
         try {
-            const { name, color, icon } = req.body;
-            if (!name) return res.status(400).json({ success: false, error: 'Role name is required.' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).some(key => !['name', 'color'].includes(key))) {
+                return res.status(400).json({ success: false, error: 'Provide only a role name and color.' });
+            }
+            const name = body.name === undefined || body.name === null ? '' : body.name;
+            const color = body.color === undefined || body.color === null || body.color === '' ? '#FF73FA' : body.color;
+            if (typeof name !== 'string' || name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) {
+                return res.status(400).json({ success: false, error: 'Role name must be plain text up to 100 characters.' });
+            }
+            if (typeof color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(color.trim())) {
+                return res.status(400).json({ success: false, error: 'Role color must be a valid hexadecimal color.' });
+            }
 
-            const result = await boosterEngine.createBoosterRole(req.guild, req.member, { name, color, icon });
+            const result = await boosterEngine.createBoosterRole(req.guild, req.member, { name: name.trim(), color: color.trim() });
             res.json({
                 success: true,
                 message: `✨ Custom booster role [${result.doc.name}] created successfully!`,
@@ -2255,8 +2266,25 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/booster-roles/update - Update role styling
     app.post('/api/guild/:id/booster-roles/update', actionLimiter, requireGuildMember, async (req, res) => {
         try {
-            const { name, color, icon } = req.body;
-            const result = await boosterEngine.updateBoosterRole(req.guild, req.member, { name, color, icon });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).length === 0 || Object.keys(body).some(key => !['name', 'color'].includes(key))) {
+                return res.status(400).json({ success: false, error: 'Provide a role name or color to update.' });
+            }
+            const updates = {};
+            if (body.name !== undefined) {
+                if (typeof body.name !== 'string' || body.name.length > 100 || /[\u0000-\u001f\u007f]/.test(body.name)) {
+                    return res.status(400).json({ success: false, error: 'Role name must be plain text up to 100 characters.' });
+                }
+                updates.name = body.name.trim();
+            }
+            if (body.color !== undefined) {
+                if (typeof body.color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(body.color.trim())) {
+                    return res.status(400).json({ success: false, error: 'Role color must be a valid hexadecimal color.' });
+                }
+                updates.color = body.color.trim();
+            }
+            const result = await boosterEngine.updateBoosterRole(req.guild, req.member, updates);
             res.json({
                 success: true,
                 message: '🎨 Custom booster role updated!',
