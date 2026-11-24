@@ -297,65 +297,61 @@ module.exports = (client) => {
         }
     }
 
-    // Single service facade used by both Discord commands and the dashboard API.
+    // One serialized JSON-backed service facade is shared by Discord and the dashboard.
     client.starryGiveawayEngine = {
-        list: async guildId => {
-            const records = getGiveaways().filter(item => item.guildId === String(guildId));
-            return Promise.all(records.map(async item => {
-                let participantCount = Number(item.participantCount || 0);
-                if (item.status === 'active') {
-                    const guild = client.guilds.cache.get(item.guildId);
-                    const channel = guild?.channels.cache.get(item.channelId);
-                    const message = await channel?.messages.fetch(item.messageId).catch(() => null);
-                    const reaction = message?.reactions.cache.get('🎉');
-                    if (reaction) {
-                        const users = await fetchHumanParticipants(reaction).catch(() => null);
-                        if (users) participantCount = users.length;
-                    }
-                }
-                return {
-                    messageId: item.messageId, channelId: item.channelId, guildId: item.guildId,
-                    prize: item.prize, winners: item.winners, endsAt: item.endsAt, hostId: item.hostId,
-                    status: item.status || (item.endsAt > Date.now() ? 'active' : 'processing'),
-                    participantCount, winnerIds: item.winnerIds || [],
-                    createdAt: item.createdAt || null, completedAt: item.completedAt || null
-                };
-            }));
-        },
+        list: async guildId => getGiveaways()
+            .filter(item => String(item.guildId) === String(guildId))
+            .map(item => ({
+                messageId: item.messageId,
+                channelId: item.channelId,
+                guildId: item.guildId,
+                prize: item.prize,
+                winners: item.winners,
+                endsAt: item.endsAt,
+                hostId: item.hostId,
+                status: item.status || (Number(item.endsAt) > Date.now() ? 'active' : 'processing'),
+                participantCount: Number(item.participantCount || 0),
+                winnerIds: item.winnerIds || [],
+                createdAt: item.createdAt || null,
+                completedAt: item.completedAt || null
+            })),
         create: async (channel, author, duration, winnerCount, prize) => {
-            const previousIds = new Set(getGiveaways().map(item => item.messageId));
-            const response = await startGiveaway(channel, author, duration, winnerCount, prize);
-            if (String(response).includes('❌')) throw new Error(String(response).replace(/\*\*/g, ''));
-            const record = getGiveaways().find(item =>
-                item.guildId === channel.guild.id && item.hostId === author.id &&
-                item.prize === prize && !previousIds.has(item.messageId)
-            );
-            if (!record) throw new Error('Giveaway message was sent but its record could not be verified.');
-            return { message: response, giveaway: record };
+            const result = await startGiveaway(channel, author, duration, winnerCount, prize);
+            if (!result.success) throw new Error(result.message);
+            return { message: result.message, giveaway: result.giveaway };
         },
-        find: (guildId, messageId) => getGiveaways().find(item =>
-            item.guildId === String(guildId) && item.messageId === String(messageId)
-        ) || null,
+        find: (guildId, messageId) => {
+            const record = getGiveaways().find(item =>
+                String(item.guildId) === String(guildId) && String(item.messageId) === String(messageId)
+            );
+            return record ? JSON.parse(JSON.stringify(record)) : null;
+        },
         end: async (guildId, messageId) => {
-            const records = getGiveaways();
-            const record = records.find(item => item.guildId === String(guildId) && item.messageId === String(messageId));
-            if (!record) throw new Error('Giveaway does not exist in this server.');
-            if (record.status === 'completed' || record.status === 'failed') throw new Error('This giveaway has already ended.');
-            record.endsAt = Date.now();
-            record.status = 'active';
-            saveGiveaways(records);
-            await checkGiveaways();
-            const updated = getGiveaways().find(item => item.messageId === String(messageId));
-            return { success: updated?.status === 'completed', giveaway: updated || record };
+            const updated = await updateGiveawayRecord(guildId, messageId, current => {
+                if (current.status === 'completed' || current.status === 'failed') return;
+                current.endsAt = Date.now();
+                if (current.status !== 'processing') current.status = 'active';
+            });
+            if (!updated) throw new Error('Giveaway does not exist in this server.');
+            if (updated.status === 'completed' || updated.status === 'failed') {
+                throw new Error('This giveaway has already ended.');
+            }
+            await checkGiveaways(String(messageId));
+            const result = client.starryGiveawayEngine.find(guildId, messageId);
+            return {
+                success: result && result.status === 'completed',
+                pending: Boolean(result && result.status !== 'completed' && result.status !== 'failed'),
+                giveaway: result
+            };
         },
         reroll: async (guildId, messageId, winnerCount, executor) => {
-            const record = getGiveaways().find(item => item.guildId === String(guildId) && item.messageId === String(messageId));
+            const record = client.starryGiveawayEngine.find(guildId, messageId);
             if (!record) throw new Error('Giveaway does not exist in this server.');
             const guild = client.guilds.cache.get(String(guildId));
-            const channel = guild?.channels.cache.get(record.channelId);
+            const channel = guild && guild.channels.cache.get(record.channelId);
             if (!channel) throw new Error('The giveaway channel is unavailable.');
             const response = await rerollGiveaway(channel, String(messageId), winnerCount || record.winners || 1, executor);
-            if (String(response).includes('❌')) throw new Error(String(response).replace(/\*\*/g, ''));
+            if (String(response).startsWith('❌')) throw new Error(String(response).replace(/\*\*/g, ''));
             return { success: true, message: response };
         }
     };
@@ -387,7 +383,7 @@ module.exports = (client) => {
             const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
 
             const response = await startGiveaway(targetChannel, interaction.user, duration, winners, prize);
-            await interaction.editReply({ content: response }).catch(() => {});
+            await interaction.editReply({ content: response.message }).catch(() => {});
         }
     });
 
@@ -440,8 +436,8 @@ module.exports = (client) => {
             }
 
             const response = await startGiveaway(message.channel, message.author, duration, winners, prize);
-            if (response.includes('❌')) {
-                await message.reply(response).catch(() => {});
+            if (!response.success) {
+                await message.reply(response.message).catch(() => {});
             } else {
                 await message.delete().catch(() => {});
             }
