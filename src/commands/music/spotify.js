@@ -280,15 +280,21 @@ module.exports = {
             if (!isSlash) {
                 return ctx.reply('For account security, use the `/spotify connect` slash command. Its private response keeps your personal Spotify authorization link hidden from the channel.');
             }
-            const port = process.env.PORT || 10000;
-            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://localhost:${port}`;
-            const redirectUri = getSpotifyRedirectUri(publicUrl);
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl();
             let authUrl;
             try {
+                if (!publicUrl) throw new Error('The backend public URL is not configured.');
+                const redirectUri = getSpotifyRedirectUri(publicUrl);
                 const authorization = await spotifyManager.createAuthorizationRequest(ctx.user.id, redirectUri);
-                authUrl = authorization.authorizeUrl;
+                const parsedAuthorizationUrl = new URL(authorization.authorizeUrl);
+                if (parsedAuthorizationUrl.protocol !== 'https:' || parsedAuthorizationUrl.hostname !== 'accounts.spotify.com' ||
+                    parsedAuthorizationUrl.username || parsedAuthorizationUrl.password) {
+                    throw new Error('Spotify returned an unexpected authorization destination.');
+                }
+                authUrl = parsedAuthorizationUrl.href;
             } catch (error) {
-                return ctx.reply('❌ Spotify connection could not be started: ' + String(error.message || 'OAuth setup is unavailable.').slice(0, 240));
+                console.warn('[Spotify] Slash-command connection setup failed:', error.message);
+                return ctx.reply('❌ Spotify connection could not be started. Check the backend callback configuration and retry.');
             }
 
             const row = new ActionRowBuilder().addComponents(
