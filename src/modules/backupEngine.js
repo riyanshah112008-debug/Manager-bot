@@ -20,10 +20,13 @@ try {
 }
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const ARCHIVE_MESSAGE_CONTENT = process.env.BACKUP_INCLUDE_MESSAGE_CONTENT === 'true';
 
 // Helper: Safely fetch recent channel message history
 async function fetchChannelMessageArchive(channel, limit = 50) {
-    if (!channel.isTextBased() || channel.isVoiceBased()) return [];
+    // Message content is excluded by default. Explicitly opt in through a private
+    // deployment environment variable, and never archive NSFW-marked channels.
+    if (!ARCHIVE_MESSAGE_CONTENT || channel.nsfw || !channel.isTextBased() || channel.isVoiceBased()) return [];
     const botPerms = channel.permissionsFor(channel.guild.members.me);
     if (!botPerms || !botPerms.has(PermissionFlagsBits.ReadMessageHistory) || !botPerms.has(PermissionFlagsBits.ViewChannel)) return [];
 
