@@ -12,9 +12,10 @@ const TIER_CONFIG = {
 };
 
 async function getOrderStatus(orderId) {
-    if (!orderId) return null;
+    if (typeof orderId !== 'string') return null;
     const cleanOrderId = orderId.trim().toUpperCase();
-    const order = await PaymentOrder.findOne({ orderId: cleanOrderId }).lean();
+    if (!/^[A-Z0-9_-]{1,128}$/.test(cleanOrderId)) return null;
+    const order = await PaymentOrder.findOne().where('orderId').equals(cleanOrderId).lean();
     if (!order) return null;
 
     return {
