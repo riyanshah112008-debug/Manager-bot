@@ -44,9 +44,9 @@ function hasUnsafeMongoKeys(value, depth = 0) {
 }
 
 function getTrustedSpotifyBackendBaseUrl() {
-    const configured = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_WEB_URL || getPublicUrl();
+    const configured = process.env.RENDER_EXTERNAL_URL || getPublicUrl();
     if (typeof configured !== 'string' || !configured.trim()) {
-        throw new Error('Set RENDER_EXTERNAL_URL or PUBLIC_WEB_URL before starting Spotify OAuth.');
+        throw new Error('Set the Render backend URL before starting Spotify OAuth.');
     }
     let parsed;
     try { parsed = new URL(configured.trim()); }
