@@ -162,7 +162,7 @@ function setupDashboardRoutes(app, client) {
         let token = null;
         if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
         else if (req.query.session) token = String(req.query.session);
-        if (!token || token.length > 4096) return null;
+        if (typeof token !== 'string' || !/^[a-f0-9]{64}$/i.test(token)) return null;
         const now = Date.now();
         const tokenHash = hashSessionToken(token);
         const renewIfNeeded = async (session) => {
@@ -322,7 +322,7 @@ function setupDashboardRoutes(app, client) {
                 redirectUri
             );
             res.set('Cache-Control', 'no-store, private');
-            res.json({ success: true, authorizeUrl: authorization.authorizeUrl });
+            res.json({ success: true, authorizeUrl: assertSpotifyAuthorizationUrl(authorization.authorizeUrl) });
         } catch (error) {
             console.error('Spotify authorization could not be started:', error.message);
             res.status(503).json({
