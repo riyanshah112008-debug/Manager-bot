@@ -1542,11 +1542,18 @@ function setupDashboardRoutes(app, client) {
 
     app.post('/api/guild/:id/giveaways/:messageId/end', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
+            const messageId = typeof req.params.messageId === 'string' ? req.params.messageId : '';
+            if (!/^\\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
             if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
-            const record = client.starryGiveawayEngine.find(req.guild.id, req.params.messageId);
+            const record = client.starryGiveawayEngine.find(req.guild.id, messageId);
             if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
-            const result = await client.starryGiveawayEngine.end(req.guild.id, req.params.messageId);
-            res.json({ success: true, message: result.success ? 'Giveaway ended successfully.' : 'The giveaway was processed; check its stored status.', giveaway: result.giveaway });
+            const result = await client.starryGiveawayEngine.end(req.guild.id, messageId);
+            res.json({
+                success: Boolean(result.success),
+                pending: Boolean(result.pending),
+                message: result.pending ? 'Giveaway end requested. Discord publication is still processing and will resume automatically if interrupted.' : 'Giveaway ended successfully.',
+                giveaway: result.giveaway
+            });
         } catch (error) {
             res.status(409).json({ success: false, error: error.message || 'Could not end this giveaway.' });
         }
@@ -1554,8 +1561,10 @@ function setupDashboardRoutes(app, client) {
 
     app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
+            const messageId = typeof req.params.messageId === 'string' ? req.params.messageId : '';
+            if (!/^\\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
             if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
-            const record = client.starryGiveawayEngine.find(req.guild.id, req.params.messageId);
+            const record = client.starryGiveawayEngine.find(req.guild.id, messageId);
             if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
             if (record.status !== 'completed') return res.status(409).json({ success: false, error: 'Only completed giveaways can be rerolled.' });
             const winners = req.body?.winners === undefined ? Number(record.winners) || 1 : Number(req.body.winners);
