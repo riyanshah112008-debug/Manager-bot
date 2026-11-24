@@ -1652,6 +1652,24 @@ function setupDashboardRoutes(app, client) {
                     if (roleId && (!guild.roles.cache.has(roleId) || guild.roles.cache.get(roleId).managed || roleId === guild.id)) {
                         return res.status(400).json({ success: false, error: 'Choose a manageable role from this server for quarantine.' });
                     }
+                    if (roleId) {
+                        const quarantineRole = guild.roles.cache.get(roleId);
+                        const dangerousPermissions = [
+                            PermissionFlagsBits.Administrator,
+                            PermissionFlagsBits.ManageGuild,
+                            PermissionFlagsBits.ManageChannels,
+                            PermissionFlagsBits.ManageRoles,
+                            PermissionFlagsBits.ManageWebhooks,
+                            PermissionFlagsBits.BanMembers,
+                            PermissionFlagsBits.KickMembers,
+                            PermissionFlagsBits.ManageMessages,
+                            PermissionFlagsBits.ManageEvents,
+                            PermissionFlagsBits.ManageThreads
+                        ];
+                        if (dangerousPermissions.some(permission => quarantineRole.permissions.has(permission))) {
+                            return res.status(400).json({ success: false, error: 'The quarantine role must not grant administrator, moderation, role, channel, webhook or event-management permissions.' });
+                        }
+                    }
                     policy.quarantineRoleId = roleId;
                 }
                 for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
