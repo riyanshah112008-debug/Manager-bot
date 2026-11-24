@@ -506,22 +506,43 @@ function setupDashboardRoutes(app, client) {
     // OAuth state is held in a short-lived HttpOnly cookie so it survives a
     // Render restart and works without process-local session state.
     app.get('/auth/login', actionLimiter, (req, res) => {
+        let publicBase;
+        let redirectUri;
+        try {
+            publicBase = getTrustedSpotifyBackendBaseUrl();
+            const configuredRedirect = String(process.env.DISCORD_REDIRECT_URI || '').trim();
+            const candidate = configuredRedirect || (publicBase + '/auth/callback');
+            const parsedRedirect = new URL(candidate);
+            const parsedBase = new URL(publicBase);
+            if (parsedRedirect.protocol !== 'https:' && parsedRedirect.hostname !== 'localhost' && parsedRedirect.hostname !== '127.0.0.1') {
+                throw new Error('Discord OAuth callback must use HTTPS.');
+            }
+            if (parsedRedirect.origin !== parsedBase.origin || parsedRedirect.pathname !== '/auth/callback' ||
+                parsedRedirect.search || parsedRedirect.hash || parsedRedirect.username || parsedRedirect.password) {
+                throw new Error('Discord OAuth callback must be the configured backend /auth/callback URL.');
+            }
+            redirectUri = parsedRedirect.href;
+        } catch (error) {
+            console.error('Discord OAuth configuration rejected:', error.message);
+            return res.status(503).send('Discord sign-in is temporarily unavailable. Check the backend callback configuration.');
+        }
+
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
-        const host = req.get('host');
-        const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
-        const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
+        if (!/^\\d{17,20}$/.test(String(clientId))) {
+            return res.status(503).send('Discord sign-in is temporarily unavailable. The application ID is invalid.');
+        }
         const state = crypto.randomBytes(24).toString('hex');
-        const secureCookie = proto === 'https' ? '; Secure' : '';
-        res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
+        const secureCookie = redirectUri.startsWith('https:') ? '; Secure' : '';
+        res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax`);
+        if (secureCookie) res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax; Secure`);
         res.set('Cache-Control', 'no-store');
         const authUrl = new URL('https://discord.com/oauth2/authorize');
-        authUrl.searchParams.set('client_id', clientId);
+        authUrl.searchParams.set('client_id', String(clientId));
         authUrl.searchParams.set('redirect_uri', redirectUri);
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('scope', 'identify guilds email');
         authUrl.searchParams.set('state', state);
-        res.redirect(authUrl.toString());
+        return res.redirect(303, authUrl.href);
     });
 
     app.get('/auth/callback', actionLimiter, async (req, res) => {
