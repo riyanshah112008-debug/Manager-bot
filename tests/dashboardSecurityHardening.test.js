@@ -34,6 +34,7 @@ test('Legacy Spotify redirect endpoint cannot redirect to a supplied URL', () =>
     assert.match(route, /status\(410\)/);
     assert.doesNotMatch(route, /res\.redirect\(/);
     assert.match(dashboard, /assertSpotifyAuthorizationUrl\(authorization\.authorizeUrl\)/);
+    assert.match(dashboard, /assertDiscordAuthorizationUrl\(authUrl\.href\)/);
 });
 
 test('Discord OAuth callback URL never falls back to the incoming Host header', () => {
@@ -58,6 +59,14 @@ test('Anti-Nuke verifies effective restriction and retries failed enforcement', 
     assert.match(antiNuke, /if \(enforced\) punished\.set\(penaltyKey/);
     assert.match(antiNuke, /const inFlight = new Set\(\)/);
     assert.match(antiNuke, /hasDestructivePermissions\(refreshed\)/);
+    assert.match(dashboard, /The quarantine role must not grant administrator/);
+});
+
+test('Giveaway persistence uses fixed paths and atomic replacement', () => {
+    assert.match(giveaway, /const dbPath = 'src\\/modules\\/giveaways\\.json'/);
+    assert.match(giveaway, /const temporaryDbPath = 'src\\/modules\\/giveaways\\.json\\.tmp'/);
+    assert.match(giveaway, /fs\\.renameSync\\(temporaryDbPath, dbPath\\)/);
+    assert.doesNotMatch(giveaway, /path\\.join\\(/);
 });
 
 test('Giveaway creates only after its entry reaction is confirmed', () => {
