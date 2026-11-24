@@ -1314,7 +1314,69 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
-    // Giveaway dashboard endpoints delegate to the existing giveaway module facade.
+// Live AutoMod controls: only the link/emoji filters currently enforced by automod.js are exposed.
+    app.get('/api/guild/:id/automod', requireGuildAdmin, async (req, res) => {
+        try {
+            const helper = require('../utils/automodHelper');
+            const channels = req.guild.channels.cache.filter(channel => channel.isTextBased() && typeof channel.send === 'function');
+            const overrides = await Promise.all(channels.map(async channel => ({
+                channelId: channel.id,
+                channelName: channel.name,
+                ...(await helper.getChannelSettings(channel.id, req.guild.id))
+            })));
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, enabled: helper.getGuildStatus(req.guild.id), channels: overrides });
+        } catch (error) {
+            console.error('Dashboard AutoMod read failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod settings are temporarily unavailable.' });
+        }
+    });
+
+    app.patch('/api/guild/:id/automod', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const allowed = new Set(['enabled', 'channelId', 'linksActive', 'emojisActive']);
+            if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.has(key))) {
+                return res.status(400).json({ success: false, error: 'Invalid AutoMod update.' });
+            }
+            if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return res.status(400).json({ success: false, error: 'Server AutoMod must be true or false.' });
+            for (const key of ['linksActive', 'emojisActive']) if (body[key] !== undefined && typeof body[key] !== 'boolean') {
+                return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+            }
+            if (body.enabled === undefined && body.channelId === undefined) return res.status(400).json({ success: false, error: 'Choose a server setting or channel filter to update.' });
+            if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'AutoMod storage is offline. No changes were applied.' });
+            const helper = require('../utils/automodHelper');
+            if (body.enabled !== undefined) {
+                await helper.setGuildStatus(req.guild.id, body.enabled);
+                const { AutomodGuild } = require('../models/AutomodSchema');
+                const stored = await AutomodGuild.findOne({ guildId: req.guild.id }).lean();
+                if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
+            }
+            if (body.channelId !== undefined) {
+                const channelId = String(body.channelId || '');
+                const channel = req.guild.channels.cache.get(channelId);
+                if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                    return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+                }
+                const { AutomodChannel } = require('../models/AutomodSchema');
+                if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
+                if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
+                const stored = await AutomodChannel.findOne({ channelId, guildId: req.guild.id }).lean();
+                const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
+                const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
+                if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
+                    (expectedEmojis !== undefined && stored?.emojis !== expectedEmojis)) {
+                    return res.status(503).json({ success: false, error: 'AutoMod channel filter could not be confirmed in storage.' });
+                }
+            }
+            return res.json({ success: true, message: 'AutoMod settings saved and synced to the live filter cache.' });
+        } catch (error) {
+            console.error('Dashboard AutoMod update failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod update failed. Retry after checking database connectivity.' });
+        }
+    });
+
+        // Giveaway dashboard endpoints delegate to the existing giveaway module facade.
     app.get('/api/guild/:id/giveaways', requireGuildAdmin, async (req, res) => {
         try {
             if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
