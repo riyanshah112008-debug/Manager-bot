@@ -74,6 +74,10 @@ function assertSpotifyAuthorizationUrl(value) {
 const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
 const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const getOAuthEncryptionKey = () => {
     const secret = process.env.SESSION_ENCRYPTION_KEY || process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
@@ -193,9 +197,11 @@ function setupDashboardRoutes(app, client) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
 
-        const guildId = req.params.id || req.body.guildId;
-        if (!guildId) {
-            return res.status(400).json({ success: false, error: 'Guild ID is required.' });
+        const guildId = typeof req.params.id === 'string'
+            ? req.params.id
+            : (typeof req.body?.guildId === 'string' ? req.body.guildId : '');
+        if (!/^\\d{17,20}$/.test(guildId)) {
+            return res.status(400).json({ success: false, error: 'A valid Discord guild ID is required.' });
         }
 
         const guild = client.guilds.cache.get(guildId);
@@ -241,7 +247,12 @@ function setupDashboardRoutes(app, client) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
 
-        const guildId = req.params.id || req.body.guildId;
+        const guildId = typeof req.params.id === 'string'
+            ? req.params.id
+            : (typeof req.body?.guildId === 'string' ? req.body.guildId : '');
+        if (!/^\\d{17,20}$/.test(guildId)) {
+            return res.status(400).json({ success: false, error: 'A valid Discord guild ID is required.' });
+        }
         const guild = client.guilds.cache.get(guildId);
         if (!guild) {
             return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
@@ -1398,9 +1409,12 @@ function setupDashboardRoutes(app, client) {
             if (body.enabled === undefined && body.channelId === undefined) return res.status(400).json({ success: false, error: 'Choose a server setting or channel filter to update.' });
             if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'AutoMod storage is offline. No changes were applied.' });
             const helper = require('../utils/automodHelper');
-            const channelId = body.channelId === undefined ? '' : String(body.channelId || '');
+            const channelId = body.channelId === undefined ? '' : (typeof body.channelId === 'string' ? body.channelId.trim() : '');
             let selectedChannel = null;
             if (body.channelId !== undefined) {
+                if (!/^\\d{17,20}$/.test(channelId)) {
+                    return res.status(400).json({ success: false, error: 'Choose a valid text channel ID from this server.' });
+                }
                 selectedChannel = req.guild.channels.cache.get(channelId);
                 if (!selectedChannel || !selectedChannel.isTextBased() || typeof selectedChannel.send !== 'function') {
                     return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
@@ -1456,9 +1470,14 @@ function setupDashboardRoutes(app, client) {
             if (!/^[1-9]\d{0,3}[smhdw]$/i.test(duration)) return res.status(400).json({ success: false, error: 'Use a valid duration such as 10m, 2h or 1d.' });
             const match = duration.match(/^([1-9]\d{0,3})([smhdw])$/i);
             const amount = Number(match[1]), unit = match[2].toLowerCase();
-            const multiplier = unit === 's' ? 1000 : unit === 'm' ? 60000 : unit === 'h' ? 3600000 : unit === 'd' ? 86400000 : 604800000;
+            const multiplier = unit === 's' ? MS_PER_SECOND :
+                unit === 'm' ? MS_PER_MINUTE :
+                unit === 'h' ? MS_PER_HOUR :
+                unit === 'd' ? MS_PER_DAY : 7 * MS_PER_DAY;
             const durationMs = amount * multiplier;
-            if (durationMs < 10000 || durationMs > 90 * 86400000) return res.status(400).json({ success: false, error: 'Duration must be between 10 seconds and 90 days.' });
+            if (durationMs < 10 * MS_PER_SECOND || durationMs > 90 * MS_PER_DAY) {
+                return res.status(400).json({ success: false, error: 'Duration must be between 10 seconds and 90 days.' });
+            }
             if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
             const channel = req.guild.channels.cache.get(channelId);
             if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
