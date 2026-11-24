@@ -283,7 +283,7 @@ module.exports = (client) => {
                 if (!validUsers.length) return '❌ There are no human participants to reroll.';
 
                 const previousWinnerMentions = message.embeds[0] && message.embeds[0].description
-                    ? message.embeds[0].description.match(/<@!?(\\d+)>/g) || []
+                    ? message.embeds[0].description.match(/<@!?(\d+)>/g) || []
                     : [];
                 const previousWinnerIds = Array.isArray(record.winnerIds) && record.winnerIds.length
                     ? record.winnerIds
@@ -320,7 +320,7 @@ module.exports = (client) => {
 
             const winners = pending.winnerIds;
             const winnersText = winners.map(id => '<@' + id + '>').join(', ');
-            const marker = '\\u2063starry-reroll:' + pending.nonce + '\\u2063';
+            const marker = '\u2063starry-reroll:' + pending.nonce + '\u2063';
             const rerollEmbed = new EmbedBuilder()
                 .setColor('#00F5D4')
                 .setAuthor({ name: '🔄 GIVEAWAY WINNER REROLLED 🔄' })
@@ -332,7 +332,7 @@ module.exports = (client) => {
                     '👑 **Rerolled By:** <@' + pending.executorId + '>',
                     '',
                     '*“Here’s to the new champion!”* 🥂'
-                ].join('\\n'))
+                ].join('\n'))
                 .setImage(ASSETS.WINNER_BANNER)
                 .setFooter({ text: 'Reroll Complete • Winner Verified', iconURL: client.user.displayAvatarURL({ dynamic: true }) })
                 .setTimestamp();
@@ -356,7 +356,7 @@ module.exports = (client) => {
                 const history = await findMarkerInChannelHistory(channel, marker, pending.historyBoundaryId || null);
                 if (!history.found) {
                     await channel.send({
-                        content: '🎉 **NEW REROLLED WINNER(S):** ' + winnersText + '! Congratulations! 🚀🥂\\n' + marker,
+                        content: '🎉 **NEW REROLLED WINNER(S):** ' + winnersText + '! Congratulations! 🚀🥂\n' + marker,
                         embeds: [rerollEmbed],
                         allowedMentions: { parse: [], users: winners }
                     });
@@ -645,7 +645,7 @@ module.exports = (client) => {
         }
 
         if (!record.processingResult || record.processingResult.announcementSent !== true) {
-            const marker = '\\u2063starry-giveaway:' + result.nonce + '\\u2063';
+            const marker = '\u2063starry-giveaway:' + result.nonce + '\u2063';
             let shouldSend = record.processingResult.announcementSent !== true;
 
             if (record.processingResult.announcementBoundaryCaptured !== true) {
@@ -672,7 +672,7 @@ module.exports = (client) => {
 
             if (shouldSend) {
                 await channel.send({
-                    content: announcementContent + '\\n' + marker,
+                    content: announcementContent + '\n' + marker,
                     allowedMentions: { parse: [], users: result.winnerIds }
                 });
                 record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
