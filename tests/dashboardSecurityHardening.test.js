@@ -151,7 +151,19 @@ test('Premium order lookup validates and binds a scalar order identifier', () =>
     assert.match(paymentHelper, /findOne\(\)\.where\('orderId'\)\.equals\(cleanOrderId\)/);
 });
 
-test('Spotify refresh updates only the originally linked account record', () => {
-    assert.match(spotifyManager, /UserSpotify\.findOneAndUpdate\([\s\S]*?\{ userId: String\(userDoc\.userId\), spotifyId: String\(userDoc\.spotifyId\) \}/);
+test('Spotify refresh updates only the exact credential version it originally read', () => {
+    assert.match(spotifyManager, /const refreshFilter = \{/);
+    assert.match(spotifyManager, /refreshFilter\.accessToken = userDoc\.accessToken/);
+    assert.match(spotifyManager, /refreshFilter\.refreshToken = userDoc\.refreshToken/);
     assert.match(spotifyManager, /if \(!updated\) return null/);
+});
+
+test('Music Controller Spotify connect keeps OAuth setup failures private and user-visible', () => {
+    const start = musicController.indexOf("if (customId === 'ctrl_spotify')");
+    const end = musicController.indexOf("\n        }", start);
+    assert.ok(start >= 0 && end > start);
+    const route = musicController.slice(start, start + 7000);
+    assert.match(route, /deferReply\(\{ flags: \[EPHEMERAL_FLAG\] \}\)/);
+    assert.match(route, /parsedAuthorizationUrl\.pathname !== '\/authorize'/);
+    assert.match(route, /interaction\.editReply\(\{ embeds: \[emptyEmbed\], components: \[row\] \}\)/);
 });
