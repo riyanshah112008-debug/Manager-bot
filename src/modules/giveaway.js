@@ -43,6 +43,19 @@ module.exports = (client) => {
         return records;
     }
 
+    function readGiveawaysStrict() {
+        let contents;
+        try {
+            contents = fs.readFileSync(dbPath, 'utf-8');
+        } catch (error) {
+            if (error.code === 'ENOENT') return [];
+            throw error;
+        }
+        const records = JSON.parse(contents);
+        if (!Array.isArray(records)) throw new Error('Giveaway store must contain a JSON array.');
+        return records;
+    }
+
     function saveGiveaways(data) {
         fs.writeFileSync(temporaryDbPath, JSON.stringify(data, null, 2));
         fs.renameSync(temporaryDbPath, dbPath);
@@ -56,7 +69,7 @@ module.exports = (client) => {
 
     async function addGiveawayRecord(record) {
         return withGiveawayStoreLock(() => {
-            const records = getGiveaways();
+            const records = readGiveawaysStrict();
             records.push(record);
             saveGiveaways(records);
             return JSON.parse(JSON.stringify(record));
@@ -65,7 +78,7 @@ module.exports = (client) => {
 
     async function updateGiveawayRecord(guildId, messageId, update) {
         return withGiveawayStoreLock(() => {
-            const records = getGiveaways();
+            const records = readGiveawaysStrict();
             const record = records.find(item =>
                 String(item.guildId) === String(guildId) && String(item.messageId) === String(messageId)
             );
