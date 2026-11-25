@@ -20,8 +20,8 @@ const buildAdminHelpEmbed = (client) => {
             {
                 name: '💾 Backup & Disaster Recovery',
                 value: 
-                '`.backup` — Choose daily automatic exports or manual-only downloadable server snapshots.\n' +
-                'Automatic backups are disabled until a server administrator opts in.'
+                '`,backup` — On first use, choose daily automatic exports or manual-only snapshots. Use `,backup setup` to change this preference.\n' +
+                'Automatic backups remain off until an administrator explicitly enables them.'
             },
             {
                 name: '⚙️ Master Setup & Configuration',
