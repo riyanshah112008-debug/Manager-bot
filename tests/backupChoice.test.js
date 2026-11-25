@@ -11,8 +11,8 @@ test('backup is opt-in and never scheduled for an unset or manual server', () =>
   const engine = read('src/modules/backupEngine.js');
   const settings = read('src/models/ServerSettings.js');
   assert.match(engine, /ServerSettings\.find\(\{\s*'backup\.enabled': true,\s*'backup\.mode': 'automatic'\s*\}\)/);
-  assert.match(engine, /enabled:\s*\{\s*type:\s*Boolean,\s*default:\s*false\s*\}/);
-  assert.match(engine, /mode:\s*\{\s*type:\s*String,\s*enum:\s*\['unset', 'manual', 'automatic'\],\s*default:\s*'unset'\s*\}/);
+  assert.match(settings, /enabled:\s*\{\s*type:\s*Boolean,\s*default:\s*false\s*\}/);
+  assert.match(settings, /mode:\s*\{\s*type:\s*String,\s*enum:\s*\['unset', 'manual', 'automatic'\],\s*default:\s*'unset'\s*\}/);
 });
 
 test('backup command asks admins to choose and supports changing the choice', () => {
