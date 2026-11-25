@@ -22,7 +22,7 @@ test('AutoMod dashboard rejects unknown fields and non-boolean switches', () => 
 test('AutoMod channel updates are restricted to text channels in the authorized guild', () => {
     assert.match(server, /req\.guild\.channels\.cache\.get\(channelId\)/);
     assert.match(server, /!channel\.isTextBased\(\)/);
-    assert.match(server, /AutomodChannel\.findOne\(\{\s*channelId,\s*guildId: req\.guild\.id\s*\}\)/);
+    assert.match(server, /AutomodChannel\.findOne\(\{\s*channelId,\s*guildId: requireDiscordSnowflake\(req\.guild\.id, 'guild ID'\)\s*\}\)/);
 });
 
 test('AutoMod writes confirm persisted server and channel settings before success', () => {
