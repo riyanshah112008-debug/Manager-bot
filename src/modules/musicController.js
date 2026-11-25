@@ -801,15 +801,20 @@ class MusicControllerEngine {
                         `Once added, you can 1-click play any of your playlists right from this controller!`
                     );
 
-                const { getPublicUrl } = require('../utils/tunnelManager');
-                const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_WEB_URL || getPublicUrl();
-                const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
-                const redirectUri = getSpotifyRedirectUri(publicUrl);
                 let authUrl = '';
                 try {
+                    const { getPublicUrl } = require('../utils/tunnelManager');
+                    const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_WEB_URL || getPublicUrl();
+                    const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
+                    const redirectUri = getSpotifyRedirectUri(publicUrl);
                     const authorization = await spotifyManager.createAuthorizationRequest(interaction.user.id, redirectUri);
                     const parsedAuthorizationUrl = new URL(authorization.authorizeUrl);
-                    if (parsedAuthorizationUrl.protocol !== 'https:' || parsedAuthorizationUrl.hostname !== 'accounts.spotify.com') throw new Error('Unexpected Spotify authorization destination.');
+                    if (parsedAuthorizationUrl.protocol !== 'https:' ||
+                        parsedAuthorizationUrl.hostname !== 'accounts.spotify.com' ||
+                        parsedAuthorizationUrl.pathname !== '/authorize' ||
+                        parsedAuthorizationUrl.username || parsedAuthorizationUrl.password) {
+                        throw new Error('Unexpected Spotify authorization destination.');
+                    }
                     authUrl = parsedAuthorizationUrl.href;
                 } catch (error) {
                     console.warn('[Spotify] Account authorization unavailable:', error.message);
