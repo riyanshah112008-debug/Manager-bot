@@ -959,15 +959,15 @@ const commands = [
             }
             if (!await requirePremium(ctx, 'Server Cloud Backup Engine')) return;
             const guildId = String(ctx.guild.id);
-            if (!/^\\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+            if (!/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
             const settings = await ServerSettings.findOne({ guildId }).select('backup').lean();
             const mode = settings?.backup?.mode || 'unset';
-            if (mode === 'unset') {
+            if (mode === 'unset' || ['setup', 'mode'].includes(String(ctx.args?.[0] || '').toLowerCase())) {
                 const { buildBackupChoiceComponents } = require('../../modules/backupEngine');
                 return ctx.reply({
-                    content: '💾 **Choose how Starry should handle server backups.**\\n\\n' +
-                        '• **Automatic:** Starry creates a snapshot every 24 hours and posts it in this channel.\\n' +
-                        '• **Manual:** Starry creates a snapshot only when an administrator runs `,backup`.\\n\\n' +
+                    content: '💾 **Choose how Starry should handle server backups.**\n\n' +
+                        '• **Automatic:** Starry creates a snapshot every 24 hours and posts it in this channel.\n' +
+                        '• **Manual:** Starry creates a snapshot only when an administrator runs `,backup`.\n\n' +
                         'No backup will run automatically until you choose.',
                     components: buildBackupChoiceComponents(guildId, ctx.user.id)
                 });
