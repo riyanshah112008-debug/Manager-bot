@@ -32,11 +32,11 @@ const ALL_PREMIUM_FEATURES = [
     },
     {
         id: 'cloud_backups',
-        name: 'Server Cloud Backup & Instant Restore',
+        name: 'Server Backup Export',
         category: 'Server Security',
         tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
-        commands: [',backup', ',restore <id>'],
-        description: 'Create encrypted cloud snapshots of your entire server architecture (channels, categories, roles, permissions) with 1-click disaster recovery.'
+        commands: [',backup'],
+        description: 'Export server roles, categories, channels, permission overwrites and accessible recent message history. Administrators choose daily automation or manual command-only backups.'
     },
     {
         id: 'emergency_lockdown',
@@ -232,7 +232,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
                 value: 
                     '• **📻 24/7 Voice Channel Mode** — Bot stays in voice permanently\n' +
                     '• **🎧 Studio DSP Hi-Fi Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave\n' +
-                    '• **💾 Cloud Backups & Restore** — Full server layout & permissions snapshot\n' +
+                    '• **💾 Server Backup Export** — Downloadable server layout snapshot with opt-in daily automation\n' +
                     '• **🚨 Emergency Lockdown Shield** — 1-click server-wide raid isolation\n' +
                     '• **🤖 Multi-Bot Worker Nodes** — Custom bot tokens for multi-room audio\n' +
                     '• **📥 Unlimited Emoji/Sticker Steal** — Direct 1-click upload\n' +
