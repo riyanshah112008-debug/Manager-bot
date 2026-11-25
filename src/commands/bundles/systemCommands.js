@@ -945,38 +945,41 @@ const commands = [
         }
     },
 
-    // 14. BACKUP
+    // 14. BACKUP — first use asks each server administrator to choose a mode.
     {
         name: 'backup',
         category: 'Systems',
-        description: 'Create an instant backup of the server layout, channels, roles and permissions.',
+        description: 'Create a server backup or configure opt-in daily backups.',
         usage: ',backup',
         permissions: [PermissionFlagsBits.Administrator],
         async execute(ctx) {
+            if (!ctx.guild) return ctx.reply('❌ Use this command inside a server.');
             if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
                 return ctx.reply('❌ Administrator permission required.');
             }
             if (!await requirePremium(ctx, 'Server Cloud Backup Engine')) return;
-            const backupId = Math.random().toString(36).substring(2, 10).toUpperCase();
-            return ctx.reply(`💾 **Server Backup Created Successfully!**\nBackup ID: \`#${backupId}\`\n*Use \`,restore ${backupId}\` to restore if needed.*`);
-        }
-    },
-
-    // 15. RESTORE
-    {
-        name: 'restore',
-        category: 'Systems',
-        description: 'Restore server structure and permissions from a backup ID.',
-        usage: ',restore <backupID>',
-        permissions: [PermissionFlagsBits.Administrator],
-        async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
+            const guildId = String(ctx.guild.id);
+            if (!/^\\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+            const settings = await ServerSettings.findOne({ guildId }).select('backup').lean();
+            const mode = settings?.backup?.mode || 'unset';
+            if (mode === 'unset') {
+                const { buildBackupChoiceComponents } = require('../../modules/backupEngine');
+                return ctx.reply({
+                    content: '💾 **Choose how Starry should handle server backups.**\\n\\n' +
+                        '• **Automatic:** Starry creates a snapshot every 24 hours and posts it in this channel.\\n' +
+                        '• **Manual:** Starry creates a snapshot only when an administrator runs `,backup`.\\n\\n' +
+                        'No backup will run automatically until you choose.',
+                    components: buildBackupChoiceComponents(guildId, ctx.user.id)
+                });
             }
-            if (!await requirePremium(ctx, 'Server Instant Restore Engine')) return;
-            const backupId = ctx.args[0];
-            if (!backupId) return ctx.reply('❌ Please provide the Backup ID: `,restore <ID>`');
-            return ctx.reply(`⏳ **Restoring server from Backup \`${backupId}\`...**`);
+            try {
+                const { createBackupAttachment } = require('../../modules/backupEngine');
+                const { file, embed } = await createBackupAttachment(ctx.guild);
+                return ctx.reply({ embeds: [embed], files: [file] });
+            } catch (error) {
+                console.error('[BackupCommand] Backup failed:', error.message);
+                return ctx.reply('❌ Starry could not create this backup. Check the bot role and channel permissions, then retry.');
+            }
         }
     },
 
