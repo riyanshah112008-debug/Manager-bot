@@ -84,6 +84,14 @@ const serverSettingsSchema = new mongoose.Schema({
         serverLogChannel: { type: String, default: '' }
     },
 
+    // 💾 Server backup preferences. No automatic backups until an administrator opts in.
+    backup: {
+        enabled: { type: Boolean, default: false },
+        mode: { type: String, enum: ['unset', 'manual', 'automatic'], default: 'unset' },
+        channelId: { type: String, default: '' },
+        lastRunAt: { type: Date, default: null }
+    },
+
     // 🎵 Starry Studio & 24/7 Music Settings
     music: {
         defaultVolume: { type: Number, default: 100 },
