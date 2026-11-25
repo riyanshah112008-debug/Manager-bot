@@ -91,7 +91,11 @@ async function enforce(client, guild, executorId, policy, reason) {
             // Remove each role individually so emergency quarantine does not depend
             // on bulk-role removal behavior.
             for (const dangerousRoleId of dangerousRoleIds) {
-                await member.roles.remove(dangerousRoleId, reason);
+                await member.roles.remove(dangerousRoleId, reason).catch(error => {
+                    // Continue removing other dangerous roles; the forced member
+                    // refetch below decides whether the fallback action is needed.
+                    console.error('[Anti-Nuke] Failed to remove role', dangerousRoleId, error.message);
+                });
             }
 
             const refreshed = await guild.members.fetch({ user: member.id, force: true }).catch(() => null);
