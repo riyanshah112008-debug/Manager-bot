@@ -18,6 +18,12 @@ const BACKUP_CHOICE_PREFIX = 'starry_backup_mode';
 const AUTOMATIC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let schedulerStarted = false;
 
+function isBackupDue(lastRunAt, now = Date.now()) {
+    if (!lastRunAt) return true;
+    const lastRun = new Date(lastRunAt).getTime();
+    return !Number.isFinite(lastRun) || now - lastRun >= AUTOMATIC_INTERVAL_MS;
+}
+
 async function fetchChannelMessageArchive(channel, limit = 50) {
     if (!channel.isTextBased() || channel.isVoiceBased()) return [];
     const botMember = channel.guild.members.me;
@@ -148,7 +154,7 @@ async function runAutomaticBackups(client) {
     const settings = await ServerSettings.find({ 'backup.enabled': true, 'backup.mode': 'automatic' }).lean();
     for (const setting of settings) {
         const guild = client.guilds.cache.get(String(setting.guildId));
-        if (!guild || !setting.backup?.channelId) continue;
+        if (!guild || !setting.backup?.channelId || !isBackupDue(setting.backup.lastRunAt)) continue;
         const channel = guild.channels.cache.get(String(setting.backup.channelId));
         const botMember = guild.members.me;
         const permissions = channel && botMember ? channel.permissionsFor(botMember) : null;
@@ -207,3 +213,4 @@ module.exports.executeServerFullBackup = executeServerFullBackup;
 module.exports.createBackupAttachment = createBackupAttachment;
 module.exports.buildBackupChoiceComponents = buildBackupChoiceComponents;
 module.exports.saveBackupMode = saveBackupMode;
+module.exports.isBackupDue = isBackupDue;
