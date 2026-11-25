@@ -2,7 +2,7 @@
 
 const { spawnSync } = require('node:child_process');
 
-69const suites = [
+const suites = [
   ['Backup choice policy', '--test', 'tests/backupChoice.test.js'],
   ['Persistent component collector policy', '--test', 'tests/persistentComponentPolicy.test.js'],
   ['Global interaction guard', '--test', 'tests/interactionHandler.test.js'],
