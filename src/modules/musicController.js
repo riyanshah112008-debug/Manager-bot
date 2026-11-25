@@ -773,8 +773,19 @@ class MusicControllerEngine {
 
         // Spotify Library Explorer
         if (customId === 'ctrl_spotify') {
+            try {
+                await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+            } catch (_) {
+                return false;
+            }
             const spotifyManager = require('./spotifyManager');
-            const data = await spotifyManager.getUserPlaylists(interaction.user.id);
+            let data;
+            try {
+                data = await spotifyManager.getUserPlaylists(interaction.user.id);
+            } catch (error) {
+                console.warn('[Spotify] Library lookup failed:', error.message);
+                return interaction.editReply({ content: 'Spotify library is temporarily unavailable. Please retry shortly.' }).catch(() => {});
+            }
             const total = data.savedPlaylists.length + data.oauthPlaylists.length;
 
             if (total === 0) {
@@ -790,11 +801,26 @@ class MusicControllerEngine {
                         `Once added, you can 1-click play any of your playlists right from this controller!`
                     );
 
-                const port = process.env.PORT || 10000;
-                const { getPublicUrl } = require('../utils/tunnelManager');
-                const publicUrl = getPublicUrl() || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-                const redirectUri = `${publicUrl}/api/spotify/callback`;
-                const authUrl = spotifyManager.getOAuthUrl(interaction.user.id, redirectUri);
+                let authUrl = '';
+                try {
+                    const { getPublicUrl } = require('../utils/tunnelManager');
+                    const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_WEB_URL || getPublicUrl();
+                    const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
+                    const redirectUri = getSpotifyRedirectUri(publicUrl);
+                    const authorization = await spotifyManager.createAuthorizationRequest(interaction.user.id, redirectUri);
+                    const parsedAuthorizationUrl = new URL(authorization.authorizeUrl);
+                    if (parsedAuthorizationUrl.protocol !== 'https:' ||
+                        parsedAuthorizationUrl.hostname !== 'accounts.spotify.com' ||
+                        parsedAuthorizationUrl.pathname !== '/authorize' ||
+                        parsedAuthorizationUrl.username || parsedAuthorizationUrl.password) {
+                        throw new Error('Unexpected Spotify authorization destination.');
+                    }
+                    authUrl = parsedAuthorizationUrl.href;
+                } catch (error) {
+                    console.warn('[Spotify] Account authorization unavailable:', error.message);
+                    emptyEmbed.setDescription(emptyEmbed.data.description + '\n\nSpotify account linking is temporarily unavailable. You can still save public playlist links with the Spotify save command.');
+                    return interaction.editReply({ embeds: [emptyEmbed], components: [] }).catch(() => {});
+                }
 
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
@@ -804,14 +830,14 @@ class MusicControllerEngine {
                         .setEmoji('🟢')
                 );
 
-                return interaction.reply({ embeds: [emptyEmbed], components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+                return interaction.editReply({ embeds: [emptyEmbed], components: [row] }).catch(() => {});
             }
 
             const embed = new EmbedBuilder()
                 .setColor('#1DB954')
                 .setAuthor({ name: `${interaction.user.username}'s Spotify Library`, iconURL: data.avatarUrl || interaction.user.displayAvatarURL() })
                 .setTitle(`🟢 Choose a Spotify Playlist to Stream (${total} available)`)
-                .setDescription('Select any of your saved or personal Spotify playlists below to stream immediately into your voice channel:');
+                .setDescription('Browse Spotify playlist metadata linked to your account. Spotify account linking does not provide Spotify audio streams.');
 
             const options = [];
             data.savedPlaylists.slice(0, 15).forEach(p => {
@@ -839,7 +865,7 @@ class MusicControllerEngine {
                 .addOptions(options);
 
             const row = new ActionRowBuilder().addComponents(menu);
-            return interaction.reply({ embeds: [embed], components: [row], flags: [EPHEMERAL_FLAG] }).catch(() => {});
+            return interaction.editReply({ embeds: [embed], components: [row] }).catch(() => {});
         }
 
         // Spotify Direct Stream from Menu

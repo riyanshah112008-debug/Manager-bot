@@ -1,49 +1,49 @@
-# 🌟 Starry Manager Bot (Multi-Bot & Voice AI Suite)
+# Starry — Discord Server Management
 
-A high-performance Discord Manager & Multi-Bot clustering framework with Voice Audio DSP streaming, Advanced Moderation, Economy & Leveling, and Modern Web Dashboard.
+Starry is a Discord server-management bot and control center built to bring moderation, safety, community engagement, music integrations and server configuration into one coherent workspace.
 
----
+The project is developed around a simple principle: **every visible control must correspond to a real, authorized backend capability**. Features should fail clearly when a dependency or permission is missing; the dashboard must never imply that an inactive feature is working.
 
-## 🚀 How to Host on PC (Windows, macOS, Linux)
+## Product areas
 
-Hosting on PC is **100% automated**. You do not need to manually configure packages or build tools.
+- **Safety & moderation:** moderation workflows, AutoMod controls, verification and Anti-Nuke safeguards.
+- **Community:** tickets, welcome flows, roles, events, birthdays and notifications.
+- **Engagement:** giveaways, leveling, economy and booster tools.
+- **Music & integrations:** Discord voice features and account integrations, subject to each provider's API and licensing rules.
+- **Control Center:** Discord OAuth sign-in, server selection and server-scoped configuration.
+- **Operations:** multi-bot management, diagnostics, permissions and configuration visibility.
 
-### 💻 Option A: Windows PC (1-Click Launch)
-1. **Download or Clone this Repository** to your PC.
-2. Ensure you have **Node.js (LTS version)** installed from [https://nodejs.org/](https://nodejs.org/).
-3. Double-click **`run.bat`** (or `start.bat`).
-   - The launcher will **automatically install all required dependencies**.
-   - It will **automatically deploy all Discord slash commands**.
-   - It will **start the bot 24/7** with automatic crash-recovery and restart.
+Availability depends on the deployed bot build, configured environment variables, Discord permissions and external provider restrictions. A feature is not considered production-ready until its API, persistence, runtime behavior and dashboard path have all been tested together.
 
----
+## Starry Discord profile copy
 
-### 🍏 Option B: Mac / Linux / Termux (1-Command Launch)
-Open your terminal in this repository folder and run:
+The recommended short profile text and extended application description are maintained in [docs/BRAND-PROFILE.md](docs/BRAND-PROFILE.md). Update the Discord Developer Portal application description and bot profile manually; this repository cannot change Discord's hosted profile metadata without an authorized application-management credential.
+
+## Development
+
+Requirements:
+- Node.js 22.12 or newer
+- A Discord application and bot token
+- MongoDB connection for the features that use persistent models
+- Provider credentials only for integrations that are enabled
+
+Install dependencies and run the repository checks:
+
 ```bash
-chmod +x run.sh && ./run.sh
-```
-*Or using PM2 on servers:*
-```bash
-./start.sh
+npm ci
+npm test
 ```
 
----
+Copy `.env.example` to a private environment file and configure only the variables required by the features being deployed. Never commit bot tokens, OAuth secrets, payment secrets, encryption keys or database credentials.
 
-## ⚙️ Configuration (`.env`)
-Fill in your environment variables in `.env` (or copy from `.env.example`):
-```env
-BOT_TOKEN=your_primary_bot_token
-CLIENT_ID=your_bot_client_id
-MONGODB_URI=your_mongodb_connection_string
-PORT=10000
-```
+## Deployment and release discipline
 
----
+1. Run syntax checks and the full test suite.
+2. Review authorization, input validation, rate limits and secret handling.
+3. Verify database writes and restart persistence.
+4. Test Discord permissions and role hierarchy in a staging server.
+5. Test the dashboard and bot behavior together against the deployed backend.
+6. Verify provider and payment webhooks with provider test environments.
+7. Deploy only after required checks pass; monitor logs and retain a rollback path.
 
-## 🛠️ Management & Monitoring
-- **Check Status:** `./status.sh` or `pm2 status`
-- **View Live Logs:** `pm2 logs starry-bot`
-- **Stop Bot:** `./stop.sh` or `pm2 stop starry-bot`
-- **Restart Bot:** `./restart.sh` or `pm2 restart starry-bot`
-- **Web Dashboard:** Access via `http://localhost:10000` (or the public HTTPS tunnel).
+A green CI run is necessary, but it is not proof of live Discord, provider, payment or hosting behavior.

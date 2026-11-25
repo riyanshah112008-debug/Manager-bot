@@ -22,17 +22,120 @@ const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
 const config = require('../config');
+const { requireDiscordSnowflake } = require('../utils/discordSnowflake');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
 const { setupSupportDeskRoutes } = require('./supportDesk');
 const { setupPhoneSyncRoutes } = require('./phoneSync');
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[character]));
+
+function hasUnsafeMongoKeys(value, depth = 0) {
+    if (depth > 12) return true;
+    if (Array.isArray(value)) return value.some(item => hasUnsafeMongoKeys(item, depth + 1));
+    if (!value || typeof value !== 'object') return false;
+    return Object.keys(value).some(key =>
+        !key || key.startsWith('$') || key.includes('.') ||
+        key === '__proto__' || key === 'prototype' || key === 'constructor' ||
+        hasUnsafeMongoKeys(value[key], depth + 1)
+    );
+}
+
+function getTrustedSpotifyBackendBaseUrl() {
+    const configured = process.env.RENDER_EXTERNAL_URL || getPublicUrl();
+    if (typeof configured !== 'string' || !configured.trim()) {
+        throw new Error('Set the Render backend URL before starting Spotify OAuth.');
+    }
+    let parsed;
+    try { parsed = new URL(configured.trim()); }
+    catch (_) { throw new Error('The configured public backend URL is invalid.'); }
+    const localDevelopment = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if (parsed.username || parsed.password ||
+        (parsed.protocol !== 'https:' && !(localDevelopment && parsed.protocol === 'http:'))) {
+        throw new Error('The Spotify backend URL must use HTTPS and cannot contain credentials.');
+    }
+    return parsed.origin;
+}
+
+function assertSpotifyAuthorizationUrl(value) {
+    let parsed;
+    try { parsed = new URL(String(value || '')); }
+    catch (_) { throw new Error('Spotify returned an invalid authorization URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'accounts.spotify.com' ||
+        parsed.username || parsed.password) {
+        throw new Error('Spotify returned an unexpected authorization destination.');
+    }
+    return parsed.href;
+}
+
+function assertDiscordAuthorizationUrl(value) {
+    let parsed;
+    try { parsed = new URL(String(value || '')); }
+    catch (_) { throw new Error('Discord returned an invalid authorization URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'discord.com' ||
+        parsed.pathname !== '/oauth2/authorize' || parsed.username || parsed.password) {
+        throw new Error('Discord returned an unexpected authorization destination.');
+    }
+    return parsed.href;
+}
+
+function getTrustedDashboardFrontendBase() {
+    const configured = String(process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').trim();
+    let parsed;
+    try { parsed = new URL(configured); }
+    catch (_) { throw new Error('The dashboard frontend URL is invalid.'); }
+    const allowedOrigins = getDashboardOrigins();
+    const localDevelopment = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if (!allowedOrigins.has(parsed.origin) ||
+        (parsed.protocol !== 'https:' && !(localDevelopment && parsed.protocol === 'http:')) ||
+        parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error('The dashboard frontend URL is not an approved HTTPS origin.');
+    }
+    return parsed.origin;
+}
+
+function buildTrustedDashboardRedirect(frontendBase, pathname) {
+    if (typeof pathname !== 'string' || !pathname.startsWith('/') ||
+        pathname.startsWith('//') || pathname.includes('\\') || /[\\r\\n]/.test(pathname)) {
+        throw new Error('The dashboard redirect path is invalid.');
+    }
+    const destination = new URL(pathname, frontendBase);
+    if (destination.origin !== frontendBase || destination.username || destination.password) {
+        throw new Error('The dashboard redirect destination is not trusted.');
+    }
+    return destination.href;
+}
+
+
+function getTrustedDiscordCallbackUri() {
+    const backendBase = getTrustedSpotifyBackendBaseUrl();
+    const configured = String(process.env.DISCORD_REDIRECT_URI || (backendBase + '/auth/callback')).trim();
+    let parsed;
+    try { parsed = new URL(configured); }
+    catch (_) { throw new Error('The Discord OAuth callback URI is invalid.'); }
+    const base = new URL(backendBase);
+    const localDevelopment = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if ((parsed.protocol !== 'https:' && !(localDevelopment && parsed.protocol === 'http:')) ||
+        parsed.origin !== base.origin || parsed.pathname !== '/auth/callback' ||
+        parsed.search || parsed.hash || parsed.username || parsed.password) {
+        throw new Error('The Discord OAuth callback must match the configured backend /auth/callback URL.');
+    }
+    return parsed.href;
+}
+
+
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_RENEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
 const hashSessionToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const getOAuthEncryptionKey = () => {
     const secret = process.env.SESSION_ENCRYPTION_KEY || process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
@@ -42,17 +145,24 @@ const getOAuthEncryptionKey = () => {
 const encryptOAuthSecret = (value) => {
     if (!value) return null;
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv, { authTagLength: 16 });
     const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
     return ['v1', iv.toString('hex'), cipher.getAuthTag().toString('hex'), encrypted.toString('hex')].join(':');
 };
 const decryptOAuthSecret = (value) => {
     if (!value || typeof value !== 'string') return null;
     const [version, ivHex, tagHex, dataHex] = value.split(':');
-    if (version !== 'v1' || !ivHex || !tagHex || !dataHex) throw new Error('Stored Discord session needs a fresh login.');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getOAuthEncryptionKey(), Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-    return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
+    if (version !== 'v1' || !ivHex || !tagHex || !dataHex ||
+        !/^[a-f0-9]+$/i.test(ivHex) || !/^[a-f0-9]+$/i.test(tagHex) || !/^[a-f0-9]*$/i.test(dataHex)) {
+        throw new Error('Stored Discord session needs a fresh login.');
+    }
+    const iv = Buffer.from(ivHex, 'hex');
+    const tag = Buffer.from(tagHex, 'hex');
+    const encrypted = Buffer.from(dataHex, 'hex');
+    if (iv.length !== 12 || tag.length !== 16) throw new Error('Stored Discord session needs a fresh login.');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getOAuthEncryptionKey(), iv, { authTagLength: 16 });
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 };
 
 function bestPlayableMusicMatch(tracks, query) {
@@ -110,7 +220,7 @@ function setupDashboardRoutes(app, client) {
         let token = null;
         if (authHeader && authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
         else if (req.query.session) token = String(req.query.session);
-        if (!token || token.length > 4096) return null;
+        if (typeof token !== 'string' || !/^[a-f0-9]{64}$/i.test(token)) return null;
         const now = Date.now();
         const tokenHash = hashSessionToken(token);
         const renewIfNeeded = async (session) => {
@@ -152,9 +262,11 @@ function setupDashboardRoutes(app, client) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
 
-        const guildId = req.params.id || req.body.guildId;
-        if (!guildId) {
-            return res.status(400).json({ success: false, error: 'Guild ID is required.' });
+        const guildId = typeof req.params.id === 'string'
+            ? req.params.id
+            : (typeof req.body?.guildId === 'string' ? req.body.guildId : '');
+        if (!/^\d{17,20}$/.test(guildId)) {
+            return res.status(400).json({ success: false, error: 'A valid Discord guild ID is required.' });
         }
 
         const guild = client.guilds.cache.get(guildId);
@@ -200,7 +312,12 @@ function setupDashboardRoutes(app, client) {
             return res.status(401).json({ success: false, error: 'Authentication required. Please log in via Discord.' });
         }
 
-        const guildId = req.params.id || req.body.guildId;
+        const guildId = typeof req.params.id === 'string'
+            ? req.params.id
+            : (typeof req.body?.guildId === 'string' ? req.body.guildId : '');
+        if (!/^\d{17,20}$/.test(guildId)) {
+            return res.status(400).json({ success: false, error: 'A valid Discord guild ID is required.' });
+        }
         const guild = client.guilds.cache.get(guildId);
         if (!guild) {
             return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
@@ -235,6 +352,132 @@ function setupDashboardRoutes(app, client) {
     // Website support inbox and AI-to-human escalation workflow.
     setupSupportDeskRoutes(app, { requireAuth, client, config });
     setupPhoneSyncRoutes(app, { requireAuth });
+
+    // Spotify account linking is user-scoped: never accept a Discord user ID from
+    // the browser. OAuth state is random, one-time, short-lived and PKCE-bound.
+    app.get('/api/me/spotify', requireAuth, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const spotifyManager = require('./spotifyManager');
+            const account = await spotifyManager.getAccountStatus(String(req.session.user.id));
+            res.json({ success: true, account });
+        } catch (error) {
+            console.error('Spotify account status lookup failed:', error.message);
+            res.status(503).json({ success: false, error: 'Spotify account status is temporarily unavailable.' });
+        }
+    });
+
+    app.post('/api/spotify/connect', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            const redirectUri = getSpotifyRedirectUri(getTrustedSpotifyBackendBaseUrl());
+            const spotifyManager = require('./spotifyManager');
+            const authorization = await spotifyManager.createAuthorizationRequest(
+                String(req.session.user.id),
+                redirectUri
+            );
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, authorizeUrl: assertSpotifyAuthorizationUrl(authorization.authorizeUrl) });
+        } catch (error) {
+            console.error('Spotify authorization could not be started:', error.message);
+            res.status(503).json({
+                success: false,
+                error: error.message.includes('SPOTIFY_')
+                    ? error.message
+                    : 'Spotify connection is not configured yet. Check the server environment and try again.'
+            });
+        }
+    });
+
+    app.get('/api/me/spotify/playlists', requireAuth, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const spotifyManager = require('./spotifyManager');
+            const data = await spotifyManager.getUserPlaylists(String(req.session.user.id));
+            const safePlaylist = playlist => {
+                try {
+                    const url = new URL(String(playlist?.url || ''));
+                    if (url.protocol !== 'https:' || url.hostname !== 'open.spotify.com') return null;
+                    return {
+                        id: String(playlist.id || '').slice(0, 128),
+                        name: String(playlist.name || 'Spotify playlist').slice(0, 160),
+                        url: url.href,
+                        trackCount: Math.max(0, Number(playlist.trackCount) || 0),
+                        owner: String(playlist.owner || 'Spotify').slice(0, 80)
+                    };
+                } catch (_) {
+                    return null;
+                }
+            };
+            res.json({
+                success: true,
+                isLinked: Boolean(data.isLinked),
+                savedPlaylists: (data.savedPlaylists || []).map(safePlaylist).filter(Boolean),
+                playlists: (data.oauthPlaylists || []).map(safePlaylist).filter(Boolean)
+            });
+        } catch (error) {
+            console.error('Spotify playlist lookup failed:', error.message);
+            res.status(502).json({ success: false, error: 'Spotify playlists could not be loaded. Reconnect your account and retry.' });
+        }
+    });
+
+    app.delete('/api/me/spotify', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            const spotifyManager = require('./spotifyManager');
+            await spotifyManager.disconnectAccount(String(req.session.user.id));
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, message: 'Spotify has been disconnected from your Starry account.' });
+        } catch (error) {
+            console.error('Spotify account disconnect failed:', error.message);
+            res.status(503).json({ success: false, error: 'Spotify could not be disconnected right now. Please retry.' });
+        }
+    });
+
+    app.get('/api/me/preferences', requireAuth, async (req, res) => {
+        try {
+            const DashboardPreferences = require('../models/DashboardPreferences');
+            const preferences = await DashboardPreferences.findOne({ userId: requireDiscordSnowflake(req.session.user.id, 'user ID') }).lean();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({
+                success: true,
+                preferences: {
+                    showSuccessFeedback: preferences?.showSuccessFeedback !== false,
+                    showErrorFeedback: preferences?.showErrorFeedback !== false
+                }
+            });
+        } catch (error) {
+            console.error('Dashboard preferences lookup failed:', error.message);
+            res.status(503).json({ success: false, error: 'Personal dashboard preferences are temporarily unavailable.' });
+        }
+    });
+
+    app.put('/api/me/preferences', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const allowed = new Set(['showSuccessFeedback', 'showErrorFeedback']);
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).length === 0 || Object.keys(body).some(key => !allowed.has(key)) ||
+                Object.values(body).some(value => typeof value !== 'boolean')) {
+                return res.status(400).json({ success: false, error: 'Provide one or more valid personal dashboard preference switches.' });
+            }
+            const DashboardPreferences = require('../models/DashboardPreferences');
+            const preferences = await DashboardPreferences.findOneAndUpdate(
+                { userId: requireDiscordSnowflake(req.session.user.id, 'user ID') },
+                { $set: body, $setOnInsert: { userId: requireDiscordSnowflake(req.session.user.id, 'user ID') } },
+                { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
+            ).lean();
+            res.set('Cache-Control', 'no-store, private');
+            res.json({
+                success: true,
+                preferences: {
+                    showSuccessFeedback: preferences.showSuccessFeedback !== false,
+                    showErrorFeedback: preferences.showErrorFeedback !== false
+                }
+            });
+        } catch (error) {
+            console.error('Dashboard preferences save failed:', error.message);
+            res.status(500).json({ success: false, error: 'Could not save personal dashboard preferences.' });
+        }
+    });
 
     // Multi-platform discovery via Starry's configured Lavalink provider. No Spotify API credentials required.
     app.get('/api/guild/:id/music/search', requireGuildMember, async (req, res) => {
@@ -317,50 +560,70 @@ function setupDashboardRoutes(app, client) {
     // OAuth state is held in a short-lived HttpOnly cookie so it survives a
     // Render restart and works without process-local session state.
     app.get('/auth/login', actionLimiter, (req, res) => {
+        let redirectUri;
+        try {
+            redirectUri = getTrustedDiscordCallbackUri();
+        } catch (error) {
+            console.error('Discord OAuth configuration rejected:', error.message);
+            return res.status(503).send('Discord sign-in is temporarily unavailable. Check the backend callback configuration.');
+        }
+
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
-        const host = req.get('host');
-        const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
-        const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
+        if (!/^\d{17,20}$/.test(String(clientId))) {
+            return res.status(503).send('Discord sign-in is temporarily unavailable. The application ID is invalid.');
+        }
         const state = crypto.randomBytes(24).toString('hex');
-        const secureCookie = proto === 'https' ? '; Secure' : '';
-        res.set('Set-Cookie', `starry_oauth_state=${state}; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
+        const secureCookie = redirectUri.startsWith('https:') ? '; Secure' : '';
+        res.set('Set-Cookie', 'starry_oauth_state=' + state +
+            '; Max-Age=600; Path=/auth/callback; HttpOnly; SameSite=Lax' + secureCookie);
         res.set('Cache-Control', 'no-store');
         const authUrl = new URL('https://discord.com/oauth2/authorize');
-        authUrl.searchParams.set('client_id', clientId);
+        authUrl.searchParams.set('client_id', String(clientId));
         authUrl.searchParams.set('redirect_uri', redirectUri);
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('scope', 'identify guilds email');
         authUrl.searchParams.set('state', state);
-        res.redirect(authUrl.toString());
+        return res.redirect(303, assertDiscordAuthorizationUrl(authUrl.href));
     });
 
     app.get('/auth/callback', actionLimiter, async (req, res) => {
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
-        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+        let frontendBase;
+        try {
+            frontendBase = getTrustedDashboardFrontendBase();
+        } catch (error) {
+            console.error('Dashboard redirect origin rejected:', error.message);
+            return res.status(503).send('Dashboard sign-in is temporarily unavailable. Check the configured frontend URL.');
+        }
+        const redirectError = errorCode => res.redirect(303,
+            buildTrustedDashboardRedirect(frontendBase, '/?error=' + encodeURIComponent(errorCode)));
         const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
         const cookieState = cookiePart ? cookiePart.slice('starry_oauth_state='.length) : '';
-        const secureCookie = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
+        let secureCookie = '; Secure';
+        try { if (new URL(getTrustedDiscordCallbackUri()).protocol === 'http:') secureCookie = ''; } catch (_) {}
         res.set('Set-Cookie', `starry_oauth_state=; Max-Age=0; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
-        if (req.query.error) return res.redirect(`${frontendBase}/?error=discord_authorization_denied`);
+        if (req.query.error) return redirectError('discord_authorization_denied');
         const validState = returnedState && cookieState &&
             returnedState.length === cookieState.length &&
             crypto.timingSafeEqual(Buffer.from(returnedState), Buffer.from(cookieState));
-        if (!validState) return res.redirect(`${frontendBase}/?error=oauth_state_invalid`);
-        if (!code) return res.redirect(`${frontendBase}/?error=no_code`);
+        if (!validState) return redirectError('oauth_state_invalid');
+        if (!code) return redirectError('no_code');
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
-        const host = req.get('host');
-        const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
-        const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;
+        let redirectUri;
+        try {
+            redirectUri = getTrustedDiscordCallbackUri();
+        } catch (configurationError) {
+            console.error('Discord OAuth callback configuration rejected:', configurationError.message);
+            return redirectError('oauth_not_configured');
+        }
 
         try {
             if (!clientSecret) {
                 console.error('Discord OAuth client secret is not configured.');
-                return res.redirect(`${frontendBase}/?error=oauth_not_configured`);
+                return redirectError('oauth_not_configured');
             }
 
             const tokenParams = new URLSearchParams({
@@ -378,7 +641,7 @@ function setupDashboardRoutes(app, client) {
             const tokenData = await tokenRes.json().catch(() => ({}));
             if (!tokenRes.ok || !tokenData.access_token) {
                 console.error('Discord OAuth token exchange failed:', tokenRes.status, tokenData.error || tokenData.message || 'unknown_error');
-                return res.redirect(`${frontendBase}/?error=token_failed`);
+                return redirectError('token_failed');
             }
 
             const discordHeaders = { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' };
@@ -392,11 +655,11 @@ function setupDashboardRoutes(app, client) {
             ]);
             if (!userRes.ok || !userData.id) {
                 console.error('Discord OAuth profile request failed:', userRes.status);
-                return res.redirect(`${frontendBase}/?error=profile_failed`);
+                return redirectError('profile_failed');
             }
             if (!guildsRes.ok || !Array.isArray(userGuilds)) {
                 console.error('Discord OAuth guild request failed:', guildsRes.status);
-                return res.redirect(`${frontendBase}/?error=guilds_failed`);
+                return redirectError('guilds_failed');
             }
 
             const sessionToken = crypto.randomBytes(32).toString('hex');
@@ -418,7 +681,7 @@ function setupDashboardRoutes(app, client) {
             // Persist before redirecting; never send a session that cannot be reloaded.
             if (mongoose.connection.readyState !== 1) {
                 console.error('Discord OAuth session storage is unavailable: MongoDB is not connected.');
-                return res.redirect(`${frontendBase}/?error=session_store_unavailable`);
+                return redirectError('session_store_unavailable');
             }
             await OAuthSession.create({
                 tokenHash: hashSessionToken(sessionToken),
@@ -429,11 +692,11 @@ function setupDashboardRoutes(app, client) {
             });
             userSessions.set(sessionToken, sessionData);
             res.set('Cache-Control', 'no-store');
-            return res.redirect(`${frontendBase}/dashboard.html?session=${encodeURIComponent(sessionToken)}`);
+            return res.redirect(303, buildTrustedDashboardRedirect(frontendBase, '/dashboard.html?session=' + encodeURIComponent(sessionToken)));
         } catch (error) {
             console.error('Discord OAuth callback failed:', error);
             const storageUnavailable = mongoose.connection.readyState !== 1;
-            return res.redirect(`${frontendBase}/?error=${storageUnavailable ? 'session_store_unavailable' : 'session_store_failed'}`);
+            return redirectError(storageUnavailable ? 'session_store_unavailable' : 'session_store_failed');
         }
     });
 
@@ -523,24 +786,37 @@ function setupDashboardRoutes(app, client) {
                 return res.status(401).json({ success: false, error: 'Unauthorized webhook request.' });
             }
 
+            if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+                return res.status(400).json({ success: false, error: 'Invalid vote webhook payload.' });
+            }
             const { user: userId, type, isWeekend } = req.body;
-            if (!userId) return res.status(400).json({ success: false, error: 'User ID missing in payload.' });
+            const safeUserId = typeof userId === 'string' ? userId.trim() : '';
+            if (!/^\d{17,20}$/.test(safeUserId)) {
+                return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
+            }
+            if (type !== undefined && !['upvote', 'test'].includes(type)) {
+                return res.status(400).json({ success: false, error: 'Unsupported vote webhook type.' });
+            }
+            if (isWeekend !== undefined && typeof isWeekend !== 'boolean') {
+                return res.status(400).json({ success: false, error: 'Weekend flag must be boolean.' });
+            }
 
-            const rewardCred = isWeekend ? 1000 : 500;
-            const rewardXp = isWeekend ? 1000 : 500;
+            const rewardCred = isWeekend === true ? 1000 : 500;
+            const rewardXp = isWeekend === true ? 1000 : 500;
 
-            let userDoc = await User.findOne({ userId });
-            if (!userDoc) userDoc = new User({ userId, guildId: 'global' });
+            const userQuery = User.findOne({ userId: requireDiscordSnowflake(safeUserId, 'user ID') });
+            let userDoc = await userQuery.exec();
+            if (!userDoc) userDoc = new User({ userId: safeUserId, guildId: 'global' });
 
             userDoc.credits = (userDoc.credits || 0) + rewardCred;
             userDoc.xp = (userDoc.xp || 0) + rewardXp;
             await userDoc.save();
 
-            console.log(`⭐ [Top.gg Upvote] User ${userId} voted! Awarded +${rewardCred} Credits & +${rewardXp} XP (${isWeekend ? 'Weekend 2x' : 'Standard'}).`);
+            console.log(`⭐ [Top.gg Upvote] User ${safeUserId} voted! Awarded +${rewardCred} Credits & +${rewardXp} XP (${isWeekend ? 'Weekend 2x' : 'Standard'}).`);
 
             // Attempt to DM user if accessible
             try {
-                const discordUser = await client.users.fetch(userId);
+                const discordUser = await client.users.fetch(safeUserId);
                 if (discordUser) {
                     const voteEmbed = new EmbedBuilder()
                         .setColor('#FF79C6')
@@ -555,7 +831,7 @@ function setupDashboardRoutes(app, client) {
             res.status(200).json({ success: true, message: 'Vote processed and rewards delivered.' });
         } catch (e) {
             console.error('Top.gg Webhook Error:', e);
-            res.status(500).json({ success: false, error: e.message });
+            res.status(500).json({ success: false, error: 'Unable to retrieve premium orders.' });
         }
     });
 
@@ -660,7 +936,7 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
 
-            let settings = await ServerSettings.findOne({ guildId: guild.id });
+            let settings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') });
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: guild.id });
             }
@@ -672,7 +948,7 @@ function setupDashboardRoutes(app, client) {
             try {
                 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
                 const activeGuildPremium = await PremiumModel.findOne({
-                    targetId: guild.id,
+                    targetId: requireDiscordSnowflake(guild.id, 'guild ID'),
                     isPremium: true,
                     $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
                 }).lean();
@@ -810,7 +1086,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
-            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
+            const premiumSettings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).select('premium').lean();
             const premium = premiumSettings?.premium;
             const premiumActive = Boolean(premium?.isPremium) &&
                 (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
@@ -871,7 +1147,7 @@ function setupDashboardRoutes(app, client) {
         try {
             res.set('Cache-Control', 'no-store, private');
             const { WelcomeSettings } = require('./welcome');
-            const settings = await WelcomeSettings.findOne({ guildId: req.guild.id }).lean();
+            const settings = await WelcomeSettings.findOne({ guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).lean();
             res.json({ success: true, configured: Boolean(settings), settings: settings || {
                 channelId: '', title: '✨ WELCOME TO {server} ✨',
                 description: '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟',
@@ -923,7 +1199,7 @@ function setupDashboardRoutes(app, client) {
                 updates.thumbnail = value;
             }
             const settings = await WelcomeSettings.findOneAndUpdate(
-                { guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true }
+                { guildId: requireDiscordSnowflake(guild.id, 'guild ID') }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true }
             ).lean();
             res.json({ success: true, settings, message: 'Welcome settings saved. New members will receive the configured welcome card.' });
         } catch (error) {
@@ -1028,7 +1304,7 @@ function setupDashboardRoutes(app, client) {
             res.set('Cache-Control', 'no-store, private');
             const leveling = require('./leveling');
             const { LevelSettings, LevelUser } = leveling;
-            const guildId = req.guild.id;
+            const guildId = requireDiscordSnowflake(req.guild.id, 'guild ID');
             const settings = await LevelSettings.findOne({ guildId }).lean() || {
                 enabled: true, announcementChannelId: null, logChannelId: null, title: 'Congratulations {user}!',
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
@@ -1077,7 +1353,7 @@ function setupDashboardRoutes(app, client) {
             }
             for (const key of ['ignoredChannelIds', 'ignoredRoleIds']) {
                 if (body[key] === undefined) continue;
-                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !/^\\d{17,20}$/.test(value))) {
+                if (!Array.isArray(body[key]) || body[key].length > 100 || body[key].some(value => typeof value !== 'string' || !/^\d{17,20}$/.test(value))) {
                     return res.status(400).json({ success: false, error: 'Invalid ' + key + ' selection.' });
                 }
                 const collection = key === 'ignoredChannelIds' ? guild.channels.cache : guild.roles.cache;
@@ -1113,7 +1389,7 @@ function setupDashboardRoutes(app, client) {
                 if (value && (!/^https?:\/\//i.test(value) || value.length > 1000)) return res.status(400).json({ success: false, error: 'Image fields must be valid HTTP or HTTPS URLs.' });
                 updates[key] = value;
             }
-            const settings = await LevelSettings.findOneAndUpdate({ guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true });
+            const settings = await LevelSettings.findOneAndUpdate({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true });
             leveling.settingsCache.set(guild.id, { ...(leveling.settingsCache.get(guild.id) || {}), ...updates });
             res.json({ success: true, settings, message: 'Leveling settings saved.' });
         } catch (error) {
@@ -1129,7 +1405,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/guild/:id/economy', requireGuildAdmin, async (req, res) => {
         try {
             res.set('Cache-Control', 'no-store, private');
-            const guildId = req.guild.id;
+            const guildId = requireDiscordSnowflake(req.guild.id, 'guild ID');
             const [membersTracked, totals, leaderboard] = await Promise.all([
                 User.countDocuments({ guildId }),
                 User.aggregate([{ $match: { guildId } }, { $group: { _id: null, totalCredits: { $sum: '$credits' }, totalXp: { $sum: '$xp' }, totalPrestige: { $sum: '$prestige' } } }]),
@@ -1142,6 +1418,223 @@ function setupDashboardRoutes(app, client) {
         }
     });
 
+    app.get('/api/guild/:id/security/status', requireGuildAdmin, async (req, res) => {
+        try {
+            const guild = req.guild;
+            const settings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') }).select('antinuke').lean();
+            const policy = settings?.antinuke || {};
+            const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+            const engineReady = client.antiNukeReady === true;
+            const permissions = botMember?.permissions;
+            const canReadAuditLog = Boolean(permissions?.has(PermissionFlagsBits.ViewAuditLog));
+            const action = policy.action || 'quarantine';
+            const quarantineRole = policy.quarantineRoleId ? guild.roles.cache.get(policy.quarantineRoleId) : null;
+            const quarantineDangerousPermissions = [
+                PermissionFlagsBits.Administrator,
+                PermissionFlagsBits.ManageGuild,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.ManageRoles,
+                PermissionFlagsBits.ManageWebhooks,
+                PermissionFlagsBits.BanMembers,
+                PermissionFlagsBits.KickMembers,
+                PermissionFlagsBits.ManageMessages,
+                PermissionFlagsBits.ManageEvents,
+                PermissionFlagsBits.ManageThreads
+            ];
+            const quarantineRoleSafe = Boolean(quarantineRole && !quarantineRole.managed &&
+                !quarantineDangerousPermissions.some(permission => quarantineRole.permissions.has(permission)));
+            const canApplyAction = action === 'quarantine'
+                ? Boolean(quarantineRoleSafe && botMember?.roles?.highest &&
+                    quarantineRole.position < botMember.roles.highest.position && permissions?.has(PermissionFlagsBits.ManageRoles))
+                : action === 'timeout' ? Boolean(permissions?.has(PermissionFlagsBits.ModerateMembers))
+                : action === 'kick' ? Boolean(permissions?.has(PermissionFlagsBits.KickMembers))
+                : action === 'ban' ? Boolean(permissions?.has(PermissionFlagsBits.BanMembers)) : false;
+            const canBlockBots = policy.blockUnapprovedBots !== true || Boolean(permissions?.has(PermissionFlagsBits.KickMembers));
+            const canBlockWebhooks = policy.blockWebhookCreation !== true || Boolean(permissions?.has(PermissionFlagsBits.ManageWebhooks));
+            const effectiveEnabled = Boolean(policy.enabled === true && engineReady && canReadAuditLog && canApplyAction && canBlockBots && canBlockWebhooks);
+            const missing = [];
+            if (!engineReady) missing.push('Anti-Nuke runtime is not initialized');
+            if (!canReadAuditLog) missing.push('View Audit Log permission is missing');
+            if (!canApplyAction) missing.push(action === 'quarantine'
+                ? 'A safe quarantine role without elevated permissions and the required role hierarchy are not configured'
+                : 'The selected response action is not configured or permitted');
+            if (!canBlockBots) missing.push('Kick Members permission is missing for unapproved bot protection');
+            if (!canBlockWebhooks) missing.push('Manage Webhooks permission is missing for webhook protection');
+            res.set('Cache-Control', 'no-store, private');
+            res.json({
+                success: true,
+                engineReady,
+                canReadAuditLog,
+                canApplyAction,
+                effectiveEnabled,
+                missing,
+                settings: policy
+            });
+        } catch (error) {
+            console.error('Security status lookup failed:', error.message);
+            res.status(503).json({ success: false, error: 'Could not verify Anti-Nuke runtime status.' });
+        }
+    });
+
+// Live AutoMod controls: only the link/emoji filters currently enforced by automod.js are exposed.
+    app.get('/api/guild/:id/automod', requireGuildAdmin, async (req, res) => {
+        try {
+            const helper = require('../utils/automodHelper');
+            const channels = req.guild.channels.cache.filter(channel => channel.isTextBased() && typeof channel.send === 'function');
+            const overrides = await Promise.all(channels.map(async channel => ({
+                channelId: channel.id,
+                channelName: channel.name,
+                ...(await helper.getChannelSettings(channel.id, req.guild.id))
+            })));
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, enabled: helper.getGuildStatus(req.guild.id), channels: overrides });
+        } catch (error) {
+            console.error('Dashboard AutoMod read failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod settings are temporarily unavailable.' });
+        }
+    });
+
+    app.patch('/api/guild/:id/automod', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const allowed = new Set(['enabled', 'channelId', 'linksActive', 'emojisActive']);
+            if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.has(key))) {
+                return res.status(400).json({ success: false, error: 'Invalid AutoMod update.' });
+            }
+            if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return res.status(400).json({ success: false, error: 'Server AutoMod must be true or false.' });
+            for (const key of ['linksActive', 'emojisActive']) if (body[key] !== undefined && typeof body[key] !== 'boolean') {
+                return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+            }
+            if (body.enabled === undefined && body.channelId === undefined) return res.status(400).json({ success: false, error: 'Choose a server setting or channel filter to update.' });
+            if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'AutoMod storage is offline. No changes were applied.' });
+            const helper = require('../utils/automodHelper');
+            const channelId = body.channelId === undefined ? '' : (typeof body.channelId === 'string' ? body.channelId.trim() : '');
+            let selectedChannel = null;
+            if (body.channelId !== undefined) {
+                if (!/^\d{17,20}$/.test(channelId)) {
+                    return res.status(400).json({ success: false, error: 'Choose a valid text channel ID from this server.' });
+                }
+                selectedChannel = req.guild.channels.cache.get(channelId);
+                if (!selectedChannel || !selectedChannel.isTextBased() || typeof selectedChannel.send !== 'function') {
+                    return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+                }
+            }
+            if (body.enabled !== undefined) {
+                await helper.setGuildStatus(req.guild.id, body.enabled);
+                const { AutomodGuild } = require('../models/AutomodSchema');
+                const stored = await AutomodGuild.findOne({ guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).lean();
+                if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
+            }
+            if (selectedChannel) {
+                const { AutomodChannel } = require('../models/AutomodSchema');
+                if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
+                if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
+                const stored = await AutomodChannel.findOne({ channelId, guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).lean();
+                const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
+                const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
+                if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
+                    (expectedEmojis !== undefined && stored?.emojis !== expectedEmojis)) {
+                    return res.status(503).json({ success: false, error: 'AutoMod channel filter could not be confirmed in storage.' });
+                }
+            }
+            return res.json({ success: true, message: 'AutoMod settings saved and synced to the live filter cache.' });
+        } catch (error) {
+            console.error('Dashboard AutoMod update failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod update failed. Retry after checking database connectivity.' });
+        }
+    });
+
+        // Giveaway dashboard endpoints delegate to the existing giveaway module facade.
+    app.get('/api/guild/:id/giveaways', requireGuildAdmin, async (req, res) => {
+        try {
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const giveaways = await client.starryGiveawayEngine.list(req.guild.id);
+            res.set('Cache-Control', 'no-store, private');
+            res.json({ success: true, giveaways });
+        } catch (error) {
+            console.error('Dashboard giveaway list failed:', error.message);
+            res.status(500).json({ success: false, error: 'Could not load giveaways for this server.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const body = req.body || {};
+            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
+            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
+            const winners = Number(body.winners);
+            const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
+            if (!prize || prize.length > 200) return res.status(400).json({ success: false, error: 'Prize must contain 1–200 characters.' });
+            if (!/^[1-9]\d{0,3}[smhdw]$/i.test(duration)) return res.status(400).json({ success: false, error: 'Use a valid duration such as 10m, 2h or 1d.' });
+            const match = duration.match(/^([1-9]\d{0,3})([smhdw])$/i);
+            const amount = Number(match[1]), unit = match[2].toLowerCase();
+            const multiplier = unit === 's' ? MS_PER_SECOND :
+                unit === 'm' ? MS_PER_MINUTE :
+                unit === 'h' ? MS_PER_HOUR :
+                unit === 'd' ? MS_PER_DAY : 7 * MS_PER_DAY;
+            const durationMs = amount * multiplier;
+            if (durationMs < 10 * MS_PER_SECOND || durationMs > 90 * MS_PER_DAY) {
+                return res.status(400).json({ success: false, error: 'Duration must be between 10 seconds and 90 days.' });
+            }
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
+            const channel = req.guild.channels.cache.get(channelId);
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+            const botMember = req.guild.members.me || await req.guild.members.fetch(client.user.id).catch(() => null);
+            const channelPermissions = botMember ? channel.permissionsFor(botMember) : null;
+            const required = PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages |
+                PermissionFlagsBits.EmbedLinks | PermissionFlagsBits.AddReactions | PermissionFlagsBits.ReadMessageHistory;
+            if (!channelPermissions?.has(required)) {
+                return res.status(400).json({ success: false, error: 'Starry needs View Channel, Send Messages, Embed Links, Add Reactions and Read Message History in the selected channel.' });
+            }
+            const author = await client.users.fetch(req.session.user.id).catch(() => null);
+            if (!author) return res.status(503).json({ success: false, error: 'Could not load your Discord profile to host the giveaway.' });
+            const result = await client.starryGiveawayEngine.create(channel, author, duration, winners, prize);
+            res.status(201).json({ success: true, message: result.message, giveaway: result.giveaway });
+        } catch (error) {
+            console.error('Dashboard giveaway creation failed:', error.message);
+            res.status(400).json({ success: false, error: error.message || 'Could not start this giveaway.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/end', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const messageId = typeof req.params.messageId === 'string' ? req.params.messageId : '';
+            if (!/^\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const record = client.starryGiveawayEngine.find(req.guild.id, messageId);
+            if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
+            const result = await client.starryGiveawayEngine.end(req.guild.id, messageId);
+            res.json({
+                success: Boolean(result.success),
+                pending: Boolean(result.pending),
+                message: result.pending ? 'Giveaway end requested. Discord publication is still processing and will resume automatically if interrupted.' : 'Giveaway ended successfully.',
+                giveaway: result.giveaway
+            });
+        } catch (error) {
+            res.status(409).json({ success: false, error: error.message || 'Could not end this giveaway.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const messageId = typeof req.params.messageId === 'string' ? req.params.messageId : '';
+            if (!/^\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'A valid giveaway message ID is required.' });
+            if (!client.starryGiveawayEngine) return res.status(503).json({ success: false, error: 'Giveaway engine is not initialized.' });
+            const record = client.starryGiveawayEngine.find(req.guild.id, messageId);
+            if (!record) return res.status(404).json({ success: false, error: 'Giveaway not found in this server.' });
+            if (record.status !== 'completed') return res.status(409).json({ success: false, error: 'Only completed giveaways can be rerolled.' });
+            const winners = req.body?.winners === undefined ? Number(record.winners) || 1 : Number(req.body.winners);
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
+            const executor = await client.users.fetch(req.session.user.id).catch(() => null);
+            if (!executor) return res.status(503).json({ success: false, error: 'Could not load your Discord profile.' });
+            const result = await client.starryGiveawayEngine.reroll(req.guild.id, req.params.messageId, winners, executor);
+            res.json(result);
+        } catch (error) {
+            res.status(409).json({ success: false, error: error.message || 'Could not reroll this giveaway.' });
+        }
+    });
+
     // POST /api/guild/:id/settings - Save updated Starry settings (Admin Guarded)
     app.post('/api/guild/:id/settings', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
@@ -1151,6 +1644,13 @@ function setupDashboardRoutes(app, client) {
             const payload = req.body;
             if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
                 return res.status(400).json({ success: false, error: 'Settings payload must be an object.' });
+            }
+            const allowedPayloadKeys = new Set([
+                'prefix', 'triggerWord', 'birthdays', 'logging', 'verification', 'antinuke',
+                'embedTheme', 'automod', 'autorole', 'boosterRoleSystem', 'music', 'tickets', 'mediaPerms'
+            ]);
+            if (Object.keys(payload).some(key => !allowedPayloadKeys.has(key)) || hasUnsafeMongoKeys(payload)) {
+                return res.status(400).json({ success: false, error: 'Settings payload contains an unsupported or unsafe field.' });
             }
             if (payload.prefix !== undefined && (typeof payload.prefix !== 'string' || payload.prefix.trim().length < 1 || payload.prefix.trim().length > 3)) {
                 return res.status(400).json({ success: false, error: 'Command prefix must contain 1 to 3 characters.' });
@@ -1176,18 +1676,26 @@ function setupDashboardRoutes(app, client) {
                 if (b.enabled && !b.channelId) return res.status(400).json({ success: false, error: 'Select an announcement channel before enabling birthdays.' });
             }
             if (payload.logging !== undefined) {
-                const allowedLogKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                const channelKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                const booleanKeys = new Set(['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled']);
+                const allowedLogKeys = new Set([...channelKeys, ...booleanKeys]);
                 if (!payload.logging || typeof payload.logging !== 'object' || Array.isArray(payload.logging) ||
                     Object.keys(payload.logging).some(key => !allowedLogKeys.has(key))) {
                     return res.status(400).json({ success: false, error: 'Invalid logging settings.' });
                 }
-                for (const [key, rawId] of Object.entries(payload.logging)) {
-                    if (typeof rawId !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
-                    const channelId = rawId.trim();
+                for (const [key, rawValue] of Object.entries(payload.logging)) {
+                    if (booleanKeys.has(key)) {
+                        if (typeof rawValue !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+                        continue;
+                    }
+                    if (typeof rawValue !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
+                    const channelId = rawValue.trim();
                     if (channelId) {
                         const channel = guild.channels.cache.get(channelId);
-                        if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
-                            return res.status(400).json({ success: false, error: 'Each log destination must be a text channel in this server.' });
+                        const botMember = guild.members.me;
+                        if (!channel || !channel.isTextBased() || typeof channel.send !== 'function' ||
+                            !channel.permissionsFor(botMember)?.has(PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages)) {
+                            return res.status(400).json({ success: false, error: 'Each log destination must be a text channel Starry can view and send messages in.' });
                         }
                     }
                     payload.logging[key] = channelId;
@@ -1245,12 +1753,66 @@ function setupDashboardRoutes(app, client) {
                     if (roleId && (!guild.roles.cache.has(roleId) || guild.roles.cache.get(roleId).managed || roleId === guild.id)) {
                         return res.status(400).json({ success: false, error: 'Choose a manageable role from this server for quarantine.' });
                     }
+                    if (roleId) {
+                        const quarantineRole = guild.roles.cache.get(roleId);
+                        const dangerousPermissions = [
+                            PermissionFlagsBits.Administrator,
+                            PermissionFlagsBits.ManageGuild,
+                            PermissionFlagsBits.ManageChannels,
+                            PermissionFlagsBits.ManageRoles,
+                            PermissionFlagsBits.ManageWebhooks,
+                            PermissionFlagsBits.BanMembers,
+                            PermissionFlagsBits.KickMembers,
+                            PermissionFlagsBits.ManageMessages,
+                            PermissionFlagsBits.ManageEvents,
+                            PermissionFlagsBits.ManageThreads
+                        ];
+                        if (dangerousPermissions.some(permission => quarantineRole.permissions.has(permission))) {
+                            return res.status(400).json({ success: false, error: 'The quarantine role must not grant administrator, moderation, role, channel, webhook or event-management permissions.' });
+                        }
+                    }
                     policy.quarantineRoleId = roleId;
                 }
                 for (const key of ['whitelistedUsers', 'whitelistedRoles']) {
-                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].some(value => typeof value !== 'string'))) {
-                        return res.status(400).json({ success: false, error: key + ' must be a list of Discord IDs.' });
+                    if (policy[key] !== undefined && (!Array.isArray(policy[key]) || policy[key].length > 50 ||
+                        policy[key].some(value => typeof value !== 'string' || !/^\d{17,20}$/.test(value)))) {
+                        return res.status(400).json({ success: false, error: key + ' must contain up to 50 valid Discord IDs.' });
                     }
+                    if (policy[key] !== undefined) policy[key] = [...new Set(policy[key])];
+                }
+                if (policy.whitelistedRoles !== undefined) {
+                    for (const roleId of policy.whitelistedRoles) {
+                        const role = guild.roles.cache.get(roleId);
+                        if (!role || role.id === guild.id || role.managed) {
+                            return res.status(400).json({ success: false, error: 'Every trusted role must be a normal role in this server.' });
+                        }
+                    }
+                }
+                if (policy.whitelistedUsers !== undefined) {
+                    for (const userId of policy.whitelistedUsers) {
+                        const member = await guild.members.fetch(userId).catch(() => null);
+                        if (!member) return res.status(400).json({ success: false, error: 'Every trusted user must currently belong to this server.' });
+                    }
+                }
+                if (policy.enabled === true) {
+                    if (client.antiNukeReady !== true) return res.status(503).json({ success: false, error: 'Anti-Nuke runtime is not initialized.' });
+                    const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+                    if (!botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
+                        return res.status(400).json({ success: false, error: 'Grant Starry View Audit Log permission before enabling Anti-Nuke.' });
+                    }
+                    const action = policy.action || 'quarantine';
+                    if (action === 'quarantine') {
+                        const role = policy.quarantineRoleId ? guild.roles.cache.get(policy.quarantineRoleId) : null;
+                        if (!role || role.managed || role.position >= botMember.roles.highest.position ||
+                            !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                            return res.status(400).json({ success: false, error: 'Select a quarantine role below Starry’s highest role and grant Manage Roles permission.' });
+                        }
+                    }
+                    if (action === 'timeout' && !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Moderate Members permission for the timeout response.' });
+                    if (action === 'kick' && !botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Kick Members permission for the kick response.' });
+                    if (action === 'ban' && !botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Ban Members permission for the ban response.' });
+                    if (policy.blockUnapprovedBots === true && !botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(400).json({ success: false, error: 'Grant Starry Kick Members permission to block unapproved bots.' });
+                    if (policy.blockWebhookCreation === true && !botMember.permissions.has(PermissionFlagsBits.ManageWebhooks)) return res.status(400).json({ success: false, error: 'Grant Starry Manage Webhooks permission to block webhook creation.' });
                 }
             }
             if (payload.embedTheme !== undefined) {
@@ -1281,7 +1843,7 @@ function setupDashboardRoutes(app, client) {
                 }
                 if (theme.color !== undefined) theme.color = theme.color.trim();
             }
-            let settings = await ServerSettings.findOne({ guildId: guild.id });
+            let settings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
             if (payload.prefix !== undefined) {
@@ -1308,6 +1870,17 @@ function setupDashboardRoutes(app, client) {
             if (payload.mediaPerms) settings.mediaPerms = { ...settings.mediaPerms?.toObject(), ...payload.mediaPerms };
 
             await settings.save();
+            if (payload.antinuke) {
+                const logChannel = typeof client.getLogChannel === 'function'
+                    ? await client.getLogChannel(guild, 'moderate').catch(() => null)
+                    : null;
+                if (logChannel?.isTextBased?.()) {
+                    await logChannel.send({
+                        content: '🛡️ Anti-Nuke configuration updated by <@' + req.session.user.id + '>.',
+                        allowedMentions: { parse: [], users: [] }
+                    }).catch(() => {});
+                }
+            }
             if (payload.embedTheme) {
                 const { setCachedTheme } = require('./embedVisuality');
                 setCachedTheme(guild.id, settings.embedTheme?.toObject?.() || settings.embedTheme);
@@ -1348,7 +1921,7 @@ function setupDashboardRoutes(app, client) {
             if (explicitColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
                 return res.status(400).json({ success: false, error: 'Embed accent color must be a valid hex color.' });
             }
-            const theme = (await ServerSettings.findOne({ guildId: guild.id }))?.embedTheme || {};
+            const theme = (await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') }))?.embedTheme || {};
             const authorName = cleanText(author, 256, 'Embed author') || theme.authorName || '';
             const authorImage = cleanUrl(authorIcon, 'Author icon') || theme.authorIcon || '';
             const footerText = cleanText(footer, 2048, 'Embed footer') || theme.footer || '';
@@ -1540,54 +2113,109 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/mod/action - Member Moderation (Admin Guarded)
     app.post('/api/guild/:id/mod/action', actionLimiter, requireGuildAdmin, async (req, res) => {
         try {
-            const guild = req.guild || client.guilds.cache.get(req.params.id);
+            const guild = req.guild;
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found.' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body)) {
+                return res.status(400).json({ success: false, error: 'Invalid moderation request.' });
+            }
+            const allowedKeys = new Set(['action', 'targetId', 'reason', 'durationMinutes', 'roleId', 'nickname']);
+            if (Object.keys(body).some(key => !allowedKeys.has(key))) {
+                return res.status(400).json({ success: false, error: 'Unsupported moderation request field.' });
+            }
 
-            const { action, targetId, reason, durationMinutes, roleId, nickname } = req.body;
-            if (!targetId && action !== 'unban') return res.status(400).json({ success: false, error: 'Target member ID is required.' });
+            const action = typeof body.action === 'string' ? body.action : '';
+            const targetId = typeof body.targetId === 'string' ? body.targetId.trim() : '';
+            const reason = body.reason === undefined || body.reason === null || body.reason === ''
+                ? 'Moderation action via Starry Control Center'
+                : (typeof body.reason === 'string' ? body.reason.trim() : null);
+            const validActions = new Set(['kick', 'ban', 'unban', 'timeout', 'role_add', 'role_remove', 'nickname']);
+            if (!validActions.has(action)) return res.status(400).json({ success: false, error: 'Unsupported moderation action.' });
+            if (!/^\d{17,20}$/.test(targetId)) return res.status(400).json({ success: false, error: 'A valid Discord user ID is required.' });
+            if (reason === null || reason.length > 512) return res.status(400).json({ success: false, error: 'Reason must be a text value of up to 512 characters.' });
+
+            const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+            if (!botMember) return res.status(503).json({ success: false, error: 'Starry could not verify its server permissions.' });
 
             const member = await guild.members.fetch(targetId).catch(() => null);
+            const requireManageableMember = () => {
+                if (!member) return res.status(404).json({ success: false, error: 'Member not found in this server.' });
+                if (member.id === guild.ownerId || member.id === client.user.id ||
+                    member.roles.highest.position >= botMember.roles.highest.position) {
+                    return res.status(403).json({ success: false, error: 'Starry cannot moderate this member because of Discord role hierarchy.' });
+                }
+                return null;
+            };
 
             if (action === 'kick') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.kick(reason || 'Kicked via Starry Web Dashboard');
-                return res.json({ success: true, message: `👢 Successfully kicked ${member.user.tag}` });
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                if (!botMember.permissions.has(PermissionFlagsBits.KickMembers)) return res.status(403).json({ success: false, error: 'Starry needs Kick Members permission.' });
+                await member.kick(reason);
+                return res.json({ success: true, message: 'Member kicked successfully.' });
             }
             if (action === 'ban') {
-                await guild.bans.create(targetId, { reason: reason || 'Banned via Starry Web Dashboard' });
-                return res.json({ success: true, message: `🔨 Successfully banned user ID: ${targetId}` });
+                if (!botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(403).json({ success: false, error: 'Starry needs Ban Members permission.' });
+                if (member && (member.id === guild.ownerId || member.id === client.user.id ||
+                    member.roles.highest.position >= botMember.roles.highest.position)) {
+                    return res.status(403).json({ success: false, error: 'Starry cannot ban this member because of Discord role hierarchy.' });
+                }
+                await guild.bans.create(targetId, { reason });
+                return res.json({ success: true, message: 'User banned successfully.' });
             }
             if (action === 'unban') {
-                await guild.bans.remove(targetId, reason || 'Unbanned via Starry Web Dashboard');
-                return res.json({ success: true, message: `🔓 Successfully unbanned user ID: ${targetId}` });
+                if (!botMember.permissions.has(PermissionFlagsBits.BanMembers)) return res.status(403).json({ success: false, error: 'Starry needs Ban Members permission.' });
+                await guild.bans.remove(targetId, reason);
+                return res.json({ success: true, message: 'User unbanned successfully.' });
             }
             if (action === 'timeout') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                const durMs = (Number(durationMinutes) || 60) * 60 * 1000;
-                await member.timeout(durMs, reason || 'Timed out via Starry Web Dashboard');
-                return res.json({ success: true, message: `⏳ Successfully timed out ${member.user.tag} for ${durationMinutes || 60}m` });
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                if (!botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) return res.status(403).json({ success: false, error: 'Starry needs Moderate Members permission.' });
+                const durationValue = body.durationMinutes === undefined || body.durationMinutes === ''
+                    ? 60 : Number(body.durationMinutes);
+                if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 40320) {
+                    return res.status(400).json({ success: false, error: 'Timeout must be between 1 minute and 28 days.' });
+                }
+                await member.timeout(durationValue * 60 * 1000, reason);
+                return res.json({ success: true, message: 'Member timed out for ' + durationValue + ' minute(s).' });
             }
-            if (action === 'role_add') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.roles.add(roleId);
-                return res.json({ success: true, message: `✅ Role added to ${member.user.tag}` });
-            }
-            if (action === 'role_remove') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.roles.remove(roleId);
-                return res.json({ success: true, message: `➖ Role removed from ${member.user.tag}` });
+            if (action === 'role_add' || action === 'role_remove') {
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                const roleId = typeof body.roleId === 'string' ? body.roleId.trim() : '';
+                if (!/^\d{17,20}$/.test(roleId)) return res.status(400).json({ success: false, error: 'A valid server role ID is required.' });
+                const role = guild.roles.cache.get(roleId);
+                if (!role || role.managed || role.id === guild.id ||
+                    role.position >= botMember.roles.highest.position) {
+                    return res.status(400).json({ success: false, error: 'Choose a manageable role from this server.' });
+                }
+                if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) return res.status(403).json({ success: false, error: 'Starry needs Manage Roles permission.' });
+                if (action === 'role_add') {
+                    await member.roles.add(role, reason);
+                    return res.json({ success: true, message: 'Role added successfully.' });
+                }
+                await member.roles.remove(role, reason);
+                return res.json({ success: true, message: 'Role removed successfully.' });
             }
             if (action === 'nickname') {
-                if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
-                await member.setNickname(nickname || null);
-                return res.json({ success: true, message: `✏️ Nickname updated for ${member.user.tag}` });
+                const blocked = requireManageableMember();
+                if (blocked) return blocked;
+                if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) return res.status(403).json({ success: false, error: 'Starry needs Manage Nicknames permission.' });
+                const nickname = body.nickname === undefined || body.nickname === null ? '' : body.nickname;
+                if (typeof nickname !== 'string' || nickname.length > 32) {
+                    return res.status(400).json({ success: false, error: 'Nickname must be text with a maximum of 32 characters.' });
+                }
+                await member.setNickname(nickname.trim() || null, reason);
+                return res.json({ success: true, message: 'Nickname updated successfully.' });
             }
 
-            res.status(400).json({ success: false, error: 'Unknown moderation action.' });
-        } catch (e) {
-            res.status(500).json({ success: false, error: e.message });
+            return res.status(400).json({ success: false, error: 'Unsupported moderation action.' });
+        } catch (error) {
+            console.error('Dashboard moderation action failed:', error.message);
+            return res.status(500).json({ success: false, error: 'The moderation action failed. Verify Starry permissions and try again.' });
         }
-    });
+    });;
 
     // ==========================================
     // 🚀 BOOSTER STUDIO REST API (BOOSTER SYNERGY)
@@ -1601,7 +2229,7 @@ function setupDashboardRoutes(app, client) {
             const isBooster = boosterEngine.isBooster(member);
 
             const settings = await boosterEngine.getSettings(guild.id);
-            const myDoc = await BoosterRole.findOne({ guildId: guild.id, userId: member.id });
+            const myDoc = await BoosterRole.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID'), userId: requireDiscordSnowflake(member.id, 'user ID') });
             let myRole = null;
             if (myDoc) {
                 const r = guild.roles.cache.get(myDoc.roleId);
@@ -1612,7 +2240,7 @@ function setupDashboardRoutes(app, client) {
                 };
             }
 
-            const allDocs = await BoosterRole.find({ guildId: guild.id, active: true }).limit(50).lean();
+            const allDocs = await BoosterRole.find({ guildId: requireDiscordSnowflake(guild.id, 'guild ID'), active: true }).limit(50).lean();
             const allRoles = allDocs.map(d => {
                 const r = guild.roles.cache.get(d.roleId);
                 return {
@@ -1641,10 +2269,21 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/booster-roles/create - Create custom booster role
     app.post('/api/guild/:id/booster-roles/create', actionLimiter, requireGuildMember, async (req, res) => {
         try {
-            const { name, color, icon } = req.body;
-            if (!name) return res.status(400).json({ success: false, error: 'Role name is required.' });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).some(key => !['name', 'color'].includes(key))) {
+                return res.status(400).json({ success: false, error: 'Provide only a role name and color.' });
+            }
+            const name = body.name === undefined || body.name === null ? '' : body.name;
+            const color = body.color === undefined || body.color === null || body.color === '' ? '#FF73FA' : body.color;
+            if (typeof name !== 'string' || name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) {
+                return res.status(400).json({ success: false, error: 'Role name must be plain text up to 100 characters.' });
+            }
+            if (typeof color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(color.trim())) {
+                return res.status(400).json({ success: false, error: 'Role color must be a valid hexadecimal color.' });
+            }
 
-            const result = await boosterEngine.createBoosterRole(req.guild, req.member, { name, color, icon });
+            const result = await boosterEngine.createBoosterRole(req.guild, req.member, { name: name.trim(), color: color.trim() });
             res.json({
                 success: true,
                 message: `✨ Custom booster role [${result.doc.name}] created successfully!`,
@@ -1663,8 +2302,25 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/booster-roles/update - Update role styling
     app.post('/api/guild/:id/booster-roles/update', actionLimiter, requireGuildMember, async (req, res) => {
         try {
-            const { name, color, icon } = req.body;
-            const result = await boosterEngine.updateBoosterRole(req.guild, req.member, { name, color, icon });
+            const body = req.body;
+            if (!body || typeof body !== 'object' || Array.isArray(body) ||
+                Object.keys(body).length === 0 || Object.keys(body).some(key => !['name', 'color'].includes(key))) {
+                return res.status(400).json({ success: false, error: 'Provide a role name or color to update.' });
+            }
+            const updates = {};
+            if (body.name !== undefined) {
+                if (typeof body.name !== 'string' || body.name.length > 100 || /[\u0000-\u001f\u007f]/.test(body.name)) {
+                    return res.status(400).json({ success: false, error: 'Role name must be plain text up to 100 characters.' });
+                }
+                updates.name = body.name.trim();
+            }
+            if (body.color !== undefined) {
+                if (typeof body.color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(body.color.trim())) {
+                    return res.status(400).json({ success: false, error: 'Role color must be a valid hexadecimal color.' });
+                }
+                updates.color = body.color.trim();
+            }
+            const result = await boosterEngine.updateBoosterRole(req.guild, req.member, updates);
             res.json({
                 success: true,
                 message: '🎨 Custom booster role updated!',
@@ -1683,8 +2339,10 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/booster-roles/share - Share role with friend
     app.post('/api/guild/:id/booster-roles/share', actionLimiter, requireGuildMember, async (req, res) => {
         try {
-            const { friendId } = req.body;
-            if (!friendId) return res.status(400).json({ success: false, error: 'Friend User ID is required.' });
+            const { friendId } = req.body || {};
+            if (typeof friendId !== 'string' || !/^\d{17,20}$/.test(friendId)) {
+                return res.status(400).json({ success: false, error: 'A valid friend Discord user ID is required.' });
+            }
 
             const friendMember = await req.guild.members.fetch(friendId).catch(() => null);
             if (!friendMember) return res.status(404).json({ success: false, error: 'Friend not found in this server.' });
@@ -1703,8 +2361,10 @@ function setupDashboardRoutes(app, client) {
     // POST /api/guild/:id/booster-roles/unshare - Revoke role from friend
     app.post('/api/guild/:id/booster-roles/unshare', actionLimiter, requireGuildMember, async (req, res) => {
         try {
-            const { friendId } = req.body;
-            if (!friendId) return res.status(400).json({ success: false, error: 'Friend User ID is required.' });
+            const { friendId } = req.body || {};
+            if (typeof friendId !== 'string' || !/^\d{17,20}$/.test(friendId)) {
+                return res.status(400).json({ success: false, error: 'A valid friend Discord user ID is required.' });
+            }
 
             const friendMember = await req.guild.members.fetch(friendId).catch(() => null);
             const result = await boosterEngine.unshareBoosterRole(req.guild, req.member, friendMember || { id: friendId });
@@ -1760,7 +2420,10 @@ function setupDashboardRoutes(app, client) {
     // GET /api/premium/order/:orderId - Check Live Order Status (Polling endpoint)
     app.get('/api/premium/order/:orderId', requireAuth, async (req, res) => {
         try {
-            const { orderId } = req.params;
+            const orderId = typeof req.params.orderId === 'string' ? req.params.orderId.trim().toUpperCase() : '';
+            if (!/^[A-Z0-9_-]{1,128}$/.test(orderId)) {
+                return res.status(404).json({ success: false, error: 'Order not found.' });
+            }
             const order = await getOrderStatus(orderId);
             if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
 
@@ -1785,8 +2448,14 @@ function setupDashboardRoutes(app, client) {
             if (!isOwner) return res.status(403).json({ success: false, error: 'Forbidden. Bot owners only.' });
 
             const status = req.query.status;
-            const query = status ? { status } : {};
-            const orders = await PaymentOrder.find(query).sort({ createdAt: -1 }).limit(50).lean();
+            if (status !== undefined && (typeof status !== 'string' || !/^[a-z_]{1,32}$/i.test(status))) {
+                return res.status(400).json({ success: false, error: 'Invalid order status filter.' });
+            }
+            const allowedStatuses = new Set(['created', 'pending', 'processing', 'paid', 'completed', 'failed', 'cancelled', 'expired']);
+            if (status && !allowedStatuses.has(status.toLowerCase())) {
+                return res.status(400).json({ success: false, error: 'Unsupported order status filter.' });
+            }
+            const orders = await PaymentOrder.find(status ? { status: status.toLowerCase() } : {}).sort({ createdAt: -1 }).limit(50).lean();
 
             res.json({ success: true, count: orders.length, orders });
         } catch (e) {
@@ -1797,85 +2466,72 @@ function setupDashboardRoutes(app, client) {
     // Payment approval and key-generation endpoints have been removed.
     // Premium entitlements will only be granted by verified provider webhooks.
 
-    // GET /api/spotify/login - Initiate Spotify OAuth2 Authorization
-    app.get('/api/spotify/login', (req, res) => {
-        const userId = req.query.userId;
-        if (!userId) return res.status(400).send('<h1>❌ Missing userId parameter</h1>');
-        const spotifyManager = require('./spotifyManager');
-        const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
-        const redirectUri = getSpotifyRedirectUri(publicUrl);
-        const authUrl = spotifyManager.getOAuthUrl(userId, redirectUri);
-        res.redirect(authUrl);
+    // Retire the legacy redirect endpoint. Account linking must begin through
+    // the authenticated POST API so the frontend can handle failures safely.
+    app.get('/api/spotify/login', requireAuth, (req, res) => {
+        res.set('Cache-Control', 'no-store, private');
+        return res.status(410).json({
+            success: false,
+            code: 'SPOTIFY_CONNECT_ENDPOINT_CHANGED',
+            error: 'Use the Music workspace Connect Spotify action to start a protected account link.'
+        });
     });
 
-    // GET /api/spotify/callback - Handle Spotify OAuth2 Redirect
     app.get('/api/spotify/callback', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        res.set('Referrer-Policy', 'no-referrer');
+        res.set('X-Content-Type-Options', 'nosniff');
         const { code, state, error } = req.query;
-        if (error) {
-            return res.send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Spotify Authorization Denied</h2>
-            <p>${error}</p><p>You can close this tab and return to Discord.</p>
-            </body></html>`);
+        const page = (title, message, success) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>${title} · Starry</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#080b14;color:#f8fafc;font:16px system-ui;padding:22px;box-sizing:border-box}.card{max-width:460px;width:100%;padding:32px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:#121827;box-sizing:border-box}h1{font-size:24px;color:${success ? '#1ed760' : '#f87171'}}p{line-height:1.65;color:#aab5c8}.btn{display:inline-block;margin-top:12px;padding:12px 18px;border-radius:10px;background:#5865f2;color:white;text-decoration:none;font-weight:700}</style></head>
+<body><main class="card"><h1>${title}</h1><p>${message}</p><a class="btn" href="https://manager-bot-96c07.web.app/music.html">Return to Starry Music</a></main></body></html>`;
+        if (typeof state !== 'string' || !/^[a-f0-9]{64}$/i.test(state)) {
+            return res.status(400).send(page('Invalid authorization', 'This Spotify connection request is invalid or expired. Start again from Starry Music.', false));
         }
 
-        if (!code || !state) {
-            return res.status(400).send('<h1>❌ Missing code or state from Spotify</h1>');
+        const spotifyManager = require('./spotifyManager');
+        let authorization;
+        try {
+            // Consume even on an explicit denial so the same state cannot be replayed.
+            authorization = await spotifyManager.consumeAuthorizationState(state);
+        } catch (stateError) {
+            return res.status(400).send(page('Authorization expired', 'This Spotify request has expired or has already been used. Start a new connection from Starry Music.', false));
+        }
+
+        if (error || typeof code !== 'string' || !code) {
+            return res.status(400).send(page('Connection cancelled', 'Spotify authorization was cancelled. No account was connected.', false));
         }
 
         try {
-            const spotifyManager = require('./spotifyManager');
-            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
+            const publicUrl = getTrustedSpotifyBackendBaseUrl();
             const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const { profile } = await spotifyManager.handleOAuthCallback(code, redirectUri, state);
-
-            res.send(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Spotify Connected • Starry</title>
-                <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
-                <style>
-                    body { background: #080A10; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; background-image: radial-gradient(circle at 50% 50%, rgba(29, 185, 84, 0.15), transparent 60%); }
-                    .card { background: rgba(18, 24, 38, 0.95); border: 1px solid rgba(29, 185, 84, 0.3); border-radius: 20px; padding: 40px; text-align: center; max-width: 440px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-                    .sp-icon { width: 70px; height: 70px; margin-bottom: 20px; }
-                    h2 { margin: 0 0 10px; font-weight: 800; color: #1DB954; font-size: 1.6rem; }
-                    p { color: #9CA3AF; line-height: 1.6; margin-bottom: 25px; }
-                    .user-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(29, 185, 84, 0.1); border: 1px solid rgba(29, 185, 84, 0.3); padding: 8px 16px; border-radius: 30px; font-weight: 700; color: #1DB954; margin-bottom: 20px; }
-                    .btn { display: inline-block; padding: 12px 28px; background: #1DB954; color: #fff; font-weight: 700; text-decoration: none; border-radius: 12px; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <img src="https://cdn-icons-png.flaticon.com/512/174/174872.png" class="sp-icon" alt="Spotify">
-                    <div class="user-badge">🟢 Connected as ${profile.display_name || profile.id}</div>
-                    <h2>Spotify Connected!</h2>
-                    <p>Starry has successfully authorized your Spotify account. You can now use <strong>,spotify myplaylists</strong> or <strong>,spotify play</strong> in Discord!</p>
-                    <p style="color:#6B7280; font-size:0.85rem;">You may now safely close this window and return to Discord.</p>
-                </div>
-            </body>
-            </html>
-            `);
-        } catch (err) {
-            res.status(500).send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Connection Error</h2>
-            <p>${err.message}</p>
-            </body></html>`);
+            const { profile } = await spotifyManager.handleOAuthCallback(
+                code,
+                redirectUri,
+                authorization.userId,
+                authorization.codeVerifier
+            );
+            const displayName = String(profile.display_name || profile.id || 'Spotify user')
+                .replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+            res.send(page('Spotify connected', 'Connected successfully as ' + displayName + '. Return to Starry Music and refresh the account card to view your Spotify playlists.', true));
+        } catch (callbackError) {
+            // OAuth codes, tokens and provider response bodies are intentionally not logged.
+            console.error('Spotify OAuth callback failed:', callbackError.message);
+            res.status(502).send(page('Connection failed', 'Starry could not complete Spotify authorization. Check the Spotify credentials and registered redirect URI, then try again.', false));
         }
     });
 
     // GET /verify/:guildId - External Web Captcha Verification Portal
     app.get('/verify/:guildId', async (req, res) => {
-        const guild = client.guilds.cache.get(req.params.guildId);
-        const guildName = guild ? guild.name : 'Discord Server';
-        const guildIcon = guild?.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png';
+        const guildId = typeof req.params.guildId === 'string' ? req.params.guildId : '';
+        if (!/^\d{17,20}$/.test(guildId)) {
+            return res.status(400).send('A valid Discord server ID is required.');
+        }
+        const guild = client.guilds.cache.get(guildId);
+        const guildName = escapeHtml(guild ? guild.name : 'Discord Server');
+        const guildIcon = escapeHtml(guild?.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png');
 
         res.send(`
         <!DOCTYPE html>

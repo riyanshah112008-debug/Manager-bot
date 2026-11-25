@@ -3,6 +3,7 @@
 const { spawnSync } = require('node:child_process');
 
 const suites = [
+  ['Backup choice policy', '--test', 'tests/backupChoice.test.js'],
   ['Persistent component collector policy', '--test', 'tests/persistentComponentPolicy.test.js'],
   ['Global interaction guard', '--test', 'tests/interactionHandler.test.js'],
   ['Global interaction guard syntax', '--check', 'src/utils/interactionHandler.js'],
@@ -13,6 +14,20 @@ const suites = [
   ['Dashboard origins', 'tests/dashboardOrigins.test.js'],
   ['Premium order access control', '--test', 'tests/paymentOrderAccess.test.js'],
   ['Spotify OAuth redirect URI', '--test', 'tests/spotifyOAuthRedirect.test.js'],
+  ['Spotify token encryption', '--test', 'tests/spotifyTokenCrypto.test.js'],
+  ['Dashboard server syntax', '--check', 'src/modules/dashboardServer.js'],
+  ['Dashboard AutoMod integration', '--test', 'tests/dashboardAutoModIntegration.test.js'],
+  ['Dashboard security hardening', '--test', 'tests/dashboardSecurityHardening.test.js'],
+  ['Dashboard preference model syntax', '--check', 'src/models/DashboardPreferences.js'],
+  ['Spotify OAuth state model syntax', '--check', 'src/models/SpotifyOAuthState.js'],
+  ['Spotify token crypto syntax', '--check', 'src/utils/spotifyTokenCrypto.js'],
+  ['Spotify manager syntax', '--check', 'src/modules/spotifyManager.js'],
+  ['Anti-Nuke runtime syntax', '--check', 'src/modules/antiNukeEngine.js'],
+  ['Giveaway engine syntax', '--check', 'src/modules/giveaway.js'],
+  ['Spotify command syntax', '--check', 'src/commands/music/spotify.js'],
+  ['Music controller syntax', '--check', 'src/modules/musicController.js'],
+  ['Dashboard workspace syntax', '--check', 'public/workspace.js'],
+  ['Primary bot bootstrap syntax', '--check', 'src/index.js'],
   ['Verification', 'tests/verification.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
   ['Music playback lifecycle', '--test', 'tests/musicPlaybackLifecycle.test.js'],

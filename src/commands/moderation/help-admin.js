@@ -20,8 +20,8 @@ const buildAdminHelpEmbed = (client) => {
             {
                 name: '💾 Backup & Disaster Recovery',
                 value: 
-                '`.backup` — Saves a full MongoDB snapshot of all roles, categories, channels & permission overwrites.\n' +
-                '`.restore` — Reconstructs missing channels/roles and re-applies saved permission overwrites.'
+                '`,backup` — On first use, choose daily automatic exports or manual-only snapshots. Use `,backup setup` to change this preference.\n' +
+                'Automatic backups remain off until an administrator explicitly enables them.'
             },
             {
                 name: '⚙️ Master Setup & Configuration',

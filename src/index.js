@@ -347,6 +347,9 @@ client.verifyMap = new Map();
 client.voiceCalls = new Map();
 client.vcLocks = new Map();
 
+// Initialize the real Anti-Nuke audit-log guard before the Discord client becomes ready.
+require('./modules/antiNukeEngine')(client);
+
 // Mount Starry Enterprise Web Dashboard & Payment Suite
 const { setupDashboardRoutes } = require('./modules/dashboardServer');
 setupDashboardRoutes(app, client);

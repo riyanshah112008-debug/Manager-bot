@@ -168,19 +168,6 @@ async function getBadWordPanelEmbed(guild, client) {
     return { embeds: [embed], components: [row] };
 }
 
-async function executeFullGuildBackup(guild) {
-    try {
-        const allRoles = await guild.roles.fetch();
-        const allChannels = await guild.channels.fetch();
-        return {
-            rolesSaved: allRoles.size,
-            categoriesSaved: allChannels.filter(c => c.type === ChannelType.GuildCategory).size,
-            channelsSaved: allChannels.filter(c => c.type !== ChannelType.GuildCategory).size
-        };
-    } catch (e) {
-        return { rolesSaved: guild.roles.cache.size, categoriesSaved: guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size, channelsSaved: guild.channels.cache.filter(c => c.type !== ChannelType.GuildCategory).size };
-    }
-}
 
 async function getOrCreateCategory(guild, name, overwrites = []) {
     let cat = guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === ChannelType.GuildCategory);
@@ -1243,7 +1230,6 @@ module.exports = async (client) => {
 
 module.exports.provisionMasterServerStructure = provisionMasterServerStructure;
 module.exports.generateAIResponseWithRetry = generateAIResponseWithRetry;
-module.exports.executeFullGuildBackup = executeFullGuildBackup;
 module.exports.emergencyNukePayload = emergencyNukeCommand.toJSON();
 module.exports.modPanelPayload = modPanelSlashCommand.toJSON();
 module.exports.setupStarryPayload = setupStarryCommand.toJSON();
