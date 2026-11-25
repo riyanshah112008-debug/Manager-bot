@@ -2419,7 +2419,6 @@ function setupDashboardRoutes(app, client) {
             if (status && !allowedStatuses.has(status.toLowerCase())) {
                 return res.status(400).json({ success: false, error: 'Unsupported order status filter.' });
             }
-            const query = status ? { status: status.toLowerCase() } : {};
             const orders = await PaymentOrder.find(status ? { status: status.toLowerCase() } : {}).sort({ createdAt: -1 }).limit(50).lean();
 
             res.json({ success: true, count: orders.length, orders });
