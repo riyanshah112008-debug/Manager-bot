@@ -22,6 +22,7 @@ const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
 const config = require('../config');
+const { requireDiscordSnowflake } = require('../utils/discordSnowflake');
 const { getDashboardOrigins } = require('../utils/dashboardOrigins');
 const { isServerOrUserPremium } = require('../utils/premiumHelper');
 const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
@@ -79,6 +80,33 @@ function assertDiscordAuthorizationUrl(value) {
         throw new Error('Discord returned an unexpected authorization destination.');
     }
     return parsed.href;
+}
+
+function getTrustedDashboardFrontendBase() {
+    const configured = String(process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').trim();
+    let parsed;
+    try { parsed = new URL(configured); }
+    catch (_) { throw new Error('The dashboard frontend URL is invalid.'); }
+    const allowedOrigins = getDashboardOrigins();
+    const localDevelopment = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if (!allowedOrigins.has(parsed.origin) ||
+        (parsed.protocol !== 'https:' && !(localDevelopment && parsed.protocol === 'http:')) ||
+        parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error('The dashboard frontend URL is not an approved HTTPS origin.');
+    }
+    return parsed.origin;
+}
+
+function buildTrustedDashboardRedirect(frontendBase, pathname) {
+    if (typeof pathname !== 'string' || !pathname.startsWith('/') ||
+        pathname.startsWith('//') || pathname.includes('\\') || /[\\r\\n]/.test(pathname)) {
+        throw new Error('The dashboard redirect path is invalid.');
+    }
+    const destination = new URL(pathname, frontendBase);
+    if (destination.origin !== frontendBase || destination.username || destination.password) {
+        throw new Error('The dashboard redirect destination is not trusted.');
+    }
+    return destination.href;
 }
 
 
@@ -407,7 +435,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/me/preferences', requireAuth, async (req, res) => {
         try {
             const DashboardPreferences = require('../models/DashboardPreferences');
-            const preferences = await DashboardPreferences.findOne({ userId: String(req.session.user.id) }).lean();
+            const preferences = await DashboardPreferences.findOne({ userId: requireDiscordSnowflake(req.session.user.id, 'user ID') }).lean();
             res.set('Cache-Control', 'no-store, private');
             res.json({
                 success: true,
@@ -433,8 +461,8 @@ function setupDashboardRoutes(app, client) {
             }
             const DashboardPreferences = require('../models/DashboardPreferences');
             const preferences = await DashboardPreferences.findOneAndUpdate(
-                { userId: String(req.session.user.id) },
-                { $set: body, $setOnInsert: { userId: String(req.session.user.id) } },
+                { userId: requireDiscordSnowflake(req.session.user.id, 'user ID') },
+                { $set: body, $setOnInsert: { userId: requireDiscordSnowflake(req.session.user.id, 'user ID') } },
                 { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
             ).lean();
             res.set('Cache-Control', 'no-store, private');
@@ -561,18 +589,26 @@ function setupDashboardRoutes(app, client) {
     app.get('/auth/callback', actionLimiter, async (req, res) => {
         const code = typeof req.query.code === 'string' ? req.query.code : '';
         const returnedState = typeof req.query.state === 'string' ? req.query.state : '';
-        const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || 'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+        let frontendBase;
+        try {
+            frontendBase = getTrustedDashboardFrontendBase();
+        } catch (error) {
+            console.error('Dashboard redirect origin rejected:', error.message);
+            return res.status(503).send('Dashboard sign-in is temporarily unavailable. Check the configured frontend URL.');
+        }
+        const redirectError = errorCode => res.redirect(303,
+            buildTrustedDashboardRedirect(frontendBase, '/?error=' + encodeURIComponent(errorCode)));
         const cookiePart = (req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('starry_oauth_state='));
         const cookieState = cookiePart ? cookiePart.slice('starry_oauth_state='.length) : '';
         let secureCookie = '; Secure';
         try { if (new URL(getTrustedDiscordCallbackUri()).protocol === 'http:') secureCookie = ''; } catch (_) {}
         res.set('Set-Cookie', `starry_oauth_state=; Max-Age=0; Path=/auth/callback; HttpOnly; SameSite=Lax${secureCookie}`);
-        if (req.query.error) return res.redirect(`${frontendBase}/?error=discord_authorization_denied`);
+        if (req.query.error) return redirectError('discord_authorization_denied');
         const validState = returnedState && cookieState &&
             returnedState.length === cookieState.length &&
             crypto.timingSafeEqual(Buffer.from(returnedState), Buffer.from(cookieState));
-        if (!validState) return res.redirect(`${frontendBase}/?error=oauth_state_invalid`);
-        if (!code) return res.redirect(`${frontendBase}/?error=no_code`);
+        if (!validState) return redirectError('oauth_state_invalid');
+        if (!code) return redirectError('no_code');
 
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
         const clientSecret = process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET;
@@ -581,13 +617,13 @@ function setupDashboardRoutes(app, client) {
             redirectUri = getTrustedDiscordCallbackUri();
         } catch (configurationError) {
             console.error('Discord OAuth callback configuration rejected:', configurationError.message);
-            return res.redirect(`${frontendBase}/?error=oauth_not_configured`);
+            return redirectError('oauth_not_configured');
         }
 
         try {
             if (!clientSecret) {
                 console.error('Discord OAuth client secret is not configured.');
-                return res.redirect(`${frontendBase}/?error=oauth_not_configured`);
+                return redirectError('oauth_not_configured');
             }
 
             const tokenParams = new URLSearchParams({
@@ -605,7 +641,7 @@ function setupDashboardRoutes(app, client) {
             const tokenData = await tokenRes.json().catch(() => ({}));
             if (!tokenRes.ok || !tokenData.access_token) {
                 console.error('Discord OAuth token exchange failed:', tokenRes.status, tokenData.error || tokenData.message || 'unknown_error');
-                return res.redirect(`${frontendBase}/?error=token_failed`);
+                return redirectError('token_failed');
             }
 
             const discordHeaders = { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' };
@@ -619,11 +655,11 @@ function setupDashboardRoutes(app, client) {
             ]);
             if (!userRes.ok || !userData.id) {
                 console.error('Discord OAuth profile request failed:', userRes.status);
-                return res.redirect(`${frontendBase}/?error=profile_failed`);
+                return redirectError('profile_failed');
             }
             if (!guildsRes.ok || !Array.isArray(userGuilds)) {
                 console.error('Discord OAuth guild request failed:', guildsRes.status);
-                return res.redirect(`${frontendBase}/?error=guilds_failed`);
+                return redirectError('guilds_failed');
             }
 
             const sessionToken = crypto.randomBytes(32).toString('hex');
@@ -645,7 +681,7 @@ function setupDashboardRoutes(app, client) {
             // Persist before redirecting; never send a session that cannot be reloaded.
             if (mongoose.connection.readyState !== 1) {
                 console.error('Discord OAuth session storage is unavailable: MongoDB is not connected.');
-                return res.redirect(`${frontendBase}/?error=session_store_unavailable`);
+                return redirectError('session_store_unavailable');
             }
             await OAuthSession.create({
                 tokenHash: hashSessionToken(sessionToken),
@@ -656,11 +692,11 @@ function setupDashboardRoutes(app, client) {
             });
             userSessions.set(sessionToken, sessionData);
             res.set('Cache-Control', 'no-store');
-            return res.redirect(`${frontendBase}/dashboard.html?session=${encodeURIComponent(sessionToken)}`);
+            return res.redirect(303, buildTrustedDashboardRedirect(frontendBase, '/dashboard.html?session=' + encodeURIComponent(sessionToken)));
         } catch (error) {
             console.error('Discord OAuth callback failed:', error);
             const storageUnavailable = mongoose.connection.readyState !== 1;
-            return res.redirect(`${frontendBase}/?error=${storageUnavailable ? 'session_store_unavailable' : 'session_store_failed'}`);
+            return redirectError(storageUnavailable ? 'session_store_unavailable' : 'session_store_failed');
         }
     });
 
@@ -768,7 +804,7 @@ function setupDashboardRoutes(app, client) {
             const rewardCred = isWeekend === true ? 1000 : 500;
             const rewardXp = isWeekend === true ? 1000 : 500;
 
-            const userQuery = User.findOne({ userId: safeUserId });
+            const userQuery = User.findOne({ userId: requireDiscordSnowflake(safeUserId, 'user ID') });
             let userDoc = await userQuery.exec();
             if (!userDoc) userDoc = new User({ userId: safeUserId, guildId: 'global' });
 
@@ -900,7 +936,7 @@ function setupDashboardRoutes(app, client) {
             if (!guild) return res.status(404).json({ success: false, error: 'Guild not found on this bot instance.' });
 
 
-            let settings = await ServerSettings.findOne({ guildId: guild.id });
+            let settings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') });
             if (!settings) {
                 settings = await ServerSettings.create({ guildId: guild.id });
             }
@@ -912,7 +948,7 @@ function setupDashboardRoutes(app, client) {
             try {
                 const PremiumModel = mongoose.models.PremiumGuilds || mongoose.model('PremiumGuilds');
                 const activeGuildPremium = await PremiumModel.findOne({
-                    targetId: guild.id,
+                    targetId: requireDiscordSnowflake(guild.id, 'guild ID'),
                     isPremium: true,
                     $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
                 }).lean();
@@ -1050,7 +1086,7 @@ function setupDashboardRoutes(app, client) {
     app.post('/api/guild/:id/multibot/workers', actionLimiter, requireGuildAdmin, requireClusterManager, async (req, res) => {
         try {
             const cluster = client.multiBot || require('./multiBot');
-            const premiumSettings = await ServerSettings.findOne({ guildId: req.guild.id }).select('premium').lean();
+            const premiumSettings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).select('premium').lean();
             const premium = premiumSettings?.premium;
             const premiumActive = Boolean(premium?.isPremium) &&
                 (!premium.expiresAt || new Date(premium.expiresAt).getTime() > Date.now());
@@ -1111,7 +1147,7 @@ function setupDashboardRoutes(app, client) {
         try {
             res.set('Cache-Control', 'no-store, private');
             const { WelcomeSettings } = require('./welcome');
-            const settings = await WelcomeSettings.findOne({ guildId: req.guild.id }).lean();
+            const settings = await WelcomeSettings.findOne({ guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).lean();
             res.json({ success: true, configured: Boolean(settings), settings: settings || {
                 channelId: '', title: '✨ WELCOME TO {server} ✨',
                 description: '💖 Hello {user}! We are so overjoyed to have you join our family! 🌟',
@@ -1163,7 +1199,7 @@ function setupDashboardRoutes(app, client) {
                 updates.thumbnail = value;
             }
             const settings = await WelcomeSettings.findOneAndUpdate(
-                { guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true }
+                { guildId: requireDiscordSnowflake(guild.id, 'guild ID') }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true }
             ).lean();
             res.json({ success: true, settings, message: 'Welcome settings saved. New members will receive the configured welcome card.' });
         } catch (error) {
@@ -1268,7 +1304,7 @@ function setupDashboardRoutes(app, client) {
             res.set('Cache-Control', 'no-store, private');
             const leveling = require('./leveling');
             const { LevelSettings, LevelUser } = leveling;
-            const guildId = req.guild.id;
+            const guildId = requireDiscordSnowflake(req.guild.id, 'guild ID');
             const settings = await LevelSettings.findOne({ guildId }).lean() || {
                 enabled: true, announcementChannelId: null, logChannelId: null, title: 'Congratulations {user}!',
                 description: 'Your active participation in **{server}** has paid off! You reached **Level {level}**!',
@@ -1353,7 +1389,7 @@ function setupDashboardRoutes(app, client) {
                 if (value && (!/^https?:\/\//i.test(value) || value.length > 1000)) return res.status(400).json({ success: false, error: 'Image fields must be valid HTTP or HTTPS URLs.' });
                 updates[key] = value;
             }
-            const settings = await LevelSettings.findOneAndUpdate({ guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true });
+            const settings = await LevelSettings.findOneAndUpdate({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true });
             leveling.settingsCache.set(guild.id, { ...(leveling.settingsCache.get(guild.id) || {}), ...updates });
             res.json({ success: true, settings, message: 'Leveling settings saved.' });
         } catch (error) {
@@ -1369,7 +1405,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/guild/:id/economy', requireGuildAdmin, async (req, res) => {
         try {
             res.set('Cache-Control', 'no-store, private');
-            const guildId = req.guild.id;
+            const guildId = requireDiscordSnowflake(req.guild.id, 'guild ID');
             const [membersTracked, totals, leaderboard] = await Promise.all([
                 User.countDocuments({ guildId }),
                 User.aggregate([{ $match: { guildId } }, { $group: { _id: null, totalCredits: { $sum: '$credits' }, totalXp: { $sum: '$xp' }, totalPrestige: { $sum: '$prestige' } } }]),
@@ -1385,7 +1421,7 @@ function setupDashboardRoutes(app, client) {
     app.get('/api/guild/:id/security/status', requireGuildAdmin, async (req, res) => {
         try {
             const guild = req.guild;
-            const settings = await ServerSettings.findOne({ guildId: guild.id }).select('antinuke').lean();
+            const settings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') }).select('antinuke').lean();
             const policy = settings?.antinuke || {};
             const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
             const engineReady = client.antiNukeReady === true;
@@ -1486,14 +1522,14 @@ function setupDashboardRoutes(app, client) {
             if (body.enabled !== undefined) {
                 await helper.setGuildStatus(req.guild.id, body.enabled);
                 const { AutomodGuild } = require('../models/AutomodSchema');
-                const stored = await AutomodGuild.findOne({ guildId: req.guild.id }).lean();
+                const stored = await AutomodGuild.findOne({ guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).lean();
                 if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
             }
             if (selectedChannel) {
                 const { AutomodChannel } = require('../models/AutomodSchema');
                 if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
                 if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
-                const stored = await AutomodChannel.findOne({ channelId, guildId: req.guild.id }).lean();
+                const stored = await AutomodChannel.findOne({ channelId, guildId: requireDiscordSnowflake(req.guild.id, 'guild ID') }).lean();
                 const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
                 const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
                 if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
@@ -1807,7 +1843,7 @@ function setupDashboardRoutes(app, client) {
                 }
                 if (theme.color !== undefined) theme.color = theme.color.trim();
             }
-            let settings = await ServerSettings.findOne({ guildId: guild.id });
+            let settings = await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
             if (payload.prefix !== undefined) {
@@ -1885,7 +1921,7 @@ function setupDashboardRoutes(app, client) {
             if (explicitColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
                 return res.status(400).json({ success: false, error: 'Embed accent color must be a valid hex color.' });
             }
-            const theme = (await ServerSettings.findOne({ guildId: guild.id }))?.embedTheme || {};
+            const theme = (await ServerSettings.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID') }))?.embedTheme || {};
             const authorName = cleanText(author, 256, 'Embed author') || theme.authorName || '';
             const authorImage = cleanUrl(authorIcon, 'Author icon') || theme.authorIcon || '';
             const footerText = cleanText(footer, 2048, 'Embed footer') || theme.footer || '';
@@ -2193,7 +2229,7 @@ function setupDashboardRoutes(app, client) {
             const isBooster = boosterEngine.isBooster(member);
 
             const settings = await boosterEngine.getSettings(guild.id);
-            const myDoc = await BoosterRole.findOne({ guildId: guild.id, userId: member.id });
+            const myDoc = await BoosterRole.findOne({ guildId: requireDiscordSnowflake(guild.id, 'guild ID'), userId: requireDiscordSnowflake(member.id, 'user ID') });
             let myRole = null;
             if (myDoc) {
                 const r = guild.roles.cache.get(myDoc.roleId);
@@ -2204,7 +2240,7 @@ function setupDashboardRoutes(app, client) {
                 };
             }
 
-            const allDocs = await BoosterRole.find({ guildId: guild.id, active: true }).limit(50).lean();
+            const allDocs = await BoosterRole.find({ guildId: requireDiscordSnowflake(guild.id, 'guild ID'), active: true }).limit(50).lean();
             const allRoles = allDocs.map(d => {
                 const r = guild.roles.cache.get(d.roleId);
                 return {
