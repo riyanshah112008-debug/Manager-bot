@@ -2,6 +2,7 @@
 
 const { AuditLogEvent, PermissionFlagsBits } = require('discord.js');
 const ServerSettings = require('../models/ServerSettings');
+const { requireDiscordSnowflake } = require('../utils/discordSnowflake');
 
 const WINDOW_MS = 10_000;
 const counters = new Map();
@@ -142,7 +143,8 @@ module.exports = function setupAntiNukeEngine(client) {
     client.on('guildAuditLogEntryCreate', async (entry, guild) => {
         try {
             if (!guild || !entry?.executorId) return;
-            const settings = await ServerSettings.findOne({ guildId: guild.id }).select('antinuke').lean();
+            const guildId = requireDiscordSnowflake(guild.id, 'guild ID');
+            const settings = await ServerSettings.findOne({ guildId }).select('antinuke').lean();
             const policy = settings?.antinuke;
             if (!policy?.enabled) return;
 
@@ -201,7 +203,8 @@ module.exports = function setupAntiNukeEngine(client) {
     client.on('guildMemberAdd', async member => {
         try {
             if (!member?.user?.bot || member.id === client.user?.id) return;
-            const settings = await ServerSettings.findOne({ guildId: member.guild.id }).select('antinuke').lean();
+            const guildId = requireDiscordSnowflake(member.guild.id, 'guild ID');
+            const settings = await ServerSettings.findOne({ guildId }).select('antinuke').lean();
             const policy = settings?.antinuke;
             if (!policy?.enabled || !policy.blockUnapprovedBots) return;
             if (isWhitelisted(member, policy)) return;
