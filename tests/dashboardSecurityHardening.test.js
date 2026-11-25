@@ -19,6 +19,13 @@ test('Guild middleware validates IDs before Discord cache access or Mongo querie
     assert.equal((dashboard.match(/A valid Discord guild ID is required\./g) || []).length, 2);
 });
 
+test('Dashboard and Anti-Nuke Mongo filters use validated Discord snowflakes', () => {
+    assert.match(dashboard, /requireDiscordSnowflake\(req\.guild\.id, 'guild ID'\)/);
+    assert.match(dashboard, /requireDiscordSnowflake\(guild\.id, 'guild ID'\)/);
+    assert.match(antiNuke, /requireDiscordSnowflake\(guild\.id, 'guild ID'\)/);
+    assert.match(antiNuke, /requireDiscordSnowflake\(member\.guild\.id, 'guild ID'\)/);
+});
+
 test('User-controlled Mongo query objects are rejected recursively', () => {
     assert.match(dashboard, /function hasUnsafeMongoKeys\(value, depth = 0\)/);
     assert.match(dashboard, /key\.startsWith\('\$'\)/);
