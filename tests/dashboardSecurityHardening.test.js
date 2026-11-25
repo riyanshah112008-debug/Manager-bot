@@ -61,7 +61,7 @@ test('Spotify token encryption uses authenticated GCM with a fixed tag length', 
 });
 
 test('Anti-Nuke verifies effective restriction and retries failed enforcement', () => {
-    assert.match(antiNuke, /member\.roles\.remove\(dangerousRoleIds/);
+    assert.match(antiNuke, /for \(const dangerousRoleId of dangerousRoleIds\)/);\n    assert.match(antiNuke, /member\.roles\.remove\(dangerousRoleId, reason\)/);
     assert.match(antiNuke, /if \(enforced\) punished\.set\(penaltyKey/);
     assert.match(antiNuke, /const inFlight = new Set\(\)/);
     assert.match(antiNuke, /hasDestructivePermissions\(refreshed\)/);
