@@ -795,7 +795,7 @@ function setupDashboardRoutes(app, client) {
             res.status(200).json({ success: true, message: 'Vote processed and rewards delivered.' });
         } catch (e) {
             console.error('Top.gg Webhook Error:', e);
-            res.status(500).json({ success: false, error: e.message });
+            res.status(500).json({ success: false, error: 'Unable to retrieve premium orders.' });
         }
     });
 
@@ -1807,7 +1807,7 @@ function setupDashboardRoutes(app, client) {
                 }
                 if (theme.color !== undefined) theme.color = theme.color.trim();
             }
-            let settings = await ServerSettings.findOne().where('guildId').equals(guild.id);
+            let settings = await ServerSettings.findOne({ guildId: guild.id });
             if (!settings) settings = new ServerSettings({ guildId: guild.id });
 
             if (payload.prefix !== undefined) {
@@ -1885,7 +1885,7 @@ function setupDashboardRoutes(app, client) {
             if (explicitColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
                 return res.status(400).json({ success: false, error: 'Embed accent color must be a valid hex color.' });
             }
-            const theme = (await ServerSettings.findOne().where('guildId').equals(guild.id))?.embedTheme || {};
+            const theme = (await ServerSettings.findOne({ guildId: guild.id }))?.embedTheme || {};
             const authorName = cleanText(author, 256, 'Embed author') || theme.authorName || '';
             const authorImage = cleanUrl(authorIcon, 'Author icon') || theme.authorIcon || '';
             const footerText = cleanText(footer, 2048, 'Embed footer') || theme.footer || '';
@@ -2420,7 +2420,7 @@ function setupDashboardRoutes(app, client) {
                 return res.status(400).json({ success: false, error: 'Unsupported order status filter.' });
             }
             const query = status ? { status: status.toLowerCase() } : {};
-            const orders = await PaymentOrder.find(query).sort({ createdAt: -1 }).limit(50).lean();
+            const orders = await PaymentOrder.find(status ? { status: status.toLowerCase() } : {}).sort({ createdAt: -1 }).limit(50).lean();
 
             res.json({ success: true, count: orders.length, orders });
         } catch (e) {
