@@ -243,7 +243,7 @@ const components = createHelpComponents();
                     `• \`${prefix}applysetup\` — Spawn staff application panel\n` +
                     `• \`${prefix}verify-setup\` — Spawn human verification panel\n` +
                     `• \`${prefix}setupwelcome\` & \`${prefix}setupgoodbye\` — Greeting cards\n` +
-                    `• \`${prefix}backup\` — Choose automatic daily exports or manual-only snapshots`
+                    `• \`${prefix}backup\` — Create a snapshot; first use asks automatic or manual mode. Use \`${prefix}backup setup\` to change it`
                 )
                 .setFooter({ text: 'Admins & Staff Only • Prefix: ,' })
                 .setTimestamp();
