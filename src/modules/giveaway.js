@@ -601,6 +601,13 @@ module.exports = (client) => {
                 winnerIds.push(pool.splice(crypto.randomInt(pool.length), 1)[0]);
             }
 
+            // Capture the newest pre-announcement message as a recovery boundary
+            // before persisting the draw. Retries search only back to this point,
+            // so a delayed retry cannot resend after thousands of later messages.
+            const announcementBoundaryId = await newestChannelMessageId(channel);
+            if (!announcementBoundaryId) {
+                throw new Error('Could not capture the giveaway announcement boundary; retrying without publishing.');
+            }
             const draw = {
                 nonce: crypto.randomBytes(12).toString('hex'),
                 participantCount: participants.length,
@@ -608,6 +615,8 @@ module.exports = (client) => {
                 noParticipants: participants.length === 0,
                 messageEdited: false,
                 announcementSent: false,
+                announcementBoundaryCaptured: true,
+                announcementBoundaryId,
                 createdAt: Date.now()
             };
             record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
@@ -660,27 +669,41 @@ module.exports = (client) => {
         if (!record.processingResult || record.processingResult.announcementSent !== true) {
             const marker = '\u2063starry-giveaway:' + result.nonce + '\u2063';
             let shouldSend = record.processingResult.announcementSent !== true;
+            let announcementFound = false;
 
             if (record.processingResult.announcementBoundaryCaptured !== true) {
-                // Legacy processing records are reconciled against the complete
-                // accessible history before a publication boundary is recorded.
+                // Legacy processing records lack a saved boundary. Reconcile the
+                // accessible history once, then persist a boundary for future retries.
                 const history = await findMarkerInChannelHistory(channel, marker, null);
                 record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
                     if (current.processingResult && current.processingResult.nonce === result.nonce) {
                         current.processingResult.announcementBoundaryCaptured = true;
                         current.processingResult.announcementBoundaryId = history.oldestMessageId;
-                        current.processingResult.announcementSent = history.found;
                     }
                 });
                 if (!record) throw new Error('Could not persist giveaway history boundary; retrying.');
-                shouldSend = history.found !== true;
+                announcementFound = history.found === true;
+                shouldSend = !announcementFound;
             } else if (shouldSend) {
                 const history = await findMarkerInChannelHistory(
                     channel,
                     marker,
                     record.processingResult.announcementBoundaryId || null
                 );
-                shouldSend = history.found !== true;
+                announcementFound = history.found === true;
+                shouldSend = !announcementFound;
+            }
+
+            // A recovered announcement is a completed external side effect. Persist
+            // its acknowledgement even though no new send is necessary.
+            if (announcementFound) {
+                record = await updateGiveawayRecord(snapshot.guildId, snapshot.messageId, current => {
+                    if (current.processingResult && current.processingResult.nonce === result.nonce) {
+                        current.processingResult.announcementSent = true;
+                    }
+                });
+                if (!record) throw new Error('Could not persist recovered giveaway announcement; retrying.');
+                shouldSend = false;
             }
 
             if (shouldSend) {
