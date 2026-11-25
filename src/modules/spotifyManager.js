@@ -215,8 +215,17 @@ class SpotifyManager {
                 };
                 // Spotify may omit refresh_token during refresh. Preserve the existing one.
                 if (data.refresh_token) update.refreshToken = encryptToken(data.refresh_token);
+                // Include the exact credentials read before the provider request.
+                // A newer link or token refresh must not be overwritten by this stale response.
+                const refreshFilter = {
+                    _id: userDoc._id,
+                    userId: String(userDoc.userId),
+                    spotifyId: String(userDoc.spotifyId)
+                };
+                if (userDoc.accessToken !== undefined) refreshFilter.accessToken = userDoc.accessToken;
+                if (userDoc.refreshToken !== undefined) refreshFilter.refreshToken = userDoc.refreshToken;
                 const updated = await UserSpotify.findOneAndUpdate(
-                    { userId: String(userDoc.userId), spotifyId: String(userDoc.spotifyId) },
+                    refreshFilter,
                     { $set: update },
                     { new: true }
                 );
