@@ -104,6 +104,27 @@ test('Spotify controller acknowledges before network work and handles lookup err
     assert.match(musicController, /Spotify library is temporarily unavailable/);
 });
 
+test('Anti-Nuke continues quarantine role cleanup after an individual removal failure', () => {
+    assert.match(antiNuke, /for \(const dangerousRoleId of dangerousRoleIds\)/);
+    assert.match(antiNuke, /member\.roles\.remove\(dangerousRoleId, reason\)\.catch\(error =>/);
+    assert.match(antiNuke, /Failed to remove role/);
+    assert.match(antiNuke, /hasDestructivePermissions\(refreshed\)/);
+    assert.match(antiNuke, /applyFallback\(refreshed, botMember, reason\)/);
+});
+
+test('New giveaway draws persist their announcement history boundary before publication', () => {
+    assert.match(giveaway, /const announcementBoundaryId = await newestChannelMessageId\(channel\)/);
+    assert.match(giveaway, /announcementBoundaryCaptured: true/);
+    assert.match(giveaway, /announcementBoundaryId,/);
+});
+
+test('Giveaway recovery acknowledges an already-found marker with the same draw nonce', () => {
+    assert.match(giveaway, /let announcementFound = false/);
+    assert.match(giveaway, /announcementFound = history\.found === true/);
+    assert.match(giveaway, /if \(announcementFound\)[\s\S]*?current\.processingResult\.nonce === result\.nonce[\s\S]*?current\.processingResult\.announcementSent = true/);
+    assert.match(giveaway, /if \(shouldSend\)[\s\S]*?await channel\.send\([\s\S]*?current\.processingResult\.announcementSent = true/);
+});
+
 test('Dashboard moderation validates action, IDs, permissions and bounded inputs', () => {
     const start = dashboard.indexOf("app.post('/api/guild/:id/mod/action'");
     const end = dashboard.indexOf("\n    });", start);
