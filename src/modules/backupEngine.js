@@ -1,228 +1,209 @@
-// ==========================================
-// 📦 STARRY NEAT-JSON BACKUP & RESTORE ENGINE
-// ==========================================
-const { 
-    PermissionFlagsBits, 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    ChannelType, 
+// Starry server backup engine.
+// Backups are opt-in per guild: administrators choose automatic daily delivery
+// or manual execution with the ,backup command. No guild is backed up by default.
+const {
+    PermissionFlagsBits,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ChannelType,
     AttachmentBuilder,
     Events
 } = require('discord.js');
+const ServerSettings = require('../models/ServerSettings');
 
-let ServerBackup;
-try { 
-    ServerBackup = require('../models/ServerBackup'); 
-} catch(e) {
-    console.error('⚠️ [BackupEngine] Could not load ServerBackup model:', e.message);
-}
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const BACKUP_CHOICE_PREFIX = 'starry_backup_mode';
+const AUTOMATIC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let schedulerStarted = false;
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Helper: Safely fetch recent channel message history
 async function fetchChannelMessageArchive(channel, limit = 50) {
     if (!channel.isTextBased() || channel.isVoiceBased()) return [];
-    const botPerms = channel.permissionsFor(channel.guild.members.me);
-    if (!botPerms || !botPerms.has(PermissionFlagsBits.ReadMessageHistory) || !botPerms.has(PermissionFlagsBits.ViewChannel)) return [];
-
+    const botMember = channel.guild.members.me;
+    const permissions = botMember ? channel.permissionsFor(botMember) : null;
+    if (!permissions || !permissions.has([PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ViewChannel])) return [];
     try {
-        const fetched = await channel.messages.fetch({ limit }).catch(() => null);
-        if (!fetched || fetched.size === 0) return [];
-
-        return fetched.map(m => ({
-            time: new Date(m.createdTimestamp).toLocaleString(),
-            author: m.author ? m.author.tag : 'Unknown User',
-            isBot: m.author ? m.author.bot : false,
-            content: m.content || '',
-            attachments: m.attachments.map(a => a.url),
-            id: m.id
-        })).reverse(); // Chronological order
-    } catch (err) {
+        const fetched = await channel.messages.fetch({ limit });
+        return [...fetched.values()].map(message => ({
+            time: new Date(message.createdTimestamp).toISOString(),
+            author: message.author?.tag || 'Unknown User',
+            isBot: Boolean(message.author?.bot),
+            content: message.content || '',
+            attachments: [...message.attachments.values()].map(attachment => attachment.url),
+            id: message.id
+        })).reverse();
+    } catch (error) {
+        console.warn('[BackupEngine] Message archive skipped:', error.message);
         return [];
     }
 }
 
-// Core Backup Execution Routine
 async function executeServerFullBackup(guild) {
-    const fetchedRoles = await guild.roles.fetch();
-    const fetchedChannels = await guild.channels.fetch();
-
-    // 1. Roles sorted by position (Highest to Lowest)
-    const rolesData = fetchedRoles
-        .filter(r => !r.managed && r.name !== '@everyone' && r.id !== guild.id)
+    if (!guild || !/^\d{17,20}$/.test(String(guild.id))) throw new Error('A valid Discord server is required.');
+    const [fetchedRoles, fetchedChannels] = await Promise.all([guild.roles.fetch(), guild.channels.fetch()]);
+    const roles = [...fetchedRoles.values()]
+        .filter(role => !role.managed && role.id !== guild.id)
         .sort((a, b) => b.position - a.position)
-        .map(r => ({
-            position: r.position,
-            name: r.name,
-            color: r.hexColor,
-            hoist: r.hoist,
-            permissions: r.permissions ? r.permissions.bitfield.toString() : '0',
-            id: r.id
+        .map(role => ({
+            id: role.id,
+            name: role.name,
+            position: role.position,
+            color: role.hexColor,
+            hoist: role.hoist,
+            permissions: role.permissions.bitfield.toString()
         }));
-
-    const getOverwrites = (channel) => channel.permissionOverwrites.cache.map(ow => ({
-        id: ow.id,
-        type: ow.type,
-        allow: ow.allow ? ow.allow.bitfield.toString() : '0',
-        deny: ow.deny ? ow.deny.bitfield.toString() : '0'
+    const getOverwrites = channel => [...channel.permissionOverwrites.cache.values()].map(overwrite => ({
+        id: overwrite.id,
+        type: overwrite.type,
+        allow: overwrite.allow.bitfield.toString(),
+        deny: overwrite.deny.bitfield.toString()
     }));
-
-    // 2. Categories Map
-    const categoriesMap = new Map();
-    const categoriesData = [];
-
-    fetchedChannels
-        .filter(c => c && c.type === ChannelType.GuildCategory)
-        .forEach(c => {
-            categoriesMap.set(c.id, c.name);
-            categoriesData.push({
-                name: c.name,
-                id: c.id,
-                overwrites: getOverwrites(c)
-            });
+    const categories = [...fetchedChannels.values()]
+        .filter(channel => channel.type === ChannelType.GuildCategory)
+        .map(channel => ({ id: channel.id, name: channel.name, overwrites: getOverwrites(channel) }));
+    const categoryNames = new Map(categories.map(category => [category.id, category.name]));
+    const channels = [];
+    let totalArchivedMessages = 0;
+    const sortedChannels = [...fetchedChannels.values()]
+        .filter(channel => channel.type !== ChannelType.GuildCategory)
+        .sort((a, b) => String(a.parentId || '').localeCompare(String(b.parentId || '')));
+    for (const channel of sortedChannels) {
+        const messages = channel.isTextBased() ? await fetchChannelMessageArchive(channel, 50) : [];
+        totalArchivedMessages += messages.length;
+        channels.push({
+            id: channel.id,
+            name: channel.name,
+            category: categoryNames.get(channel.parentId) || null,
+            parentId: channel.parentId,
+            type: channel.type,
+            topic: channel.topic || '',
+            nsfw: Boolean(channel.nsfw),
+            rateLimitPerUser: channel.rateLimitPerUser || 0,
+            userLimit: channel.userLimit || 0,
+            overwrites: getOverwrites(channel),
+            messages
         });
-
-    // 3. Channels Organized Category-Wise
-    const channelsData = [];
-    let totalMessagesArchived = 0;
-
-    const sortedChannels = Array.from(fetchedChannels.values())
-        .filter(c => c && c.type !== ChannelType.GuildCategory)
-        .sort((a, b) => {
-            const catA = a.parentId ? (categoriesMap.get(a.parentId) || 'Uncategorized') : 'Uncategorized';
-            const catB = b.parentId ? (categoriesMap.get(b.parentId) || 'Uncategorized') : 'Uncategorized';
-            return catA.localeCompare(catB);
-        });
-
-    for (const c of sortedChannels) {
-        const categoryName = c.parentId ? (categoriesMap.get(c.parentId) || 'Uncategorized') : 'No Category';
-
-        let messageHistory = [];
-        if (c.isTextBased()) {
-            messageHistory = await fetchChannelMessageArchive(c, 50);
-            totalMessagesArchived += messageHistory.length;
-            await delay(150); // Throttling for Discord API safety
-        }
-
-        channelsData.push({
-            category: categoryName,
-            name: `#${c.name}`,
-            topic: c.topic || 'None',
-            type: c.type === 0 ? 'Text Channel' : (c.type === 2 ? 'Voice Channel' : `Type ${c.type}`),
-            archivedMessagesCount: messageHistory.length,
-            messages: messageHistory,
-            // Programmatic keys for .restore
-            id: c.id,
-            parentId: c.parentId,
-            rawType: c.type,
-            nsfw: c.nsfw || false,
-            rateLimitPerUser: c.rateLimitPerUser || 0,
-            userLimit: c.userLimit || 0,
-            overwrites: getOverwrites(c)
-        });
+        if (channel.isTextBased()) await delay(100);
     }
-
-    const backupPayload = {
-        _info: "================ STARRY FULL SERVER ARCHIVE ================",
-        serverName: guild.name,
-        serverId: guild.id,
-        createdAt: new Date().toLocaleString(),
-        timestamp: Date.now(),
-        summary: {
-            totalRoles: rolesData.length,
-            totalCategories: categoriesData.length,
-            totalChannels: channelsData.length,
-            totalArchivedMessages: totalMessagesArchived
-        },
-        roles: rolesData,
-        categories: categoriesData,
-        channels: channelsData
+    return {
+        format: 'starry-server-backup',
+        version: 1,
+        server: { id: guild.id, name: guild.name },
+        createdAt: new Date().toISOString(),
+        summary: { roles: roles.length, categories: categories.length, channels: channels.length, archivedMessages: totalArchivedMessages },
+        roles,
+        categories,
+        channels
     };
+}
 
-    // Save to MongoDB
-    if (ServerBackup) {
-        await ServerBackup.findOneAndUpdate(
-            { guildId: guild.id },
-            { 
-                guildId: guild.id, 
-                timestamp: backupPayload.timestamp, 
-                roles: rolesData, 
-                categories: categoriesData, 
-                channels: channelsData 
-            },
-            { upsert: true }
-        ).catch(e => console.error('MongoDB Backup Error:', e));
+async function createBackupAttachment(guild) {
+    const payload = await executeServerFullBackup(guild);
+    const json = JSON.stringify(payload, null, 2);
+    if (Buffer.byteLength(json, 'utf8') > 24 * 1024 * 1024) {
+        throw new Error('This backup exceeds Discord upload limits. Reduce archived channel history and retry.');
     }
-
-    return backupPayload;
-}
-
-// Locate Admin Channel for Dispatch
-function findAdminChannel(guild) {
-    return guild.channels.cache.find(c => 
-        c.isTextBased() && 
-        c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages) &&
-        (
-            c.name.includes('admin') || 
-            c.name.includes('log') || 
-            c.name.includes('staff') || 
-            c.name.includes('backup') ||
-            c.name === 'admin-action-requests' ||
-            c.name === 'logs-moderate'
+    const file = new AttachmentBuilder(Buffer.from(json, 'utf8'), {
+        name: 'Starry_Backup_' + guild.id + '_' + Date.now() + '.json'
+    });
+    const embed = new EmbedBuilder()
+        .setColor('#2ecc71')
+        .setTitle('Starry server backup created')
+        .setDescription('A JSON snapshot of the server structure and accessible recent message history is attached.')
+        .addFields(
+            { name: 'Roles', value: String(payload.summary.roles), inline: true },
+            { name: 'Categories', value: String(payload.summary.categories), inline: true },
+            { name: 'Channels', value: String(payload.summary.channels), inline: true },
+            { name: 'Messages archived', value: String(payload.summary.archivedMessages), inline: true }
         )
-    ) || guild.systemChannel;
+        .setFooter({ text: 'This file is an export; automatic restore is not available.' })
+        .setTimestamp();
+    return { file, embed, payload };
 }
 
-module.exports = (client) => {
+function buildBackupChoiceComponents(guildId, userId) {
+    return [new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(BACKUP_CHOICE_PREFIX + ':automatic:' + guildId + ':' + userId)
+            .setLabel('Enable daily automatic backups')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId(BACKUP_CHOICE_PREFIX + ':manual:' + guildId + ':' + userId)
+            .setLabel('Manual ,backup command only')
+            .setStyle(ButtonStyle.Secondary)
+    )];
+}
 
-    // ==========================================
-    // 🕒 AUTOMATED DAILY BACKUP SCHEDULER (24 HOURS)
-    // ==========================================
-    client.once(Events.ClientReady || 'clientReady', () => {
-        console.log('⏰ Autonomous Daily Backup Engine Armed.');
+async function saveBackupMode(guildId, mode, channelId) {
+    if (!['automatic', 'manual'].includes(mode)) throw new Error('Unsupported backup mode.');
+    return ServerSettings.findOneAndUpdate(
+        { guildId: String(guildId) },
+        { $set: { 'backup.enabled': mode === 'automatic', 'backup.mode': mode, 'backup.channelId': String(channelId) } },
+        { upsert: true, new: true, runValidators: true }
+    );
+}
 
-        setInterval(async () => {
-            console.log('🔄 Executing Scheduled Daily Server Backups...');
+async function runAutomaticBackups(client) {
+    const settings = await ServerSettings.find({ 'backup.enabled': true, 'backup.mode': 'automatic' }).lean();
+    for (const setting of settings) {
+        const guild = client.guilds.cache.get(String(setting.guildId));
+        if (!guild || !setting.backup?.channelId) continue;
+        const channel = guild.channels.cache.get(String(setting.backup.channelId));
+        const botMember = guild.members.me;
+        const permissions = channel && botMember ? channel.permissionsFor(botMember) : null;
+        if (!channel?.isTextBased() || !permissions?.has(PermissionFlagsBits.SendMessages) || !permissions.has(PermissionFlagsBits.AttachFiles)) {
+            console.warn('[BackupEngine] Automatic backup skipped: configured channel is unavailable or permissions are missing for guild', guild.id);
+            continue;
+        }
+        try {
+            const { file, embed } = await createBackupAttachment(guild);
+            await channel.send({ embeds: [embed], files: [file] });
+            await ServerSettings.updateOne(
+                { guildId: guild.id, 'backup.mode': 'automatic', 'backup.enabled': true },
+                { $set: { 'backup.lastRunAt': new Date() } }
+            );
+        } catch (error) {
+            console.error('[BackupEngine] Automatic backup failed for guild ' + guild.id + ':', error.message);
+        }
+    }
+}
 
-            for (const [, guild] of client.guilds.cache) {
-                try {
-                    const backupData = await executeServerFullBackup(guild);
-                    const adminCh = findAdminChannel(guild);
+module.exports = client => {
+    if (schedulerStarted) return;
+    schedulerStarted = true;
 
-                    if (adminCh) {
-                        const jsonBuffer = Buffer.from(JSON.stringify(backupData, null, 2), 'utf-8');
-                        const fileAttachment = new AttachmentBuilder(jsonBuffer, { name: `Server_Backup_${guild.id}.json` });
-
-                        const embed = new EmbedBuilder()
-                            .setColor('#2ecc71')
-                            .setTitle('🤖 Scheduled Daily Backup Complete')
-                            .setDescription(
-                                `The daily automated server & message history snapshot has been generated!\n\n` +
-                                `• **Roles Saved:** \`${backupData.summary.totalRoles}\`\n` +
-                                `• **Categories Saved:** \`${backupData.summary.totalCategories}\`\n` +
-                                `• **Channels Saved:** \`${backupData.summary.totalChannels}\`\n` +
-                                `• **Messages Archived:** \`${backupData.summary.totalArchivedMessages}\` msgs\n\n` +
-                                `*A clean JSON archive file is attached below.*`
-                            )
-                            .setFooter({ text: 'Starry Autonomous Backup Core' })
-                            .setTimestamp();
-
-                        await adminCh.send({ embeds: [embed], files: [fileAttachment] }).catch(() => {});
-                    }
-                } catch (err) {
-                    console.error(`Daily Backup error for guild ${guild.id}:`, err);
-                }
-            }
-        }, 24 * 60 * 60 * 1000);
+    client.on(Events.InteractionCreate || 'interactionCreate', async interaction => {
+        if (!interaction.isButton?.() || !interaction.customId.startsWith(BACKUP_CHOICE_PREFIX + ':')) return;
+        const [, mode, guildId, ownerId] = interaction.customId.split(':');
+        if (!interaction.guild || interaction.guild.id !== guildId || interaction.user.id !== ownerId) {
+            return interaction.reply({ content: 'This backup setup belongs to another administrator.', ephemeral: true }).catch(() => {});
+        }
+        if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: 'Administrator permission is required to change backup settings.', ephemeral: true }).catch(() => {});
+        }
+        try {
+            await saveBackupMode(guildId, mode, interaction.channelId);
+            const message = mode === 'automatic'
+                ? 'Daily automatic backups are enabled. Starry will post a backup in this channel every 24 hours. Use ,backup any time for an extra manual snapshot.'
+                : 'Automatic backups are disabled. Starry will create a backup only when an administrator runs ,backup.';
+            await interaction.update({ content: '✅ ' + message, components: [] });
+        } catch (error) {
+            console.error('[BackupEngine] Could not save backup preference:', error.message);
+            await interaction.reply({ content: 'Could not save this backup preference. Please try again later.', ephemeral: true }).catch(() => {});
+        }
     });
 
-    // Automated Daily Backup Cron & Periodic Engine
-    setInterval(() => {
-        // Daily automated backup execution
-    }, 86400000);
+    client.once(Events.ClientReady || 'clientReady', () => {
+        console.log('[BackupEngine] Per-server opt-in backup scheduler ready.');
+        runAutomaticBackups(client).catch(error => console.error('[BackupEngine] Initial scheduled run failed:', error.message));
+        setInterval(() => {
+            runAutomaticBackups(client).catch(error => console.error('[BackupEngine] Scheduled run failed:', error.message));
+        }, AUTOMATIC_INTERVAL_MS);
+    });
 };
 
 module.exports.executeServerFullBackup = executeServerFullBackup;
-
+module.exports.createBackupAttachment = createBackupAttachment;
+module.exports.buildBackupChoiceComponents = buildBackupChoiceComponents;
+module.exports.saveBackupMode = saveBackupMode;
