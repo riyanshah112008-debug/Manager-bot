@@ -69,6 +69,19 @@ test('Kazagumo starts are awaited and only one response is emitted for first-tra
   assert.ok(commands.includes('playerStart owns the single response after playback starts'));
 });
 
+test('idle Kazagumo players with stale current tracks are rebuilt before the new request starts', () => {
+  assert.ok(commands.includes('const staleIdleTrack = Boolean('));
+  assert.ok(commands.includes('await player.destroy()'));
+  assert.ok(commands.includes('player = await manager.createPlayer({'));
+  assert.ok(commands.includes('for (const queuedTrack of waitingTracks) player.queue.add(queuedTrack)'));
+  assert.ok(commands.includes('Your existing queue was kept; retry after the node reconnects'));
+});
+
+test('request-channel Lavalink empty results fall through to the native resolver', () => {
+  assert.ok(controller.includes('Lavalink returned no playable results; retrying with the native audio resolver.'));
+  assert.ok(controller.includes('const player = StarryAudioEngine.getOrCreatePlayer'));
+});
+
 test('request-channel success updates its persistent controller instead of sending duplicate confirmations', () => {
   assert.ok(controller.includes('await kazagumoPlayer.setVoiceChannel(voiceChannel.id)'));
   assert.ok(controller.includes('await kazagumoPlayer.play()'));
