@@ -70,9 +70,9 @@ const VIRTUAL_WORKER_NODES = [
         id: 'node-util',
         name: 'Starry Systems & Utility Engine',
         emoji: '🛠️',
-        role: 'Server Backups, Tickets & Whois',
+        role: 'Tickets, Server Tools & Whois',
         color: '#1ABC9C',
-        activity: 'backups & server tools | ,help utility',
+        activity: 'server tools & utilities | ,help utility',
         type: ActivityType.Playing,
         commands: '28 Utility Commands'
     },
