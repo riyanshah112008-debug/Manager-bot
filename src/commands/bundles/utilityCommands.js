@@ -242,8 +242,7 @@ const components = createHelpComponents();
                     `• \`${prefix}ticketsetup\` — Spawn support ticket panel\n` +
                     `• \`${prefix}applysetup\` — Spawn staff application panel\n` +
                     `• \`${prefix}verify-setup\` — Spawn human verification panel\n` +
-                    `• \`${prefix}setupwelcome\` & \`${prefix}setupgoodbye\` — Greeting cards\n` +
-
+                    `• \`${prefix}setupwelcome\` & \`${prefix}setupgoodbye\` — Greeting cards`
                 )
                 .setFooter({ text: 'Admins & Staff Only • Prefix: ,' })
                 .setTimestamp();
