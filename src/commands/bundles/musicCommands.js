@@ -46,7 +46,7 @@ function getVoiceGuard(ctx) {
     return { voiceChannel, botMember, workerClient: ctx.client };
 }
 
-function getActivePlayer(client, guildId) {
+async function startKazagumoPlayback(player) {\n    if (!player) throw new Error('Music player could not be initialized.');\n    if (player.playing || player.paused) return false;\n    await player.play();\n    return true;\n}\n\nfunction getActivePlayer(client, guildId) {
     let kPlayer = client.manager?.getPlayer(guildId);
     if (!kPlayer && client.multiBot?.instances) {
         for (const inst of client.multiBot.instances.values()) {
