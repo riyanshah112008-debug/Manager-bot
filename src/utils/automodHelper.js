@@ -21,6 +21,7 @@ const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.r
 
 // Fast In-Memory Caches for Zero-Latency Message Filtering
 const guildCache = new Map();
+const guildSubmoduleCache = new Map();
 const channelCache = new Map();
 
 /**
@@ -30,7 +31,7 @@ async function initAutomodCaches() {
     try {
         if (isDbConnected()) {
             const gSettings = await AutomodGuild.find().lean();
-            gSettings.forEach(s => guildCache.set(s.guildId, s.enabled));
+            gSettings.forEach(s => {\n                guildCache.set(s.guildId, s.enabled);\n                guildSubmoduleCache.set(s.guildId, { links: s.linksEnabled !== false, emojis: s.emojisEnabled !== false });\n            });
 
             const cSettings = await AutomodChannel.find().lean();
             cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
@@ -91,6 +92,27 @@ async function setGuildStatus(guildId, enabled) {
             console.error('❌ [AutoMod] Error saving guild status:', err.message);
         }
     }
+    return enabled;
+}
+
+function getGuildSubmoduleStatus(guildId, key) {
+    if (!guildId || !['links', 'emojis'].includes(key)) return true;
+    return guildSubmoduleCache.get(guildId)?.[key] !== false;
+}
+
+async function setGuildSubmoduleStatus(guildId, key, enabled) {
+    if (!/^\\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
+        throw new Error('Invalid AutoMod submodule setting.');
+    }
+    if (!isDbConnected()) throw new Error('Database is unavailable; AutoMod setting was not changed.');
+    const field = key === 'links' ? 'linksEnabled' : 'emojisEnabled';
+    await AutomodGuild.findOneAndUpdate(
+        { guildId },
+        { $set: { [field]: enabled } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    const current = guildSubmoduleCache.get(guildId) || { links: true, emojis: true };
+    guildSubmoduleCache.set(guildId, { ...current, [key]: enabled });
     return enabled;
 }
 
@@ -447,10 +469,13 @@ function createServerAutomodButtons(channelId, isGuildEnabled = true) {
 
 module.exports = {
     guildCache,
+    guildSubmoduleCache,
     channelCache,
     initAutomodCaches,
     getGuildStatus,
     setGuildStatus,
+    getGuildSubmoduleStatus,
+    setGuildSubmoduleStatus,
     getChannelSettings,
     setChannelFilter,
     resetChannelSettings,
