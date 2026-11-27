@@ -1077,7 +1077,7 @@ class MusicControllerEngine {
 
         // 16. DSP Filter Dropdown
         if (customId === 'ctrl_filter') {
-            const selected = interaction.values[0] || 'empowering';
+            const selected = interaction.values[0] || 'clear';
             if (isKazagumo) {
                 const { applyKazagumoFilter } = require('../utils/musicManager');
                 await applyKazagumoFilter(player, selected);
