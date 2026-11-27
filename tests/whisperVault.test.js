@@ -74,6 +74,25 @@ test('public channel validation requires Read Message History for persistent rev
  const botMember = { id: '5', roles: { cache: new Map() } };
  assert.match(whisper.validateChannels(guild, publicChannel, staffChannel, staffRole, botMember), /Read Message History/);
 });
+test('Whisper Vault rejects NSFW channels and NSFW parent categories', () => {
+ const { ChannelType } = require('discord.js');
+ const guild = { id: '12345678901234567', roles: { everyone: { id: '12345678901234567' }, cache: new Map() } };
+ const safeChannel = { id: '12345678901234568', guildId: guild.id, type: ChannelType.GuildText, nsfw: false };
+ const nsfwChannel = { ...safeChannel, nsfw: true };
+ const nsfwCategoryChannel = { ...safeChannel, parent: { nsfw: true } };
+ const staffChannel = { ...safeChannel, id: '12345678901234569' };
+ const nsfwStaffChannel = { ...staffChannel, nsfw: true };
+ const staffRole = { id: '12345678901234570', guild };
+ const botMember = { id: '12345678901234571', roles: { cache: new Map() } };
+
+ assert.equal(whisper.isSfwGuildTextChannel(safeChannel), true);
+ assert.equal(whisper.isSfwGuildTextChannel(nsfwChannel), false);
+ assert.equal(whisper.isSfwGuildTextChannel(nsfwCategoryChannel), false);
+ assert.equal(whisper.isSfwGuildTextChannel({ ...safeChannel, type: ChannelType.GuildVoice }), false);
+ assert.match(whisper.validateChannels(guild, nsfwChannel, staffChannel, staffRole, botMember), /SFW/);
+ assert.match(whisper.validateChannels(guild, safeChannel, nsfwStaffChannel, staffRole, botMember), /SFW/);
+});
+
 test('staff embed has a structured red review layout and escapes mentions', () => {
  const json = whisper.buildReportEmbed(12, 'Threats @here', 'https://discord.com/channels/123456789012345678/234567890123456789/345678901234567890').toJSON();
  assert.equal(json.color, 0xD64545);
