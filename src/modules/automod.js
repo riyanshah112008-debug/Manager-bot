@@ -220,8 +220,8 @@ module.exports = (client) => {
         const unauthorizedLinks = rawLinks.filter(link => !isAllowedUrl(link));
         const emojis = message.content.match(emojiPattern) || [];
 
-        const isLinkSpam = channelSettings.linksActive && unauthorizedLinks.length >= 1;
-        const isEmojiSpam = !hasMediaAttachment(message) && channelSettings.emojisActive && emojis.length >= 5;
+        const isLinkSpam = automodHelper.getGuildSubmoduleStatus(message.guild.id, 'links') && channelSettings.linksActive && unauthorizedLinks.length >= 1;
+        const isEmojiSpam = automodHelper.getGuildSubmoduleStatus(message.guild.id, 'emojis') && !hasMediaAttachment(message) && channelSettings.emojisActive && emojis.length >= 5;
 
         // 4. Action Execution
         if (isLinkSpam || isEmojiSpam) {
