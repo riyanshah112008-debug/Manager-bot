@@ -31,7 +31,10 @@ async function initAutomodCaches() {
     try {
         if (isDbConnected()) {
             const gSettings = await AutomodGuild.find().lean();
-            gSettings.forEach(s => {\n                guildCache.set(s.guildId, s.enabled);\n                guildSubmoduleCache.set(s.guildId, { links: s.linksEnabled !== false, emojis: s.emojisEnabled !== false });\n            });
+            gSettings.forEach(s => {
+                guildCache.set(s.guildId, s.enabled);
+                guildSubmoduleCache.set(s.guildId, { links: s.linksEnabled !== false, emojis: s.emojisEnabled !== false });
+            });
 
             const cSettings = await AutomodChannel.find().lean();
             cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
@@ -331,20 +334,25 @@ function buildChannelAutomodEmbed(guild, channel, settings, isGuildEnabled = tru
     const embed = new EmbedBuilder()
         .setColor(color)
         .setTitle(`🛡️ Starry AutoMod • Channel Configuration`)
-        .setDescription(`Channel: <#${channel.id}> (\`${channel.name || channel.id}\`)\nServer: **${guild.name}**`)
+        .setDescription(`Channel: <#${channel.id}> (\`${channel.name || channel.id}\`)
+Server: **${guild.name}**`)
         .addFields(
             {
                 name: '🔗 Link Protection',
                 value: settings.linksActive 
-                    ? '🟢 **ACTIVE (Blocking Links)**\n*Unauthorized external links & invites are deleted & timed out.*' 
-                    : '🔴 **DISABLED (Links Allowed)**\n*Members can freely post links in this channel.*',
+                    ? '🟢 **ACTIVE (Blocking Links)**
+*Unauthorized external links & invites are deleted & timed out.*' 
+                    : '🔴 **DISABLED (Links Allowed)**
+*Members can freely post links in this channel.*',
                 inline: true
             },
             {
                 name: '😀 Emoji Spam Filter',
                 value: settings.emojisActive 
-                    ? '🟢 **ACTIVE (Blocking 5+ Emojis)**\n*Spamming 5 or more emojis triggers auto-timeout.*' 
-                    : '🔴 **DISABLED (Emojis Allowed)**\n*Members can post multiple emojis without restriction.*',
+                    ? '🟢 **ACTIVE (Blocking 5+ Emojis)**
+*Spamming 5 or more emojis triggers auto-timeout.*' 
+                    : '🔴 **DISABLED (Emojis Allowed)**
+*Members can post multiple emojis without restriction.*',
                 inline: true
             },
             {
@@ -409,29 +417,35 @@ function buildServerAutomodEmbed(guild, isGuildEnabled = true, overrides = []) {
     const embed = new EmbedBuilder()
         .setColor(isGuildEnabled ? '#2ECC71' : '#ED4245')
         .setTitle(`🛡️ Starry AutoMod • Server Dashboard`)
-        .setDescription(`Server: **${guild.name}** (\`${guild.id}\`)\nAutonomous Real-time Server Moderation & Spam Shield`)
+        .setDescription(`Server: **${guild.name}** (\`${guild.id}\`)
+Autonomous Real-time Server Moderation & Spam Shield`)
         .addFields(
             {
                 name: '🌐 Server AutoMod Engine',
                 value: isGuildEnabled 
-                    ? '🟢 **Globally Active**\n*All protective filters are actively shielding the entire server.*' 
-                    : '🔴 **SUSPENDED / DISABLED**\n*Automated deletions and mutes are turned off server-wide.*',
+                    ? '🟢 **Globally Active**
+*All protective filters are actively shielding the entire server.*' 
+                    : '🔴 **SUSPENDED / DISABLED**
+*Automated deletions and mutes are turned off server-wide.*',
                 inline: false
             },
             {
                 name: '🔗 Link Protection',
-                value: 'Deletes unauthorized external invites & links.\n*Whitelisted media, GIFs, and staff exempt.*',
+                value: 'Deletes unauthorized external invites & links.
+*Whitelisted media, GIFs, and staff exempt.*',
                 inline: true
             },
             {
                 name: '😀 Emoji Spam Protection',
-                value: 'Auto-mutes users sending 5 or more emojis.\n*Staff & bot owners exempt.*',
+                value: 'Auto-mutes users sending 5 or more emojis.
+*Staff & bot owners exempt.*',
                 inline: true
             },
             {
                 name: '📋 Channel Overrides',
                 value: overrides.length > 0 
-                    ? `\`${overrides.length}\` channel(s) customized with channel-specific rules.\n*(Click **View Overrides** below)*` 
+                    ? `\`${overrides.length}\` channel(s) customized with channel-specific rules.
+*(Click **View Overrides** below)*` 
                     : 'No channel overrides active. All channels use default protection.',
                 inline: false
             }
