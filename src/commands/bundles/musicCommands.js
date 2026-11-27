@@ -149,6 +149,8 @@ const commands = [
 
             // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
             if (hasLavalink) {
+                let kazagumoPlayer = null;
+                let createdKazagumoPlayer = false;
                 try {
                     let res;
                     const spotifyLink = parseSpotifyUrl(query);
@@ -202,7 +204,9 @@ const commands = [
                             textId: ctx.channel.id,
                             deaf: true
                         });
+                        createdKazagumoPlayer = true;
                     }
+                    kazagumoPlayer = player;
 
                     if (player.voiceId !== guard.voiceChannel.id) {
                         await player.setVoiceChannel(guard.voiceChannel.id);
@@ -282,6 +286,12 @@ const commands = [
                     return;
                 } catch (kErr) {
                     console.warn('⚠️ [Kazagumo Lavalink Playback Notice]:', kErr.message || kErr);
+                    if (createdKazagumoPlayer && kazagumoPlayer) {
+                        await kazagumoPlayer.destroy().catch(() => {});
+                    } else if (kazagumoPlayer) {
+                        if (loadingMsg) loadingMsg.delete().catch(() => {});
+                        return ctx.reply('⚠️ The active Lavalink player could not start audio. I kept the existing session intact; please retry after the node recovers.');
+                    }
                 }
             }
 
