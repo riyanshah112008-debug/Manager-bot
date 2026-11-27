@@ -432,7 +432,8 @@ class StarryGuildPlayer {
         this.player = createAudioPlayer({
             behaviors: {
                 noSubscriber: NoSubscriberBehavior.Play,
-                maxMissedFrames: 5
+                // Tolerate brief event-loop/host scheduling stalls without immediately idling the stream.
+                maxMissedFrames: 15
             }
         });
         this.connection = null;
@@ -674,8 +675,8 @@ class StarryGuildPlayer {
                         '-buffer_size', '2048k',
                         '-analyzeduration', '2000000',
                         '-probesize', '2000000',
-                        '-thread_queue_size', '2048',
-                        '-fflags', '+genpts+discardcorrupt'
+                        '-thread_queue_size', '512',
+                        '-fflags', '+genpts'
                     );
                     if (customHeaders && typeof customHeaders === 'object' && Object.keys(customHeaders).length > 0) {
                         const headerStr = Object.entries(customHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n';
@@ -726,6 +727,7 @@ class StarryGuildPlayer {
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
+                        '-threads', '1',
                         '-compression_level', '5',
                         '-frame_duration', '20',
                         '-f', 'opus'
