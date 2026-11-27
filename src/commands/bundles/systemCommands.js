@@ -292,17 +292,6 @@ const modulesPanelCommand = {
                 await interaction.reply({ content: '❌ Could not save that module setting. No success was reported.', ephemeral: true }).catch(() => {});
             }
         });
-        collector.on('end', async () => {
-            const disabled = (panelMessage.components || []).map(row => {
-                const rebuilt = ActionRowBuilder.from(row);
-                rebuilt.components = rebuilt.components.map(component => {
-                    const data = component.toJSON();
-                    return ButtonBuilder.from(data).setDisabled(true);
-                });
-                return rebuilt;
-            });
-            await panelMessage.edit({ components: disabled }).catch(() => {});
-        });
     }
 };
 
