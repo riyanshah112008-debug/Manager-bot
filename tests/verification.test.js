@@ -17,8 +17,8 @@ try {
     delete process.env.VERIFY_URL;
     delete process.env.PUBLIC_URL;
     delete process.env.CUSTOM_DOMAIN;
-    process.env.RENDER_EXTERNAL_URL = 'https://manager-bot-1-6167.onrender.com';
-    assert.strictEqual(getPublicUrl(), 'https://manager-bot-1-6167.onrender.com');
+    process.env.RENDER_EXTERNAL_URL = 'https://starry-example.onrender.com';
+    assert.strictEqual(getPublicUrl(), 'https://starry-example.onrender.com');
     console.log('  ✅ Render external URL resolved correctly');
 
     // 2. CUSTOM_DOMAIN overrides Render

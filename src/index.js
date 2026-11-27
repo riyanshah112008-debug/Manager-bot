@@ -63,19 +63,6 @@ const multiBot = require('./modules/multiBot');
 const commandRegistry = require('./modules/commandHandler');
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('./utils/contextHelper');
 
-// Safely Require Bump Engine & Model
-let bumpEngine = null;
-let ServerListing = null;
-try {
-    bumpEngine = require('./modules/bumpEngine');
-    ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
-} catch (e) {
-    try {
-        bumpEngine = require('../modules/bumpEngine');
-        ServerListing = bumpEngine.ServerListing || mongoose.models.ServerListing;
-    } catch (err) {}
-}
-
 const app = express();
 const port = process.env.PORT || 10000;
 
@@ -91,16 +78,6 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); 
-
-app.get('/api/servers', async (req, res) => {
-    try {
-        if (!ServerListing) return res.json([]);
-        const servers = await ServerListing.find({ isListed: true }).sort({ lastBump: -1 }).limit(50);
-        res.json(servers);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch servers' });
-    }
-});
 
 app.get('/api/multibot/stats', (req, res) => {
     try {
@@ -963,16 +940,6 @@ async function startBot(overrideToken, overrideMongo) {
     } else {
         console.warn('⚠️ [MongoDB Boot] MONGO_URI is not set. Bot will operate in high-resilience mode with local/in-memory state.');
     }
-
-    try {
-        const bumpModule = require('./modules/bumpEngine.js');
-            if (typeof bumpModule === 'function') {
-                bumpModule(client, app);
-                console.log('✅ Registered Directory API Endpoints with Express Web Server!');
-            }
-        } catch (e) {
-            console.error('⚠️ Could not load bumpEngine API routes:', e.message);
-        }
 
         // 1. Connect Primary Client to Discord Gateway IMMEDIATELY
         console.log('🚀 Connecting Primary Bot to Discord Gateway...');

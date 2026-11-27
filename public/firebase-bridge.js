@@ -1,6 +1,8 @@
 (() => {
 "use strict";
-const RENDER_BACKEND="https://manager-bot-1-6167.onrender.com";
+// ⚠️ UPDATE REQUIRED after the Render account move: paste the new Render service URL here
+// (e.g. "https://YOUR-NEW-SERVICE.onrender.com"), or define window.STARRY_BACKEND_URL before this script loads.
+const RENDER_BACKEND=(window.STARRY_BACKEND_URL||"https://YOUR-NEW-SERVICE.onrender.com").replace(/\/+$/,"");
 const isRenderBackend=/(^|\.)onrender\.com$/i.test(location.hostname);
 // Use the Render API from Firebase Hosting and all Firebase custom domains.
 const backendOrigin=isRenderBackend?location.origin:RENDER_BACKEND;

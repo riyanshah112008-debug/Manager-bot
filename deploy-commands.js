@@ -73,12 +73,6 @@ if (afkModule && afkModule.afkPayload) {
     masterPayloads.push(afkModule.afkPayload);
 }
 
-// Bump Engine Payload (Server Promotion)
-const bumpModule = safeRequire(['./src/modules/bumpEngine', './modules/bumpEngine']);
-if (bumpModule && bumpModule.bumpPayload) {
-    masterPayloads.push(bumpModule.bumpPayload);
-}
-
 // Whisper Vault commands
 const whisperModule = safeRequire(['./src/modules/confession', './modules/confession']);
 if (whisperModule) {

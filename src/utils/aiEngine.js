@@ -302,7 +302,6 @@ To turn a quiet Discord server into a crowded, thriving community, you need to a
 ---
 
 ### 📢 4. Traffic & Discovery Funnels
-• **Listing Bots:** Enable Starry's automatic server listing (\`,bumplist\`) to reach global users on our web portal!
 • **Cross-Server Partnerships:** Partner with complementary servers of similar size (e.g. 50-200 members) and exchange shoutouts.
 • **Weekly Scheduled Events:** Host Friday Game Nights (Among Us, Skribbl.io, Gartic Phone, Roblox) with simple Discord role prizes!
 

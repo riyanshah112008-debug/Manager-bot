@@ -5,7 +5,7 @@
 const localtunnel = require('localtunnel');
 
 let activeTunnel = null;
-let publicDomainUrl = 'https://manager-bot-1-6167.onrender.com';
+let publicDomainUrl = (process.env.PUBLIC_WEB_URL || process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '') || null;
 let isConnecting = false;
 let reconnectTimer = null;
 
