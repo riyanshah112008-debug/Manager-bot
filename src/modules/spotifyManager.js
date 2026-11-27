@@ -7,6 +7,7 @@ const fetch = globalThis.fetch;
 const spotifyUrlInfo = require('spotify-url-info')(fetch);
 const UserSpotify = require('../models/UserSpotify');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
+const { isLavalinkRequired } = require('../utils/audioBackendPolicy');
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
@@ -323,7 +324,7 @@ class SpotifyManager {
             }
 
             if (player.voiceId !== voiceChannel.id) {
-                player.setVoiceChannel(voiceChannel.id);
+                await player.setVoiceChannel(voiceChannel.id);
             }
             player.textId = textChannel.id;
 
@@ -343,6 +344,10 @@ class SpotifyManager {
                 trackCount: res.tracks.length,
                 tracks: res.tracks
             };
+        }
+
+        if (isLavalinkRequired()) {
+            throw new Error('The dedicated Render Lavalink node is unavailable. Spotify playback is paused until the audio node reconnects.');
         }
 
         // Native Audio Engine fallback
