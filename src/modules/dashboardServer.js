@@ -254,6 +254,14 @@ function setupDashboardRoutes(app, client) {
                 matchQuery = first.query;
                 searchQuery = 'ytmsearch:' + first.query;
             }
+            if (!hasReadyLavalink && isLavalinkRequired()) {
+                return res.status(503).json({
+                    success: false,
+                    code: 'AUDIO_NODE_UNAVAILABLE',
+                    error: 'Starry music search is temporarily unavailable while the dedicated Render audio node reconnects.'
+                });
+            }
+
             let result;
             if (hasReadyLavalink) {
                 result = await manager.search(searchQuery, { requester: req.session.user });
