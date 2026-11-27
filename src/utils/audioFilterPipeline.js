@@ -29,8 +29,6 @@ const DEFAULT_BASS_FILTER = [
     'equalizer=f=250:width_type=q:w=1.1:g=-1.0'
 ].join(',');
 
-const FINAL_LIMITER = 'alimiter=limit=0.90:attack=5:release=240:level=false';
-const FINAL_RESAMPLER = 'aresample=48000:resampler=swr:filter_size=64:phase_shift=10';
 
 function clamp(value, minimum, maximum) {
     return Math.max(minimum, Math.min(maximum, value));
@@ -87,12 +85,10 @@ function buildAudioFilterArgs(filterString, volumePercent = 100, equalizer = nul
     const headroom = getHeadroom(getPositiveEqBoost(equalizer));
     const adjustedStages = applyVolume(stages, volumePercent, headroom);
     const customEqStages = buildCustomEqStages(equalizer);
-    return ['-af', [
-        ...adjustedStages,
-        ...customEqStages,
-        FINAL_RESAMPLER,
-        FINAL_LIMITER
-    ].join(',')];
+    // Keep the default path transparent: do not add a permanent limiter or resampler.
+    // The encoder's -ar 48000 output option performs any required sample-rate conversion.
+    // Apply only the requested profile and any explicit custom EQ stages.
+    return ['-af', [...adjustedStages, ...customEqStages].join(',') || 'anull'];
 }
 
 module.exports = {
