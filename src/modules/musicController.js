@@ -22,6 +22,7 @@ const MusicController = require('../models/MusicController');
 const { StarryAudioEngine, formatTime } = require('../utils/nativeAudioEngine');
 const { getGuildLanguageSync, t } = require('../utils/i18n');
 const { isStayConnected: getStayConnected, setStayConnected } = require('../utils/musicStayConnected');
+const { isLavalinkRequired } = require('../utils/audioBackendPolicy');
 
 const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -627,6 +628,15 @@ class MusicControllerEngine {
                 }
             }
         }
+        // Render production never falls back to local FFmpeg/yt-dlp transcoding.
+        // Keep one actionable response while the dedicated local Lavalink node recovers.
+        if (isLavalinkRequired()) {
+            await message.channel.send({
+                content: '⚠️ Starry music is temporarily unavailable because the dedicated Render audio node is reconnecting. The crackle-prone local transcoding fallback is disabled in production; retry when the node is healthy.'
+            }).catch(() => {});
+            return;
+        }
+
         // Route 2 (Fallback): Starry Native Audio Engine
         const player = StarryAudioEngine.getOrCreatePlayer(client, message.guild.id, voiceChannel, message.channel);
         try {
