@@ -234,11 +234,27 @@ const commands = [
                         // Search YouTube Music and YouTube in parallel: provider-specific
                         // prefixes are more reliable than relying on a node's default engine.
                         // Keep the entire Lavalink lookup within a bounded startup budget.
-                        const candidates = await searchWithTimeout(Promise.all([
-                            manager.search(`ytmsearch:${query}`, { requester: ctx.user }).catch(() => null),
-                            manager.search(`ytsearch:${query}`, { requester: ctx.user }).catch(() => null)
-                        ]), 2200);
-                        res = candidates.find(candidate =>
+                        const isDirectUrl = /^https?:\/\//i.test(query.trim());
+                        const searches = isDirectUrl
+                            ? [manager.search(query.trim(), { requester: ctx.user }).catch(() => null)]
+                            : [
+                                manager.search(`ytmsearch:${query}`, { requester: ctx.user }).catch(() => null),
+                                manager.search(`ytsearch:${query}`, { requester: ctx.user }).catch(() => null)
+                            ];
+                        const completedCandidates = new Array(searches.length);
+                        let searchTimer;
+                        await Promise.race([
+                            Promise.all(searches.map((search, index) => search.then(result => {
+                                completedCandidates[index] = result;
+                            }).catch(() => {
+                                completedCandidates[index] = null;
+                            }))),
+                            new Promise(resolve => {
+                                searchTimer = setTimeout(resolve, 2200);
+                            })
+                        ]);
+                        if (searchTimer) clearTimeout(searchTimer);
+                        res = completedCandidates.find(candidate =>
                             candidate?.tracks?.length && candidate.loadType !== 'empty' && candidate.loadType !== 'error'
                         ) || null;
                     }
