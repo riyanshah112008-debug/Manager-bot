@@ -21,6 +21,7 @@ export LAVALINK_SECURE="${LAVALINK_SECURE:-false}"
 export STARRY_REQUIRE_LAVALINK="${STARRY_REQUIRE_LAVALINK:-true}"
 export STARRY_ENABLE_PUBLIC_LAVALINK_NODES="false"
 export STARRY_DISABLE_STREAM_RESOLVER="1"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
 
 if [ ! -s "$LAVALINK_JAR" ] || [ ! -r "$LAVALINK_CONFIG" ]; then
     echo "[Startup] Lavalink binary or configuration is missing." >&2
@@ -42,7 +43,7 @@ trap stop_services INT TERM EXIT
     cd "$LAVALINK_DIR"
     exec java \
         -Xms128m \
-        -Xmx768m \
+        -Xmx512m \
         -XX:+UseG1GC \
         -XX:MaxGCPauseMillis=150 \
         -jar "$LAVALINK_JAR"
