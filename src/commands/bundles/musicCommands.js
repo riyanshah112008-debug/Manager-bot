@@ -713,9 +713,13 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
+            if (isLavalinkRequired()) {
+                return ctx.reply('Use the `/stay` command for 24/7 mode on the dedicated Render Lavalink player.');
+            }
+
             const targetClient = guard.workerClient || ctx.client;
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            player.connect().catch(() => {});
+            await player.connect();
             player.is247 = !player.is247;
 
             return ctx.reply(`📻 24/7 Voice Channel Persistence is now: **${player.is247 ? '🟢 ENABLED' : '🔴 DISABLED'}**!`);
@@ -742,6 +746,10 @@ const commands = [
                         if (p) { kPlayer = p; break; }
                     }
                 }
+            }
+
+            if (!kPlayer && isLavalinkRequired()) {
+                return ctx.reply('⚠️ Autoplay requires an active Lavalink music session. Use `,play <song>` to start music first.');
             }
 
             let newState = false;
@@ -1380,6 +1388,28 @@ const commands = [
             if (guard.error) return ctx.reply(guard.error);
 
             const targetClient = guard.workerClient || ctx.client;
+            const manager = targetClient.manager;
+            const hasReadyLavalink = Boolean(
+                manager?.shoukaku?.nodes &&
+                Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1)
+            );
+            if (hasReadyLavalink) {
+                let player = manager.getPlayer(ctx.guild.id);
+                if (!player) {
+                    player = await manager.createPlayer({
+                        guildId: ctx.guild.id,
+                        voiceId: guard.voiceChannel.id,
+                        textId: ctx.channel.id,
+                        deaf: true
+                    });
+                } else if (player.voiceId !== guard.voiceChannel.id) {
+                    await player.setVoiceChannel(guard.voiceChannel.id);
+                }
+                return ctx.reply(`👋 **Joined voice channel:** <#${guard.voiceChannel.id}> using Starry's dedicated audio node.`);
+            }
+            if (isLavalinkRequired()) {
+                return ctx.reply('⚠️ Starry’s dedicated Render audio node is not ready. Please retry when Lavalink reconnects.');
+            }
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             await player.connect();
 
