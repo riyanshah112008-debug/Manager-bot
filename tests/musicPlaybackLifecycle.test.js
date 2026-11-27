@@ -58,3 +58,19 @@ test('Starry source selector exposes five services and a separate cancel row', (
 test('Starry keeps Cancel Search available when a provider has no playable results', () => {
   assert.ok(search.includes('components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]'));
 });
+
+test('Kazagumo starts are awaited and only one response is emitted for first-track playback', () => {
+  assert.match(commands, /async function startKazagumoPlayback\\(player\\)/);
+  assert.match(commands, /await player\\.play\\(\\)/);
+  assert.match(commands, /await startKazagumoPlayback\\(player\\)/);
+  assert.match(commands, /playerStart owns the single response after playback starts/);
+});
+
+test('request-channel success updates its persistent controller instead of sending duplicate confirmations', () => {
+  const controller = read('src/modules/musicController.js');
+  assert.match(controller, /await player\\.setVoiceChannel\\(voiceChannel\\.id\\)/);
+  assert.match(controller, /await kazagumoPlayer\\.play\\(\\)/);
+  assert.match(controller, /persistent controller is the single success response/);
+  assert.doesNotMatch(controller, /Added to Queue:/);
+  assert.doesNotMatch(controller, /Enqueued Playlist:/);
+});
