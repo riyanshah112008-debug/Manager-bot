@@ -18,6 +18,7 @@ const { parseSpotifyUrl, resolveSpotifyUrl } = require('../../utils/spotifyApi')
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../../utils/contextHelper');
 const { StarryAudioEngine, formatTime, createProgressBar } = require('../../utils/nativeAudioEngine');
 const { requirePremium } = require('../../utils/premiumHelper');
+const { isLavalinkRequired } = require('../../utils/audioBackendPolicy');
 
 function getVoiceGuard(ctx) {
     const voiceChannel = ctx.member?.voice?.channel;
@@ -370,6 +371,16 @@ const commands = [
                         return ctx.reply('⚠️ Lavalink could not start this track. Your existing queue was kept; retry after the node reconnects and Starry will rebuild any idle player left with a stale track.');
                     }
                 }
+            }
+
+            // Render production must never fall back to the in-process FFmpeg/yt-dlp path.
+            // It can underrun the Discord event loop under load and produce audible gaps/crackles.
+            if (isLavalinkRequired()) {
+                const notice = '⚠️ Starry audio is temporarily unavailable because the dedicated Render Lavalink node is not ready. The unstable local transcoding fallback is disabled in production. Please retry after the audio node reconnects.';
+                if (loadingMsg) {
+                    return loadingMsg.edit({ content: notice, embeds: [], components: [] }).catch(() => null);
+                }
+                return ctx.reply(notice);
             }
 
             // Route 2: Native Audio Engine (Local / Standalone / Cloud fallback)
