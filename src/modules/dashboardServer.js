@@ -28,6 +28,7 @@ const { parseSpotifyUrl, resolveSpotifyUrl } = require('../utils/spotifyApi');
 const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicManager');
 const { setupSupportDeskRoutes } = require('./supportDesk');
 const { setupPhoneSyncRoutes } = require('./phoneSync');
+const { recordAuditEvent, getAuditTrail } = require('../utils/auditTrail');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -85,6 +86,15 @@ function setupDashboardRoutes(app, client) {
     });
 
     app.use('/api/', apiLimiter);
+
+    // Structured audit trail: record who changed what, when, and whether it succeeded.
+    const auditWrite = (req, action, details = {}) => recordAuditEvent({
+        guildId: req.guild?.id || req.params?.id,
+        actor: req.session?.user,
+        action,
+        ...details,
+        req
+    });
 
     // Restrict cross-origin dashboard access to explicitly configured frontends.
     const dashboardOrigins = getDashboardOrigins();
@@ -824,6 +834,7 @@ function setupDashboardRoutes(app, client) {
             if (role && !cluster.ROLE_PRESETS?.[role]) return res.status(400).json({ success: false, error: 'Choose a valid worker specialization.' });
             const worker = await cluster.addToken(token, role, name || 'Worker Bot', req.session.user.id);
             if (!worker?.client?.user) return res.status(502).json({ success: false, error: 'The worker could not connect to Discord.' });
+            await auditWrite(req, 'multibot.worker.connect', { targetType: 'bot', targetId: worker.client.user.id, summary: `Connected worker bot ${worker.name || worker.client.user.tag} as ${role}`, changes: { name, role } });
             return res.status(201).json({
                 success: true,
                 message: 'Worker bot connected and saved to the Starry cluster.',
@@ -846,6 +857,7 @@ function setupDashboardRoutes(app, client) {
             if (!cluster.ROLE_PRESETS?.[role]) return res.status(400).json({ success: false, error: 'Choose a valid worker specialization.' });
             const result = await cluster.setRole(String(req.params.botId), role);
             if (!result.success) return res.status(404).json({ success: false, error: result.message });
+            await auditWrite(req, 'multibot.worker.role', { targetType: 'bot', targetId: req.params.botId, summary: `Changed worker specialization to ${role}`, changes: { role } });
             return res.json({ success: true, message: 'Worker specialization updated.' });
         } catch (error) {
             return res.status(500).json({ success: false, error: 'Could not update worker specialization.' });
@@ -860,6 +872,7 @@ function setupDashboardRoutes(app, client) {
             if (worker.isPrimary) return res.status(400).json({ success: false, error: 'The primary Starry bot cannot be disconnected here.' });
             const removed = await cluster.removeToken(String(req.params.botId));
             if (!removed) return res.status(404).json({ success: false, error: 'Worker bot was not removed.' });
+            await auditWrite(req, 'multibot.worker.disconnect', { targetType: 'bot', targetId: req.params.botId, summary: 'Disconnected and removed worker bot from the cluster' });
             return res.json({ success: true, message: 'Worker disconnected and removed from the saved cluster.' });
         } catch (error) {
             return res.status(500).json({ success: false, error: 'Could not disconnect worker bot.' });
@@ -925,6 +938,7 @@ function setupDashboardRoutes(app, client) {
             const settings = await WelcomeSettings.findOneAndUpdate(
                 { guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true }
             ).lean();
+            await auditWrite(req, 'welcome.update', { targetType: 'channel', targetId: updates.channelId, summary: 'Updated welcome settings', changes: updates });
             res.json({ success: true, settings, message: 'Welcome settings saved. New members will receive the configured welcome card.' });
         } catch (error) {
             console.error('Dashboard welcome settings save failed:', error);
@@ -994,6 +1008,7 @@ function setupDashboardRoutes(app, client) {
                 options.entityMetadata = { location };
             }
             const event = await guild.scheduledEvents.create(options);
+            await auditWrite(req, 'events.create', { targetType: 'event', targetId: event.id, summary: `Created scheduled event ${name}`, changes: { name, type, start: start.toISOString(), end: end.toISOString() } });
             res.status(201).json({ success: true, message: 'Discord scheduled event created.', event: {
                 id: event.id, name: event.name, start: event.scheduledStartAt?.toISOString() || null,
                 end: event.scheduledEndAt?.toISOString() || null, status: event.status,
@@ -1015,6 +1030,7 @@ function setupDashboardRoutes(app, client) {
             const event = await guild.scheduledEvents.fetch(req.params.eventId).catch(() => null);
             if (!event || event.guildId !== guild.id) return res.status(404).json({ success: false, error: 'Scheduled event not found in this server.' });
             await event.delete('Cancelled from the Starry dashboard');
+            await auditWrite(req, 'events.delete', { targetType: 'event', targetId: req.params.eventId, summary: `Cancelled scheduled event ${event.name}` });
             res.json({ success: true, message: 'Scheduled event cancelled.' });
         } catch (error) {
             console.error('Dashboard scheduled event delete failed:', error);
@@ -1115,6 +1131,7 @@ function setupDashboardRoutes(app, client) {
             }
             const settings = await LevelSettings.findOneAndUpdate({ guildId: guild.id }, { $set: updates }, { new: true, upsert: true, setDefaultsOnInsert: true });
             leveling.settingsCache.set(guild.id, { ...(leveling.settingsCache.get(guild.id) || {}), ...updates });
+            await auditWrite(req, 'leveling.update', { targetType: 'settings', summary: 'Updated leveling settings', changes: updates });
             res.json({ success: true, settings, message: 'Leveling settings saved.' });
         } catch (error) {
             console.error('Dashboard leveling settings save failed:', error);
@@ -1313,6 +1330,7 @@ function setupDashboardRoutes(app, client) {
                 setCachedTheme(guild.id, settings.embedTheme?.toObject?.() || settings.embedTheme);
             }
             if (payload.logging && typeof client.invalidateLogSettings === 'function') client.invalidateLogSettings(guild.id);
+            await auditWrite(req, 'settings.update', { targetType: 'settings', summary: 'Updated server settings', changes: Object.fromEntries(Object.keys(payload).map(key => [key, payload[key]])) });
             res.json({ success: true, message: 'Settings saved successfully!', settings });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
@@ -1365,6 +1383,7 @@ function setupDashboardRoutes(app, client) {
             embed.setTimestamp();
 
             await channel.send({ embeds: [embed] });
+            await auditWrite(req, 'embed.send', { targetType: 'channel', targetId: channelId, summary: `Dispatched embed to #${channel.name}` });
             res.json({ success: true, message: `Embed successfully dispatched to #${channel.name}!` });
         } catch (e) {
             res.status(e.status || 500).json({ success: false, error: e.message });
@@ -1551,41 +1570,68 @@ function setupDashboardRoutes(app, client) {
             if (action === 'kick') {
                 if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
                 await member.kick(reason || 'Kicked via Starry Web Dashboard');
+                await auditWrite(req, 'mod.kick', { targetType: 'user', targetId, summary: `Kicked ${member.user.tag}`, changes: { reason } });
                 return res.json({ success: true, message: `👢 Successfully kicked ${member.user.tag}` });
             }
             if (action === 'ban') {
                 await guild.bans.create(targetId, { reason: reason || 'Banned via Starry Web Dashboard' });
+                await auditWrite(req, 'mod.ban', { targetType: 'user', targetId, summary: `Banned user ${targetId}`, changes: { reason } });
                 return res.json({ success: true, message: `🔨 Successfully banned user ID: ${targetId}` });
             }
             if (action === 'unban') {
                 await guild.bans.remove(targetId, reason || 'Unbanned via Starry Web Dashboard');
+                await auditWrite(req, 'mod.unban', { targetType: 'user', targetId, summary: `Unbanned user ${targetId}`, changes: { reason } });
                 return res.json({ success: true, message: `🔓 Successfully unbanned user ID: ${targetId}` });
             }
             if (action === 'timeout') {
                 if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
                 const durMs = (Number(durationMinutes) || 60) * 60 * 1000;
                 await member.timeout(durMs, reason || 'Timed out via Starry Web Dashboard');
+                await auditWrite(req, 'mod.timeout', { targetType: 'user', targetId, summary: `Timed out ${member.user.tag} for ${durationMinutes || 60}m`, changes: { reason, durationMinutes } });
                 return res.json({ success: true, message: `⏳ Successfully timed out ${member.user.tag} for ${durationMinutes || 60}m` });
             }
             if (action === 'role_add') {
                 if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
                 await member.roles.add(roleId);
+                await auditWrite(req, 'mod.role_add', { targetType: 'user', targetId, summary: `Added a role to ${member.user.tag}`, changes: { roleId } });
                 return res.json({ success: true, message: `✅ Role added to ${member.user.tag}` });
             }
             if (action === 'role_remove') {
                 if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
                 await member.roles.remove(roleId);
+                await auditWrite(req, 'mod.role_remove', { targetType: 'user', targetId, summary: `Removed a role from ${member.user.tag}`, changes: { roleId } });
                 return res.json({ success: true, message: `➖ Role removed from ${member.user.tag}` });
             }
             if (action === 'nickname') {
                 if (!member) return res.status(404).json({ success: false, error: 'Member not found in server.' });
                 await member.setNickname(nickname || null);
+                await auditWrite(req, 'mod.nickname', { targetType: 'user', targetId, summary: `Updated nickname for ${member.user.tag}`, changes: { nickname } });
                 return res.json({ success: true, message: `✏️ Nickname updated for ${member.user.tag}` });
             }
 
             res.status(400).json({ success: false, error: 'Unknown moderation action.' });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // ==========================================
+    // 🔍 DASHBOARD AUDIT TRAIL (ADMIN GUARDED)
+    // ==========================================
+
+    // GET /api/guild/:id/audit - Recent dashboard configuration changes for this server
+    app.get('/api/guild/:id/audit', requireGuildAdmin, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'no-store, private');
+            const entries = await getAuditTrail(req.guild.id, {
+                limit: req.query.limit,
+                action: req.query.action,
+                actorId: req.query.actorId
+            });
+            res.json({ success: true, entries });
+        } catch (error) {
+            console.error('Dashboard audit trail fetch failed:', error);
+            res.status(500).json({ success: false, error: 'Could not load the audit trail.' });
         }
     });
 
@@ -1645,6 +1691,7 @@ function setupDashboardRoutes(app, client) {
             if (!name) return res.status(400).json({ success: false, error: 'Role name is required.' });
 
             const result = await boosterEngine.createBoosterRole(req.guild, req.member, { name, color, icon });
+            await auditWrite(req, 'booster.role.create', { targetType: 'role', targetId: result.role?.id, actor: req.member?.user, summary: `Created custom booster role ${result.doc?.name || name}`, changes: { name, color } });
             res.json({
                 success: true,
                 message: `✨ Custom booster role [${result.doc.name}] created successfully!`,
@@ -1665,6 +1712,7 @@ function setupDashboardRoutes(app, client) {
         try {
             const { name, color, icon } = req.body;
             const result = await boosterEngine.updateBoosterRole(req.guild, req.member, { name, color, icon });
+            await auditWrite(req, 'booster.role.update', { targetType: 'role', targetId: result.role?.id, actor: req.member?.user, summary: `Updated custom booster role ${result.doc?.name || name || ''}`, changes: { name, color } });
             res.json({
                 success: true,
                 message: '🎨 Custom booster role updated!',
@@ -1690,6 +1738,7 @@ function setupDashboardRoutes(app, client) {
             if (!friendMember) return res.status(404).json({ success: false, error: 'Friend not found in this server.' });
 
             const result = await boosterEngine.shareBoosterRole(req.guild, req.member, friendMember);
+            await auditWrite(req, 'booster.role.share', { targetType: 'user', targetId: friendId, actor: req.member?.user, summary: `Shared custom booster role with ${friendMember.user.tag}` });
             res.json({
                 success: true,
                 message: `💜 Successfully shared your custom role with ${friendMember.user.tag}!`,
@@ -1708,6 +1757,7 @@ function setupDashboardRoutes(app, client) {
 
             const friendMember = await req.guild.members.fetch(friendId).catch(() => null);
             const result = await boosterEngine.unshareBoosterRole(req.guild, req.member, friendMember || { id: friendId });
+            await auditWrite(req, 'booster.role.unshare', { targetType: 'user', targetId: friendId, actor: req.member?.user, summary: 'Revoked custom booster role from friend' });
             res.json({
                 success: true,
                 message: '➖ Role revoked from friend.',
@@ -1722,6 +1772,7 @@ function setupDashboardRoutes(app, client) {
     app.delete('/api/guild/:id/booster-roles', actionLimiter, requireGuildMember, async (req, res) => {
         try {
             await boosterEngine.deleteBoosterRole(req.guild, req.member);
+            await auditWrite(req, 'booster.role.delete', { targetType: 'role', actor: req.member?.user, summary: 'Deleted own custom booster role' });
             res.json({ success: true, message: '🗑️ Your custom booster role has been deleted.' });
         } catch (e) {
             res.status(400).json({ success: false, error: e.message });

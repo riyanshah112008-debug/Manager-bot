@@ -48,6 +48,11 @@ const suites = [
   ['Leveling control panel', '--test', 'tests/levelingControlPanel.test.js'],
   ['Leveling module syntax', '--check', 'src/modules/leveling.js'],
   ['Suspicious-account monitor syntax', '--check', 'src/modules/susAccount.js'],
+  ['Dashboard audit trail', '--test', 'tests/auditTrail.test.js'],
+  ['Audit trail util syntax', '--check', 'src/utils/auditTrail.js'],
+  ['Audit event model syntax', '--check', 'src/models/AuditEvent.js'],
+  ['Dashboard server syntax', '--check', 'src/modules/dashboardServer.js'],
+  ['Workspace audit page syntax', '--check', 'public/workspace.js'],
   ['Suspicious-member monitoring policy', '--test', 'tests/susAccountMonitoring.test.js'],
   ['Slash command deployment syntax', '--check', 'deploy-commands.js']
 ];
