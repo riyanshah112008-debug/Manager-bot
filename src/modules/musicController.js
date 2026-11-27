@@ -578,6 +578,7 @@ class MusicControllerEngine {
                     await kazagumoPlayer.setVoiceChannel(voiceChannel.id);
                 }
 
+                let preservedQueue = [];
                 const pendingStartAt = Number(kazagumoPlayer.data?.get('starryPlaybackStartPending') || 0);
                 if (pendingStartAt && Date.now() - pendingStartAt >= 20000) {
                     kazagumoPlayer.data.delete('starryPlaybackStartPending');
@@ -587,7 +588,7 @@ class MusicControllerEngine {
                     (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
                 );
                 if (staleIdleTrack) {
-                    const waitingTracks = Array.from(kazagumoPlayer.queue || []);
+                    preservedQueue = Array.from(kazagumoPlayer.queue || []);
                     await kazagumoPlayer.destroy();
                     kazagumoPlayer = await manager.createPlayer({
                         guildId: message.guild.id,
@@ -596,7 +597,6 @@ class MusicControllerEngine {
                         deaf: true
                     });
                     createdPlayer = true;
-                    for (const queuedTrack of waitingTracks) kazagumoPlayer.queue.add(queuedTrack);
                 }
 
                 if (res.loadType === 'playlist') {
@@ -604,6 +604,7 @@ class MusicControllerEngine {
                 } else {
                     kazagumoPlayer.queue.add(res.tracks[0]);
                 }
+                for (const queuedTrack of preservedQueue) kazagumoPlayer.queue.add(queuedTrack);
                 if (!kazagumoPlayer.playing && !kazagumoPlayer.paused) {
                     kazagumoPlayer.data?.set?.('starryPlaybackStartPending', Date.now());
                     await kazagumoPlayer.play();
