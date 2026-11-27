@@ -21,7 +21,11 @@ RUN mkdir -p /opt/lavalink/plugins \
     && curl --fail --location --silent --show-error --retry 4 --retry-delay 2 \
        "https://github.com/lavalink-devs/Lavalink/releases/download/${LAVALINK_VERSION}/Lavalink.jar" \
        --output /opt/lavalink/Lavalink.jar \
-    && test -s /opt/lavalink/Lavalink.jar
+    && test -s /opt/lavalink/Lavalink.jar \
+    && curl --fail --location --silent --show-error --retry 4 --retry-delay 2 \
+       "https://maven.lavalink.dev/releases/dev/lavalink/youtube/youtube-plugin/1.18.2/youtube-plugin-1.18.2.jar" \
+       --output /opt/lavalink/plugins/youtube-plugin-1.18.2.jar \
+    && test -s /opt/lavalink/plugins/youtube-plugin-1.18.2.jar
 
 WORKDIR /app
 
