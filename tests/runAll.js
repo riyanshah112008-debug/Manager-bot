@@ -16,6 +16,7 @@ const suites = [
   ['Spotify OAuth redirect URI', '--test', 'tests/spotifyOAuthRedirect.test.js'],
   ['Verification', 'tests/verification.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
+  ['Music audio backend policy', '--test', 'tests/audioBackendPolicy.test.js'],
   ['Music playback lifecycle', '--test', 'tests/musicPlaybackLifecycle.test.js'],
   ['Interactive module control panel', '--test', 'tests/moduleControlPanel.test.js'],
   ['Music 24/7 and automatic mastering', '--test', 'tests/musicStayConnected.test.js'],
