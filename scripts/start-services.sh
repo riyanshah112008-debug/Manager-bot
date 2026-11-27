@@ -73,7 +73,8 @@ if [ "$attempt" -ge 180 ]; then
     exit 1
 fi
 
-npm start &
+npm run deploy
+node src/index.js &
 BOT_PID=$!
 
 # If either critical process exits, stop the other one and let Render restart
@@ -84,12 +85,12 @@ done
 
 if ! kill -0 "$LAVALINK_PID" 2>/dev/null; then
     echo "[Supervisor] Lavalink exited; stopping Starry." >&2
-    wait "$LAVALINK_PID" || STATUS=$?
-    exit "${STATUS:-1}"
+    wait "$LAVALINK_PID" || true
+    exit 1
 fi
 
 if ! kill -0 "$BOT_PID" 2>/dev/null; then
     echo "[Supervisor] Starry exited; stopping Lavalink." >&2
-    wait "$BOT_PID" || STATUS=$?
-    exit "${STATUS:-1}"
+    wait "$BOT_PID" || true
+    exit 1
 fi
