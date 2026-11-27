@@ -240,12 +240,23 @@ test('native FFmpeg clear path adds no permanent limiter or resampler', () => {
 });
 
 
-test('native Opus encoding uses real-time complexity rather than maximum CPU complexity', () => {
+test('every native Opus encoder, including seek, uses real-time complexity', () => {
     const source = require('node:fs').readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
-    assert.equal((source.match(/'-compression_level', '5'/g) || []).length, 2,
-        'all native stream and seek encoders should use the real-time complexity setting');
+    const encoderArgs = [...source.matchAll(/new prism\\.FFmpeg\\(\\{\\s*args:\\s*\\[([\\s\\S]*?)\\]\\s*\\}\\)/g)]
+        .map(match => match[1])
+        .filter(args => args.includes("'libopus'"));
+    assert.equal(encoderArgs.length, 3, 'stream, file and seek paths must each define an Opus encoder');
+    for (const args of encoderArgs) {
+        assert.match(args, /'-compression_level', '5'/,
+            'each real-time Opus encoder must use complexity 5');
+    }
     assert.doesNotMatch(source, /'-compression_level', '10'/,
         'maximum encoder complexity can starve the real-time audio loop on small instances');
+});
+
+test('processed filter profiles retain explicitly configured peak limiters', () => {
+    const [, filterGraph] = buildAudioFilterArgs('volume=1.0,alimiter=limit=0.97', 100);
+    assert.match(filterGraph, /alimiter=limit=0\\.97/i);
 });
 
 test('native custom EQ reserves cumulative boost plus transient headroom', () => {
