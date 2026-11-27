@@ -17,6 +17,7 @@ const suites = [
   ['Verification', 'tests/verification.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
   ['Music playback lifecycle', '--test', 'tests/musicPlaybackLifecycle.test.js'],
+  ['Interactive module control panel', '--test', 'tests/moduleControlPanel.test.js'],
   ['Music 24/7 and automatic mastering', '--test', 'tests/musicStayConnected.test.js'],
   ['Music 24/7 command syntax', '--check', 'src/commands/music/stay.js'],
   ['Music native engine syntax', '--check', 'src/utils/nativeAudioEngine.js'],

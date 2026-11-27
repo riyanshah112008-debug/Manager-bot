@@ -1240,6 +1240,7 @@ function createMusicManager(client) {
 
     // Player Start Event
     manager.on('playerStart', async (player, track) => {
+        player.data.delete('starryPlaybackStartPending');
         player.data.set('previousTrack', track);
         // Premium Level 3 servers may request Discord's full 384 kbps channel bitrate.
         // The channel setting is independent of DSP; keep the default playback path flat.
@@ -1255,6 +1256,20 @@ function createMusicManager(client) {
         try {
             const musicController = require('../modules/musicController');
             if (musicController.isRequestChannel(player.guildId, player.textId)) {
+                const interaction = player.data.get('interaction');
+                const loadingMessage = player.data.get('loadingMessage');
+                player.data.delete('interaction');
+                player.data.delete('loadingMessage');
+                if (interaction) {
+                    await interaction.deleteReply().catch(() =>
+                        interaction.editReply({
+                            content: '🎵 Playback started. Use the persistent music controller for controls.',
+                            embeds: [],
+                            components: []
+                        }).catch(() => {})
+                    );
+                }
+                if (loadingMessage) await loadingMessage.delete().catch(() => {});
                 await musicController.update(player.guildId, client).catch(() => {});
                 return;
             }
@@ -1354,11 +1369,33 @@ function createMusicManager(client) {
         }
     });
 
-    manager.on('playerResolveError', (player, track, message) => {
+    const completePendingPlaybackFailure = async (player, reason) => {
+        if (!player?.data?.get('starryPlaybackStartPending')) return;
+        player.data.delete('starryPlaybackStartPending');
+        const interaction = player.data.get('interaction');
+        const loadingMessage = player.data.get('loadingMessage');
+        player.data.delete('interaction');
+        player.data.delete('loadingMessage');
+        const payload = {
+            content: `⚠️ Starry could not start this track: ${String(reason || 'audio source unavailable').slice(0, 300)}`,
+            embeds: [],
+            components: []
+        };
+        if (interaction) {
+            await interaction.editReply(payload).catch(() => {});
+        } else if (loadingMessage) {
+            await loadingMessage.edit(payload).catch(() => {});
+            setTimeout(() => loadingMessage.delete().catch(() => {}), 8000);
+        }
+    };
+
+    manager.on('playerResolveError', async (player, track, message) => {
         console.warn(`⚠️ [Music PlayerResolveError] Guild ${player?.guildId}: ${track?.title} - ${message}`);
+        await completePendingPlaybackFailure(player, message || 'track resolution failed');
     });
 
     manager.on('playerException', async (player, track, exception) => {
+        await completePendingPlaybackFailure(player, exception?.message || exception || 'Lavalink playback exception');
         console.warn(`⚠️ [Music Player Exception] Guild ${player?.guildId}:`, exception?.message || exception || 'Node failover event');
         const isFatal = exception?.severity === 'fault' || exception?.severity === 'FATAL' || (exception?.message && (exception.message.includes('Load failed') || exception.message.includes('not available')));
         if (isFatal && player && player.queue && player.queue.length > 0) {

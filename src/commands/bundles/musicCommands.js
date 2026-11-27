@@ -46,6 +46,27 @@ function getVoiceGuard(ctx) {
     return { voiceChannel, botMember, workerClient: ctx.client };
 }
 
+async function startKazagumoPlayback(player, track = null) {
+    if (!player) throw new Error('Music player could not be initialized.');
+    if (player.playing || player.paused) return false;
+
+    const pendingSince = Number(player.data?.get('starryPlaybackStartPending') || 0);
+    if (pendingSince && Date.now() - pendingSince < 20000) return false;
+    player.data?.delete('starryPlaybackStartPending');
+    player.data?.set('starryPlaybackStartPending', Date.now());
+
+    try {
+        // Kazagumo's play(track) force-plays the requested track and retains the
+        // previous current track in its queue; use it only for a confirmed stale idle player.
+        if (track) await player.play(track);
+        else await player.play();
+        return true;
+    } catch (error) {
+        player.data?.delete('starryPlaybackStartPending');
+        throw error;
+    }
+}
+
 function getActivePlayer(client, guildId) {
     let kPlayer = client.manager?.getPlayer(guildId);
     if (!kPlayer && client.multiBot?.instances) {
@@ -142,6 +163,8 @@ const commands = [
 
             // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
             if (hasLavalink) {
+                let kazagumoPlayer = null;
+                let createdKazagumoPlayer = false;
                 try {
                     let res;
                     const spotifyLink = parseSpotifyUrl(query);
@@ -195,29 +218,45 @@ const commands = [
                             textId: ctx.channel.id,
                             deaf: true
                         });
+                        createdKazagumoPlayer = true;
                     }
+                    kazagumoPlayer = player;
 
                     if (player.voiceId !== guard.voiceChannel.id) {
-                        player.setVoiceChannel(guard.voiceChannel.id);
+                        await player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
-                    if (ctx.isSlash && ctx.interaction) {
-                        player.data.set('interaction', ctx.interaction);
-                    }
-                    if (loadingMsg) {
-                        player.data.set('loadingMessage', loadingMsg);
+                    let preservedQueue = [];
+                    const pendingStartAt = Number(player.data?.get('starryPlaybackStartPending') || 0);
+                    if (pendingStartAt && Date.now() - pendingStartAt >= 20000) player.data.delete('starryPlaybackStartPending');
+                    const staleIdleTrack = Boolean(
+                        !player.playing && !player.paused && player.queue.current &&
+                        (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
+                    );
+                    if (staleIdleTrack) {
+                        preservedQueue = Array.from(player.queue || []);
+                        await player.destroy();
+                        player = await manager.createPlayer({
+                            guildId: ctx.guild.id,
+                            voiceId: guard.voiceChannel.id,
+                            textId: ctx.channel.id,
+                            deaf: true
+                        });
+                        kazagumoPlayer = player;
+                        createdKazagumoPlayer = true;
                     }
 
                     if (res.loadType === 'playlist') {
-                        for (const track of res.tracks) {
-                            player.queue.add(track);
+                        for (const track of res.tracks) player.queue.add(track);
+                        for (const queuedTrack of preservedQueue) player.queue.add(queuedTrack);
+                        const shouldStart = !player.playing && !player.paused && !player.data?.get('starryPlaybackStartPending');
+                        if (shouldStart) {
+                            if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
+                            if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
                         }
-                        if (!player.playing && !player.paused) player.play();
-
-                        if (loadingMsg) {
-                            loadingMsg.delete().catch(() => {});
-                            player.data.delete('loadingMessage');
-                        }
+                        await startKazagumoPlayback(player);
+                        if (shouldStart) return; // playerStart owns the single response after playback starts
+                        if (loadingMsg) loadingMsg.delete().catch(() => {});
 
                         const totalDurationMs = res.tracks.reduce((acc, t) => acc + (t.length || 0), 0);
                         const totalDurationStr = formatTime(totalDurationMs);
@@ -249,10 +288,14 @@ const commands = [
                         return ctx.reply({ embeds: [embed] });
                     } else {
                         const track = res.tracks[0];
-                        if (!player.playing && !player.paused && !player.queue.current) {
+                        if (!player.playing && !player.paused && !player.data?.get('starryPlaybackStartPending')) {
+                            if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
+                            if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
                             player.queue.add(track);
-                            player.play();
-                            // loadingMsg will be deleted by playerStart handler in musicManager.js
+                            for (const queuedTrack of preservedQueue) player.queue.add(queuedTrack);
+                            await startKazagumoPlayback(player);
+                            // playerStart edits the pending response after playback starts
+                            return;
                         } else {
                             if (loadingMsg) {
                                 loadingMsg.delete().catch(() => {});
@@ -280,6 +323,12 @@ const commands = [
                     return;
                 } catch (kErr) {
                     console.warn('⚠️ [Kazagumo Lavalink Playback Notice]:', kErr.message || kErr);
+                    if (createdKazagumoPlayer && kazagumoPlayer) {
+                        await kazagumoPlayer.destroy().catch(() => {});
+                    } else if (kazagumoPlayer) {
+                        if (loadingMsg) loadingMsg.delete().catch(() => {});
+                        return ctx.reply('⚠️ Lavalink could not start this track. Your existing queue was kept; retry after the node reconnects and Starry will rebuild any idle player left with a stale track.');
+                    }
                 }
             }
 
@@ -305,13 +354,14 @@ const commands = [
                     }
                     if (!player.currentTrack) {
                         if (ctx.isSlash && ctx.interaction) {
-                            await ctx.reply('⏳ Connecting to voice and starting the playlist. Now Playing will appear after audio is confirmed.');
                             player.loadingMessage = await ctx.interaction.fetchReply().catch(() => null);
                         } else {
                             player.loadingMessage = loadingMsg;
                         }
-                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
+                        await player.playNext();
+                        return; // Native engine owns the single now-playing response
                     }
+                    if (loadingMsg) loadingMsg.delete().catch(() => {});
 
                     const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
                     const totalDurationStr = formatTime(totalDurationMs);
@@ -352,7 +402,7 @@ const commands = [
                         } else {
                             player.loadingMessage = loadingMsg;
                         }
-                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
+                        await player.playNext();
                         return;
                     } else {
                         if (loadingMsg) {

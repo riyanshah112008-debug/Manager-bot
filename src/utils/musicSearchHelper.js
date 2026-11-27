@@ -23,7 +23,7 @@ const searchSessions = new Map();
 const autocompleteCache = new Map();
 
 // Clean up stale sessions every 60 seconds
-setInterval(() => {
+const searchCleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [id, session] of searchSessions.entries()) {
         if (now - session.createdAt > 300000) { // 5 minutes TTL
@@ -36,6 +36,8 @@ setInterval(() => {
         }
     }
 }, 60000);
+// Background cache cleanup must not keep short-lived scripts and test workers alive.
+searchCleanupTimer.unref?.();
 
 function formatDuration(ms) {
     if (!ms || isNaN(ms)) return '0:00';

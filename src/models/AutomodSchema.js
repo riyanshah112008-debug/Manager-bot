@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 
 const guildSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
-    enabled: { type: Boolean, default: true }
+    enabled: { type: Boolean, default: true },
+    linksEnabled: { type: Boolean, default: true },
+    emojisEnabled: { type: Boolean, default: true }
 });
 
 const channelSchema = new mongoose.Schema({

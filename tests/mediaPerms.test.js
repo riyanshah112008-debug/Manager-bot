@@ -109,18 +109,19 @@ async function runTests() {
 
     // 2. AutoMod Server Controls
     console.log('\n📁 2. AutoMod Server-Wide Controls & Helpers');
-    it('Validates AutoMod server toggle and status methods', () => {
+    await asyncIt('Validates AutoMod server toggle and status methods', async () => {
         const automodHelper = require('../src/utils/automodHelper');
         assert.strictEqual(typeof automodHelper.getGuildStatus, 'function');
         assert.strictEqual(typeof automodHelper.setGuildStatus, 'function');
         assert.strictEqual(typeof automodHelper.createServerAutomodButtons, 'function');
         assert.strictEqual(typeof automodHelper.createChannelAutomodButtons, 'function');
 
-        const testGuildId = 'test_am_guild_' + Date.now();
-        automodHelper.setGuildStatus(testGuildId, false);
+        // Discord guild IDs are snowflakes, and persistence is asynchronous.
+        const testGuildId = '123456789012345678';
+        await automodHelper.setGuildStatus(testGuildId, false);
         assert.strictEqual(automodHelper.getGuildStatus(testGuildId), false);
 
-        automodHelper.setGuildStatus(testGuildId, true);
+        await automodHelper.setGuildStatus(testGuildId, true);
         assert.strictEqual(automodHelper.getGuildStatus(testGuildId), true);
     });
 

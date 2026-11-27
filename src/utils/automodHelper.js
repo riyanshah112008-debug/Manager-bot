@@ -21,6 +21,7 @@ const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.r
 
 // Fast In-Memory Caches for Zero-Latency Message Filtering
 const guildCache = new Map();
+const guildSubmoduleCache = new Map();
 const channelCache = new Map();
 
 /**
@@ -30,7 +31,10 @@ async function initAutomodCaches() {
     try {
         if (isDbConnected()) {
             const gSettings = await AutomodGuild.find().lean();
-            gSettings.forEach(s => guildCache.set(s.guildId, s.enabled));
+            gSettings.forEach(s => {
+                guildCache.set(s.guildId, s.enabled);
+                guildSubmoduleCache.set(s.guildId, { links: s.linksEnabled !== false, emojis: s.emojisEnabled !== false });
+            });
 
             const cSettings = await AutomodChannel.find().lean();
             cSettings.forEach(s => channelCache.set(s.channelId, { links: s.links, emojis: s.emojis }));
@@ -66,31 +70,88 @@ function getGuildStatus(guildId) {
  * @param {boolean} enabled
  */
 async function setGuildStatus(guildId, enabled) {
-    if (!guildId) return false;
-    guildCache.set(guildId, enabled);
+    if (!/^\d{17,20}$/.test(String(guildId || '')) || typeof enabled !== 'boolean') {
+        throw new Error('Invalid AutoMod guild setting.');
+    }
 
-    // Save to local JSON database for persistent offline resilience
+    let persisted = false;
     try {
         if (db.updateGuildSettings && db.getGuildSettings) {
             const current = db.getGuildSettings(guildId) || {};
-            const automod = current.automod || {};
-            automod.enabled = enabled;
+            const automod = { ...(current.automod || {}), enabled };
             db.updateGuildSettings(guildId, { automod });
+            persisted = true;
         }
-    } catch (_) {}
+    } catch (error) {
+        console.warn('[AutoMod] Local guild status persistence failed:', error.message);
+    }
 
-    // Save to MongoDB if online
     if (isDbConnected()) {
         try {
             await AutomodGuild.findOneAndUpdate(
-                { guildId },
-                { enabled },
-                { upsert: true, new: true }
+                { guildId: { $eq: guildId } },
+                { $set: { enabled } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
             );
-        } catch (err) {
-            console.error('❌ [AutoMod] Error saving guild status:', err.message);
+            persisted = true;
+        } catch (error) {
+            console.warn('[AutoMod] MongoDB guild status persistence failed:', error.message);
         }
     }
+    if (!persisted) throw new Error('Database is unavailable; AutoMod setting was not changed.');
+    guildCache.set(guildId, enabled);
+    return enabled;
+}
+
+function getGuildSubmoduleStatus(guildId, key) {
+    if (!guildId || !['links', 'emojis'].includes(key)) return true;
+    if (guildSubmoduleCache.has(guildId)) {
+        const cached = guildSubmoduleCache.get(guildId);
+        if (typeof cached?.[key] === 'boolean') return cached[key];
+    }
+    try {
+        const localSettings = db.getGuildSettings ? db.getGuildSettings(guildId) : null;
+        const savedValue = localSettings?.automod?.[key];
+        if (typeof savedValue === 'boolean') {
+            const current = guildSubmoduleCache.get(guildId) || { links: true, emojis: true };
+            guildSubmoduleCache.set(guildId, { ...current, [key]: savedValue });
+            return savedValue;
+        }
+    } catch (_) {}
+    return true;
+}
+
+async function setGuildSubmoduleStatus(guildId, key, enabled) {
+    if (!/^\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
+        throw new Error('Invalid AutoMod submodule setting.');
+    }
+    const field = key === 'links' ? 'linksEnabled' : 'emojisEnabled';
+    let persisted = false;
+    if (isDbConnected()) {
+        try {
+            await AutomodGuild.findOneAndUpdate(
+                { guildId: { $eq: guildId } },
+                { $set: { [field]: enabled } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+            persisted = true;
+        } catch (error) {
+            console.warn('[AutoMod] MongoDB submodule persistence failed:', error.message);
+        }
+    }
+    try {
+        if (db.getGuildSettings && db.updateGuildSettings) {
+            const currentSettings = db.getGuildSettings(guildId) || {};
+            const automod = { ...(currentSettings.automod || {}), [key]: enabled };
+            db.updateGuildSettings(guildId, { automod });
+            persisted = true;
+        }
+    } catch (error) {
+        console.warn('[AutoMod] Local submodule persistence failed:', error.message);
+    }
+    if (!persisted) throw new Error('Database is unavailable; AutoMod setting was not changed.');
+    const current = guildSubmoduleCache.get(guildId) || { links: true, emojis: true };
+    guildSubmoduleCache.set(guildId, { ...current, [key]: enabled });
     return enabled;
 }
 
@@ -301,42 +362,40 @@ async function resolveChannel(ctx, args = []) {
 function buildChannelAutomodEmbed(guild, channel, settings, isGuildEnabled = true) {
     const isBothActive = settings.linksActive && settings.emojisActive;
     const isBothDisabled = !settings.linksActive && !settings.emojisActive;
-    
-    let color = '#2ECC71'; // Green
-    if (isBothDisabled) color = '#E74C3C'; // Red
-    else if (!isBothActive) color = '#F1C40F'; // Yellow
 
-    const embed = new EmbedBuilder()
+    let color = '#2ECC71';
+    if (isBothDisabled) color = '#E74C3C';
+    else if (!isBothActive) color = '#F1C40F';
+
+    return new EmbedBuilder()
         .setColor(color)
-        .setTitle(`🛡️ Starry AutoMod • Channel Configuration`)
+        .setTitle('🛡️ Starry AutoMod • Channel Configuration')
         .setDescription(`Channel: <#${channel.id}> (\`${channel.name || channel.id}\`)\nServer: **${guild.name}**`)
         .addFields(
             {
                 name: '🔗 Link Protection',
-                value: settings.linksActive 
-                    ? '🟢 **ACTIVE (Blocking Links)**\n*Unauthorized external links & invites are deleted & timed out.*' 
+                value: settings.linksActive
+                    ? '🟢 **ACTIVE (Blocking Links)**\n*Unauthorized external links & invites are deleted & timed out.*'
                     : '🔴 **DISABLED (Links Allowed)**\n*Members can freely post links in this channel.*',
                 inline: true
             },
             {
                 name: '😀 Emoji Spam Filter',
-                value: settings.emojisActive 
-                    ? '🟢 **ACTIVE (Blocking 5+ Emojis)**\n*Spamming 5 or more emojis triggers auto-timeout.*' 
+                value: settings.emojisActive
+                    ? '🟢 **ACTIVE (Blocking 5+ Emojis)**\n*Spamming 5 or more emojis triggers auto-timeout.*'
                     : '🔴 **DISABLED (Emojis Allowed)**\n*Members can post multiple emojis without restriction.*',
                 inline: true
             },
             {
                 name: '🌐 Server AutoMod Engine',
-                value: isGuildEnabled 
-                    ? '🟢 **Globally Active** across entire server' 
+                value: isGuildEnabled
+                    ? '🟢 **Globally Active** across entire server'
                     : '🔴 **DISABLED / SUSPENDED Server-Wide** *(Use `,automod server on` or button below to enable)*',
                 inline: false
             }
         )
         .setFooter({ text: '💡 Use buttons below or type ,automod server on/off to manage server-wide.' })
         .setTimestamp();
-
-    return embed;
 }
 
 /**
@@ -384,15 +443,15 @@ function createChannelAutomodButtons(channelId, settings, isGuildEnabled = true)
  * Build Server-Wide AutoMod Dashboard Embed
  */
 function buildServerAutomodEmbed(guild, isGuildEnabled = true, overrides = []) {
-    const embed = new EmbedBuilder()
+    return new EmbedBuilder()
         .setColor(isGuildEnabled ? '#2ECC71' : '#ED4245')
-        .setTitle(`🛡️ Starry AutoMod • Server Dashboard`)
+        .setTitle('🛡️ Starry AutoMod • Server Dashboard')
         .setDescription(`Server: **${guild.name}** (\`${guild.id}\`)\nAutonomous Real-time Server Moderation & Spam Shield`)
         .addFields(
             {
                 name: '🌐 Server AutoMod Engine',
-                value: isGuildEnabled 
-                    ? '🟢 **Globally Active**\n*All protective filters are actively shielding the entire server.*' 
+                value: isGuildEnabled
+                    ? '🟢 **Globally Active**\n*All protective filters are actively shielding the entire server.*'
                     : '🔴 **SUSPENDED / DISABLED**\n*Automated deletions and mutes are turned off server-wide.*',
                 inline: false
             },
@@ -408,16 +467,14 @@ function buildServerAutomodEmbed(guild, isGuildEnabled = true, overrides = []) {
             },
             {
                 name: '📋 Channel Overrides',
-                value: overrides.length > 0 
-                    ? `\`${overrides.length}\` channel(s) customized with channel-specific rules.\n*(Click **View Overrides** below)*` 
+                value: overrides.length > 0
+                    ? `\`${overrides.length}\` channel(s) customized with channel-specific rules.\n*(Click **View Overrides** below)*`
                     : 'No channel overrides active. All channels use default protection.',
                 inline: false
             }
         )
         .setFooter({ text: '💡 Use buttons below or type ,automod server on / off to toggle.' })
         .setTimestamp();
-
-    return embed;
 }
 
 /**
@@ -447,10 +504,13 @@ function createServerAutomodButtons(channelId, isGuildEnabled = true) {
 
 module.exports = {
     guildCache,
+    guildSubmoduleCache,
     channelCache,
     initAutomodCaches,
     getGuildStatus,
     setGuildStatus,
+    getGuildSubmoduleStatus,
+    setGuildSubmoduleStatus,
     getChannelSettings,
     setChannelFilter,
     resetChannelSettings,
