@@ -45,8 +45,7 @@ trap stop_services INT TERM EXIT
         -Xmx768m \
         -XX:+UseG1GC \
         -XX:MaxGCPauseMillis=150 \
-        -jar "$LAVALINK_JAR" \
-        --spring.config.additional-location="file:$LAVALINK_CONFIG"
+        -jar "$LAVALINK_JAR"
 ) &
 LAVALINK_PID=$!
 
