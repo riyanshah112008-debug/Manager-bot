@@ -394,7 +394,7 @@ class StarryGuildPlayer {
         this.previousTrack = null;
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
-        this.filter = 'empowering';
+        this.filter = 'clear';
         this.equalizer = { subBass: 0, bass: 0, mids: 0, presence: 0, treble: 0 };
         this.is247 = false;
         this.autoplay = false;
@@ -698,7 +698,8 @@ class StarryGuildPlayer {
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
-                        '-compression_level', '10',
+                        '-threads', '1',
+                        '-compression_level', '5',
                         '-frame_duration', '20',
                         '-f', 'opus'
                     ]
