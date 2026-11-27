@@ -102,7 +102,7 @@ const loggingPanelCommand = {
             return;
         }
         const collectors = [
-            panelMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: 600000 }),
+            panelMessage.createMessageComponentCollector({ componentType: ComponentType.Button }),
             panelMessage.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 600000 }),
             panelMessage.createMessageComponentCollector({ componentType: ComponentType.ChannelSelect, time: 600000 })
         ];
