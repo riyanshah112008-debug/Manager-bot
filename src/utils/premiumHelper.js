@@ -31,14 +31,6 @@ const ALL_PREMIUM_FEATURES = [
         description: 'Access 15 studio-grade audio DSP effects: Physical Vibration Bass, 360° 8D Audio, Lo-Fi Chill, Slowed & Reverb, Karaoke Vocal Remover, 3D Surround, EDM/Club Master, Soft Chill, Retro Radio, Nightcore, Daycore, Vaporwave, Treble Boost, and Pop Clarity.'
     },
     {
-        id: 'cloud_backups',
-        name: 'Server Cloud Backup & Instant Restore',
-        category: 'Server Security',
-        tier: 'Shield Plus / Pro Cluster / Platinum / Lifetime',
-        commands: [',backup', ',restore <id>'],
-        description: 'Create encrypted cloud snapshots of your entire server architecture (channels, categories, roles, permissions) with 1-click disaster recovery.'
-    },
-    {
         id: 'emergency_lockdown',
         name: 'Emergency Server Lockdown Shield',
         category: 'Server Security',
@@ -232,7 +224,6 @@ function createPremiumLockPayload(featureName, prefix = ',') {
                 value: 
                     '• **📻 24/7 Voice Channel Mode** — Bot stays in voice permanently\n' +
                     '• **🎧 Studio DSP Hi-Fi Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave\n' +
-                    '• **💾 Cloud Backups & Restore** — Full server layout & permissions snapshot\n' +
                     '• **🚨 Emergency Lockdown Shield** — 1-click server-wide raid isolation\n' +
                     '• **🤖 Multi-Bot Worker Nodes** — Custom bot tokens for multi-room audio\n' +
                     '• **📥 Unlimited Emoji/Sticker Steal** — Direct 1-click upload\n' +
@@ -281,7 +272,7 @@ function createPremiumPerksPayload(prefix = ',') {
         })
         .setTitle('👑 All Starry Premium Features & Perks')
         .setDescription(
-            `Unlock maximum performance, continuous 24/7 audio, server backup vaults, and autonomous worker node clustering for your server.\n\n` +
+            `Unlock maximum performance, continuous 24/7 audio and autonomous worker node clustering for your server.\n\n` +
             `To activate, run \`${prefix}redeem <license_key>\` or contact our bot developers.`
         );
 
