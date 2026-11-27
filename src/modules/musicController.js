@@ -692,6 +692,12 @@ class MusicControllerEngine {
         // Toggle continuous voice presence and automatic queue continuation.
         if (customId === 'ctrl_247') {
             const enabled = !getStayConnected(player);
+            if (enabled && !isKazagumo && isLavalinkRequired()) {
+                return interaction.reply({
+                    content: '⚠️ 24/7 mode requires an active dedicated Render Lavalink session. Start music first or retry when the audio node reconnects.',
+                    flags: [EPHEMERAL_FLAG]
+                }).catch(() => {});
+            }
             if (enabled && !voiceChannel) {
                 return interaction.reply({ content: 'Join a voice channel first to enable 24/7 mode.', flags: [EPHEMERAL_FLAG] }).catch(() => {});
             }
@@ -731,8 +737,14 @@ class MusicControllerEngine {
                 }).catch(() => {});
             }
             if (isKazagumo) {
-                player.setVoiceChannel(voiceChannel.id);
+                await player.setVoiceChannel(voiceChannel.id);
             } else {
+                if (isLavalinkRequired()) {
+                    return interaction.reply({
+                        content: '⚠️ The dedicated Render Lavalink player is not ready. Please retry after it reconnects.',
+                        flags: [EPHEMERAL_FLAG]
+                    }).catch(() => {});
+                }
                 const p = StarryAudioEngine.getOrCreatePlayer(client, guildId, voiceChannel, interaction.channel);
                 await p.connect().catch(() => {});
             }
