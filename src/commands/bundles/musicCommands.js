@@ -1597,5 +1597,8 @@ const commands = [
 const spotifyCommand = require('../music/spotify');
 commands.push(spotifyCommand);
 
+commands.claimMusicRequest = claimMusicRequest;
+commands.searchWithTimeout = searchWithTimeout;
+
 module.exports = commands;
 
