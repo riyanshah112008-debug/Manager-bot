@@ -227,6 +227,7 @@ const commands = [
                     }
 
                     const pendingStartAt = Number(player.data?.get('starryPlaybackStartPending') || 0);
+                    if (pendingStartAt && Date.now() - pendingStartAt >= 20000) player.data.delete('starryPlaybackStartPending');
                     const staleIdleTrack = Boolean(
                         !player.playing && !player.paused && player.queue.current &&
                         (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
@@ -247,7 +248,7 @@ const commands = [
 
                     if (res.loadType === 'playlist') {
                         for (const track of res.tracks) player.queue.add(track);
-                        const shouldStart = !player.playing && !player.paused;
+                        const shouldStart = !player.playing && !player.paused && !player.data?.get('starryPlaybackStartPending');
                         if (shouldStart) {
                             if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
                             if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
