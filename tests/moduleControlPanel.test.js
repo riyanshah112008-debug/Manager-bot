@@ -3,20 +3,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 
-const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-const schema = read('src/models/AutomodSchema.js');
-const helper = read('src/utils/automodHelper.js');
-const automod = read('src/modules/automod.js');
-const commands = read('src/commands/bundles/systemCommands.js');
+const schema = fs.readFileSync(require.resolve('../src/models/AutomodSchema'), 'utf8');
+const helper = fs.readFileSync(require.resolve('../src/utils/automodHelper'), 'utf8');
+const automod = fs.readFileSync(require.resolve('../src/modules/automod'), 'utf8');
+const commands = fs.readFileSync(require.resolve('../src/commands/bundles/systemCommands'), 'utf8');
 
 test('AutoMod persists guild-wide link and emoji submodule settings', () => {
     assert.match(schema, /linksEnabled:\s*\{\s*type:\s*Boolean,\s*default:\s*true\s*\}/);
     assert.match(schema, /emojisEnabled:\s*\{\s*type:\s*Boolean,\s*default:\s*true\s*\}/);
     assert.match(helper, /async function setGuildSubmoduleStatus/);
     assert.match(helper, /AutomodGuild\.findOneAndUpdate/);
-    assert.match(helper, /if \(!isDbConnected\(\)\) throw new Error/);
+    assert.match(helper, /db\.updateGuildSettings\(guildId, \{ automod \}\)/);
+    assert.match(helper, /if \(!persisted\) throw new Error/);
 });
 
 test('AutoMod runtime checks the saved parent and child module switches', () => {
@@ -35,4 +34,5 @@ test('modules command exposes real AutoMod and Logging parent/submodule controls
     ]) assert.ok(commands.includes(id), id);
     assert.match(commands, /PermissionFlagsBits\.ManageGuild/);
     assert.match(commands, /interaction\.update\(await render\(\)\)/);
+    assert.match(commands, /guildId: \{ \$eq: guildId \}/);
 });
