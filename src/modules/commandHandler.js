@@ -447,6 +447,13 @@ class CommandRegistry {
             const resolvedName = this.commands.has(commandKey) ? commandKey : (this.aliases.get(commandKey) || commandKey);
             let command = this.commands.get(resolvedName);
 
+            // AFK prefix handling is owned by src/modules/afk.js, which also
+            // manages the AFK state and mention notifications. Do not dispatch
+            // the same message through a second command implementation: that
+            // duplicate path can reply after the AFK embed and throw when its
+            // command context has no cached GuildMember.
+            if (resolvedName === 'afk') return;
+
             // If user mentioned bot directly and spoke naturally, route seamlessly to Starry AI
             if (!command && matchedPrefix === '@') {
                 const askCmd = this.commands.get('ask');
