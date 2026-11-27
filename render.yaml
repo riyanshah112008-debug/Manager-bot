@@ -2,7 +2,7 @@ services:
   - type: web
     name: starry-bot
     env: docker
-    # Paid always-on compute: 1 CPU / 2 GB RAM for Discord Gateway + real-time FFmpeg audio.
+    # Paid always-on compute: 1 CPU / 2 GB RAM for Discord Gateway + local Lavalink audio sidecar.
     plan: 1c-2g
     region: oregon
     dockerfilePath: Dockerfile
@@ -41,10 +41,16 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: LAVALINK_URL
-        sync: false
+        value: 127.0.0.1:2333
       - key: LAVALINK_AUTH
         sync: false
       - key: LAVALINK_SECURE
+        value: "false"
+      - key: LAVALINK_NODE_NAME
+        value: Render-Local-Lavalink
+      - key: STARRY_REQUIRE_LAVALINK
         value: "true"
+      - key: STARRY_DISABLE_STREAM_RESOLVER
+        value: "1"
       - key: STARRY_ENABLE_PUBLIC_LAVALINK_NODES
         value: "false"
