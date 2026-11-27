@@ -29,7 +29,7 @@ test('GIF attachments and GIF embeds are excluded from rapid-text-spam counting'
     assert.equal(antiAbuse.shouldCountForRateLimit(embedMessage), false);
 });
 
-test('normal text remains eligible for spam detection', () => {
+test('GIF and image URLs are excluded even before Discord unfurls them', () => {\n    const gifLink = { content: 'https://tenor.com/view/reaction', attachments: [], embeds: [] };\n    const imageLink = { content: 'https://cdn.example.com/photo.webp?size=large', attachments: [], embeds: [] };\n    assert.equal(antiAbuse.shouldCountForRateLimit(gifLink), false);\n    assert.equal(antiAbuse.shouldCountForRateLimit(imageLink), false);\n});\n\ntest('stickers are excluded from rapid-text-spam counting', () => {\n    const stickerMessage = { content: '', attachments: [], stickers: { size: 1 }, embeds: [] };\n    assert.equal(antiAbuse.shouldCountForRateLimit(stickerMessage), false);\n});\n\ntest('normal text remains eligible for spam detection', () => {
     const message = { content: 'hello everyone', attachments: [], embeds: [] };
     assert.equal(antiAbuse.hasMediaAttachment(message), false);
     assert.equal(antiAbuse.shouldCountForRateLimit(message), true);
