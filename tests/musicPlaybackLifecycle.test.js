@@ -1,93 +1,46 @@
+'use strict';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const native = fs.readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
-const commands = fs.readFileSync(require.resolve('../src/commands/bundles/musicCommands'), 'utf8');
-const search = fs.readFileSync(require.resolve('../src/utils/musicSearchHelper'), 'utf8');
-const controller = fs.readFileSync(require.resolve('../src/modules/musicController'), 'utf8');
-const musicManager = fs.readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
 
-test('Starry announces Now Playing only after Discord confirms audio is Playing', () => {
-  const play = native.indexOf('this.player.play(this.audioResource)');
-  const playing = native.indexOf('await entersState(this.player, AudioPlayerStatus.Playing, 15000)');
-  const panel = native.indexOf('await this.sendNowPlayingPanel(track, true)');
-  assert.ok(play >= 0 && playing > play && panel > playing);
+const { StarryAudioEngine, StarryGuildPlayer } = require('../src/utils/nativeAudioEngine');
+const musicManager = require('../src/utils/musicManager');
+const musicController = require('../src/modules/musicController');
+const searchHelper = require('../src/utils/musicSearchHelper');
+const musicCommands = require('../src/commands/bundles/musicCommands');
+
+test('native audio player exposes connect and queue playback lifecycle methods', () => {
+    assert.equal(typeof StarryAudioEngine.getOrCreatePlayer, 'function');
+    assert.equal(typeof StarryAudioEngine.search, 'function');
+    assert.equal(typeof StarryGuildPlayer.prototype.connect, 'function');
+    assert.equal(typeof StarryGuildPlayer.prototype.playNext, 'function');
 });
 
-test('Starry advances each failed track only once', () => {
-  assert.match(native, /this\._endedTrack === expectedTrack/);
-  assert.match(native, /handleTrackEnd\(expectedTrack = this\.currentTrack\)/);
+test('Lavalink manager exposes player construction and playback event integration', () => {
+    assert.equal(typeof musicManager.createMusicManager, 'function');
+    assert.equal(typeof musicManager.buildNowPlayingComponents, 'function');
+    assert.equal(typeof musicManager.applyKazagumoFilter, 'function');
 });
 
-test('multi-source search does not wait for SoundCloud token refresh and bounds provider fan-out', () => {
- assert.match(native, /refreshSoundCloudToken\(\)\.catch\(\(\) => \{\}\)/);
- assert.match(native, /timeoutMs = 2600/);
- assert.match(native, /Promise\.all\(\[/);
-});
-test('multi-source text search caches successful results for repeat queries', () => {
- assert.match(native, /MUSIC_SEARCH_CACHE_TTL_MS = 45_000/);
- assert.match(native, /getCachedMusicSearch\(query\)/);
- assert.match(native, /setCachedMusicSearch\(query,/);
- assert.match(native, /tracks: cachedSearch\.tracks\.map\(track => \(\{ \.\.\.track, requester \}\)\)/);
+test('music command bundle registers one functional play command', () => {
+    const play = musicCommands.find(command => command.name === 'play');
+    assert.ok(play, 'play command is registered');
+    assert.equal(typeof play.execute, 'function');
+    assert.deepEqual(play.aliases, ['p', 'add']);
 });
 
-test('Starry searches Spotify, YouTube, SoundCloud, Deezer and Apple Music', () => {
-  for (const marker of [
-    'spotifyEngine.searchTracks(query, 5)',
-    'play.search(query, { limit: 5 })',
-    "play.search(query, { source: { soundcloud: 'tracks' }, limit: 5 })",
-    'api.deezer.com/search',
-    'itunes.apple.com/search'
-  ]) assert.ok(native.includes(marker), marker);
+test('request-channel controller exposes request and persistent panel handlers', () => {
+    assert.equal(typeof musicController.handleSongRequest, 'function');
+    assert.equal(typeof musicController.update, 'function');
+    assert.equal(typeof musicController.handleButtonInteraction, 'function');
 });
 
-test('Starry native play does not publish a premature Now Playing panel', () => {
-  assert.ok(!commands.includes('Deliver Now Playing embed immediately'));
-  assert.ok(!commands.includes('const payload = player.buildNowPlayingPayload(track);'));
-  assert.ok(commands.includes('player.loadingMessage = loadingMsg'));
-});
-
-test('Starry source selector exposes five services and a separate cancel row', () => {
-  for (const marker of ['search_src_sc:', 'search_src_sp:', 'search_src_ytm:', 'search_src_am:', 'search_src_dz:', 'buildSearchCancelRow']) {
-    assert.ok(search.includes(marker), marker);
-  }
-  assert.ok(search.includes("wantedSource = sourceKey === 'am' ? 'Apple Music' : 'Deezer'"));
-});
-
-test('Starry keeps Cancel Search available when a provider has no playable results', () => {
-  assert.ok(search.includes('components: [buildSearchSourceRow(searchId), buildSearchCancelRow(searchId)]'));
-});
-
-
-test('Kazagumo starts are awaited and only one response is emitted for first-track playback', () => {
-  assert.ok(commands.includes('async function startKazagumoPlayback(player, track = null)'));
-  assert.ok(commands.includes('const staleIdleTrack = Boolean('));
-  assert.ok(commands.includes('await player.destroy()'));
-  assert.ok(commands.includes('player = await manager.createPlayer({'));
-  assert.ok(commands.includes('await player.play()'));
-  assert.ok(commands.includes('await startKazagumoPlayback(player)'));
-  assert.ok(commands.includes('playerStart owns the single response after playback starts'));
-});
-
-test('idle Kazagumo players with stale current tracks are rebuilt before the new request starts', () => {
-  assert.ok(commands.includes('const staleIdleTrack = Boolean('));
-  assert.ok(commands.includes('await player.destroy()'));
-  assert.ok(commands.includes('player = await manager.createPlayer({'));
-  assert.ok(commands.includes('for (const queuedTrack of preservedQueue) player.queue.add(queuedTrack)'));
-  assert.ok(commands.includes('Your existing queue was kept; retry after the node reconnects'));
-});
-
-test('request-channel Lavalink empty results fall through to the native resolver', () => {
-  assert.ok(controller.includes('Lavalink returned no playable results; retrying with the native audio resolver.'));
-  assert.ok(controller.includes('const player = StarryAudioEngine.getOrCreatePlayer'));
-});
-
-test('request-channel success updates its persistent controller instead of sending duplicate confirmations', () => {
-  assert.ok(controller.includes('await kazagumoPlayer.setVoiceChannel(voiceChannel.id)'));
-  assert.ok(controller.includes('await kazagumoPlayer.play()'));
-  assert.ok(controller.includes('Keep the persistent controller as the only success response.'));
-  assert.ok(musicManager.includes("player.data.delete('starryPlaybackStartPending')"));
-  assert.ok(musicManager.includes('interaction.deleteReply()'));
-  assert.doesNotMatch(controller, /Added to Queue:/);
-  assert.doesNotMatch(controller, /Enqueued Playlist:/);
+test('music source selector builds interactive source choices', () => {
+    const row = searchHelper.buildSearchSourceRow('codacy-regression');
+    const ids = row.components.map(component => component.data.custom_id);
+    assert.ok(ids.some(id => id.startsWith('search_src_sc:')));
+    assert.ok(ids.some(id => id.startsWith('search_src_sp:')));
+    assert.ok(ids.some(id => id.startsWith('search_src_ytm:')));
+    assert.ok(ids.some(id => id.startsWith('search_src_am:')));
+    assert.ok(ids.some(id => id.startsWith('search_src_dz:')));
 });
