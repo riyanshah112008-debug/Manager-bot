@@ -3,6 +3,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 const { isStayConnected, setStayConnected } = require('../../utils/musicStayConnected');
+const { isLavalinkRequired } = require('../../utils/audioBackendPolicy');
 
 const EPHEMERAL_FLAG = MessageFlags?.Ephemeral ?? 64;
 
@@ -44,6 +45,12 @@ module.exports = {
 
         if (!voiceChannel) {
             return context.reply({ content: 'Join a voice channel first to enable 24/7 mode.', flags: [EPHEMERAL_FLAG] });
+        }
+        if (!player && isLavalinkRequired()) {
+            return context.reply({
+                content: 'Starry’s dedicated Render audio node is unavailable. 24/7 mode cannot start until Lavalink reconnects.',
+                flags: [EPHEMERAL_FLAG]
+            });
         }
         if (!player) {
             nativePlayer = StarryAudioEngine.getOrCreatePlayer(client, guild.id, voiceChannel, context.channel);
