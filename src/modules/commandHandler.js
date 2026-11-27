@@ -432,6 +432,14 @@ class CommandRegistry {
                 return;
             }
 
+            // Claim the Discord message before any command execution can yield.
+            // This closes the race where multiple registered dispatchers process the
+            // same gateway delivery and each posts a duplicate response.
+            if (executedMessageIds.has(message.id)) return;
+            executedMessageIds.add(message.id);
+            const executionExpiry = setTimeout(() => executedMessageIds.delete(message.id), 20000);
+            executionExpiry.unref?.();
+
             // Ignore custom emoji spam (e.g. ,<:emoji:id>)
             if (commandBody.startsWith('<:') || commandBody.startsWith('<a:')) return;
 
@@ -460,10 +468,6 @@ class CommandRegistry {
             if (!isExecutableCommand(command)) return;
 
 NaN
-            if (executedMessageIds.has(message.id)) return;
-            executedMessageIds.add(message.id);
-            setTimeout(() => executedMessageIds.delete(message.id), 20000);
-
             const isPrefixInvocation = matchedPrefix !== '@' && matchedPrefix !== '';
 
             // Prefix commands are available to all server members.
