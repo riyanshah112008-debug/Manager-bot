@@ -205,26 +205,18 @@ const commands = [
                     }
 
                     if (player.voiceId !== guard.voiceChannel.id) {
-                        player.setVoiceChannel(guard.voiceChannel.id);
-                    }
-
-                    if (ctx.isSlash && ctx.interaction) {
-                        player.data.set('interaction', ctx.interaction);
-                    }
-                    if (loadingMsg) {
-                        player.data.set('loadingMessage', loadingMsg);
+                        await player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
                     if (res.loadType === 'playlist') {
-                        for (const track of res.tracks) {
-                            player.queue.add(track);
+                        for (const track of res.tracks) player.queue.add(track);
+                        const started = await startKazagumoPlayback(player);
+                        if (started) {
+                            if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
+                            if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
+                            return; // playerStart owns the single response after playback starts
                         }
-                        if (!player.playing && !player.paused) player.play();
-
-                        if (loadingMsg) {
-                            loadingMsg.delete().catch(() => {});
-                            player.data.delete('loadingMessage');
-                        }
+                        if (loadingMsg) loadingMsg.delete().catch(() => {});
 
                         const totalDurationMs = res.tracks.reduce((acc, t) => acc + (t.length || 0), 0);
                         const totalDurationStr = formatTime(totalDurationMs);
@@ -258,8 +250,10 @@ const commands = [
                         const track = res.tracks[0];
                         if (!player.playing && !player.paused && !player.queue.current) {
                             player.queue.add(track);
-                            player.play();
-                            // loadingMsg will be deleted by playerStart handler in musicManager.js
+                            if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
+                            if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
+                            await startKazagumoPlayback(player);
+                            // playerStart edits the pending response after playback starts
                         } else {
                             if (loadingMsg) {
                                 loadingMsg.delete().catch(() => {});
@@ -312,13 +306,14 @@ const commands = [
                     }
                     if (!player.currentTrack) {
                         if (ctx.isSlash && ctx.interaction) {
-                            await ctx.reply('⏳ Connecting to voice and starting the playlist. Now Playing will appear after audio is confirmed.');
                             player.loadingMessage = await ctx.interaction.fetchReply().catch(() => null);
                         } else {
                             player.loadingMessage = loadingMsg;
                         }
-                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
+                        await player.playNext();
+                        return; // Native engine owns the single now-playing response
                     }
+                    if (loadingMsg) loadingMsg.delete().catch(() => {});
 
                     const totalDurationMs = result.tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
                     const totalDurationStr = formatTime(totalDurationMs);
@@ -359,7 +354,7 @@ const commands = [
                         } else {
                             player.loadingMessage = loadingMsg;
                         }
-                        player.playNext().catch(err => console.warn('playNext error:', err.message || err));
+                        await player.playNext();
                         return;
                     } else {
                         if (loadingMsg) {
