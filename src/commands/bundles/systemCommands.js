@@ -183,13 +183,13 @@ const modulesPanelCommand = {
             ai: 'AI activity logs'
         };
         const loadLogging = async () => {
-            const row = await ServerSettings.findOne({ guildId }).select('logging').lean();
+            const row = await ServerSettings.findOne({ guildId: { $eq: guildId } }).select('logging').lean();
             return row?.logging || {};
         };
         const saveLogging = async patch => {
             const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
             await ServerSettings.updateOne(
-                { guildId },
+                { guildId: { $eq: guildId } },
                 { $set: set, $setOnInsert: { guildId } },
                 { upsert: true, setDefaultsOnInsert: true }
             );
