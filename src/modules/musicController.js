@@ -560,11 +560,7 @@ class MusicControllerEngine {
             try {
                 const res = await manager.search(content, { requester: message.author });
                 if (!res || !res.tracks?.length || res.loadType === 'empty' || res.loadType === 'error') {
-                    const temp = await message.channel.send({
-                        content: `❌ No audio results found for: \`${content.substring(0, 50)}\``
-                    }).catch(() => null);
-                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
-                    return;
+                    throw new Error('Lavalink returned no playable results; retrying with the native audio resolver.');
                 }
 
                 kazagumoPlayer = manager.getPlayer(message.guild.id);
@@ -582,12 +578,34 @@ class MusicControllerEngine {
                     await kazagumoPlayer.setVoiceChannel(voiceChannel.id);
                 }
 
+                const pendingStartAt = Number(kazagumoPlayer.data?.get('starryPlaybackStartPending') || 0);
+                if (pendingStartAt && Date.now() - pendingStartAt >= 20000) {
+                    kazagumoPlayer.data.delete('starryPlaybackStartPending');
+                }
+                const staleIdleTrack = Boolean(
+                    !kazagumoPlayer.playing && !kazagumoPlayer.paused && kazagumoPlayer.queue.current &&
+                    (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
+                );
+                if (staleIdleTrack) {
+                    const waitingTracks = Array.from(kazagumoPlayer.queue || []);
+                    await kazagumoPlayer.destroy();
+                    kazagumoPlayer = await manager.createPlayer({
+                        guildId: message.guild.id,
+                        voiceId: voiceChannel.id,
+                        textId: message.channel.id,
+                        deaf: true
+                    });
+                    createdPlayer = true;
+                    for (const queuedTrack of waitingTracks) kazagumoPlayer.queue.add(queuedTrack);
+                }
+
                 if (res.loadType === 'playlist') {
                     for (const track of res.tracks) kazagumoPlayer.queue.add(track);
                 } else {
                     kazagumoPlayer.queue.add(res.tracks[0]);
                 }
                 if (!kazagumoPlayer.playing && !kazagumoPlayer.paused) {
+                    kazagumoPlayer.data?.set?.('starryPlaybackStartPending', Date.now());
                     await kazagumoPlayer.play();
                 }
 
@@ -595,6 +613,7 @@ class MusicControllerEngine {
                 await this.update(message.guild.id, client);
                 return;
             } catch (kErr) {
+                kazagumoPlayer?.data?.delete?.('starryPlaybackStartPending');
                 console.warn('⚠️ [MusicController Lavalink Fallback]:', kErr.message || kErr);
                 if (createdPlayer && kazagumoPlayer && !kazagumoPlayer.playing) {
                     await kazagumoPlayer.destroy().catch(() => {});
