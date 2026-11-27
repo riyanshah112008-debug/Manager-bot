@@ -230,20 +230,23 @@ test('custom EQ clamps values and neutral reset restores unity',async()=>{
 });
 
 
-test('native FFmpeg pipeline uses one final limiter after 48 kHz resampling', () => {
-    const [, filterGraph] = buildAudioFilterArgs(
-        'volume=0.90,highpass=f=28,equalizer=f=63:width_type=q:w=1:g=1.0,alimiter=limit=0.96:attack=5:release=140:level=false',
-        100
-    );
+test('native FFmpeg clear path adds no permanent limiter or resampler', () => {
+    const [, filterGraph] = buildAudioFilterArgs('volume=1.0', 100);
     const stages = filterGraph.split(',');
-    assert.equal(stages.filter(stage => /^alimiter=/i.test(stage)).length, 1,
-        'profile limiters must be removed so compression is not stacked');
-    assert.ok(stages.at(-2).startsWith('aresample=48000'),
-        'resampling must happen before the final peak guard');
-    assert.ok(stages.at(-1).startsWith('alimiter=limit=0.90'),
-        'the common final limiter must reserve codec headroom');
+    assert.deepEqual(stages, ['volume=1.000'],
+        'clear playback should preserve source dynamics and avoid extra always-on DSP');
+    assert.equal(stages.some(stage => /^alimiter=/i.test(stage)), false);
+    assert.equal(stages.some(stage => /^aresample=/i.test(stage)), false);
 });
 
+
+test('native Opus encoding uses real-time complexity rather than maximum CPU complexity', () => {
+    const source = require('node:fs').readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
+    assert.equal((source.match(/'-compression_level', '5'/g) || []).length, 3,
+        'all native stream and seek encoders should use the real-time complexity setting');
+    assert.doesNotMatch(source, /'-compression_level', '10'/,
+        'maximum encoder complexity can starve the real-time audio loop on small instances');
+});
 
 test('native custom EQ reserves cumulative boost plus transient headroom', () => {
     const [, filterGraph] = buildAudioFilterArgs(
@@ -256,7 +259,7 @@ test('native custom EQ reserves cumulative boost plus transient headroom', () =>
         'combined EQ gain must be attenuated before filtering');
 });
 
-test('native automatic master avoids makeup compression and stacked limiting', () => {
+test('selectable studio master avoids makeup compression and hard limiting', () => {
     assert.doesNotMatch(DEFAULT_STUDIO_MASTER_FILTER, /acompressor|alimiter/i,
-        'the default master must use the shared final limiter without vocal makeup compression');
+        'the optional studio preset must not add compression or a hard limiter');
 });
