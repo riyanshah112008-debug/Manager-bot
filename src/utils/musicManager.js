@@ -301,42 +301,25 @@ for (const TrackClass of trackClasses) {
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
-const defaultNodes = [
-    {
-        name: 'Node-1-Serenetia-SSL',
-        url: process.env.LAVALINK_URL || 'lavalink.serenetia.com:443',
-        auth: process.env.LAVALINK_AUTH || 'youshallnotpass',
-        secure: process.env.LAVALINK_SECURE ? process.env.LAVALINK_SECURE === 'true' : true,
-        retryAmount: 15,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-2-Serenetia-V4-SSL',
-        url: 'lavalinkv4.serenetia.com:443',
-        auth: 'https://seretia.link/discord',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-3-TriniumHost-SSL',
-        url: 'lavalink-v4.triniumhost.com:443',
-        auth: 'free',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-4-MilloHost-SSL',
-        url: 'lava-v4.millohost.my.id:443',
-        auth: 'https://discord.gg/mjS5J2K3ep',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
-    }
-];
+const configuredNodes = process.env.LAVALINK_URL ? [{
+    name: process.env.LAVALINK_NODE_NAME || 'Starry-Dedicated-Lavalink',
+    url: process.env.LAVALINK_URL,
+    auth: process.env.LAVALINK_AUTH || 'youshallnotpass',
+    secure: process.env.LAVALINK_SECURE !== 'false',
+    retryAmount: 25,
+    retryDelay: 3000
+}] : [];
 
-const Nodes = defaultNodes;
+// Public community Lavalink nodes are shared by unrelated bots and are not a production audio SLA.
+// Keep them opt-in only; without a dedicated node, the bot uses its Render-hosted native pipeline.
+const publicFallbackNodes = process.env.STARRY_ENABLE_PUBLIC_LAVALINK_NODES === 'true' ? [
+    { name: 'Community-Serenetia-SSL', url: 'lavalink.serenetia.com:443', auth: 'youshallnotpass', secure: true, retryAmount: 10, retryDelay: 5000 },
+    { name: 'Community-Serenetia-V4-SSL', url: 'lavalinkv4.serenetia.com:443', auth: 'https://seretia.link/discord', secure: true, retryAmount: 8, retryDelay: 5000 },
+    { name: 'Community-TriniumHost-SSL', url: 'lavalink-v4.triniumhost.com:443', auth: 'free', secure: true, retryAmount: 8, retryDelay: 5000 },
+    { name: 'Community-MilloHost-SSL', url: 'lava-v4.millohost.my.id:443', auth: 'https://discord.gg/mjS5J2K3ep', secure: true, retryAmount: 8, retryDelay: 5000 }
+] : [];
+
+const Nodes = [...configuredNodes, ...publicFallbackNodes];
 
 function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConnected = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
@@ -1215,7 +1198,7 @@ function createMusicManager(client) {
     });
 
     // If client is already ready or logged in, connect nodes immediately
-    if (client.isReady?.() || client.user) {
+    if (Nodes.length > 0 && (client.isReady?.() || client.user)) {
         try {
             manager.shoukaku.connector.ready(Nodes);
         } catch (readyErr) {
@@ -1248,9 +1231,13 @@ function createMusicManager(client) {
         recordTrackHistory(player, track);
 
         // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
-        const activeFilter = player.data.get('activeFilter') || 'empowering';
+        const activeFilter = player.data.get('activeFilter') || 'clear';
         player.data.set('activeFilter', activeFilter);
-        await applyKazagumoFilter(player, activeFilter).catch(() => {});
+        // New players start flat. Avoid an unnecessary remote filter mutation at every track start.
+        // Explicitly selected non-flat presets are reapplied to each new track.
+        if (activeFilter !== 'clear') {
+            await applyKazagumoFilter(player, activeFilter).catch(() => {});
+        }
 
         // Dedicated Request Channel Integration: Update controller in-place, never duplicate
         try {
