@@ -138,7 +138,7 @@ test('non-Premium and non-Level-3 servers never receive the 384 kbps request', a
 
 test('music starts with unprocessed audio unless a filter is explicitly selected', async () => {
     const source = require('node:fs').readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
-    assert.match(source, /player\.data\.get\('activeFilter'\) \|\| 'empowering'/);
+    assert.match(source, /player\.data\.get\('activeFilter'\) \|\| 'clear'/);
 });
 
 
