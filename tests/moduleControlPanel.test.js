@@ -34,5 +34,6 @@ test('modules command exposes real AutoMod and Logging parent/submodule controls
     ]) assert.ok(commands.includes(id), id);
     assert.match(commands, /PermissionFlagsBits\.ManageGuild/);
     assert.match(commands, /interaction\.update\(await render\(\)\)/);
+    assert.match(commands, /panelMessage\.createMessageComponentCollector\(\{ componentType: ComponentType\.Button \}\)/);
     assert.match(commands, /guildId: \{ \$eq: guildId \}/);
 });
