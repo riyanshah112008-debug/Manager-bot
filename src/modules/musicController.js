@@ -555,9 +555,11 @@ class MusicControllerEngine {
 
         // Route 1: High-Performance Lavalink Cluster (Primary for Cloud Hosting / Render where UDP is restricted)
         if (hasLavalink) {
+            let kazagumoPlayer = null;
+            let createdPlayer = false;
             try {
                 const res = await manager.search(content, { requester: message.author });
-                if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
+                if (!res || !res.tracks?.length || res.loadType === 'empty' || res.loadType === 'error') {
                     const temp = await message.channel.send({
                         content: `❌ No audio results found for: \`${content.substring(0, 50)}\``
                     }).catch(() => null);
@@ -565,43 +567,52 @@ class MusicControllerEngine {
                     return;
                 }
 
-                let player = manager.getPlayer(message.guild.id);
-                if (!player) {
-                    player = await manager.createPlayer({
+                kazagumoPlayer = manager.getPlayer(message.guild.id);
+                if (!kazagumoPlayer) {
+                    kazagumoPlayer = await manager.createPlayer({
                         guildId: message.guild.id,
                         voiceId: voiceChannel.id,
                         textId: message.channel.id,
                         deaf: true
                     });
+                    createdPlayer = true;
                 }
 
-                if (player.voiceId !== voiceChannel.id) {
-                    await player.setVoiceChannel(voiceChannel.id);
+                if (kazagumoPlayer.voiceId !== voiceChannel.id) {
+                    await kazagumoPlayer.setVoiceChannel(voiceChannel.id);
                 }
 
                 if (res.loadType === 'playlist') {
-                    for (const track of res.tracks) player.queue.add(track);
+                    for (const track of res.tracks) kazagumoPlayer.queue.add(track);
                 } else {
-                    player.queue.add(res.tracks[0]);
+                    kazagumoPlayer.queue.add(res.tracks[0]);
                 }
-                if (!player.playing && !player.paused) await player.play();
+                if (!kazagumoPlayer.playing && !kazagumoPlayer.paused) {
+                    await kazagumoPlayer.play();
+                }
 
-                // The persistent request controller is the single success surface.
-                // Avoid an extra temporary confirmation for every song request.
+                // Keep the persistent controller as the only success response.
                 await this.update(message.guild.id, client);
                 return;
             } catch (kErr) {
                 console.warn('⚠️ [MusicController Lavalink Fallback]:', kErr.message || kErr);
+                if (createdPlayer && kazagumoPlayer && !kazagumoPlayer.playing) {
+                    await kazagumoPlayer.destroy().catch(() => {});
+                } else if (kazagumoPlayer) {
+                    const temp = await message.channel.send({
+                        content: '⚠️ Lavalink could not start this track. Please try again after the music node recovers.'
+                    }).catch(() => null);
+                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 5000);
+                    return;
+                }
             }
         }
-
-        // Route 2 (Fallback): Starry Native Audio Engine (Local playback / Termux)
+        // Route 2 (Fallback): Starry Native Audio Engine
         const player = StarryAudioEngine.getOrCreatePlayer(client, message.guild.id, voiceChannel, message.channel);
-        player.connect().catch(() => {});
-
         try {
+            await player.connect();
             const result = await StarryAudioEngine.search(content, message.author);
-            if (!result || !result.tracks || result.tracks.length === 0) {
+            if (!result || !result.tracks?.length) {
                 const temp = await message.channel.send({
                     content: `❌ No audio results found for: \`${content.substring(0, 50)}\``
                 }).catch(() => null);
@@ -610,29 +621,20 @@ class MusicControllerEngine {
             }
 
             if (result.type === 'PLAYLIST') {
-                for (const t of result.tracks) player.queue.push(t);
-                if (!player.currentTrack) await player.playNext();
-                const temp = await message.channel.send({
-                    content: `📚 **Enqueued Playlist:** \`${(result.playlistName || 'Playlist').substring(0, 45)}\` (**${result.tracks.length}** tracks) • ${message.author}`
-                }).catch(() => null);
-                if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+                for (const track of result.tracks) player.queue.push(track);
             } else {
-                const track = result.tracks[0];
-                player.queue.push(track);
-                if (!player.currentTrack) await player.playNext();
-                const temp = await message.channel.send({
-                    content: `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${message.author}`
-                }).catch(() => null);
-                if (temp) setTimeout(() => temp.delete().catch(() => {}), 3500);
+                player.queue.push(result.tracks[0]);
             }
+            if (!player.currentTrack) await player.playNext();
 
+            // The request channel controller is refreshed in place; no second success message.
             await this.update(message.guild.id, client);
-        } catch (err) {
-            console.error('❌ [Music Controller Request Error]:', err);
+        } catch (error) {
+            console.error('[Music Controller Request Error]:', error);
             const temp = await message.channel.send({
-                content: `⚠️ Failed to resolve song: \`${err.message || 'Stream error'}\``
+                content: '⚠️ Playback could not start. Check the bot voice permissions and Lavalink/native audio service.'
             }).catch(() => null);
-            if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+            if (temp) setTimeout(() => temp.delete().catch(() => {}), 5000);
         }
     }
 
