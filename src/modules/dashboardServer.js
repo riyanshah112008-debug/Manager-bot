@@ -15,6 +15,7 @@ const BoosterRole = require('../models/BoosterRole');
 const User = require('../models/User');
 const OAuthSession = require('../models/OAuthSession');
 const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
+const { isLavalinkRequired } = require('../utils/audioBackendPolicy');
 const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
@@ -253,6 +254,14 @@ function setupDashboardRoutes(app, client) {
                 matchQuery = first.query;
                 searchQuery = 'ytmsearch:' + first.query;
             }
+            if (!hasReadyLavalink && isLavalinkRequired()) {
+                return res.status(503).json({
+                    success: false,
+                    code: 'AUDIO_NODE_UNAVAILABLE',
+                    error: 'Starry music search is temporarily unavailable while the dedicated Render audio node reconnects.'
+                });
+            }
+
             let result;
             if (hasReadyLavalink) {
                 result = await manager.search(searchQuery, { requester: req.session.user });
@@ -1467,7 +1476,16 @@ function setupDashboardRoutes(app, client) {
             const manager = musicClient.manager;
             const hasReadyLavalink = Boolean(manager?.shoukaku?.nodes && Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1));
 
-            // Render workers without a reachable Lavalink node use the native FFmpeg/Discord voice player.
+            // Production Render never falls back to local FFmpeg/yt-dlp transcoding.
+            if (!hasReadyLavalink && isLavalinkRequired()) {
+                return res.status(503).json({
+                    success: false,
+                    code: 'AUDIO_NODE_UNAVAILABLE',
+                    error: 'Starry audio is temporarily unavailable while the dedicated Render Lavalink node reconnects.'
+                });
+            }
+
+            // Local development may use the native fallback when no Lavalink node is configured.
             if (!hasReadyLavalink) {
                 const nativePlayer = StarryAudioEngine.getOrCreatePlayer(musicClient, guild.id, musicVoice, musicText);
                 await nativePlayer.connect();

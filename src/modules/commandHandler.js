@@ -103,7 +103,7 @@ function setCachedPrefix(guildId, prefix) {
 }
 
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
-const executedMessageIds = new Set();
+const executedMessageIds = globalThis[Symbol.for('starry.executedMessageIds')] || (globalThis[Symbol.for('starry.executedMessageIds')] = new Set());
 const executedInteractionIds = new Set();
 
 const { handleMusicEqualizer } = require('./musicEqualizer');
@@ -307,8 +307,14 @@ class CommandRegistry {
         client.on(Events.MessageCreate, async (message) => {
             if (!message || message.author?.bot || !message.content) return;
 
-            // Instant in-memory check to discard rapid re-delivery within the same process
-            if (executedMessageIds.has(message.id)) return;
+            // Atomically claim the Discord message before any asynchronous work.
+            // This prevents two dispatcher instances from both passing the guard while
+            // awaiting prefix/database lookups and emitting duplicate command responses.
+            const dispatchKey = `${client.user?.id || 'unknown'}:${message.id}`;
+            if (executedMessageIds.has(dispatchKey)) return;
+            executedMessageIds.add(dispatchKey);
+            const claimTimer = setTimeout(() => executedMessageIds.delete(dispatchKey), 20000);
+            if (typeof claimTimer.unref === 'function') claimTimer.unref();
 
             const isPrimary = isPrimaryBotClient(client);
 
@@ -460,10 +466,6 @@ class CommandRegistry {
             if (!isExecutableCommand(command)) return;
 
 NaN
-            if (executedMessageIds.has(message.id)) return;
-            executedMessageIds.add(message.id);
-            setTimeout(() => executedMessageIds.delete(message.id), 20000);
-
             const isPrefixInvocation = matchedPrefix !== '@' && matchedPrefix !== '';
 
             // Prefix commands are available to all server members.

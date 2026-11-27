@@ -44,3 +44,17 @@ test('music source selector builds interactive source choices', () => {
     assert.ok(ids.some(id => id.startsWith('search_src_am:')));
     assert.ok(ids.some(id => id.startsWith('search_src_dz:')));
 });
+
+test('duplicate prefix delivery is claimed once per Discord message ID', () => {
+    const messageId = 'music-dedup-regression-' + Date.now();
+    const ctx = { message: { id: messageId } };
+    assert.equal(musicCommands.claimMusicRequest(ctx), true);
+    assert.equal(musicCommands.claimMusicRequest(ctx), false);
+});
+
+test('music provider searches reject within the configured latency budget', async () => {
+    await assert.rejects(
+        musicCommands.searchWithTimeout(new Promise(() => {}), 15),
+        /resolution budget/
+    );
+});

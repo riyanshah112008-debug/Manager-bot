@@ -26,7 +26,7 @@ module.exports = {
     if (kPlayer && (kPlayer.playing || kPlayer.queue.current)) {
       const track = kPlayer.queue.current;
       const isAutoplay = Boolean(kPlayer.data?.get("autoplay") || kPlayer.autoplay);
-      const activeFilter = kPlayer.data?.get("activeFilter") || "empowering";
+      const activeFilter = kPlayer.data?.get("activeFilter") || "clear";
 
       const embed = new EmbedBuilder()
         .setColor(config.theme.primary || 0x5865f2)

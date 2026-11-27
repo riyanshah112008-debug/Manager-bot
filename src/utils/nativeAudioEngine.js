@@ -394,7 +394,7 @@ class StarryGuildPlayer {
         this.previousTrack = null;
         this.loop = 'none'; // 'none' | 'track' | 'queue'
         this.volume = 100;
-        this.filter = 'empowering';
+        this.filter = 'clear';
         this.equalizer = { subBass: 0, bass: 0, mids: 0, presence: 0, treble: 0 };
         this.is247 = false;
         this.autoplay = false;
@@ -432,7 +432,8 @@ class StarryGuildPlayer {
         this.player = createAudioPlayer({
             behaviors: {
                 noSubscriber: NoSubscriberBehavior.Play,
-                maxMissedFrames: 5
+                // Tolerate brief event-loop/host scheduling stalls without immediately idling the stream.
+                maxMissedFrames: 15
             }
         });
         this.connection = null;
@@ -674,8 +675,8 @@ class StarryGuildPlayer {
                         '-buffer_size', '2048k',
                         '-analyzeduration', '2000000',
                         '-probesize', '2000000',
-                        '-thread_queue_size', '2048',
-                        '-fflags', '+genpts+discardcorrupt'
+                        '-thread_queue_size', '512',
+                        '-fflags', '+genpts'
                     );
                     if (customHeaders && typeof customHeaders === 'object' && Object.keys(customHeaders).length > 0) {
                         const headerStr = Object.entries(customHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n';
@@ -698,7 +699,8 @@ class StarryGuildPlayer {
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
-                        '-compression_level', '10',
+                        '-threads', '1',
+                        '-compression_level', '5',
                         '-frame_duration', '20',
                         '-f', 'opus'
                     ]
@@ -725,7 +727,8 @@ class StarryGuildPlayer {
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
-                        '-compression_level', '10',
+                        '-threads', '1',
+                        '-compression_level', '5',
                         '-frame_duration', '20',
                         '-f', 'opus'
                     ]
@@ -1022,8 +1025,8 @@ class StarryGuildPlayer {
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
-                { label: 'Balanced Studio Master (Default)', description: 'Automatic bass balance, vocal presence and peak-safe loudness', value: 'empowering', emoji: '✨' },
-                { label: 'Natural / Unprocessed', description: 'No EQ boost or artificial spatial processing', value: 'clear', emoji: '🎼' },
+                { label: 'Natural / Unprocessed (Default)', description: 'Original source tone with no additional EQ', value: 'clear', emoji: '🎼' },
+                { label: 'Studio Master (Optional)', description: 'Gentle bass and vocal shaping; changes the original mix', value: 'empowering', emoji: '✨' },
                 { label: 'Empowering EQ', description: 'Bass and treble enhancement; may color the original mix', value: 'empowering', emoji: '✨' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
@@ -1174,6 +1177,7 @@ class StarryGuildPlayer {
                         '-i', file,
                         ...activeFilter,
                         '-c:a', 'libopus',
+                        '-compression_level', '5',
                         '-ar', '48000',
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,

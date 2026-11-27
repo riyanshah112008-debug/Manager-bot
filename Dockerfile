@@ -1,40 +1,56 @@
 FROM node:22.12.0-bookworm-slim
 
-# Install system dependencies (Python for stream resolver & build tools)
+# Keep the Discord bot and the audio engine in one paid Render service.
+# Lavalink handles source decoding and Opus output separately from the Node event loop.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     ffmpeg \
     ca-certificates \
+    curl \
+    openjdk-17-jre-headless \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install the resolver during the image build, not at bot startup.
+# Install yt-dlp at build time for local-development fallback tooling.
 RUN python3 -m pip install --no-cache-dir --break-system-packages yt-dlp
+
+# Pin the audio engine release; do not download or update it during service startup.
+ARG LAVALINK_VERSION=4.2.2
+RUN mkdir -p /opt/lavalink/plugins \
+    && curl --fail --location --silent --show-error --retry 4 --retry-delay 2 \
+       "https://github.com/lavalink-devs/Lavalink/releases/download/${LAVALINK_VERSION}/Lavalink.jar" \
+       --output /opt/lavalink/Lavalink.jar \
+    && test -s /opt/lavalink/Lavalink.jar \
+    && curl --fail --location --silent --show-error --retry 4 --retry-delay 2 \
+       "https://maven.lavalink.dev/releases/dev/lavalink/youtube/youtube-plugin/1.18.2/youtube-plugin-1.18.2.jar" \
+       --output /opt/lavalink/plugins/youtube-plugin-1.18.2.jar \
+    && test -s /opt/lavalink/plugins/youtube-plugin-1.18.2.jar \
+    && curl --fail --location --silent --show-error --retry 4 --retry-delay 2 \
+       "https://maven.lavalink.dev/releases/dev/lavalink/youtube/youtube-plugin/1.18.2/youtube-plugin-1.18.2.jar" \
+       --output /opt/lavalink/plugins/youtube-plugin-1.18.2.jar \
+    && test -s /opt/lavalink/plugins/youtube-plugin-1.18.2.jar
 
 WORKDIR /app
 
-# Copy package specifications
 COPY package*.json ./
-
-# Install production dependencies
 RUN npm install --omit=dev --legacy-peer-deps
 
-# Copy entire application codebase
 COPY . .
+COPY infra/lavalink/application.yml /opt/lavalink/application.yml
 
-# Give the unprivileged Node.js user ownership of the application directory.
-RUN chown -R node:node /app
+RUN chown -R node:node /app /opt/lavalink \
+    && chmod 755 /app/scripts/start-services.sh \
+    && chmod 755 /opt/lavalink
 
-# Expose Web Dashboard port
 EXPOSE 10000
 
 ENV NODE_ENV=production
 ENV PORT=10000
+ENV JAVA_TOOL_OPTIONS="-XX:+UseG1GC -XX:MaxGCPauseMillis=150"
 
-# Run the bot without root privileges. npm start still executes prestart.
 USER node
 
-# Use npm start so the prestart lifecycle deploys the current Discord
-# application-command payload before the bot connects to the gateway.
-CMD ["npm", "start"]
+# Start the local Lavalink process first, wait for its health endpoint, then
+# start the Discord bot. Either process exiting causes the service to restart.
+CMD ["/app/scripts/start-services.sh"]

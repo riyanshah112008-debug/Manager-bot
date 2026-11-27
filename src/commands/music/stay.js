@@ -3,6 +3,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 const { isStayConnected, setStayConnected } = require('../../utils/musicStayConnected');
+const { isLavalinkRequired, isLavalinkReady } = require('../../utils/audioBackendPolicy');
 
 const EPHEMERAL_FLAG = MessageFlags?.Ephemeral ?? 64;
 
@@ -23,11 +24,17 @@ module.exports = {
         }
 
         const voiceChannel = context.member?.voice?.channel;
-        let kazagumoPlayer = client.manager?.getPlayer?.(guild.id) || null;
+        let kazagumoManager = client.manager || null;
+        let kazagumoPlayer = kazagumoManager?.getPlayer?.(guild.id) || null;
         if (!kazagumoPlayer && client.multiBot?.instances) {
             for (const instance of client.multiBot.instances.values()) {
-                const candidate = instance.client?.manager?.getPlayer?.(guild.id);
-                if (candidate) { kazagumoPlayer = candidate; break; }
+                const candidateManager = instance.client?.manager;
+                const candidate = candidateManager?.getPlayer?.(guild.id);
+                if (candidate) {
+                    kazagumoManager = candidateManager;
+                    kazagumoPlayer = candidate;
+                    break;
+                }
             }
         }
 
@@ -44,6 +51,21 @@ module.exports = {
 
         if (!voiceChannel) {
             return context.reply({ content: 'Join a voice channel first to enable 24/7 mode.', flags: [EPHEMERAL_FLAG] });
+        }
+        if (!player && isLavalinkRequired()) {
+            if (!isLavalinkReady(kazagumoManager)) {
+                return context.reply({
+                    content: 'Starry’s dedicated Render audio node is unavailable. 24/7 mode cannot start until Lavalink reconnects.',
+                    flags: [EPHEMERAL_FLAG]
+                });
+            }
+            kazagumoPlayer = await kazagumoManager.createPlayer({
+                guildId: guild.id,
+                voiceId: voiceChannel.id,
+                textId: context.channel?.id,
+                deaf: true
+            });
+            player = kazagumoPlayer;
         }
         if (!player) {
             nativePlayer = StarryAudioEngine.getOrCreatePlayer(client, guild.id, voiceChannel, context.channel);

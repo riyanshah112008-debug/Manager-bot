@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { StarryAudioEngine } = require("../../utils/nativeAudioEngine");
+const { isLavalinkRequired } = require("../../utils/audioBackendPolicy");
 
 module.exports = {
   name: "summon",
@@ -21,6 +22,30 @@ module.exports = {
     }
 
     try {
+      const manager = client.manager;
+      const hasReadyLavalink = Boolean(
+        manager?.shoukaku?.nodes &&
+        Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1)
+      );
+      if (hasReadyLavalink) {
+        let player = manager.getPlayer(context.guild.id);
+        if (!player) {
+          player = await manager.createPlayer({
+            guildId: context.guild.id,
+            voiceId: voiceChannel.id,
+            textId: context.channel.id,
+            deaf: true
+          });
+        } else if (player.voiceId !== voiceChannel.id) {
+          await player.setVoiceChannel(voiceChannel.id);
+        }
+        return context.reply({ content: `🎧 Joined voice channel: **${voiceChannel.name}** using Starry's dedicated audio node.` });
+      }
+
+      if (isLavalinkRequired()) {
+        return context.reply({ content: '⚠️ Starry’s dedicated Render audio node is not ready. Please retry after Lavalink reconnects.', ephemeral: true });
+      }
+
       const player = StarryAudioEngine.getOrCreatePlayer(client, context.guild.id, voiceChannel, context.channel);
       await player.connect();
       return context.reply({ content: `🎧 Joined voice channel: **${voiceChannel.name}**` });

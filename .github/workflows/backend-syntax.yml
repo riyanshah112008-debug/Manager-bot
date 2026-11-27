@@ -25,5 +25,9 @@ jobs:
         run: |
           find src public -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
           node --check deploy-commands.js
+      - name: Validate Render audio supervisor shell syntax
+        run: sh -n scripts/start-services.sh
+      - name: Build Render production container
+        run: docker build --pull --tag starry-render-audio-validation .
       - name: Run deterministic verification tests
         run: npm test

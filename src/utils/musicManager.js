@@ -301,42 +301,35 @@ for (const TrackClass of trackClasses) {
 
 const EPHEMERAL_FLAG = MessageFlags ? MessageFlags.Ephemeral : 64;
 
-const defaultNodes = [
-    {
-        name: 'Node-1-Serenetia-SSL',
-        url: process.env.LAVALINK_URL || 'lavalink.serenetia.com:443',
-        auth: process.env.LAVALINK_AUTH || 'youshallnotpass',
-        secure: process.env.LAVALINK_SECURE ? process.env.LAVALINK_SECURE === 'true' : true,
-        retryAmount: 15,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-2-Serenetia-V4-SSL',
-        url: 'lavalinkv4.serenetia.com:443',
-        auth: 'https://seretia.link/discord',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-3-TriniumHost-SSL',
-        url: 'lavalink-v4.triniumhost.com:443',
-        auth: 'free',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
-    },
-    {
-        name: 'Node-4-MilloHost-SSL',
-        url: 'lava-v4.millohost.my.id:443',
-        auth: 'https://discord.gg/mjS5J2K3ep',
-        secure: true,
-        retryAmount: 10,
-        retryDelay: 3000
-    }
-];
+const configuredNodes = process.env.LAVALINK_URL ? [{
+    name: process.env.LAVALINK_NODE_NAME || 'Starry-Dedicated-Lavalink',
+    url: process.env.LAVALINK_URL,
+    auth: process.env.LAVALINK_AUTH || 'youshallnotpass',
+    secure: process.env.LAVALINK_SECURE !== 'false',
+    retryAmount: 25,
+    retryDelay: 3000
+}] : [];
 
-const Nodes = defaultNodes;
+// Public community Lavalink nodes are shared by unrelated bots and are not a production audio SLA.
+// Keep them opt-in only; native fallback is reserved for local development and is disabled by Render.
+const publicFallbackNodes = process.env.STARRY_ENABLE_PUBLIC_LAVALINK_NODES === 'true' ? [
+    { name: 'Community-Serenetia-SSL', url: 'lavalink.serenetia.com:443', auth: 'youshallnotpass', secure: true, retryAmount: 10, retryDelay: 5000 },
+    { name: 'Community-Serenetia-V4-SSL', url: 'lavalinkv4.serenetia.com:443', auth: 'https://seretia.link/discord', secure: true, retryAmount: 8, retryDelay: 5000 },
+    { name: 'Community-TriniumHost-SSL', url: 'lavalink-v4.triniumhost.com:443', auth: 'free', secure: true, retryAmount: 8, retryDelay: 5000 },
+    { name: 'Community-MilloHost-SSL', url: 'lava-v4.millohost.my.id:443', auth: 'https://discord.gg/mjS5J2K3ep', secure: true, retryAmount: 8, retryDelay: 5000 }
+] : [];
+
+const Nodes = [...configuredNodes, ...publicFallbackNodes];
+
+if (process.env.STARRY_REQUIRE_LAVALINK === 'true') {
+    if (!process.env.LAVALINK_URL || Nodes.length === 0) {
+        console.error('[Music Backend] Render production requires a configured Lavalink node; native FFmpeg fallback is disabled.');
+    } else {
+        console.log('[Music Backend] Production mode: dedicated Lavalink node required; public nodes and native stream fallback are disabled.');
+    }
+} else {
+    console.log('[Music Backend] Development mode: native audio fallback remains available when Lavalink is offline.');
+}
 
 function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConnected = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
@@ -382,8 +375,8 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConne
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
-            { label: '⭐ Studio master', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
-            { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
+            { label: 'Clear / Flat Studio (Default)', description: 'Unprocessed source audio with no tonal shaping', value: 'clear', emoji: '🎼' },
+            { label: 'Studio Master (Optional)', description: 'Gentle bass lift and vocal presence; changes the source tone', value: 'empowering', emoji: '✨' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
             { label: '8D Rotating Pan', description: 'Slow left-to-right stereo rotation', value: '8d', emoji: '🌀' },
             { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
@@ -1215,7 +1208,7 @@ function createMusicManager(client) {
     });
 
     // If client is already ready or logged in, connect nodes immediately
-    if (client.isReady?.() || client.user) {
+    if (Nodes.length > 0 && (client.isReady?.() || client.user)) {
         try {
             manager.shoukaku.connector.ready(Nodes);
         } catch (readyErr) {
@@ -1247,10 +1240,14 @@ function createMusicManager(client) {
         applyPremiumVoiceBitrate(player, client).catch(() => {});
         recordTrackHistory(player, track);
 
-        // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
-        const activeFilter = player.data.get('activeFilter') || 'empowering';
+        // Start with a transparent flat profile; only apply DSP when a user selects it.
+        const activeFilter = player.data.get('activeFilter') || 'clear';
         player.data.set('activeFilter', activeFilter);
-        await applyKazagumoFilter(player, activeFilter).catch(() => {});
+        // New players start flat. Avoid an unnecessary remote filter mutation at every track start.
+        // Explicitly selected non-flat presets are reapplied to each new track.
+        if (activeFilter !== 'clear') {
+            await applyKazagumoFilter(player, activeFilter).catch(() => {});
+        }
 
         // Dedicated Request Channel Integration: Update controller in-place, never duplicate
         try {
@@ -1334,7 +1331,7 @@ function createMusicManager(client) {
                 `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Spotify'}\n` +
-                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'empowering' ? '⭐ Balanced Studio EQ' : currentActiveFilter.toUpperCase()}\`\n` +
+                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'clear' ? 'Natural / Unprocessed' : currentActiveFilter.toUpperCase()}\`\n` +
                 `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
                 `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`

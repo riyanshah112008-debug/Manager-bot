@@ -18,6 +18,7 @@ const { parseSpotifyUrl, resolveSpotifyUrl } = require('../../utils/spotifyApi')
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('../../utils/contextHelper');
 const { StarryAudioEngine, formatTime, createProgressBar } = require('../../utils/nativeAudioEngine');
 const { requirePremium } = require('../../utils/premiumHelper');
+const { isLavalinkRequired } = require('../../utils/audioBackendPolicy');
 
 function getVoiceGuard(ctx) {
     const voiceChannel = ctx.member?.voice?.channel;
@@ -51,7 +52,7 @@ async function startKazagumoPlayback(player, track = null) {
     if (player.playing || player.paused) return false;
 
     const pendingSince = Number(player.data?.get('starryPlaybackStartPending') || 0);
-    if (pendingSince && Date.now() - pendingSince < 20000) return false;
+    if (pendingSince && Date.now() - pendingSince < 8000) return false;
     player.data?.delete('starryPlaybackStartPending');
     player.data?.set('starryPlaybackStartPending', Date.now());
 
@@ -64,6 +65,36 @@ async function startKazagumoPlayback(player, track = null) {
     } catch (error) {
         player.data?.delete('starryPlaybackStartPending');
         throw error;
+    }
+}
+
+// Prevent duplicate execution when multiple Discord client listeners receive the same message.
+const MUSIC_REQUEST_CLAIMS = globalThis[Symbol.for('starry.music.requestClaims')] ||
+    (globalThis[Symbol.for('starry.music.requestClaims')] = new Map());
+
+function claimMusicRequest(ctx) {
+    const messageId = ctx?.message?.id;
+    if (!messageId) return true;
+    const now = Date.now();
+    for (const [id, expiresAt] of MUSIC_REQUEST_CLAIMS) {
+        if (expiresAt <= now) MUSIC_REQUEST_CLAIMS.delete(id);
+    }
+    if (MUSIC_REQUEST_CLAIMS.has(messageId)) return false;
+    MUSIC_REQUEST_CLAIMS.set(messageId, now + 30000);
+    return true;
+}
+
+async function searchWithTimeout(searchPromise, timeoutMs = 2600) {
+    let timeoutId;
+    try {
+        return await Promise.race([
+            Promise.resolve(searchPromise),
+            new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(`Music search exceeded ${timeoutMs}ms resolution budget.`)), timeoutMs);
+            })
+        ]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
     }
 }
 
@@ -135,6 +166,7 @@ const commands = [
             return interaction.respond(choices).catch(() => {});
         },
         async execute(ctx) {
+            if (!claimMusicRequest(ctx)) return;
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -176,7 +208,7 @@ const commands = [
                         for (let offset = 0; offset < spotifyCollection.tracks.length; offset += 3) {
                             const batch = spotifyCollection.tracks.slice(offset, offset + 3);
                             const results = await Promise.all(batch.map(async (metadata) => {
-                                const match = await manager.search('ytsearch:' + metadata.query, { requester: ctx.user });
+                                const match = await searchWithTimeout(manager.search('ytsearch:' + metadata.query, { requester: ctx.user }));
                                 const playable = match?.tracks?.[0];
                                 if (!playable) return null;
                                 return {
@@ -199,7 +231,32 @@ const commands = [
                             playlist: { name: 'Spotify track match' }
                         };
                     } else {
-                        res = await manager.search(query, { requester: ctx.user });
+                        // Search YouTube Music and YouTube in parallel: provider-specific
+                        // prefixes are more reliable than relying on a node's default engine.
+                        // Keep the entire Lavalink lookup within a bounded startup budget.
+                        const isDirectUrl = /^https?:\/\//i.test(query.trim());
+                        const searches = isDirectUrl
+                            ? [manager.search(query.trim(), { requester: ctx.user }).catch(() => null)]
+                            : [
+                                manager.search(`ytmsearch:${query}`, { requester: ctx.user }).catch(() => null),
+                                manager.search(`ytsearch:${query}`, { requester: ctx.user }).catch(() => null)
+                            ];
+                        const completedCandidates = new Array(searches.length);
+                        let searchTimer;
+                        await Promise.race([
+                            Promise.all(searches.map((search, index) => search.then(result => {
+                                completedCandidates[index] = result;
+                            }).catch(() => {
+                                completedCandidates[index] = null;
+                            }))),
+                            new Promise(resolve => {
+                                searchTimer = setTimeout(resolve, 2200);
+                            })
+                        ]);
+                        if (searchTimer) clearTimeout(searchTimer);
+                        res = completedCandidates.find(candidate =>
+                            candidate?.tracks?.length && candidate.loadType !== 'empty' && candidate.loadType !== 'error'
+                        ) || null;
                     }
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                         throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
@@ -228,10 +285,10 @@ const commands = [
 
                     let preservedQueue = [];
                     const pendingStartAt = Number(player.data?.get('starryPlaybackStartPending') || 0);
-                    if (pendingStartAt && Date.now() - pendingStartAt >= 20000) player.data.delete('starryPlaybackStartPending');
+                    if (pendingStartAt && Date.now() - pendingStartAt >= 8000) player.data.delete('starryPlaybackStartPending');
                     const staleIdleTrack = Boolean(
                         !player.playing && !player.paused && player.queue.current &&
-                        (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
+                        (!pendingStartAt || Date.now() - pendingStartAt >= 8000)
                     );
                     if (staleIdleTrack) {
                         preservedQueue = Array.from(player.queue || []);
@@ -332,14 +389,23 @@ const commands = [
                 }
             }
 
+            // Render production must never fall back to the in-process FFmpeg/yt-dlp path.
+            // It can underrun the Discord event loop under load and produce audible gaps/crackles.
+            if (isLavalinkRequired()) {
+                const notice = '⚠️ Starry audio is temporarily unavailable because the dedicated Render Lavalink node is not ready. The unstable local transcoding fallback is disabled in production. Please retry after the audio node reconnects.';
+                if (loadingMsg) {
+                    return loadingMsg.edit({ content: notice, embeds: [], components: [] }).catch(() => null);
+                }
+                return ctx.reply(notice);
+            }
+
             // Route 2: Native Audio Engine (Local / Standalone / Cloud fallback)
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
 
             try {
                 // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
-                    StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
+                    searchWithTimeout(StarryAudioEngine.search(query, ctx.user), 2600)
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
@@ -663,9 +729,13 @@ const commands = [
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
+            if (isLavalinkRequired()) {
+                return ctx.reply('Use the `/stay` command for 24/7 mode on the dedicated Render Lavalink player.');
+            }
+
             const targetClient = guard.workerClient || ctx.client;
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
-            player.connect().catch(() => {});
+            await player.connect();
             player.is247 = !player.is247;
 
             return ctx.reply(`📻 24/7 Voice Channel Persistence is now: **${player.is247 ? '🟢 ENABLED' : '🔴 DISABLED'}**!`);
@@ -692,6 +762,10 @@ const commands = [
                         if (p) { kPlayer = p; break; }
                     }
                 }
+            }
+
+            if (!kPlayer && isLavalinkRequired()) {
+                return ctx.reply('⚠️ Autoplay requires an active Lavalink music session. Use `,play <song>` to start music first.');
             }
 
             let newState = false;
@@ -1330,6 +1404,28 @@ const commands = [
             if (guard.error) return ctx.reply(guard.error);
 
             const targetClient = guard.workerClient || ctx.client;
+            const manager = targetClient.manager;
+            const hasReadyLavalink = Boolean(
+                manager?.shoukaku?.nodes &&
+                Array.from(manager.shoukaku.nodes.values()).some(node => node.state === 1)
+            );
+            if (hasReadyLavalink) {
+                let player = manager.getPlayer(ctx.guild.id);
+                if (!player) {
+                    player = await manager.createPlayer({
+                        guildId: ctx.guild.id,
+                        voiceId: guard.voiceChannel.id,
+                        textId: ctx.channel.id,
+                        deaf: true
+                    });
+                } else if (player.voiceId !== guard.voiceChannel.id) {
+                    await player.setVoiceChannel(guard.voiceChannel.id);
+                }
+                return ctx.reply(`👋 **Joined voice channel:** <#${guard.voiceChannel.id}> using Starry's dedicated audio node.`);
+            }
+            if (isLavalinkRequired()) {
+                return ctx.reply('⚠️ Starry’s dedicated Render audio node is not ready. Please retry when Lavalink reconnects.');
+            }
             const player = StarryAudioEngine.getOrCreatePlayer(targetClient, ctx.guild.id, guard.voiceChannel, ctx.channel);
             await player.connect();
 
@@ -1565,6 +1661,9 @@ const commands = [
 
 const spotifyCommand = require('../music/spotify');
 commands.push(spotifyCommand);
+
+commands.claimMusicRequest = claimMusicRequest;
+commands.searchWithTimeout = searchWithTimeout;
 
 module.exports = commands;
 
