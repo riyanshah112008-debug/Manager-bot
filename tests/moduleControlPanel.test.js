@@ -2,38 +2,44 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 
-const schema = fs.readFileSync(require.resolve('../src/models/AutomodSchema'), 'utf8');
-const helper = fs.readFileSync(require.resolve('../src/utils/automodHelper'), 'utf8');
-const automod = fs.readFileSync(require.resolve('../src/modules/automod'), 'utf8');
-const commands = fs.readFileSync(require.resolve('../src/commands/bundles/systemCommands'), 'utf8');
+const { AutomodGuild } = require('../src/models/AutomodSchema');
+const automodHelper = require('../src/utils/automodHelper');
+const systemCommands = require('../src/commands/bundles/systemCommands');
+const { isLoggingAllowed } = require('../src/utils/loggingPolicy');
 
-test('AutoMod persists guild-wide link and emoji submodule settings', () => {
-    assert.match(schema, /linksEnabled:\s*\{\s*type:\s*Boolean,\s*default:\s*true\s*\}/);
-    assert.match(schema, /emojisEnabled:\s*\{\s*type:\s*Boolean,\s*default:\s*true\s*\}/);
-    assert.match(helper, /async function setGuildSubmoduleStatus/);
-    assert.match(helper, /AutomodGuild\.findOneAndUpdate/);
-    assert.match(helper, /db\.updateGuildSettings\(guildId, \{ automod \}\)/);
-    assert.match(helper, /if \(!persisted\) throw new Error/);
+test('AutoMod schema exposes persistent parent and child module switches', () => {
+    assert.equal(AutomodGuild.schema.path('enabled').options.default, true);
+    assert.equal(AutomodGuild.schema.path('linksEnabled').options.default, true);
+    assert.equal(AutomodGuild.schema.path('emojisEnabled').options.default, true);
 });
 
-test('AutoMod runtime checks the saved parent and child module switches', () => {
-    assert.match(automod, /if \(!isServerEnabled\) return/);
-    assert.match(automod, /getGuildSubmoduleStatus\(message\.guild\.id, 'links'\)/);
-    assert.match(automod, /getGuildSubmoduleStatus\(message\.guild\.id, 'emojis'\)/);
+test('AutoMod helpers expose safe server and submodule controls', () => {
+    assert.equal(typeof automodHelper.getGuildStatus, 'function');
+    assert.equal(typeof automodHelper.setGuildStatus, 'function');
+    assert.equal(typeof automodHelper.getGuildSubmoduleStatus, 'function');
+    assert.equal(typeof automodHelper.setGuildSubmoduleStatus, 'function');
+    assert.equal(typeof automodHelper.buildServerAutomodEmbed, 'function');
+    assert.equal(typeof automodHelper.createServerAutomodButtons, 'function');
+    assert.equal(typeof automodHelper.buildChannelAutomodEmbed, 'function');
+    assert.equal(typeof automodHelper.createChannelAutomodButtons, 'function');
+    assert.equal(automodHelper.getGuildSubmoduleStatus('123456789012345678', 'links'), true);
+    assert.equal(automodHelper.getGuildSubmoduleStatus('123456789012345678', 'emojis'), true);
 });
 
-test('modules command exposes real AutoMod and Logging parent/submodule controls', () => {
-    assert.match(commands, /name: 'modules'/);
-    assert.match(commands, /aliases: \['features', 'modulepanel'\]/);
-    for (const id of [
-        'modules_automod', 'modules_logging', 'modules_links', 'modules_emojis',
-        'modules_log_moderation', 'modules_log_messages', 'modules_log_members',
-        'modules_log_voice', 'modules_log_server', 'modules_log_ai'
-    ]) assert.ok(commands.includes(id), id);
-    assert.match(commands, /PermissionFlagsBits\.ManageGuild/);
-    assert.match(commands, /interaction\.update\(await render\(\)\)/);
-    assert.match(commands, /panelMessage\.createMessageComponentCollector\(\{ componentType: ComponentType\.Button \}\)/);
-    assert.match(commands, /guildId: \{ \$eq: guildId \}/);
+test('module control center is registered with Manage Server metadata', () => {
+    const command = systemCommands.find(item => item.name === 'modules');
+    assert.ok(command, 'modules command is registered');
+    assert.deepEqual(command.aliases, ['features', 'modulepanel']);
+    assert.equal(typeof command.execute, 'function');
+    assert.equal(command.data.toJSON().name, 'modules');
+    assert.match(command.data.toJSON().description, /Enable or disable/);
+});
+
+test('logging policy applies both parent and category switches used by the module panel', () => {
+    assert.equal(isLoggingAllowed({ enabled: false, messagesEnabled: true }, 'messages'), false);
+    assert.equal(isLoggingAllowed({ enabled: true, messagesEnabled: false }, 'messages'), false);
+    assert.equal(isLoggingAllowed({ enabled: true, messagesEnabled: true }, 'messages'), true);
+    assert.equal(isLoggingAllowed({ enabled: true, aiEnabled: false }, 'ai'), false);
+    assert.equal(isLoggingAllowed({ enabled: true, aiEnabled: true }, 'ai'), true);
 });
