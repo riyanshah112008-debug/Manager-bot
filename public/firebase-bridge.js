@@ -1,8 +1,7 @@
 (() => {
 "use strict";
-// ⚠️ UPDATE REQUIRED after the Render account move: paste the new Render service URL here
-// (e.g. "https://YOUR-NEW-SERVICE.onrender.com"), or define window.STARRY_BACKEND_URL before this script loads.
-const RENDER_BACKEND=(window.STARRY_BACKEND_URL||"https://YOUR-NEW-SERVICE.onrender.com").replace(/\/+$/,"");
+// Backend service for the website (Render). Can be overridden per page via window.STARRY_BACKEND_URL.
+const RENDER_BACKEND=(window.STARRY_BACKEND_URL||"https://starry-il8g.onrender.com").replace(/\/+$/,"");
 const isRenderBackend=/(^|\.)onrender\.com$/i.test(location.hostname);
 // Use the Render API from Firebase Hosting and all Firebase custom domains.
 const backendOrigin=isRenderBackend?location.origin:RENDER_BACKEND;

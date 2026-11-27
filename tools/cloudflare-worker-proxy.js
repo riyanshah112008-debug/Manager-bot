@@ -8,13 +8,13 @@
  * Setup Instructions (Takes 60 seconds):
  * 1. Go to https://dash.cloudflare.com -> Workers & Pages -> Create Application -> Create Worker.
  * 2. Paste this entire code into the worker editor.
- * 3. Replace UPSTREAM_RENDER_URL below with your Render service URL (e.g. https://YOUR-NEW-SERVICE.onrender.com).
+ * 3. Replace UPSTREAM_RENDER_URL below with your Render service URL (e.g. https://starry-il8g.onrender.com).
  * 4. Click 'Save and Deploy'.
  * 5. Copy your worker's public URL (e.g. https://starry-verify.<your-name>.workers.dev).
  * 6. Set VERIFY_URL=<your-worker-url> in your Render Environment Variables or .env.
  */
 
-const UPSTREAM_RENDER_URL = 'https://YOUR-NEW-SERVICE.onrender.com';
+const UPSTREAM_RENDER_URL = 'https://starry-il8g.onrender.com';
 
 export default {
     async fetch(request, env, ctx) {
