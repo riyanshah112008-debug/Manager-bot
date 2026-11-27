@@ -46,6 +46,15 @@ function getVoiceGuard(ctx) {
     return { voiceChannel, botMember, workerClient: ctx.client };
 }
 
+function withTimeout(promise, timeoutMs, label) {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(label)), timeoutMs);
+        timeoutId.unref?.();
+    });
+    return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 function getActivePlayer(client, guildId) {
     let kPlayer = client.manager?.getPlayer(guildId);
     if (!kPlayer && client.multiBot?.instances) {
@@ -153,7 +162,7 @@ const commands = [
                         for (let offset = 0; offset < spotifyCollection.tracks.length; offset += 3) {
                             const batch = spotifyCollection.tracks.slice(offset, offset + 3);
                             const results = await Promise.all(batch.map(async (metadata) => {
-                                const match = await manager.search('ytsearch:' + metadata.query, { requester: ctx.user });
+                                const match = await withTimeout(manager.search('ytsearch:' + metadata.query, { requester: ctx.user }), 2600, 'Lavalink search exceeded 2.6 seconds');
                                 const playable = match?.tracks?.[0];
                                 if (!playable) return null;
                                 return {
@@ -176,7 +185,7 @@ const commands = [
                             playlist: { name: 'Spotify track match' }
                         };
                     } else {
-                        res = await manager.search(query, { requester: ctx.user });
+                        res = await withTimeout(manager.search(query, { requester: ctx.user }), 2600, 'Lavalink search exceeded 2.6 seconds');
                     }
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                         throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
@@ -212,7 +221,7 @@ const commands = [
                         for (const track of res.tracks) {
                             player.queue.add(track);
                         }
-                        if (!player.playing && !player.paused) player.play();
+                        if (!player.playing && !player.paused) await player.play();
 
                         if (loadingMsg) {
                             loadingMsg.delete().catch(() => {});
@@ -249,9 +258,9 @@ const commands = [
                         return ctx.reply({ embeds: [embed] });
                     } else {
                         const track = res.tracks[0];
-                        if (!player.playing && !player.paused && !player.queue.current) {
+                        if (!player.playing && !player.paused) {
                             player.queue.add(track);
-                            player.play();
+                            await player.play();
                             // loadingMsg will be deleted by playerStart handler in musicManager.js
                         } else {
                             if (loadingMsg) {
@@ -290,7 +299,10 @@ const commands = [
                 // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
                     StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
+                    new Promise((_, reject) => {
+                        const timeoutId = setTimeout(() => reject(new Error('Audio search timed out after 3.2s')), 3200);
+                        timeoutId.unref?.();
+                    })
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
