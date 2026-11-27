@@ -14,7 +14,7 @@ The browser bridge in `public/firebase-bridge.js` sends backend paths (`/api/`, 
 
 Set these backend environment variables in Render:
 
-- `FRONTEND_URL`: the primary public website origin, for example `https://YOUR_SITE.web.app`.
+- `FRONTEND_URL`: the primary public website origin. This can be the Render URL itself (for example `https://starry-il8g.onrender.com`) or a separately hosted site such as `https://YOUR_SITE.web.app`.
 - `PUBLIC_URL`: the same public website origin (used by links and verification pages).
 - `CORS_ORIGINS`: optional comma-separated list of every allowed website origin, including any custom domain.
 - `DISCORD_REDIRECT_URI`: the Render backend callback URL, for example `https://YOUR_RENDER_SERVICE.onrender.com/auth/callback`.

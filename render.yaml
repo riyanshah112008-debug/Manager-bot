@@ -22,7 +22,7 @@ services:
       - key: DISCORD_REDIRECT_URI
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://starry-il8g.onrender.com
       - key: GEMINI_API_KEY
         sync: false
       - key: SPOTIFY_CLIENT_ID
@@ -32,7 +32,7 @@ services:
       - key: VERIFY_URL
         sync: false
       - key: PUBLIC_URL
-        sync: false
+        value: https://starry-il8g.onrender.com
       - key: CUSTOM_DOMAIN
         sync: false
       - key: FIREBASE_PROJECT_ID
