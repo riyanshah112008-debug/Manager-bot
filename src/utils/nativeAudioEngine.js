@@ -1025,8 +1025,8 @@ class StarryGuildPlayer {
         // Row 4: High-Fidelity Audio DSP Filters
         const filterRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder('🎧 Select Audio Filter / Sound FX...').addOptions([
-                { label: 'Balanced Studio Master (Default)', description: 'Automatic bass balance, vocal presence and peak-safe loudness', value: 'empowering', emoji: '✨' },
-                { label: 'Natural / Unprocessed', description: 'No EQ boost or artificial spatial processing', value: 'clear', emoji: '🎼' },
+                { label: 'Natural / Unprocessed (Default)', description: 'Original source tone with no additional EQ', value: 'clear', emoji: '🎼' },
+                { label: 'Studio Master (Optional)', description: 'Gentle bass and vocal shaping; changes the original mix', value: 'empowering', emoji: '✨' },
                 { label: 'Empowering EQ', description: 'Bass and treble enhancement; may color the original mix', value: 'empowering', emoji: '✨' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
