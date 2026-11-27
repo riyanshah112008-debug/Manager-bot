@@ -67,6 +67,37 @@ async function startKazagumoPlayback(player, track = null) {
     }
 }
 
+// Prevent duplicate execution when multiple Discord client listeners receive the same message.
+const MUSIC_REQUEST_CLAIMS = globalThis[Symbol.for('starry.music.requestClaims')] ||
+    (globalThis[Symbol.for('starry.music.requestClaims')] = new Map());
+
+function claimMusicRequest(ctx) {
+    const messageId = ctx?.message?.id;
+    if (!messageId) return true;
+    const now = Date.now();
+    for (const [id, expiresAt] of MUSIC_REQUEST_CLAIMS) {
+        if (expiresAt <= now) MUSIC_REQUEST_CLAIMS.delete(id);
+    }
+    if (MUSIC_REQUEST_CLAIMS.has(messageId)) return false;
+    MUSIC_REQUEST_CLAIMS.set(messageId, now + 30000);
+    return true;
+}
+
+async function searchWithTimeout(searchPromise, timeoutMs = 2600) {
+    let timeoutId;
+    try {
+        return await Promise.race([
+            Promise.resolve(searchPromise),
+            new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('Music search exceeded the 2.6 second resolution budget.')), timeoutMs);
+                timeoutId.unref?.();
+            })
+        ]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+}
+
 function getActivePlayer(client, guildId) {
     let kPlayer = client.manager?.getPlayer(guildId);
     if (!kPlayer && client.multiBot?.instances) {
@@ -135,6 +166,7 @@ const commands = [
             return interaction.respond(choices).catch(() => {});
         },
         async execute(ctx) {
+            if (!claimMusicRequest(ctx)) return;
             const guard = getVoiceGuard(ctx);
             if (guard.error) return ctx.reply(guard.error);
 
@@ -176,7 +208,7 @@ const commands = [
                         for (let offset = 0; offset < spotifyCollection.tracks.length; offset += 3) {
                             const batch = spotifyCollection.tracks.slice(offset, offset + 3);
                             const results = await Promise.all(batch.map(async (metadata) => {
-                                const match = await manager.search('ytsearch:' + metadata.query, { requester: ctx.user });
+                                const match = await searchWithTimeout(manager.search('ytsearch:' + metadata.query, { requester: ctx.user }));
                                 const playable = match?.tracks?.[0];
                                 if (!playable) return null;
                                 return {
@@ -199,7 +231,7 @@ const commands = [
                             playlist: { name: 'Spotify track match' }
                         };
                     } else {
-                        res = await manager.search(query, { requester: ctx.user });
+                        res = await searchWithTimeout(manager.search(query, { requester: ctx.user }));
                     }
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                         throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
@@ -338,8 +370,7 @@ const commands = [
             try {
                 // Fast search with 4-second timeout guarantee
                 const result = await Promise.race([
-                    StarryAudioEngine.search(query, ctx.user),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Audio search timed out after 10s')), 10000))
+                    searchWithTimeout(StarryAudioEngine.search(query, ctx.user), 2600)
                 ]);
 
                 if (!result || !result.tracks || result.tracks.length === 0) {
