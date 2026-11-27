@@ -10,16 +10,17 @@ const badWordsList = [
     'badword1', 'badword2', 'scam', 'free nitro', 'click here for free'
 ];
 
-const MEDIA_EXTENSION = /\.(?:png|jpe?g|gif|webp|avif|bmp|tiff?)(?:$|[?#])/i;
+const MEDIA_EXTENSION = /\\.(?:png|jpe?g|gif|webp|avif|bmp|tiff?)(?:$|[?#])/i;
+const MEDIA_URL = /https?:\\/\\/(?:[^\\s/]+\\.)?(?:tenor\\.com|giphy\\.com)\\/[^\\s]+|https?:\\/\\/[^\\s]+\\.(?:png|jpe?g|gif|webp|avif)(?:[?#][^\\s]*)?/i;
 
 function hasMediaAttachment(message) {
     return message.attachments?.some(attachment => {
         const contentType = String(attachment.contentType || '').toLowerCase();
         const name = String(attachment.name || attachment.url || '');
         return contentType.startsWith('image/') || MEDIA_EXTENSION.test(name);
-    }) || message.embeds?.some(embed =>
-        Boolean(embed.image?.url || embed.thumbnail?.url || embed.type === 'gifv')
-    );
+    }) || (message.stickers?.size || 0) > 0 ||
+    message.embeds?.some(embed => Boolean(embed.image?.url || embed.thumbnail?.url || embed.type === 'gifv')) ||
+    MEDIA_URL.test(String(message.content || ''));
 }
 
 function shouldCountForRateLimit(message) {
