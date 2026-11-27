@@ -341,47 +341,40 @@ async function resolveChannel(ctx, args = []) {
 function buildChannelAutomodEmbed(guild, channel, settings, isGuildEnabled = true) {
     const isBothActive = settings.linksActive && settings.emojisActive;
     const isBothDisabled = !settings.linksActive && !settings.emojisActive;
-    
-    let color = '#2ECC71'; // Green
-    if (isBothDisabled) color = '#E74C3C'; // Red
-    else if (!isBothActive) color = '#F1C40F'; // Yellow
 
-    const embed = new EmbedBuilder()
+    let color = '#2ECC71';
+    if (isBothDisabled) color = '#E74C3C';
+    else if (!isBothActive) color = '#F1C40F';
+
+    return new EmbedBuilder()
         .setColor(color)
-        .setTitle(`🛡️ Starry AutoMod • Channel Configuration`)
-        .setDescription(`Channel: <#${channel.id}> (\`${channel.name || channel.id}\`)
-Server: **${guild.name}**`)
+        .setTitle('🛡️ Starry AutoMod • Channel Configuration')
+        .setDescription(`Channel: <#${channel.id}> (\`${channel.name || channel.id}\`)\nServer: **${guild.name}**`)
         .addFields(
             {
                 name: '🔗 Link Protection',
-                value: settings.linksActive 
-                    ? '🟢 **ACTIVE (Blocking Links)**
-*Unauthorized external links & invites are deleted & timed out.*' 
-                    : '🔴 **DISABLED (Links Allowed)**
-*Members can freely post links in this channel.*',
+                value: settings.linksActive
+                    ? '🟢 **ACTIVE (Blocking Links)**\n*Unauthorized external links & invites are deleted & timed out.*'
+                    : '🔴 **DISABLED (Links Allowed)**\n*Members can freely post links in this channel.*',
                 inline: true
             },
             {
                 name: '😀 Emoji Spam Filter',
-                value: settings.emojisActive 
-                    ? '🟢 **ACTIVE (Blocking 5+ Emojis)**
-*Spamming 5 or more emojis triggers auto-timeout.*' 
-                    : '🔴 **DISABLED (Emojis Allowed)**
-*Members can post multiple emojis without restriction.*',
+                value: settings.emojisActive
+                    ? '🟢 **ACTIVE (Blocking 5+ Emojis)**\n*Spamming 5 or more emojis triggers auto-timeout.*'
+                    : '🔴 **DISABLED (Emojis Allowed)**\n*Members can post multiple emojis without restriction.*',
                 inline: true
             },
             {
                 name: '🌐 Server AutoMod Engine',
-                value: isGuildEnabled 
-                    ? '🟢 **Globally Active** across entire server' 
+                value: isGuildEnabled
+                    ? '🟢 **Globally Active** across entire server'
                     : '🔴 **DISABLED / SUSPENDED Server-Wide** *(Use `,automod server on` or button below to enable)*',
                 inline: false
             }
         )
         .setFooter({ text: '💡 Use buttons below or type ,automod server on/off to manage server-wide.' })
         .setTimestamp();
-
-    return embed;
 }
 
 /**
