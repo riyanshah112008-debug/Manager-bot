@@ -18,12 +18,6 @@ const buildAdminHelpEmbed = (client) => {
                 '`/emergency-quarantine` — Applies a 7-day timeout to all members who joined in the last 24h.'
             },
             {
-                name: '💾 Backup & Disaster Recovery',
-                value: 
-                '`.backup` — Saves a full MongoDB snapshot of all roles, categories, channels & permission overwrites.\n' +
-                '`.restore` — Reconstructs missing channels/roles and re-applies saved permission overwrites.'
-            },
-            {
                 name: '⚙️ Master Setup & Configuration',
                 value: 
                 '`.setup-starry` / `/setup-starry` — Scans server channels and auto-links all modules (Logs, Tickets, Boosts, Chests, etc.).\n' +
