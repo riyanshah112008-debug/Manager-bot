@@ -7,7 +7,7 @@ const antiAbuse = require('../src/modules/antiAbuse');
 test('image attachments are excluded from rapid-text-spam counting', () => {
     const message = {
         content: '',
-        attachments: new Map([['1', { contentType: 'image/png', name: 'photo.png' }]]),
+        attachments: [{ contentType: 'image/png', name: 'photo.png' }],
         embeds: []
     };
     assert.equal(antiAbuse.hasMediaAttachment(message), true);
@@ -17,12 +17,12 @@ test('image attachments are excluded from rapid-text-spam counting', () => {
 test('GIF attachments and GIF embeds are excluded from rapid-text-spam counting', () => {
     const attachmentMessage = {
         content: '',
-        attachments: new Map([['1', { contentType: 'image/gif', name: 'reaction.gif' }]]),
+        attachments: [{ contentType: 'image/gif', name: 'reaction.gif' }],
         embeds: []
     };
     const embedMessage = {
         content: 'https://tenor.com/view/reaction',
-        attachments: new Map(),
+        attachments: [],
         embeds: [{ type: 'gifv', thumbnail: { url: 'https://media.tenor.com/reaction.gif' } }]
     };
     assert.equal(antiAbuse.shouldCountForRateLimit(attachmentMessage), false);
@@ -30,7 +30,7 @@ test('GIF attachments and GIF embeds are excluded from rapid-text-spam counting'
 });
 
 test('normal text remains eligible for spam detection', () => {
-    const message = { content: 'hello everyone', attachments: new Map(), embeds: [] };
+    const message = { content: 'hello everyone', attachments: [], embeds: [] };
     assert.equal(antiAbuse.hasMediaAttachment(message), false);
     assert.equal(antiAbuse.shouldCountForRateLimit(message), true);
 });
