@@ -325,7 +325,7 @@ const commands = [
                         await kazagumoPlayer.destroy().catch(() => {});
                     } else if (kazagumoPlayer) {
                         if (loadingMsg) loadingMsg.delete().catch(() => {});
-                        return ctx.reply('⚠️ The active Lavalink player could not start audio. I kept the existing session intact; please retry after the node recovers.');
+                        return ctx.reply('⚠️ Lavalink could not start this track. Your existing queue was kept; retry after the node reconnects and Starry will rebuild any idle player left with a stale track.');
                     }
                 }
             }
