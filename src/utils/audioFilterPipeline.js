@@ -38,7 +38,7 @@ function normalizeStages(filterString) {
     return String(filterString || 'volume=1.0')
         .split(',')
         .map(stage => stage.trim())
-        .filter(stage => stage && !/^alimiter=/i.test(stage));
+        .filter(Boolean);
 }
 
 function getPositiveEqBoost(equalizer) {
