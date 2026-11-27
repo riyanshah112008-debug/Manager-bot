@@ -226,6 +226,7 @@ const commands = [
                         await player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
+                    let preservedQueue = [];
                     const pendingStartAt = Number(player.data?.get('starryPlaybackStartPending') || 0);
                     if (pendingStartAt && Date.now() - pendingStartAt >= 20000) player.data.delete('starryPlaybackStartPending');
                     const staleIdleTrack = Boolean(
@@ -233,7 +234,7 @@ const commands = [
                         (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
                     );
                     if (staleIdleTrack) {
-                        const waitingTracks = Array.from(player.queue || []);
+                        preservedQueue = Array.from(player.queue || []);
                         await player.destroy();
                         player = await manager.createPlayer({
                             guildId: ctx.guild.id,
@@ -243,11 +244,11 @@ const commands = [
                         });
                         kazagumoPlayer = player;
                         createdKazagumoPlayer = true;
-                        for (const queuedTrack of waitingTracks) player.queue.add(queuedTrack);
                     }
 
                     if (res.loadType === 'playlist') {
                         for (const track of res.tracks) player.queue.add(track);
+                        for (const queuedTrack of preservedQueue) player.queue.add(queuedTrack);
                         const shouldStart = !player.playing && !player.paused && !player.data?.get('starryPlaybackStartPending');
                         if (shouldStart) {
                             if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
@@ -291,6 +292,7 @@ const commands = [
                             if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
                             if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
                             player.queue.add(track);
+                            for (const queuedTrack of preservedQueue) player.queue.add(queuedTrack);
                             await startKazagumoPlayback(player);
                             // playerStart edits the pending response after playback starts
                             return;
