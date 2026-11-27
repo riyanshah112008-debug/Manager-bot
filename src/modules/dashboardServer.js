@@ -312,12 +312,23 @@ function setupDashboardRoutes(app, client) {
         const clientSecretConfigured = Boolean(process.env.CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET);
         const clientIdConfigured = Boolean(process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id);
         const redirectConfigured = Boolean(process.env.DISCORD_REDIRECT_URI || process.env.RENDER_EXTERNAL_URL || getPublicUrl());
+        // Detect a stale DISCORD_REDIRECT_URI pointing at a different host (for
+        // example after moving to a new Render account) so the mismatch is visible.
+        let redirectUriMismatch = false;
+        if (process.env.DISCORD_REDIRECT_URI) {
+            try {
+                redirectUriMismatch = new URL(process.env.DISCORD_REDIRECT_URI).host !== req.get('host');
+            } catch (_) {
+                redirectUriMismatch = true;
+            }
+        }
         res.json({
             service: 'ok',
             oauthConfigured: clientIdConfigured && clientSecretConfigured && redirectConfigured,
             clientSecretConfigured,
             clientIdConfigured,
             redirectConfigured,
+            redirectUriMismatch,
             mongoConfigured: Boolean(process.env.MONGO_URI),
             mongoConnected,
             sessionStoreReady: mongoConnected
@@ -328,6 +339,13 @@ function setupDashboardRoutes(app, client) {
     // Render restart and works without process-local session state.
     app.get('/auth/login', actionLimiter, (req, res) => {
         const clientId = process.env.CLIENT_ID || process.env.APPLICATION_ID || client.user?.id || '1513589513648345368';
+        if (process.env.DISCORD_REDIRECT_URI) {
+            try {
+                if (new URL(process.env.DISCORD_REDIRECT_URI).host !== req.get('host')) {
+                    console.warn('DISCORD_REDIRECT_URI host does not match this service host. Discord will send users to the configured callback host; update the environment variable or the Discord OAuth redirect list.');
+                }
+            } catch (_) {}
+        }
         const host = req.get('host');
         const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
         const publicBase = (process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `${proto}://${host}`).replace(/\/+$/, '');
