@@ -311,7 +311,7 @@ const configuredNodes = process.env.LAVALINK_URL ? [{
 }] : [];
 
 // Public community Lavalink nodes are shared by unrelated bots and are not a production audio SLA.
-// Keep them opt-in only; without a dedicated node, the bot uses its Render-hosted native pipeline.
+// Keep them opt-in only; native fallback is reserved for local development and is disabled by Render.
 const publicFallbackNodes = process.env.STARRY_ENABLE_PUBLIC_LAVALINK_NODES === 'true' ? [
     { name: 'Community-Serenetia-SSL', url: 'lavalink.serenetia.com:443', auth: 'youshallnotpass', secure: true, retryAmount: 10, retryDelay: 5000 },
     { name: 'Community-Serenetia-V4-SSL', url: 'lavalinkv4.serenetia.com:443', auth: 'https://seretia.link/discord', secure: true, retryAmount: 8, retryDelay: 5000 },
