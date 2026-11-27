@@ -136,7 +136,7 @@ test('non-Premium and non-Level-3 servers never receive the 384 kbps request', a
     assert.equal(edits, 0);
 });
 
-test('music starts with the automatic balanced studio master unless a filter is explicitly selected', async () => {
+test('music starts with unprocessed audio unless a filter is explicitly selected', async () => {
     const source = require('node:fs').readFileSync(require.resolve('../src/utils/musicManager'), 'utf8');
     assert.match(source, /player\.data\.get\('activeFilter'\) \|\| 'empowering'/);
 });
@@ -242,7 +242,7 @@ test('native FFmpeg clear path adds no permanent limiter or resampler', () => {
 
 test('native Opus encoding uses real-time complexity rather than maximum CPU complexity', () => {
     const source = require('node:fs').readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
-    assert.equal((source.match(/'-compression_level', '5'/g) || []).length, 3,
+    assert.equal((source.match(/'-compression_level', '5'/g) || []).length, 2,
         'all native stream and seek encoders should use the real-time complexity setting');
     assert.doesNotMatch(source, /'-compression_level', '10'/,
         'maximum encoder complexity can starve the real-time audio loop on small instances');
