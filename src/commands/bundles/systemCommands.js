@@ -204,7 +204,7 @@ const modulesPanelCommand = {
         const saveLogging = async patch => {
             const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
             await ServerSettings.updateOne(
-                { guildId: { $eq: guildId } },
+                { guildId },
                 { $set: set, $setOnInsert: { guildId } },
                 { upsert: true, setDefaultsOnInsert: true }
             );
