@@ -746,7 +746,6 @@
                     <button class="side-link" onclick="switchModule('autorole')">🏷️ AutoRoles & Sticky</button>
                     <button class="side-link" onclick="switchModule('logging')">📜 Audit & Telemetry</button>
                     <button class="side-link" onclick="switchModule('embed')">🎨 Visual Embed Studio</button>
-                    <button class="side-link" onclick="switchModule('backups')">💾 Server Snapshots</button>
                     <button class="side-link" onclick="switchModule('console')" style="color: var(--cyan); font-weight: 800;">⚡ Command Catalogue</button>
                 </aside>
 
@@ -1113,18 +1112,7 @@
                         </div>
                     </div>
 
-                    <!-- MODULE 12: SERVER BACKUPS -->
-                    <div id="mod-backups" class="module-pane" style="display: none;">
-                        <h3 class="section-title">💾 Cloud Server Snapshots & Backups</h3>
-                        <p class="section-desc">Create 1-click snapshot backups of channels, categories, roles, and permissions.</p>
-                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 14px; padding: 20px;">
-                            <h4 style="font-size: 1.05rem; margin-bottom: 6px;">Snapshot Protection Active</h4>
-                            <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 14px;">Automated cloud backups preserve your complete server hierarchy and role configurations.</p>
-                            <button class="btn btn-primary" onclick="showToast('💾 Server Snapshot Created Successfully!')">📸 Create Instant Snapshot</button>
-                        </div>
-                    </div>
-
-                    <!-- MODULE 13: LIVE COMMAND CATALOGUE -->
+                    <!-- MODULE 12: LIVE COMMAND CATALOGUE -->
                     <div id="mod-console" class="module-pane" style="display: none;">
                         <h3 class="section-title">⚡ Live Command Catalogue</h3>
                         <p class="section-desc">Browse the commands currently registered by the Starry backend. Run commands in Discord using slash-command autocomplete.</p>

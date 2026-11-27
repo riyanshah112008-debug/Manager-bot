@@ -242,8 +242,7 @@ const components = createHelpComponents();
                     `• \`${prefix}ticketsetup\` — Spawn support ticket panel\n` +
                     `• \`${prefix}applysetup\` — Spawn staff application panel\n` +
                     `• \`${prefix}verify-setup\` — Spawn human verification panel\n` +
-                    `• \`${prefix}setupwelcome\` & \`${prefix}setupgoodbye\` — Greeting cards\n` +
-                    `• \`${prefix}backup\` & \`${prefix}restore\` — Server layout backups`
+                    `• \`${prefix}setupwelcome\` & \`${prefix}setupgoodbye\` — Greeting cards`
                 )
                 .setFooter({ text: 'Admins & Staff Only • Prefix: ,' })
                 .setTimestamp();
@@ -618,7 +617,7 @@ const components = createHelpComponents();
                 .setTitle('⭐ Support Starry Bot Development')
                 .setDescription('Thank you for considering supporting Starry! Your contributions keep our 24/7 high-fidelity music nodes, AI servers, and low-latency clusters running smoothly.')
                 .addFields(
-                    { name: '👑 Starry Premium', value: 'Unlock 24/7 voice persistence, studio DSP audio filters, cloud backups, and multi-bot workers with `,premium`!', inline: false },
+                    { name: '👑 Starry Premium', value: 'Unlock 24/7 voice persistence, studio DSP audio filters, multi-bot workers with `,premium`!', inline: false },
                     { name: '🌐 Web Store', value: 'Check out our official dashboard at https://starry-bot.loca.lt', inline: false }
                 )
                 .setFooter({ text: 'Starry Bot • Handcrafted with love' });
@@ -1012,8 +1011,7 @@ const components = createHelpComponents();
                     `• **Verification & Captcha Gateway** (Web Portal & Auto-Roles)\n` +
                     `• **Live Music Studio** (Remote Web Player & 24/7 Voice Lock)\n` +
                     `• **Visual Embed Studio** (WYSIWYG real-time Discord card preview)\n` +
-                    `• **Cloud Backups & Ban File Export**\n` +
-                    `• **Starry Premium & License Key Store**`
+                                        `• **Starry Premium & License Key Store**`
                 )
                 .setFooter({ text: 'Prefix: , • Single-Host Multi-Bot Orchestration' })
                 .setTimestamp();
@@ -1063,11 +1061,11 @@ const components = createHelpComponents();
                 .setTitle(isPrem ? `👑 Premium Active: ${tier.toUpperCase()}` : '⭐ Upgrade to Starry Premium')
                 .setDescription(
                     isPrem 
-                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 12 Studio & Security features are fully unlocked.*`
-                        : `Supercharge your server with 24/7 Voice persistence, Studio DSP Audio Filters, Cloud Disaster Backups, and Multi-Bot Worker Nodes!`
+                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 11 Studio & Security features are fully unlocked.*`
+                        : `Supercharge your server with 24/7 Voice persistence, Studio DSP Audio Filters, Multi-Bot Worker Nodes!`
                 )
                 .addFields(
-                    { name: '🛡️ Shield Plus ($4.99/mo | ₹399)', value: '• 24/7 Voice Channel Mode\n• 9 Studio DSP Hi-Fi Filters\n• Server Cloud Backup & Restore\n• Web Captcha Gateway\n• Emergency Lockdown Shield', inline: true },
+                    { name: '🛡️ Shield Plus ($4.99/mo | ₹399)', value: '• 24/7 Voice Channel Mode\n• 9 Studio DSP Hi-Fi Filters\n• Web Captcha Gateway\n• Emergency Lockdown Shield', inline: true },
                     { name: '🌟 Pro Cluster ($12.99/mo | ₹999)', value: '• Everything in Shield Plus\n• Multi-Bot Worker Nodes\n• 3-Room Simultaneous Playback\n• 2x Economy XP & Loot Multiplier\n• Flag Neural Translator', inline: true },
                     { name: '👑 Lifetime VIP ($39.99 | ₹3,299)', value: '• Permanent Lifetime Access\n• Unlimited Server Transfers\n• Golden Crown VIP Badge\n• Top-Priority FLAC Nodes\n• VIP Game Packs & Appeal Portal', inline: true }
                 )
@@ -1077,7 +1075,7 @@ const components = createHelpComponents();
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('premium_view_perks_btn')
-                    .setLabel('View All 12 Perks')
+                    .setLabel('View All 11 Perks')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('👑'),
                 new ButtonBuilder()

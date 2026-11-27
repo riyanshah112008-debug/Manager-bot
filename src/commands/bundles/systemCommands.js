@@ -1,7 +1,7 @@
 // ==========================================
 // 🤖 Starry MULTI-BOT, GIVEAWAYS & SYSTEMS (15 COMMANDS)
 // File Path: src/commands/bundles/systemCommands.js
-// Multi-Bot Cluster Status, 1-Year Giveaways, Tickets & Backups
+// Multi-Bot Cluster Status, 1-Year Giveaways & Tickets
 // ==========================================
 const { 
     EmbedBuilder, 
@@ -942,41 +942,6 @@ const commands = [
                 return ctx.reply('❌ Administrator permission required.');
             }
             return ctx.reply(`🔢 **This channel (<#${ctx.channel.id}>) is now the official Counting Game channel!** Start counting at \`1\`.`);
-        }
-    },
-
-    // 14. BACKUP
-    {
-        name: 'backup',
-        category: 'Systems',
-        description: 'Create an instant backup of the server layout, channels, roles and permissions.',
-        usage: ',backup',
-        permissions: [PermissionFlagsBits.Administrator],
-        async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
-            }
-            if (!await requirePremium(ctx, 'Server Cloud Backup Engine')) return;
-            const backupId = Math.random().toString(36).substring(2, 10).toUpperCase();
-            return ctx.reply(`💾 **Server Backup Created Successfully!**\nBackup ID: \`#${backupId}\`\n*Use \`,restore ${backupId}\` to restore if needed.*`);
-        }
-    },
-
-    // 15. RESTORE
-    {
-        name: 'restore',
-        category: 'Systems',
-        description: 'Restore server structure and permissions from a backup ID.',
-        usage: ',restore <backupID>',
-        permissions: [PermissionFlagsBits.Administrator],
-        async execute(ctx) {
-            if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator) && !config.BOT_OWNERS.includes(ctx.user.id)) {
-                return ctx.reply('❌ Administrator permission required.');
-            }
-            if (!await requirePremium(ctx, 'Server Instant Restore Engine')) return;
-            const backupId = ctx.args[0];
-            if (!backupId) return ctx.reply('❌ Please provide the Backup ID: `,restore <ID>`');
-            return ctx.reply(`⏳ **Restoring server from Backup \`${backupId}\`...**`);
         }
     },
 

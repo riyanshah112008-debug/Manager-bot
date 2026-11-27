@@ -139,8 +139,8 @@ function buildCategoryEmbed(catId, customPrefix) {
                 `• \`${prefix}telemetry\` — Real-time performance, cluster latency & sharding analytics\n\n` +
                 `**Automated Giveaways & Tickets:**\n` +
                 `\`${prefix}giveaway\`, \`${prefix}reroll\`, \`${prefix}gend\`, \`${prefix}ticketsetup\`, \`${prefix}applysetup\`, \`${prefix}verify-setup\`, \`${prefix}confessionsetup\`, \`${prefix}setupcount\`\n\n` +
-                `**Backups & Visual Branding:**\n` +
-                `\`${prefix}backup\`, \`${prefix}restore\`, \`${prefix}embedtheme\`, \`${prefix}customizewelcome\`, \`${prefix}customizegoodbye\`, \`${prefix}customizelevels\``
+                `**Visual Branding:**\n` +
+                `\`${prefix}embedtheme\`, \`${prefix}customizewelcome\`, \`${prefix}customizegoodbye\`, \`${prefix}customizelevels\``
             );
     } else {
         const totalCommands = '250+';
@@ -162,7 +162,7 @@ function buildCategoryEmbed(catId, customPrefix) {
                 { name: '🎮 Arcade (12)', value: `\`${prefix}raid\`, \`${prefix}blackjack\`, \`${prefix}mines\``, inline: true },
                 { name: '💰 Economy (32)', value: `\`${prefix}profile\`, \`${prefix}crime\`, \`${prefix}shop\``, inline: true },
                 { name: '🎭 Social (44)', value: `\`${prefix}hug\`, \`${prefix}kiss\`, \`${prefix}bonk\``, inline: true },
-                { name: '🤖 Systems', value: `\`${prefix}multibot\`, \`${prefix}telemetry\`, \`${prefix}backup\``, inline: true }
+                { name: '🤖 Systems', value: `\`${prefix}multibot\`, \`${prefix}telemetry\``, inline: true }
             );
 
     }

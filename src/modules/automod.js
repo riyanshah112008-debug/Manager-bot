@@ -1,4 +1,5 @@
 const { registerInteractionHandler } = require('../utils/interactionHandler');
+const { hasMediaAttachment } = require('./antiAbuse');
 // ==========================================
 // 🛡️ STARRY SUPREME AUTOMOD PRO ENGINE
 // File Path: src/modules/automod.js
@@ -220,7 +221,7 @@ module.exports = (client) => {
         const emojis = message.content.match(emojiPattern) || [];
 
         const isLinkSpam = channelSettings.linksActive && unauthorizedLinks.length >= 1;
-        const isEmojiSpam = channelSettings.emojisActive && emojis.length >= 5;
+        const isEmojiSpam = !hasMediaAttachment(message) && channelSettings.emojisActive && emojis.length >= 5;
 
         // 4. Action Execution
         if (isLinkSpam || isEmojiSpam) {

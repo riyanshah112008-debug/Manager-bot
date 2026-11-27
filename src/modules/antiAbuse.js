@@ -1,75 +1,97 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 
-// Track messages for spam detection
+// Track recent text messages per guild/member. Media-only posts are deliberately
+// excluded: sharing images, GIFs, stickers, or embeds is not rapid text spam.
 const userMessageLog = new Map();
-
-// Add any inappropriate words you want to block here (lowercase)
+const WINDOW_MS = 5000;
+const MESSAGE_THRESHOLD = 5;
+const MAX_TRACKED_USERS = 10000;
 const badWordsList = [
     'badword1', 'badword2', 'scam', 'free nitro', 'click here for free'
 ];
 
+const MEDIA_EXTENSION = /\.(?:png|jpe?g|gif|webp|avif|bmp|tiff?)(?:$|[?#])/i;
+const MEDIA_URL = /https?:\/\/(?:[^\s/]+\.)?(?:tenor\.com|giphy\.com)\/[^\s]+|https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|avif)(?:[?#][^\s]*)?/i;
+
+function hasMediaAttachment(message) {
+    return message.attachments?.some(attachment => {
+        const contentType = String(attachment.contentType || '').toLowerCase();
+        const name = String(attachment.name || attachment.url || '');
+        return contentType.startsWith('image/') || MEDIA_EXTENSION.test(name);
+    }) || (message.stickers?.size || 0) > 0 ||
+    message.embeds?.some(embed => Boolean(embed.image?.url || embed.thumbnail?.url || embed.type === 'gifv')) ||
+    MEDIA_URL.test(String(message.content || ''));
+}
+
+function shouldCountForRateLimit(message) {
+    if (!message || hasMediaAttachment(message)) return false;
+    const content = typeof message.content === 'string' ? message.content.trim() : '';
+    return content.length > 0;
+}
+
+function recordTextMessage(guildId, userId, now = Date.now()) {
+    const key = `${guildId}:${userId}`;
+    const recent = (userMessageLog.get(key) || []).filter(timestamp => now - timestamp < WINDOW_MS);
+    recent.push(now);
+    if (userMessageLog.size >= MAX_TRACKED_USERS && !userMessageLog.has(key)) {
+        const oldestKey = userMessageLog.keys().next().value;
+        if (oldestKey) userMessageLog.delete(oldestKey);
+    }
+    userMessageLog.set(key, recent);
+    return recent.length;
+}
+
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.guild) return;
+        if (!message.guild || !message.member || message.author?.bot || message.webhookId) return;
 
-        // Admins bypass the anti-abuse filters
-        if (message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+        // Staff bypass; optional chaining also handles uncached/partial members safely.
+        if (message.member.permissions?.has(PermissionsBitField.Flags.Administrator)) return;
 
-        const content = message.content.toLowerCase();
-
-        // ==========================================
-        // 1. BAD WORD SCANNER
-        // ==========================================
+        const content = String(message.content || '').toLowerCase();
         const containsBadWord = badWordsList.some(word => content.includes(word));
-        
         if (containsBadWord) {
             await message.delete().catch(() => {});
-            
             const warningEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setTitle('🛑 Inappropriate Content Blocked')
                 .setDescription(`<@${message.author.id}>, your message was removed for containing restricted words.`);
-            
-            const warningMsg = await message.channel.send({ embeds: [warningEmbed] }).catch(() => {});
+            const warningMsg = await message.channel.send({ embeds: [warningEmbed] }).catch(() => null);
             if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
-            return; // Stop processing to avoid double-punishing
+            return;
         }
 
-        // ==========================================
-        // 2. RAPID ANTI-SPAM DETECTOR
-        // ==========================================
-        const userId = message.author.id;
-        const now = Date.now();
-        
-        if (!userMessageLog.has(userId)) {
-            userMessageLog.set(userId, []);
-        }
+        // Do not count normal image/GIF posts or empty messages toward text-spam limits.
+        if (!shouldCountForRateLimit(message)) return;
 
-        const timestamps = userMessageLog.get(userId);
-        timestamps.push(now);
+        const count = recordTextMessage(message.guild.id, message.author.id);
+        if (count < MESSAGE_THRESHOLD) return;
 
-        // Keep only messages sent in the last 5 seconds
-        const recentMessages = timestamps.filter(time => now - time < 5000);
-        userMessageLog.set(userId, recentMessages);
+        userMessageLog.delete(`${message.guild.id}:${message.author.id}`);
 
-        // Trigger: More than 5 messages in 5 seconds
-        if (recentMessages.length >= 5) {
-            userMessageLog.delete(userId); // Clear their log so they don't get double timed-out
+        const botMember = message.guild.members.me;
+        const canModerate = botMember?.permissions?.has(PermissionsBitField.Flags.ModerateMembers);
+        const hierarchyAllows = botMember && message.member.manageable &&
+            message.member.roles.highest.position < botMember.roles.highest.position;
+        if (!canModerate || !hierarchyAllows) return;
 
-            try {
-                // Timeout for 5 minutes
-                await message.member.timeout(5 * 60 * 1000, "Anti-Abuse: Rapid Message Spam");
-                
-                // Bulk delete their recent spam in this channel
-                const msgsToDelete = await message.channel.messages.fetch({ limit: 10 });
-                const userMsgs = msgsToDelete.filter(m => m.author.id === userId);
-                await message.channel.bulkDelete(userMsgs, true).catch(() => {});
-
-                await message.channel.send(`🔨 **Auto-Mod:** <@${userId}> has been timed out for 5 minutes due to rapid spamming.`);
-            } catch (err) {
-                console.error(`Failed to timeout spammer: ${err.message}`);
+        try {
+            await message.member.timeout(5 * 60 * 1000, 'Anti-Abuse: Rapid text message spam');
+            if (message.channel?.permissionsFor(botMember)?.has(PermissionsBitField.Flags.ManageMessages)) {
+                const recentMessages = await message.channel.messages.fetch({ limit: 10 }).catch(() => null);
+                const userMessages = recentMessages?.filter(candidate =>
+                    candidate.author?.id === message.author.id && !hasMediaAttachment(candidate)
+                );
+                if (userMessages?.size) await message.channel.bulkDelete(userMessages, true).catch(() => {});
             }
+            await message.channel.send(`🔨 **AutoMod:** <@${message.author.id}> was timed out for 5 minutes due to rapid text-message spam.`).catch(() => {});
+        } catch (error) {
+            console.error(`[Anti-Abuse] Failed to enforce text-spam timeout in guild ${message.guild.id}:`, error.message);
         }
     });
 };
-        
+
+module.exports.hasMediaAttachment = hasMediaAttachment;
+module.exports.shouldCountForRateLimit = shouldCountForRateLimit;
+module.exports.recordTextMessage = recordTextMessage;
+module.exports.userMessageLog = userMessageLog;
