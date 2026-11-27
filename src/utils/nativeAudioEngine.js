@@ -1177,6 +1177,7 @@ class StarryGuildPlayer {
                         '-i', file,
                         ...activeFilter,
                         '-c:a', 'libopus',
+                        '-compression_level', '5',
                         '-ar', '48000',
                         '-ac', '2',
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
