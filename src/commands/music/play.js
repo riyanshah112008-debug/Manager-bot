@@ -7,6 +7,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, Ac
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
 const { applyPremiumVoiceBitrate } = require('../../utils/musicManager');
 const config = require('../../config');
+const { isLavalinkRequired } = require('../../utils/audioBackendPolicy');
 
 const MUSIC_BASE_URL = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 10000}`).replace(/\/+$/, '');
 const MUSIC_DASHBOARD_URL = `${MUSIC_BASE_URL}/music.html`;
@@ -116,14 +117,14 @@ module.exports = {
           }
 
           if (player.voiceId !== voiceChannel.id) {
-            player.setVoiceChannel(voiceChannel.id);
+            await player.setVoiceChannel(voiceChannel.id);
           }
 
           if (res.loadType === 'playlist') {
             for (const track of res.tracks) {
               player.queue.add(track);
             }
-            if (!player.playing && !player.paused) player.play();
+            if (!player.playing && !player.paused) await player.play();
 
             const totalDurationMs = res.tracks.reduce((acc, t) => acc + (t.length || 0), 0);
             const totalDurationStr = formatTime(totalDurationMs);
@@ -157,7 +158,7 @@ module.exports = {
             if (!player.playing && !player.paused && !player.queue.current) {
               player.data.set('interaction', interaction);
               player.queue.add(track);
-              player.play();
+              await player.play();
             } else {
               player.queue.add(track);
               const embed = new EmbedBuilder()
@@ -182,6 +183,13 @@ module.exports = {
         } catch (kErr) {
           console.warn('⚠️ [play.js Lavalink Fallback]:', kErr.message || kErr);
         }
+      }
+
+      if (isLavalinkRequired()) {
+        const replyFunc = interaction.editReply || interaction.reply;
+        return replyFunc.call(interaction, {
+          content: '⚠️ Starry’s dedicated Render audio node is not ready. Production playback does not fall back to the crackle-prone local FFmpeg stream. Please retry when Lavalink reconnects.'
+        });
       }
 
       const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
