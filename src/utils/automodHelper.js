@@ -104,7 +104,7 @@ function getGuildSubmoduleStatus(guildId, key) {
 }
 
 async function setGuildSubmoduleStatus(guildId, key, enabled) {
-    if (!/^\\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
+    if (!/^\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
         throw new Error('Invalid AutoMod submodule setting.');
     }
     if (!isDbConnected()) throw new Error('Database is unavailable; AutoMod setting was not changed.');
