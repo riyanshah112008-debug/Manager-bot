@@ -87,12 +87,16 @@ async function setGuildStatus(guildId, enabled) {
     }
 
     if (isDbConnected()) {
-        await AutomodGuild.findOneAndUpdate(
-            { guildId: { $eq: guildId } },
-            { $set: { enabled } },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
-        persisted = true;
+        try {
+            await AutomodGuild.findOneAndUpdate(
+                { guildId: { $eq: guildId } },
+                { $set: { enabled } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+            persisted = true;
+        } catch (error) {
+            console.warn('[AutoMod] MongoDB guild status persistence failed:', error.message);
+        }
     }
     if (!persisted) throw new Error('Database is unavailable; AutoMod setting was not changed.');
     guildCache.set(guildId, enabled);
@@ -124,12 +128,16 @@ async function setGuildSubmoduleStatus(guildId, key, enabled) {
     const field = key === 'links' ? 'linksEnabled' : 'emojisEnabled';
     let persisted = false;
     if (isDbConnected()) {
-        await AutomodGuild.findOneAndUpdate(
-            { guildId: { $eq: guildId } },
-            { $set: { [field]: enabled } },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
-        persisted = true;
+        try {
+            await AutomodGuild.findOneAndUpdate(
+                { guildId: { $eq: guildId } },
+                { $set: { [field]: enabled } },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+            persisted = true;
+        } catch (error) {
+            console.warn('[AutoMod] MongoDB submodule persistence failed:', error.message);
+        }
     }
     try {
         if (db.getGuildSettings && db.updateGuildSettings) {
