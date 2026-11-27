@@ -23,16 +23,7 @@ const goodbyeModule = require('../../modules/goodbye');
 const levelingModule = require('../../modules/leveling');
 const ServerSettings = require('../../models/ServerSettings');
 const automodHelper = require('../../utils/automodHelper');
-
-function getValidatedGuildId(guild) {
-    const rawGuildId = guild?.id;
-    if (typeof rawGuildId !== 'string' || !/^[0-9]{17,20}$/.test(rawGuildId)) return null;
-    try {
-        return BigInt(rawGuildId).toString(10);
-    } catch (_) {
-        return null;
-    }
-}
+const { requireDiscordSnowflake } = require('../../utils/discordSnowflake');
 
 function hasManagePerms(ctx) {
     if (!ctx.guild) return false;
@@ -51,8 +42,12 @@ const loggingPanelCommand = {
         if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
         if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
         const guild = ctx.guild, ownerId = ctx.user.id;
-        const guildId = String(guild.id);
-        if (!/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+        let guildId;
+        try {
+            guildId = requireDiscordSnowflake(guild.id, 'guild ID');
+        } catch (_) {
+            return ctx.reply('❌ Could not validate this server ID.');
+        }
         const fields = { ai: 'aiLogChannel', moderate: 'modLogChannel', messages: 'messageLogChannel', members: 'memberLogChannel', voice: 'voiceLogChannel', channels: 'serverLogChannel' };
         const switches = { ai: 'aiEnabled', moderate: 'moderationEnabled', messages: 'messagesEnabled', members: 'membersEnabled', voice: 'voiceEnabled', channels: 'serverEnabled' };
         const labels = { ai: 'AI activity', moderate: 'Moderation', messages: 'Messages', members: 'Members & roles', voice: 'Voice', channels: 'Server & channels' };
@@ -172,14 +167,13 @@ const modulesPanelCommand = {
     async execute(ctx) {
         if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
         if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
-        const rawGuildId = ctx.guild.id;
         const ownerId = ctx.user.id;
-        if (typeof rawGuildId !== 'string' || !/^\d{17,20}$/.test(rawGuildId)) {
+        let guildId;
+        try {
+            guildId = requireDiscordSnowflake(ctx.guild.id, 'guild ID');
+        } catch (_) {
             return ctx.reply('❌ Could not validate this server ID.');
         }
-        // Canonicalize the Discord snowflake as a decimal scalar before it reaches Mongoose.
-        // This prevents query-operator objects from ever entering a database filter.
-        const guildId = BigInt(rawGuildId).toString(10);
 
         const loggingKeys = {
             moderation: 'moderationEnabled',
