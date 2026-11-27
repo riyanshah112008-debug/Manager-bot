@@ -162,9 +162,14 @@ const modulesPanelCommand = {
     async execute(ctx) {
         if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
         if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
-        const guildId = ctx.guild.id;
+        const rawGuildId = ctx.guild.id;
         const ownerId = ctx.user.id;
-        if (typeof guildId !== 'string' || !/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+        if (typeof rawGuildId !== 'string' || !/^\d{17,20}$/.test(rawGuildId)) {
+            return ctx.reply('❌ Could not validate this server ID.');
+        }
+        // Canonicalize the Discord snowflake as a decimal scalar before it reaches Mongoose.
+        // This prevents query-operator objects from ever entering a database filter.
+        const guildId = BigInt(rawGuildId).toString(10);
 
         const loggingKeys = {
             moderation: 'moderationEnabled',
