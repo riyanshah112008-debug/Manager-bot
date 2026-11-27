@@ -21,6 +21,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { getDiscordGuildBitrateCap, resolveAudioQuality } = require('./audioQuality');
 const prism = require('prism-media');
+const { PassThrough } = require('stream');
 const streamResolver = require('./streamResolverClient');
 const { 
     EmbedBuilder, 
@@ -432,7 +433,7 @@ class StarryGuildPlayer {
         this.player = createAudioPlayer({
             behaviors: {
                 noSubscriber: NoSubscriberBehavior.Play,
-                maxMissedFrames: 5
+                maxMissedFrames: 25
             }
         });
         this.connection = null;
@@ -670,8 +671,9 @@ class StarryGuildPlayer {
                         '-reconnect_streamed', '1',
                         '-reconnect_at_eof', '1',
                         '-reconnect_delay_max', '3',
-                        '-rw_timeout', '15000000',
-                        '-buffer_size', '2048k',
+                        '-multiple_requests', '1',
+                        '-rw_timeout', '20000000',
+                        '-buffer_size', '4096k',
                         '-analyzeduration', '2000000',
                         '-probesize', '2000000',
                         '-thread_queue_size', '2048',
@@ -695,7 +697,7 @@ class StarryGuildPlayer {
                         '-c:a', 'libopus',
                         '-ar', '48000',
                         '-ac', '2',
-                        '-b:a', `${this.audioBitrateKbps || 128}k`,
+                        '-b:a', `${this.audioBitrateKbps || 160}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
                         '-compression_level', '10',
@@ -722,7 +724,7 @@ class StarryGuildPlayer {
                         '-c:a', 'libopus',
                         '-ar', '48000',
                         '-ac', '2',
-                        '-b:a', `${this.audioBitrateKbps || 128}k`,
+                        '-b:a', `${this.audioBitrateKbps || 160}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
                         '-compression_level', '10',
@@ -735,7 +737,12 @@ class StarryGuildPlayer {
                 if (typeof streamOrPath.on === 'function') {
                     streamOrPath.on('error', err => console.warn('⚠️ [Input Audio Stream Notice]:', err.message || err));
                 }
-                streamOrPath.pipe(ffmpeg);
+                // Jitter smoothing: decouple the download stream from the encoder with a 16 MB
+                // buffer so short network hiccups do not starve FFmpeg and cut the audio.
+                const smoothingBuffer = new PassThrough({ highWaterMark: 1 << 24 });
+                smoothingBuffer.on('error', err => console.warn('⚠️ [Smoothing Buffer Notice]:', err.message || err));
+                streamOrPath.pipe(smoothingBuffer);
+                smoothingBuffer.pipe(ffmpeg);
                 return createAudioResource(ffmpeg, {
                     inputType: StreamType.OggOpus
                 });
@@ -1176,7 +1183,7 @@ class StarryGuildPlayer {
                         '-c:a', 'libopus',
                         '-ar', '48000',
                         '-ac', '2',
-                        '-b:a', `${this.audioBitrateKbps || 128}k`,
+                        '-b:a', `${this.audioBitrateKbps || 160}k`,
                         '-vbr', 'on',
                         '-f', 'opus'
                     ]
