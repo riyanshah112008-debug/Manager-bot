@@ -42,8 +42,6 @@ services:
         sync: false
       - key: LAVALINK_URL
         value: 127.0.0.1:2333
-      - key: LAVALINK_AUTH
-        sync: false
       - key: LAVALINK_SECURE
         value: "false"
       - key: LAVALINK_NODE_NAME
