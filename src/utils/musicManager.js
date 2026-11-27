@@ -321,6 +321,16 @@ const publicFallbackNodes = process.env.STARRY_ENABLE_PUBLIC_LAVALINK_NODES === 
 
 const Nodes = [...configuredNodes, ...publicFallbackNodes];
 
+if (process.env.STARRY_REQUIRE_LAVALINK === 'true') {
+    if (!process.env.LAVALINK_URL || Nodes.length === 0) {
+        console.error('[Music Backend] Render production requires a configured Lavalink node; native FFmpeg fallback is disabled.');
+    } else {
+        console.log('[Music Backend] Production mode: dedicated Lavalink node required; public nodes and native stream fallback are disabled.');
+    }
+} else {
+    console.log('[Music Backend] Development mode: native audio fallback remains available when Lavalink is offline.');
+}
+
 function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConnected = false) {
     const lang = guildId ? getGuildLanguageSync(guildId) : 'en';
 
