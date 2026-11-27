@@ -70,54 +70,67 @@ function getGuildStatus(guildId) {
  * @param {boolean} enabled
  */
 async function setGuildStatus(guildId, enabled) {
-    if (!guildId) return false;
-    guildCache.set(guildId, enabled);
+    if (!/^\\d{17,20}$/.test(String(guildId || '')) || typeof enabled !== 'boolean') {
+        throw new Error('Invalid AutoMod guild setting.');
+    }
 
-    // Save to local JSON database for persistent offline resilience
+    let persisted = false;
     try {
         if (db.updateGuildSettings && db.getGuildSettings) {
             const current = db.getGuildSettings(guildId) || {};
-            const automod = current.automod || {};
-            automod.enabled = enabled;
+            const automod = { ...(current.automod || {}), enabled };
             db.updateGuildSettings(guildId, { automod });
+            persisted = true;
         }
-    } catch (_) {}
-
-    // Save to MongoDB if online
-    if (isDbConnected()) {
-        try {
-            await AutomodGuild.findOneAndUpdate(
-                { guildId },
-                { enabled },
-                { upsert: true, new: true }
-            );
-        } catch (err) {
-            console.error('❌ [AutoMod] Error saving guild status:', err.message);
-        }
+    } catch (error) {
+        console.warn('[AutoMod] Local guild status persistence failed:', error.message);
     }
+
+    if (isDbConnected()) {
+        await AutomodGuild.findOneAndUpdate(
+            { guildId: { $eq: guildId } },
+            { $set: { enabled } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        persisted = true;
+    }
+    if (!persisted) throw new Error('Database is unavailable; AutoMod setting was not changed.');
+    guildCache.set(guildId, enabled);
     return enabled;
 }
 
 function getGuildSubmoduleStatus(guildId, key) {
     if (!guildId || !['links', 'emojis'].includes(key)) return true;
-    return guildSubmoduleCache.get(guildId)?.[key] !== false;
+    if (guildSubmoduleCache.has(guildId)) {
+        const cached = guildSubmoduleCache.get(guildId);
+        if (typeof cached?.[key] === 'boolean') return cached[key];
+    }
+    try {
+        const localSettings = db.getGuildSettings ? db.getGuildSettings(guildId) : null;
+        const savedValue = localSettings?.automod?.[key];
+        if (typeof savedValue === 'boolean') {
+            const current = guildSubmoduleCache.get(guildId) || { links: true, emojis: true };
+            guildSubmoduleCache.set(guildId, { ...current, [key]: savedValue });
+            return savedValue;
+        }
+    } catch (_) {}
+    return true;
 }
 
 async function setGuildSubmoduleStatus(guildId, key, enabled) {
-    if (!/^\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
+    if (!/^\\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
         throw new Error('Invalid AutoMod submodule setting.');
     }
     const field = key === 'links' ? 'linksEnabled' : 'emojisEnabled';
     let persisted = false;
     if (isDbConnected()) {
         await AutomodGuild.findOneAndUpdate(
-            { guildId },
+            { guildId: { $eq: guildId } },
             { $set: { [field]: enabled } },
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
         persisted = true;
     }
-    // Keep the existing SQLite/JSON guild settings fallback consistent with the MongoDB value.
     try {
         if (db.getGuildSettings && db.updateGuildSettings) {
             const currentSettings = db.getGuildSettings(guildId) || {};
