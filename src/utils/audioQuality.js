@@ -1,7 +1,7 @@
 'use strict';
 
 const DISCORD_GUILD_BITRATE_CAPS = Object.freeze([96000, 128000, 256000, 384000]);
-const FREE_ENCODER_BITRATE = 128000;
+const FREE_ENCODER_BITRATE = 160000;
 const PREMIUM_ENCODER_BITRATE = 384000;
 
 function getDiscordGuildBitrateCap(guildTier, maximumBitrate) {
