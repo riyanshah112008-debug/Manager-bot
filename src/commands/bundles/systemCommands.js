@@ -48,12 +48,12 @@ const loggingPanelCommand = {
         const labels = { ai: 'AI activity', moderate: 'Moderation', messages: 'Messages', members: 'Members & roles', voice: 'Voice', channels: 'Server & channels' };
         let selectedCategory = 'ai';
         const load = async () => {
-            const rows = await ServerSettings.find({ guildId }).select('logging').limit(1).lean();
+            const rows = await ServerSettings.find({ guildId: { $eq: guildId } }).select('logging').limit(1).lean();
             return rows[0]?.logging || {};
         };
         const save = async patch => {
             const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
-            await ServerSettings.updateOne({ guildId }, { $set: set, $setOnInsert: { guildId } }, { upsert: true, setDefaultsOnInsert: true });
+            await ServerSettings.updateOne({ guildId: { $eq: guildId } }, { $set: set, $setOnInsert: { guildId } }, { upsert: true, setDefaultsOnInsert: true });
             ctx.client.invalidateLogSettings?.(guild.id);
         };
         const render = async () => {
