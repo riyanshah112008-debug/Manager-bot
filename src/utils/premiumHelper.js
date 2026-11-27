@@ -216,7 +216,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
         .setTitle(`👑 Starry Premium Required`)
         .setDescription(
             `**${featureName}** is an exclusive **Starry Premium** feature!\n\n` +
-            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, disaster-recovery backups, god-mode security, and multi-bot cluster power across your entire community.`
+            `This server currently does not have an active Premium subscription. Upgrading unlocks high-performance audio, god-mode security, and multi-bot cluster power across your entire community.`
         )
         .addFields(
             {
