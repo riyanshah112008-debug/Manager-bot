@@ -22,6 +22,7 @@ const welcomeModule = require('../../modules/welcome');
 const goodbyeModule = require('../../modules/goodbye');
 const levelingModule = require('../../modules/leveling');
 const ServerSettings = require('../../models/ServerSettings');
+const automodHelper = require('../../utils/automodHelper');
 
 function hasManagePerms(ctx) {
     if (!ctx.guild) return false;
@@ -147,8 +148,167 @@ const loggingPanelCommand = {
     }
 };
 
+
+const modulesPanelCommand = {
+    name: 'modules',
+    aliases: ['features', 'modulepanel'],
+    category: 'Systems',
+    description: 'Open the interactive server module control center.',
+    usage: ',modules',
+    data: new SlashCommandBuilder()
+        .setName('modules')
+        .setDescription('Enable or disable Starry modules and their submodules.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    async execute(ctx) {
+        if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
+        if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
+        const guildId = String(ctx.guild.id);
+        const ownerId = ctx.user.id;
+        if (!/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+
+        const loggingKeys = {
+            moderation: 'moderationEnabled',
+            messages: 'messagesEnabled',
+            members: 'membersEnabled',
+            voice: 'voiceEnabled',
+            server: 'serverEnabled',
+            ai: 'aiEnabled'
+        };
+        const loggingLabels = {
+            moderation: 'Moderation logs',
+            messages: 'Message logs',
+            members: 'Member & role logs',
+            voice: 'Voice logs',
+            server: 'Server & channel logs',
+            ai: 'AI activity logs'
+        };
+        const loadLogging = async () => {
+            const row = await ServerSettings.findOne({ guildId }).select('logging').lean();
+            return row?.logging || {};
+        };
+        const saveLogging = async patch => {
+            const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
+            await ServerSettings.updateOne(
+                { guildId },
+                { $set: set, $setOnInsert: { guildId } },
+                { upsert: true, setDefaultsOnInsert: true }
+            );
+            ctx.client.invalidateLogSettings?.(ctx.guild.id);
+        };
+        const render = async () => {
+            const [logging, linksOn, emojisOn] = await Promise.all([
+                loadLogging(),
+                Promise.resolve(automodHelper.getGuildSubmoduleStatus(guildId, 'links')),
+                Promise.resolve(automodHelper.getGuildSubmoduleStatus(guildId, 'emojis'))
+            ]);
+            const automodOn = automodHelper.getGuildStatus(guildId);
+            const loggingOn = logging.enabled !== false;
+            const status = value => value ? '🟢 ON' : '🔴 OFF';
+            const lines = [
+                '**🛡️ AutoMod:** ' + status(automodOn),
+                '  • Unauthorized link filter: ' + status(automodOn && linksOn) + (automodOn && !linksOn ? ' (submodule disabled)' : ''),
+                '  • Emoji spam filter: ' + status(automodOn && emojisOn) + (automodOn && !emojisOn ? ' (submodule disabled)' : ''),
+                '',
+                '**📜 Logging:** ' + status(loggingOn)
+            ];
+            for (const [key, field] of Object.entries(loggingKeys)) {
+                const enabled = key === 'ai' ? logging[field] === true : logging[field] !== false;
+                lines.push('  • ' + loggingLabels[key] + ': ' + status(loggingOn && enabled));
+            }
+            lines.push('', 'Changes are saved to the server settings and applied by the live AutoMod and logging handlers.');
+            const embed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setTitle('⚙️ Starry Module Control Center')
+                .setDescription(lines.join('\n'))
+                .setFooter({ text: 'Manage Server required • Only the panel creator can use these controls' });
+            const button = (id, label, active, danger = false) => new ButtonBuilder()
+                .setCustomId(id)
+                .setLabel(label + (active ? ': ON' : ': OFF'))
+                .setStyle(danger ? ButtonStyle.Danger : (active ? ButtonStyle.Success : ButtonStyle.Secondary));
+            const row1 = new ActionRowBuilder().addComponents(
+                button('modules_automod', 'AutoMod', automodOn),
+                button('modules_logging', 'Logging', loggingOn)
+            );
+            const row2 = new ActionRowBuilder().addComponents(
+                button('modules_links', 'Link filter', linksOn),
+                button('modules_emojis', 'Emoji spam', emojisOn)
+            );
+            const row3 = new ActionRowBuilder().addComponents(
+                button('modules_log_moderation', 'Moderation logs', logging.moderationEnabled !== false),
+                button('modules_log_messages', 'Message logs', logging.messagesEnabled !== false),
+                button('modules_log_members', 'Member logs', logging.membersEnabled !== false)
+            );
+            const row4 = new ActionRowBuilder().addComponents(
+                button('modules_log_voice', 'Voice logs', logging.voiceEnabled !== false),
+                button('modules_log_server', 'Server logs', logging.serverEnabled !== false),
+                button('modules_log_ai', 'AI logs', logging.aiEnabled === true)
+            );
+            return { embeds: [embed], components: [row1, row2, row3, row4] };
+        };
+
+        let panelMessage = await ctx.reply(await render());
+        if (typeof panelMessage?.createMessageComponentCollector !== 'function') {
+            if (ctx.isSlash && typeof ctx.interaction?.fetchReply === 'function') {
+                panelMessage = await ctx.interaction.fetchReply().catch(() => null);
+            }
+            if (typeof panelMessage?.createMessageComponentCollector !== 'function') panelMessage = ctx.replyMessage || panelMessage;
+        }
+        if (typeof panelMessage?.createMessageComponentCollector !== 'function') {
+            return ctx.followUp('⚠️ The panel was sent, but its controls could not be initialized. Please run ,modules again.');
+        }
+        const collector = panelMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: 600000 });
+        collector.on('collect', async interaction => {
+            if (interaction.user.id !== ownerId) {
+                return interaction.reply({ content: 'This panel belongs to the user who opened it.', ephemeral: true }).catch(() => {});
+            }
+            if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) &&
+                !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) &&
+                !config.BOT_OWNERS?.includes(interaction.user.id)) {
+                return interaction.reply({ content: 'Manage Server permission is required.', ephemeral: true }).catch(() => {});
+            }
+            try {
+                const id = interaction.customId;
+                if (id === 'modules_automod') {
+                    await automodHelper.setGuildStatus(guildId, !automodHelper.getGuildStatus(guildId));
+                } else if (id === 'modules_links' || id === 'modules_emojis') {
+                    const key = id === 'modules_links' ? 'links' : 'emojis';
+                    await automodHelper.setGuildSubmoduleStatus(guildId, key, !automodHelper.getGuildSubmoduleStatus(guildId, key));
+                } else if (id === 'modules_logging') {
+                    const current = await loadLogging();
+                    await saveLogging({ enabled: current.enabled === false });
+                } else if (id.startsWith('modules_log_')) {
+                    const key = id.replace('modules_log_', '');
+                    const field = loggingKeys[key];
+                    if (!field) return interaction.reply({ content: 'Unknown logging module.', ephemeral: true });
+                    const current = await loadLogging();
+                    const active = key === 'ai' ? current[field] === true : current[field] !== false;
+                    await saveLogging({ [field]: !active });
+                } else {
+                    return;
+                }
+                await interaction.update(await render());
+            } catch (error) {
+                console.error('[Module Control Center] Save failed:', error);
+                await interaction.reply({ content: '❌ Could not save that module setting. No success was reported.', ephemeral: true }).catch(() => {});
+            }
+        });
+        collector.on('end', async () => {
+            const disabled = (panelMessage.components || []).map(row => {
+                const rebuilt = ActionRowBuilder.from(row);
+                rebuilt.components = rebuilt.components.map(component => {
+                    const data = component.toJSON();
+                    return ButtonBuilder.from(data).setDisabled(true);
+                });
+                return rebuilt;
+            });
+            await panelMessage.edit({ components: disabled }).catch(() => {});
+        });
+    }
+};
+
 const commands = [
     loggingPanelCommand,
+    modulesPanelCommand,
     // 1. MULTIBOT / BOTS / CLUSTER
     {
         name: 'multibot',
