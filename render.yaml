@@ -2,7 +2,8 @@ services:
   - type: web
     name: starry-bot
     env: docker
-    plan: free
+    # Paid always-on compute: 1 CPU / 2 GB RAM for Discord Gateway + real-time FFmpeg audio.
+    plan: 1c-2g
     region: oregon
     dockerfilePath: Dockerfile
     healthCheckPath: /health
@@ -39,3 +40,11 @@ services:
         value: manager-bot-96c07
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
+      - key: LAVALINK_URL
+        sync: false
+      - key: LAVALINK_AUTH
+        sync: false
+      - key: LAVALINK_SECURE
+        value: "true"
+      - key: STARRY_ENABLE_PUBLIC_LAVALINK_NODES
+        value: "false"
