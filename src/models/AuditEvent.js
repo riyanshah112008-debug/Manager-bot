@@ -2,13 +2,16 @@
 // 🛡️ STARRY AUDIT EVENT MODEL
 // File Path: src/models/AuditEvent.js
 // Structured trail of who changed what, when, and how — separate from Discord event/moderation logs.
+// Actor data is a strict whitelist: never persist a full Discord profile.
 // ==========================================
 const mongoose = require('mongoose');
 
 const auditEventSchema = new mongoose.Schema({
     guildId: { type: String, required: true },
     actorId: { type: String, default: null },
-    actorTag: { type: String, default: null },
+    actorUsername: { type: String, default: null },
+    actorGlobalName: { type: String, default: null },
+    actorAvatar: { type: String, default: null },
     action: { type: String, required: true },
     targetType: { type: String, default: null },
     targetId: { type: String, default: null },

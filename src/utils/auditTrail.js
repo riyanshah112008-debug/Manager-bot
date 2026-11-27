@@ -1,20 +1,46 @@
 // ==========================================
 // 🛡️ STARRY AUDIT TRAIL UTIL
 // File Path: src/utils/auditTrail.js
-// Records structured dashboard configuration changes. Never throws and never stores secrets.
+// Records structured dashboard configuration changes. Never throws and never stores secrets
+// or full Discord profiles — actor data is reduced to a strict whitelist before persisting.
 // ==========================================
 const AuditEvent = require('../models/AuditEvent');
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|passwd|authorization|cookie|session|credential|key)/i;
 const MAX_SUMMARY_LENGTH = 500;
 const MAX_METADATA_KEYS = 24;
+const MAX_TEXT_LENGTH = 200;
+const DISCORD_AVATAR_BASE = 'https://cdn.discordapp.com/avatars/';
+
+const emptyActor = () => ({ actorId: null, actorUsername: null, actorGlobalName: null, actorAvatar: null });
+
+const buildAvatarUrl = (actorId, avatar) => {
+    if (!avatar || typeof avatar !== 'string') return null;
+    if (/^https?:\/\//i.test(avatar)) return avatar.slice(0, 500);
+    if (!/^[a-zA-Z0-9_-]+$/.test(avatar) || !actorId) return null;
+    const extension = avatar.startsWith('a_') ? 'gif' : 'png';
+    return `${DISCORD_AVATAR_BASE}${actorId}/${avatar}.${extension}?size=64`;
+};
+
+// Persist only whitelisted identity fields; drop everything else (email, discriminator, flags, tokens...).
+const normalizeActor = (actor) => {
+    if (!actor || typeof actor !== 'object') return emptyActor();
+    const actorId = actor.id ? String(actor.id) : null;
+    const clip = (value) => (value ? String(value).slice(0, MAX_TEXT_LENGTH) : null);
+    return {
+        actorId,
+        actorUsername: clip(actor.username),
+        actorGlobalName: clip(actor.globalName || actor.global_name || actor.displayName),
+        actorAvatar: buildAvatarUrl(actorId, actor.avatar)
+    };
+};
 
 const redactValue = (value) => {
-    if (typeof value === 'string') return value.length > 200 ? value.slice(0, 200) + '…' : value;
+    if (typeof value === 'string') return value.length > MAX_TEXT_LENGTH ? value.slice(0, MAX_TEXT_LENGTH) + '…' : value;
     if (value === null || value === undefined) return value;
     if (typeof value === 'object') return Array.isArray(value) ? `[${value.length} items]` : '[object]';
     if (typeof value === 'number' || typeof value === 'boolean') return value;
-    return String(value).slice(0, 200);
+    return String(value).slice(0, MAX_TEXT_LENGTH);
 };
 
 const sanitizeChanges = (changes) => {
@@ -34,13 +60,6 @@ const sanitizeChanges = (changes) => {
     return Object.keys(clean).length ? clean : null;
 };
 
-const normalizeActor = (actor) => {
-    if (!actor || typeof actor !== 'object') return { actorId: null, actorTag: null };
-    const id = actor.id ? String(actor.id) : null;
-    const tag = actor.tag ? String(actor.tag).slice(0, 120) : (actor.username ? String(actor.username).slice(0, 120) : null);
-    return { actorId: id, actorTag: tag };
-};
-
 const normalizeIp = (req) => {
     if (!req || typeof req !== 'object') return null;
     const forwarded = req.headers && req.headers['x-forwarded-for'];
@@ -58,8 +77,7 @@ async function recordAuditEvent(event) {
         const summary = options.summary ? String(options.summary).slice(0, MAX_SUMMARY_LENGTH) : null;
         await AuditEvent.create({
             guildId: String(options.guildId),
-            actorId: actor.actorId,
-            actorTag: actor.actorTag,
+            ...actor,
             action: String(options.action).slice(0, 120),
             targetType: options.targetType ? String(options.targetType).slice(0, 60) : null,
             targetId: options.targetId ? String(options.targetId).slice(0, 120) : null,
@@ -89,5 +107,6 @@ module.exports = {
     recordAuditEvent,
     getAuditTrail,
     sanitizeChanges,
+    normalizeActor,
     SENSITIVE_KEY_PATTERN
 };
