@@ -205,16 +205,19 @@ const commands = [
                     }
 
                     if (player.voiceId !== guard.voiceChannel.id) {
-                        await player.setVoiceChannel(guard.voiceChannel.id);
+                        await await player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
                     if (res.loadType === 'playlist') {
                         for (const track of res.tracks) player.queue.add(track);
-                        const started = await startKazagumoPlayback(player);
-                        if (started) {
+                        const shouldStart = !player.playing && !player.paused;
+                        if (shouldStart) {
                             if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
                             if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
-                            return; // playerStart owns the single response after playback starts
+                        }
+                        await startKazagumoPlayback(player);
+                        if (shouldStart) return; // playerStart owns the single response after playback starts
+                        if (loadingMsg) loadingMsg.delete().catch(() => {});
                         }
                         if (loadingMsg) loadingMsg.delete().catch(() => {});
 
