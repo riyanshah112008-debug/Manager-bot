@@ -20,7 +20,7 @@ function getSafeDiscordId(value) {
 
 module.exports = (client) => {
     // ==========================================
-    // 1. AUTOMATIC BACKGROUND BACKUP (ON LEAVE)
+    // 1. STICKY-ROLE SNAPSHOT (ON LEAVE)
     // ==========================================
     client.on('guildMemberRemove', async (member) => {
         if (!member.guild || member.user.bot) return;
@@ -54,7 +54,7 @@ module.exports = (client) => {
     });
 
     // ==========================================
-    // 2. AUTOMATIC RESTORE & ASSIGN (ON JOIN)
+    // 2. STICKY-ROLE RESTORATION & AUTOROLE ASSIGNMENT (ON JOIN)
     // ==========================================
     client.on('guildMemberAdd', async (member) => {
         if (!member.guild) return;
