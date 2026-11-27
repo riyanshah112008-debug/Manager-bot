@@ -1,12 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
-
-const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
-const native = read('src/utils/nativeAudioEngine.js');
-const commands = read('src/commands/bundles/musicCommands.js');
-const search = read('src/utils/musicSearchHelper.js');
+const native = fs.readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
+const commands = fs.readFileSync(require.resolve('../src/commands/bundles/musicCommands'), 'utf8');
+const search = fs.readFileSync(require.resolve('../src/utils/musicSearchHelper'), 'utf8');
+const controller = fs.readFileSync(require.resolve('../src/modules/musicController'), 'utf8');
 
 test('Starry announces Now Playing only after Discord confirms audio is Playing', () => {
   const play = native.indexOf('this.player.play(this.audioResource)');
@@ -68,7 +66,6 @@ test('Kazagumo starts are awaited and only one response is emitted for first-tra
 });
 
 test('request-channel success updates its persistent controller instead of sending duplicate confirmations', () => {
-  const controller = read('src/modules/musicController.js');
   assert.ok(controller.includes('await kazagumoPlayer.setVoiceChannel(voiceChannel.id)'));
   assert.ok(controller.includes('await kazagumoPlayer.play()'));
   assert.ok(controller.includes('persistent controller is the single success response'));
