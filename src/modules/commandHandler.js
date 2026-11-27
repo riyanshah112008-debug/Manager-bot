@@ -103,7 +103,7 @@ function setCachedPrefix(guildId, prefix) {
 }
 
 // 🛡️ Global Anti-Duplicate Execution Sets (Guarantees exactly 1 response per message/interaction)
-const executedMessageIds = new Set();
+const executedMessageIds = globalThis[Symbol.for('starry.executedMessageIds')] || (globalThis[Symbol.for('starry.executedMessageIds')] = new Set());
 const executedInteractionIds = new Set();
 
 const { handleMusicEqualizer } = require('./musicEqualizer');
@@ -310,9 +310,10 @@ class CommandRegistry {
             // Atomically claim the Discord message before any asynchronous work.
             // This prevents two dispatcher instances from both passing the guard while
             // awaiting prefix/database lookups and emitting duplicate command responses.
-            if (executedMessageIds.has(message.id)) return;
-            executedMessageIds.add(message.id);
-            const claimTimer = setTimeout(() => executedMessageIds.delete(message.id), 20000);
+            const dispatchKey = `${client.user?.id || 'unknown'}:${message.id}`;
+            if (executedMessageIds.has(dispatchKey)) return;
+            executedMessageIds.add(dispatchKey);
+            const claimTimer = setTimeout(() => executedMessageIds.delete(dispatchKey), 20000);
             if (typeof claimTimer.unref === 'function') claimTimer.unref();
 
             const isPrimary = isPrimaryBotClient(client);
