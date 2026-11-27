@@ -205,7 +205,7 @@ const commands = [
                     }
 
                     if (player.voiceId !== guard.voiceChannel.id) {
-                        await await player.setVoiceChannel(guard.voiceChannel.id);
+                        await player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
                     if (res.loadType === 'playlist') {
@@ -217,8 +217,6 @@ const commands = [
                         }
                         await startKazagumoPlayback(player);
                         if (shouldStart) return; // playerStart owns the single response after playback starts
-                        if (loadingMsg) loadingMsg.delete().catch(() => {});
-                        }
                         if (loadingMsg) loadingMsg.delete().catch(() => {});
 
                         const totalDurationMs = res.tracks.reduce((acc, t) => acc + (t.length || 0), 0);
