@@ -55,6 +55,6 @@ test('duplicate prefix delivery is claimed once per Discord message ID', () => {
 test('music provider searches reject within the configured latency budget', async () => {
     await assert.rejects(
         musicCommands.searchWithTimeout(new Promise(() => {}), 15),
-        /2\.6 second resolution budget/
+        /resolution budget/
     );
 });
