@@ -242,7 +242,7 @@ test('native FFmpeg clear path adds no permanent limiter or resampler', () => {
 
 test('every native Opus encoder, including seek, uses real-time complexity', () => {
     const source = require('node:fs').readFileSync(require.resolve('../src/utils/nativeAudioEngine'), 'utf8');
-    const encoderArgs = [...source.matchAll(/new prism\.FFmpeg\\(\\{\\s*args:\\s*\\[([\s\S]*?)\\]\\s*\\}\\)/g)]
+    const encoderArgs = [...source.matchAll(/new prism\.FFmpeg\(\{\s*args:\s*\[([\s\S]*?)\]\s*\}\)/g)]
         .map(match => match[1])
         .filter(args => args.includes("'libopus'"));
     assert.equal(encoderArgs.length, 3, 'stream, file and seek paths must each define an Opus encoder');
@@ -258,7 +258,6 @@ test('processed filter profiles retain explicitly configured peak limiters', () 
     const [, filterGraph] = buildAudioFilterArgs('volume=1.0,alimiter=limit=0.97', 100);
     assert.match(filterGraph, /alimiter=limit=0\.97/i);
 });
-
 test('native custom EQ reserves cumulative boost plus transient headroom', () => {
     const [, filterGraph] = buildAudioFilterArgs(
         'volume=0.9,highpass=f=28',
