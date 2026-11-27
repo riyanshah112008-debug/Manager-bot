@@ -8,6 +8,7 @@ const {
     ChannelType 
 } = require('discord.js');
 const { generateChannelCatchup } = require('../../modules/chatCatchup');
+const { canPublishCrossChannelSummary } = require('../../utils/aiChannelAccess');
 
 module.exports = {
     name: 'catchup',
@@ -79,9 +80,24 @@ module.exports = {
             return ctx.reply('❌ Selected channel is not a valid text channel!');
         }
 
+        const requesterMember = await ctx.guild.members.fetch(ctx.user.id).catch(() => null);
+        if (!requesterMember) {
+            return ctx.reply('❌ Starry could not verify your server membership. Please try again.');
+        }
+
+        if (!canPublishCrossChannelSummary({
+            isPublic,
+            targetChannelId: targetChannel.id,
+            outputChannelId: ctx.channel.id,
+            memberPermissions: requesterMember.permissions
+        })) {
+            return ctx.reply('❌ Only server managers can publicly share a catch-up from a different channel.');
+        }
+
         const { embed, components } = await generateChannelCatchup(targetChannel, {
             hours,
-            user: ctx.user
+            user: ctx.user,
+            requesterMember
         });
 
         if (ctx.isSlash && !isPublic) {

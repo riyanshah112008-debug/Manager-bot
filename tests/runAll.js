@@ -15,6 +15,7 @@ const suites = [
   ['Premium order access control', '--test', 'tests/paymentOrderAccess.test.js'],
   ['Spotify OAuth redirect URI', '--test', 'tests/spotifyOAuthRedirect.test.js'],
   ['Verification', 'tests/verification.test.js'],
+  ['AI channel access', '--test', 'tests/aiChannelAccess.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
   ['Music playback lifecycle', '--test', 'tests/musicPlaybackLifecycle.test.js'],
   ['Interactive module control panel', '--test', 'tests/moduleControlPanel.test.js'],
