@@ -365,8 +365,8 @@ function buildNowPlayingComponents(guildId = null, isAutoplay = false, stayConne
     // Row 4: High-Fidelity Audio DSP Filters (Dropdown)
     const filterRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('music_filter').setPlaceholder(t(lang, 'music.filter_placeholder')).addOptions([
-            { label: '⭐ Studio master', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
-            { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio audio', value: 'clear', emoji: '🚫' },
+            { label: 'Clear / Flat Studio (Default)', description: 'Unprocessed source audio with no tonal shaping', value: 'clear', emoji: '🎼' },
+            { label: 'Studio Master (Optional)', description: 'Gentle bass lift and vocal presence; changes the source tone', value: 'empowering', emoji: '✨' },
             { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
             { label: '8D Rotating Pan', description: 'Slow left-to-right stereo rotation', value: '8d', emoji: '🌀' },
             { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
@@ -1230,7 +1230,7 @@ function createMusicManager(client) {
         applyPremiumVoiceBitrate(player, client).catch(() => {});
         recordTrackHistory(player, track);
 
-        // 🔊 BALANCED DSP EQ: Apply the balanced studio-style profile by default
+        // Start with a transparent flat profile; only apply DSP when a user selects it.
         const activeFilter = player.data.get('activeFilter') || 'clear';
         player.data.set('activeFilter', activeFilter);
         // New players start flat. Avoid an unnecessary remote filter mutation at every track start.
@@ -1321,7 +1321,7 @@ function createMusicManager(client) {
                 `🕒 **Duration:** ${track.isStream ? '🔴 LIVE' : formatTime(track.length)}\n` +
                 `👤 **Requester:** ${track.requester ? `<@${track.requester.id}>` : 'Unknown'}\n` +
                 `🌐 **Source:** ${track.sourceName ? track.sourceName.charAt(0).toUpperCase() + track.sourceName.slice(1) : 'Spotify'}\n` +
-                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'empowering' ? '⭐ Balanced Studio EQ' : currentActiveFilter.toUpperCase()}\`\n` +
+                `🎛️ **DSP Audio Profile:** \`${currentActiveFilter === 'clear' ? 'Natural / Unprocessed' : currentActiveFilter.toUpperCase()}\`\n` +
                 `🔠 **Queue:** \`${player.queue.length}\` songs in queue\n\n` +
                 `⚙️ **Playback & Filters (1-Year Response Lifetime)**\n` +
                 `Use the interactive controls below to manage your audio session.`
