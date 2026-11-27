@@ -627,7 +627,8 @@ class MusicControllerEngine {
             }
             if (!player.currentTrack) await player.playNext();
 
-            // The request channel controller is refreshed in place; no second success message.
+            // The native engine updates Now Playing / the persistent request controller.
+            // Do not emit an additional transient success message for the same request.
             await this.update(message.guild.id, client);
         } catch (error) {
             console.error('[Music Controller Request Error]:', error);
