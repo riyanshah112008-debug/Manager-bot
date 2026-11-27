@@ -10,8 +10,8 @@ const badWordsList = [
     'badword1', 'badword2', 'scam', 'free nitro', 'click here for free'
 ];
 
-const MEDIA_EXTENSION = /\\.(?:png|jpe?g|gif|webp|avif|bmp|tiff?)(?:$|[?#])/i;
-const MEDIA_URL = /https?:\\/\\/(?:[^\\s/]+\\.)?(?:tenor\\.com|giphy\\.com)\\/[^\\s]+|https?:\\/\\/[^\\s]+\\.(?:png|jpe?g|gif|webp|avif)(?:[?#][^\\s]*)?/i;
+const MEDIA_EXTENSION = /\.(?:png|jpe?g|gif|webp|avif|bmp|tiff?)(?:$|[?#])/i;
+const MEDIA_URL = /https?:\/\/(?:[^\s/]+\.)?(?:tenor\.com|giphy\.com)\/[^\s]+|https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|avif)(?:[?#][^\s]*)?/i;
 
 function hasMediaAttachment(message) {
     return message.attachments?.some(attachment => {
