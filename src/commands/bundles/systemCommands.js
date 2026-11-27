@@ -256,7 +256,7 @@ const modulesPanelCommand = {
         if (typeof panelMessage?.createMessageComponentCollector !== 'function') {
             return ctx.followUp('⚠️ The panel was sent, but its controls could not be initialized. Please run ,modules again.');
         }
-        const collector = panelMessage.createMessageComponentCollector({ componentType: ComponentType.Button, time: 600000 });
+        const collector = panelMessage.createMessageComponentCollector({ componentType: ComponentType.Button });
         collector.on('collect', async interaction => {
             if (interaction.user.id !== ownerId) {
                 return interaction.reply({ content: 'This panel belongs to the user who opened it.', ephemeral: true }).catch(() => {});
