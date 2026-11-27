@@ -46,11 +46,25 @@ function getVoiceGuard(ctx) {
     return { voiceChannel, botMember, workerClient: ctx.client };
 }
 
-async function startKazagumoPlayback(player) {
+async function startKazagumoPlayback(player, track = null) {
     if (!player) throw new Error('Music player could not be initialized.');
     if (player.playing || player.paused) return false;
-    await player.play();
-    return true;
+
+    const pendingSince = Number(player.data?.get('starryPlaybackStartPending') || 0);
+    if (pendingSince && Date.now() - pendingSince < 20000) return false;
+    player.data?.delete('starryPlaybackStartPending');
+    player.data?.set('starryPlaybackStartPending', Date.now());
+
+    try {
+        // Kazagumo's play(track) force-plays the requested track and retains the
+        // previous current track in its queue; use it only for a confirmed stale idle player.
+        if (track) await player.play(track);
+        else await player.play();
+        return true;
+    } catch (error) {
+        player.data?.delete('starryPlaybackStartPending');
+        throw error;
+    }
 }
 
 function getActivePlayer(client, guildId) {
@@ -212,6 +226,25 @@ const commands = [
                         await player.setVoiceChannel(guard.voiceChannel.id);
                     }
 
+                    const pendingStartAt = Number(player.data?.get('starryPlaybackStartPending') || 0);
+                    const staleIdleTrack = Boolean(
+                        !player.playing && !player.paused && player.queue.current &&
+                        (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
+                    );
+                    if (staleIdleTrack) {
+                        const waitingTracks = Array.from(player.queue || []);
+                        await player.destroy();
+                        player = await manager.createPlayer({
+                            guildId: ctx.guild.id,
+                            voiceId: guard.voiceChannel.id,
+                            textId: ctx.channel.id,
+                            deaf: true
+                        });
+                        kazagumoPlayer = player;
+                        createdKazagumoPlayer = true;
+                        for (const queuedTrack of waitingTracks) player.queue.add(queuedTrack);
+                    }
+
                     if (res.loadType === 'playlist') {
                         for (const track of res.tracks) player.queue.add(track);
                         const shouldStart = !player.playing && !player.paused;
@@ -253,12 +286,13 @@ const commands = [
                         return ctx.reply({ embeds: [embed] });
                     } else {
                         const track = res.tracks[0];
-                        if (!player.playing && !player.paused && !player.queue.current) {
-                            player.queue.add(track);
+                        if (!player.playing && !player.paused && !player.data?.get('starryPlaybackStartPending')) {
                             if (ctx.isSlash && ctx.interaction) player.data.set('interaction', ctx.interaction);
                             if (loadingMsg) player.data.set('loadingMessage', loadingMsg);
+                            player.queue.add(track);
                             await startKazagumoPlayback(player);
                             // playerStart edits the pending response after playback starts
+                            return;
                         } else {
                             if (loadingMsg) {
                                 loadingMsg.delete().catch(() => {});
