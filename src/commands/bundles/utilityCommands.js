@@ -1062,7 +1062,7 @@ const components = createHelpComponents();
                 .setTitle(isPrem ? `👑 Premium Active: ${tier.toUpperCase()}` : '⭐ Upgrade to Starry Premium')
                 .setDescription(
                     isPrem 
-                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 12 Studio & Security features are fully unlocked.*`
+                        ? `✅ This server has active **Starry Premium** privileges!\n🕒 **Status:** \`${expires ? 'Expires ' + new Date(expires).toLocaleDateString() : 'Permanent Lifetime / Bot Owner God-Mode'}\`\n\n*All 11 Studio & Security features are fully unlocked.*`
                         : `Supercharge your server with 24/7 Voice persistence, Studio DSP Audio Filters, Multi-Bot Worker Nodes!`
                 )
                 .addFields(
@@ -1076,7 +1076,7 @@ const components = createHelpComponents();
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('premium_view_perks_btn')
-                    .setLabel('View All 12 Perks')
+                    .setLabel('View All 11 Perks')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('👑'),
                 new ButtonBuilder()
