@@ -435,46 +435,38 @@ function createChannelAutomodButtons(channelId, settings, isGuildEnabled = true)
  * Build Server-Wide AutoMod Dashboard Embed
  */
 function buildServerAutomodEmbed(guild, isGuildEnabled = true, overrides = []) {
-    const embed = new EmbedBuilder()
+    return new EmbedBuilder()
         .setColor(isGuildEnabled ? '#2ECC71' : '#ED4245')
-        .setTitle(`🛡️ Starry AutoMod • Server Dashboard`)
-        .setDescription(`Server: **${guild.name}** (\`${guild.id}\`)
-Autonomous Real-time Server Moderation & Spam Shield`)
+        .setTitle('🛡️ Starry AutoMod • Server Dashboard')
+        .setDescription(`Server: **${guild.name}** (\`${guild.id}\`)\nAutonomous Real-time Server Moderation & Spam Shield`)
         .addFields(
             {
                 name: '🌐 Server AutoMod Engine',
-                value: isGuildEnabled 
-                    ? '🟢 **Globally Active**
-*All protective filters are actively shielding the entire server.*' 
-                    : '🔴 **SUSPENDED / DISABLED**
-*Automated deletions and mutes are turned off server-wide.*',
+                value: isGuildEnabled
+                    ? '🟢 **Globally Active**\n*All protective filters are actively shielding the entire server.*'
+                    : '🔴 **SUSPENDED / DISABLED**\n*Automated deletions and mutes are turned off server-wide.*',
                 inline: false
             },
             {
                 name: '🔗 Link Protection',
-                value: 'Deletes unauthorized external invites & links.
-*Whitelisted media, GIFs, and staff exempt.*',
+                value: 'Deletes unauthorized external invites & links.\n*Whitelisted media, GIFs, and staff exempt.*',
                 inline: true
             },
             {
                 name: '😀 Emoji Spam Protection',
-                value: 'Auto-mutes users sending 5 or more emojis.
-*Staff & bot owners exempt.*',
+                value: 'Auto-mutes users sending 5 or more emojis.\n*Staff & bot owners exempt.*',
                 inline: true
             },
             {
                 name: '📋 Channel Overrides',
-                value: overrides.length > 0 
-                    ? `\`${overrides.length}\` channel(s) customized with channel-specific rules.
-*(Click **View Overrides** below)*` 
+                value: overrides.length > 0
+                    ? `\`${overrides.length}\` channel(s) customized with channel-specific rules.\n*(Click **View Overrides** below)*`
                     : 'No channel overrides active. All channels use default protection.',
                 inline: false
             }
         )
         .setFooter({ text: '💡 Use buttons below or type ,automod server on / off to toggle.' })
         .setTimestamp();
-
-    return embed;
 }
 
 /**
