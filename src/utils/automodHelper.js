@@ -70,7 +70,7 @@ function getGuildStatus(guildId) {
  * @param {boolean} enabled
  */
 async function setGuildStatus(guildId, enabled) {
-    if (!/^\\d{17,20}$/.test(String(guildId || '')) || typeof enabled !== 'boolean') {
+    if (!/^\d{17,20}$/.test(String(guildId || '')) || typeof enabled !== 'boolean') {
         throw new Error('Invalid AutoMod guild setting.');
     }
 
@@ -118,7 +118,7 @@ function getGuildSubmoduleStatus(guildId, key) {
 }
 
 async function setGuildSubmoduleStatus(guildId, key, enabled) {
-    if (!/^\\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
+    if (!/^\d{17,20}$/.test(String(guildId || '')) || !['links', 'emojis'].includes(key) || typeof enabled !== 'boolean') {
         throw new Error('Invalid AutoMod submodule setting.');
     }
     const field = key === 'links' ? 'linksEnabled' : 'emojisEnabled';
