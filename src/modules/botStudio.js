@@ -25,6 +25,7 @@ const BOTS_ROOT_DIR = path.resolve(process.env.BOT_STUDIO_ROOT || path.join(proc
 
 // Active Session Cache (sessionId -> sessionData)
 const botStudioSessions = new Map();
+const BOT_STUDIO_SESSION_TTL_MS = 30 * 60 * 1000;
 
 // 🛡️ Official Non-Removable Starry Watermark Header
 const STARRY_WATERMARK_HEADER = `/* ============================================================================
@@ -63,20 +64,41 @@ function isBotCreationRequest(prompt) {
  * 2. Creates a new Bot Studio interactive session
  */
 function createBotStudioSession(userId, prompt, guildId = null) {
-    const sessionId = Math.random().toString(36).substring(2, 10);
+    const sessionId = crypto.randomBytes(16).toString('hex');
     const sessionData = {
         id: sessionId,
-        userId,
-        guildId,
+        userId: String(userId),
+        guildId: guildId ? String(guildId) : null,
         prompt: prompt.trim(),
         cleanPrompt: prompt.replace(/--(?:dev|code|coder|flash|pro)\b/gi, '').trim(),
         createdAt: Date.now()
     };
     botStudioSessions.set(sessionId, sessionData);
 
-    // Auto-expire session after 30 minutes
-    setTimeout(() => botStudioSessions.delete(sessionId), 30 * 60 * 1000);
+    // Auto-expire session after 30 minutes.
+    setTimeout(() => botStudioSessions.delete(sessionId), BOT_STUDIO_SESSION_TTL_MS);
     return sessionData;
+}
+
+function getAuthorizedBotStudioSession(sessionId, userId, guildId = null) {
+    if (typeof sessionId !== 'string' || !/^[a-f0-9]{32}$/i.test(sessionId) || !userId) {
+        return null;
+    }
+
+    const session = botStudioSessions.get(sessionId);
+    if (!session) return null;
+
+    const expired = !Number.isFinite(session.createdAt) ||
+        Date.now() - session.createdAt >= BOT_STUDIO_SESSION_TTL_MS;
+    if (expired) {
+        botStudioSessions.delete(sessionId);
+        return null;
+    }
+
+    if (String(session.userId) !== String(userId)) return null;
+    if (String(session.guildId || '') !== String(guildId || '')) return null;
+
+    return session;
 }
 
 /**
@@ -832,6 +854,7 @@ function extractBotName(prompt) {
 module.exports = {
     isBotCreationRequest,
     createBotStudioSession,
+    getAuthorizedBotStudioSession,
     buildBotStudioChoicePayload,
     scaffoldCompleteBot,
     pushBotToGitHub,
