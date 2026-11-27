@@ -22,7 +22,7 @@ const MusicController = require('../models/MusicController');
 const { StarryAudioEngine, formatTime } = require('../utils/nativeAudioEngine');
 const { getGuildLanguageSync, t } = require('../utils/i18n');
 const { isStayConnected: getStayConnected, setStayConnected } = require('../utils/musicStayConnected');
-const { isLavalinkRequired } = require('../utils/audioBackendPolicy');
+const { isLavalinkRequired, isLavalinkReady } = require('../utils/audioBackendPolicy');
 
 const isDbConnected = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
@@ -683,7 +683,8 @@ class MusicControllerEngine {
                 }
             }
         }
-        const isKazagumo = !!player;
+        let isKazagumo = !!player;
+        const activeManager = interaction.client.manager || client.manager || null;
         if (!player) {
             player = StarryAudioEngine.getPlayer(guildId);
         }
@@ -738,13 +739,21 @@ class MusicControllerEngine {
             }
             if (isKazagumo) {
                 await player.setVoiceChannel(voiceChannel.id);
-            } else {
-                if (isLavalinkRequired()) {
+            } else if (isLavalinkRequired()) {
+                if (!isLavalinkReady(activeManager)) {
                     return interaction.reply({
-                        content: '⚠️ The dedicated Render Lavalink player is not ready. Please retry after it reconnects.',
+                        content: '⚠️ The dedicated Render Lavalink node is not ready. Please retry after it reconnects.',
                         flags: [EPHEMERAL_FLAG]
                     }).catch(() => {});
                 }
+                player = await activeManager.createPlayer({
+                    guildId,
+                    voiceId: voiceChannel.id,
+                    textId: interaction.channel?.id,
+                    deaf: true
+                });
+                isKazagumo = true;
+            } else {
                 const p = StarryAudioEngine.getOrCreatePlayer(client, guildId, voiceChannel, interaction.channel);
                 await p.connect().catch(() => {});
             }
