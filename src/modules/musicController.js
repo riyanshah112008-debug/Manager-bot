@@ -189,8 +189,8 @@ class MusicControllerEngine {
             .setCustomId('ctrl_filter')
             .setPlaceholder(t(lang, 'music.filter_placeholder'))
             .addOptions([
-                { label: '⭐ Balanced Studio EQ', description: 'Gentle bass lift, vocal presence and controlled high frequencies', value: 'empowering', emoji: '✨' },
-                { label: 'Clear / Flat Studio', description: 'Raw, pristine uncolored studio sound', value: 'clear', emoji: '🚫' },
+                { label: 'Clear / Flat Studio (Default)', description: 'Unprocessed source audio with no tonal shaping', value: 'clear', emoji: '🎼' },
+                { label: 'Studio Master (Optional)', description: 'Gentle bass lift and vocal presence', value: 'empowering', emoji: '✨' },
                 { label: 'Bass', description: 'Deep physical vibration & subwoofer rumble (Vocals clear)', value: 'bass', emoji: '🔊' },
                 { label: '8D Spatial Audio', description: '360° rotating spatial surround sound', value: '8d', emoji: '🌀' },
                 { label: 'Nightcore', description: 'Sped up tempo + higher pitch aesthetic', value: 'nightcore', emoji: '✨' },
@@ -253,7 +253,7 @@ class MusicControllerEngine {
 
         if (track) {
             const rawFilter = (player.filter || player.data?.get('activeFilter') || 'clear').toLowerCase();
-            let filterName = 'Balanced Studio EQ';
+            let filterName = 'Natural / Unprocessed';
             if (rawFilter === 'bass' || rawFilter === 'vibrate' || rawFilter === 'vibration' || rawFilter === 'bassboost' || rawFilter === 'deepbass' || rawFilter === 'subwoofer') filterName = '🔊 Bass (Physical Vibration)';
             else if (rawFilter === '8d') filterName = '🌀 8D Spatial Audio';
             else if (rawFilter === 'nightcore') filterName = '✨ Nightcore';
