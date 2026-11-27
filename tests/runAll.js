@@ -14,6 +14,8 @@ const suites = [
   ['Dashboard origins', 'tests/dashboardOrigins.test.js'],
   ['Premium order access control', '--test', 'tests/paymentOrderAccess.test.js'],
   ['Spotify OAuth redirect URI', '--test', 'tests/spotifyOAuthRedirect.test.js'],
+  ['Spotify OAuth state integrity', '--test', 'tests/spotifyOAuthState.test.js'],
+  ['Spotify token encryption', '--test', 'tests/spotifyTokenCrypto.test.js'],
   ['Verification', 'tests/verification.test.js'],
   ['Music player resolver', 'tests/musicPlayerResolver.test.js'],
   ['Music playback lifecycle', '--test', 'tests/musicPlaybackLifecycle.test.js'],

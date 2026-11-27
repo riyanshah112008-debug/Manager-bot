@@ -58,9 +58,10 @@ module.exports = (client) => {
     // 🚀 1. ACTIVE GIVEAWAY EMBED (TONY STARK EDITION)
     // ==========================================
     async function startGiveaway(channel, author, durationStr, winnerCount = 1, prize) {
-        const msDuration = parseTime(durationStr);
-        if (!msDuration) return '❌ **Invalid time format!** Use `s`, `m`, `h`, `d`, or `w` *(Example: `10m`, `2h`, `1d`)*.';
-        if (winnerCount < 1) return '❌ **Invalid winners!** Must specify at least 1 winner.';
+        const msDuration = typeof durationStr === 'string' ? parseTime(durationStr) : null;
+        if (!msDuration || msDuration < 10000 || msDuration > 30 * 24 * 60 * 60 * 1000) return '❌ **Invalid duration!** Use 10 seconds to 30 days (for example `30m`, `2h`, or `1d`).';
+        if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 20) return '❌ **Invalid winners!** Choose between 1 and 20 winners.';
+        if (typeof prize !== 'string' || !prize.trim() || prize.length > 120) return '❌ **Invalid prize!** Prize must contain 1–120 characters.';
 
         const endsAt = Date.now() + msDuration;
         const endTimestamp = Math.floor(endsAt / 1000);
@@ -91,7 +92,11 @@ module.exports = (client) => {
         const message = await channel.send({ embeds: [embed] }).catch(() => null);
         if (!message) return '❌ Failed to send giveaway message. Verify channel bot permissions!';
 
-        await message.react('🎉').catch(() => {});
+        const reaction = await message.react('🎉').catch(() => null);
+        if (!reaction) {
+            await message.delete().catch(() => {});
+            return '❌ Starry could not add the giveaway reaction. Check Add Reactions and Read Message History permissions.';
+        }
 
         const giveaways = getGiveaways();
         giveaways.push({
@@ -338,4 +343,21 @@ module.exports = (client) => {
             }
         }
     }
+    client.giveawayManager = {
+        list(guildId) {
+            return getGiveaways().filter(item => item && item.guildId === String(guildId) && Number(item.endsAt) > Date.now())
+                .map(item => ({
+                    messageId: String(item.messageId),
+                    channelId: String(item.channelId),
+                    guildId: String(item.guildId),
+                    prize: String(item.prize || '').slice(0, 120),
+                    winners: Math.max(1, Number(item.winners) || 1),
+                    endsAt: Number(item.endsAt),
+                    hostId: String(item.hostId || '')
+                }));
+        },
+        start: startGiveaway,
+        reroll: rerollGiveaway
+    };
+
 };

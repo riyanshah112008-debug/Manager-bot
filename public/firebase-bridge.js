@@ -39,7 +39,7 @@ window.fetch=function(input,init){
  const headers=new Headers((init&&init.headers)||(input instanceof Request?input.headers:undefined));
  const token=getStoredSession();if(token)headers.set("Authorization","Bearer "+token);
  const requestInput=input instanceof Request?new Request(target,input):target;
- return nativeFetch(requestInput,{...(init||{}),headers,mode:"cors"}).then(response=>{
+ return nativeFetch(requestInput,{...(init||{}),headers,mode:"cors",credentials:"include"}).then(response=>{
   // Only a failed canonical session check may invalidate the saved login.
   if(response.status===401&&parsed.pathname==="/auth/user")clearStoredSession();
   if(parsed.pathname==="/auth/logout"&&response.ok)clearStoredSession();

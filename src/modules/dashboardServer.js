@@ -18,6 +18,9 @@ const { StarryAudioEngine } = require('../utils/nativeAudioEngine');
 const { getActiveMusicPlayer } = require('../utils/musicPlayerResolver');
 const { getPublicUrl } = require('../utils/tunnelManager');
 const { getSpotifyRedirectUri } = require('../utils/spotifyOAuth');
+const { createSpotifyOAuthState, verifySpotifyOAuthState } = require('../utils/spotifyOAuthState');
+const UserSpotify = require('../models/UserSpotify');
+const SpotifyOAuthState = require('../models/SpotifyOAuthState');
 const { engine: boosterEngine } = require('./boosterRoleEngine');
 const { TIER_CONFIG, getOrderStatus } = require('../utils/paymentHelper');
 const { canAccessPremiumOrder } = require('../utils/paymentOrderAccess');
@@ -235,6 +238,155 @@ function setupDashboardRoutes(app, client) {
     // Website support inbox and AI-to-human escalation workflow.
     setupSupportDeskRoutes(app, { requireAuth, client, config });
     setupPhoneSyncRoutes(app, { requireAuth });
+
+    // Live AutoMod controls: only the link/emoji filters currently enforced by automod.js are exposed.
+    app.get('/api/guild/:id/automod', requireGuildAdmin, async (req, res) => {
+        try {
+            const helper = require('../utils/automodHelper');
+            const channels = req.guild.channels.cache.filter(channel => channel.isTextBased() && typeof channel.send === 'function');
+            const overrides = await Promise.all(channels.map(async channel => ({
+                channelId: channel.id,
+                channelName: channel.name,
+                ...(await helper.getChannelSettings(channel.id, req.guild.id))
+            })));
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, enabled: helper.getGuildStatus(req.guild.id), channels: overrides });
+        } catch (error) {
+            console.error('Dashboard AutoMod read failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod settings are temporarily unavailable.' });
+        }
+    });
+
+    app.patch('/api/guild/:id/automod', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const allowed = new Set(['enabled', 'channelId', 'linksActive', 'emojisActive']);
+            if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.has(key))) {
+                return res.status(400).json({ success: false, error: 'Invalid AutoMod update.' });
+            }
+            if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return res.status(400).json({ success: false, error: 'Server AutoMod must be true or false.' });
+            for (const key of ['linksActive', 'emojisActive']) if (body[key] !== undefined && typeof body[key] !== 'boolean') {
+                return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+            }
+            if (body.enabled === undefined && body.channelId === undefined) return res.status(400).json({ success: false, error: 'Choose a server setting or channel filter to update.' });
+            if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'AutoMod storage is offline. No changes were applied.' });
+            const helper = require('../utils/automodHelper');
+            if (body.enabled !== undefined) {
+                await helper.setGuildStatus(req.guild.id, body.enabled);
+                const { AutomodGuild } = require('../models/AutomodSchema');
+                const stored = await AutomodGuild.findOne({ guildId: req.guild.id }).lean();
+                if (!stored || stored.enabled !== body.enabled) return res.status(503).json({ success: false, error: 'AutoMod server setting could not be confirmed in storage.' });
+            }
+            if (body.channelId !== undefined) {
+                const channelId = String(body.channelId || '');
+                const channel = req.guild.channels.cache.get(channelId);
+                if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
+                    return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+                }
+                const { AutomodChannel } = require('../models/AutomodSchema');
+                if (body.linksActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'links', body.linksActive);
+                if (body.emojisActive !== undefined) await helper.setChannelFilter(channelId, req.guild.id, 'emojis', body.emojisActive);
+                const stored = await AutomodChannel.findOne({ channelId, guildId: req.guild.id }).lean();
+                const expectedLinks = body.linksActive === undefined ? undefined : !body.linksActive;
+                const expectedEmojis = body.emojisActive === undefined ? undefined : !body.emojisActive;
+                if ((expectedLinks !== undefined && stored?.links !== expectedLinks) ||
+                    (expectedEmojis !== undefined && stored?.emojis !== expectedEmojis)) {
+                    return res.status(503).json({ success: false, error: 'AutoMod channel filter could not be confirmed in storage.' });
+                }
+            }
+            return res.json({ success: true, message: 'AutoMod settings saved and synced to the live filter cache.' });
+        } catch (error) {
+            console.error('Dashboard AutoMod update failed:', error.message);
+            return res.status(503).json({ success: false, error: 'AutoMod update failed. Retry after checking database connectivity.' });
+        }
+    });
+
+    // Read-only security audit using Starry CyberSec's existing server auditor.
+    app.get('/api/guild/:id/security/audit', requireGuildAdmin, async (req, res) => {
+        try {
+            const cyberSec = require('./cyberSec');
+            const report = await cyberSec.auditServerSecurity(req.guild, req.session.user);
+            const embed = report?.embed?.toJSON ? report.embed.toJSON() : null;
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                score: Number(report?.score ?? report?.securityScore ?? 0),
+                grade: String(report?.grade || report?.verdict || 'Audit complete'),
+                vulnerabilities: Array.isArray(report?.vulnerabilities) ? report.vulnerabilities : [],
+                hardeningSteps: Array.isArray(report?.hardeningSteps) ? report.hardeningSteps : [],
+                memberCacheCount: req.guild.members.cache.size,
+                memberCount: Number(req.guild.memberCount || 0),
+                embed
+            });
+        } catch (error) {
+            console.error('Dashboard security audit failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Security audit could not complete. Check Starry permissions and retry.' });
+        }
+    });
+
+    // Giveaway dashboard uses the same service and persistence as Discord commands.
+    app.get('/api/guild/:id/giveaways', requireGuildAdmin, (req, res) => {
+        const service = client.giveawayManager;
+        if (!service) return res.status(503).json({ success: false, error: 'Giveaway service is not ready on this bot instance.' });
+        return res.json({ success: true, giveaways: service.list(req.guild.id) });
+    });
+
+    app.post('/api/guild/:id/giveaways', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const prize = typeof body.prize === 'string' ? body.prize.trim() : '';
+            const duration = typeof body.duration === 'string' ? body.duration.trim() : '';
+            const winnerCount = body.winners === undefined ? 1 : Number(body.winners);
+            const channelId = String(body.channelId || '');
+            const channel = req.guild.channels.cache.get(channelId);
+            if (!prize || prize.length > 120) return res.status(400).json({ success: false, error: 'Prize must be 1–120 characters.' });
+            if (!/^[1-9]\d{0,3}(s|m|h|d|w)$/i.test(duration)) return res.status(400).json({ success: false, error: 'Duration must use s, m, h, d or w (for example 30m or 2d).' });
+            const amount = Number(duration.match(/^\d+/)[0]);
+            const unit = duration.slice(-1).toLowerCase();
+            const durationMs = amount * ({ s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 }[unit]);
+            if (durationMs < 10000 || durationMs > 30 * 86400000) return res.status(400).json({ success: false, error: 'Giveaway duration must be between 10 seconds and 30 days.' });
+            if (!Number.isInteger(winnerCount) || winnerCount < 1 || winnerCount > 20) return res.status(400).json({ success: false, error: 'Winner count must be a whole number from 1 to 20.' });
+            if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return res.status(400).json({ success: false, error: 'Choose a text channel from this server.' });
+            const me = req.guild.members.me;
+            if (!me?.permissionsIn(channel).has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions, PermissionFlagsBits.ReadMessageHistory])) {
+                return res.status(403).json({ success: false, error: 'Starry needs View Channel, Send Messages, Embed Links, Add Reactions and Read Message History in that channel.' });
+            }
+            const service = client.giveawayManager;
+            if (!service) return res.status(503).json({ success: false, error: 'Giveaway service is not ready on this bot instance.' });
+            const author = {
+                id: req.session.user.id,
+                tag: req.session.user.username || 'Dashboard Admin',
+                displayAvatarURL: () => req.session.user.avatar || undefined
+            };
+            const result = await service.start(channel, author, duration, winnerCount, prize);
+            if (typeof result !== 'string' || !result.startsWith('✅')) return res.status(502).json({ success: false, error: result || 'Giveaway could not be started.' });
+            return res.status(201).json({ success: true, message: result, giveaway: service.list(req.guild.id).slice(-1)[0] || null });
+        } catch (error) {
+            console.error('Dashboard giveaway creation failed:', error.message);
+            return res.status(502).json({ success: false, error: 'Giveaway could not be created. Check the bot permissions in that channel.' });
+        }
+    });
+
+    app.post('/api/guild/:id/giveaways/:messageId/reroll', actionLimiter, requireGuildAdmin, async (req, res) => {
+        try {
+            const messageId = String(req.params.messageId || '');
+            if (!/^\d{17,20}$/.test(messageId)) return res.status(400).json({ success: false, error: 'Invalid giveaway message ID.' });
+            const service = client.giveawayManager;
+            const giveaway = service?.list(req.guild.id).find(item => item.messageId === messageId);
+            if (!giveaway) return res.status(404).json({ success: false, error: 'Active giveaway was not found in this server.' });
+            const channel = await req.guild.channels.fetch(giveaway.channelId).catch(() => null);
+            if (!channel || !channel.isTextBased()) return res.status(404).json({ success: false, error: 'Giveaway channel is no longer available.' });
+            const winners = req.body?.winners === undefined ? giveaway.winners : Number(req.body.winners);
+            if (!Number.isInteger(winners) || winners < 1 || winners > 20) return res.status(400).json({ success: false, error: 'Winner count must be between 1 and 20.' });
+            const executor = { id: req.session.user.id };
+            const result = await service.reroll(channel, messageId, winners, executor);
+            if (typeof result !== 'string' || !result.startsWith('✅')) return res.status(502).json({ success: false, error: result || 'Reroll failed.' });
+            return res.json({ success: true, message: result });
+        } catch (error) {
+            console.error('Dashboard giveaway reroll failed:', error.message);
+            return res.status(502).json({ success: false, error: 'Giveaway reroll failed.' });
+        }
+    });
 
     // Multi-platform discovery via Starry's configured Lavalink provider. No Spotify API credentials required.
     app.get('/api/guild/:id/music/search', requireGuildMember, async (req, res) => {
@@ -1176,14 +1328,19 @@ function setupDashboardRoutes(app, client) {
                 if (b.enabled && !b.channelId) return res.status(400).json({ success: false, error: 'Select an announcement channel before enabling birthdays.' });
             }
             if (payload.logging !== undefined) {
-                const allowedLogKeys = new Set(['modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
+                const allowedLogKeys = new Set(['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled', 'modLogChannel', 'messageLogChannel', 'voiceLogChannel', 'memberLogChannel', 'serverLogChannel']);
                 if (!payload.logging || typeof payload.logging !== 'object' || Array.isArray(payload.logging) ||
                     Object.keys(payload.logging).some(key => !allowedLogKeys.has(key))) {
                     return res.status(400).json({ success: false, error: 'Invalid logging settings.' });
                 }
-                for (const [key, rawId] of Object.entries(payload.logging)) {
-                    if (typeof rawId !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
-                    const channelId = rawId.trim();
+                const booleanLogKeys = new Set(['enabled', 'aiEnabled', 'moderationEnabled', 'messagesEnabled', 'membersEnabled', 'voiceEnabled', 'serverEnabled']);
+                for (const [key, rawValue] of Object.entries(payload.logging)) {
+                    if (booleanLogKeys.has(key)) {
+                        if (typeof rawValue !== 'boolean') return res.status(400).json({ success: false, error: key + ' must be true or false.' });
+                        continue;
+                    }
+                    if (typeof rawValue !== 'string') return res.status(400).json({ success: false, error: 'Log destinations must be channel IDs or empty.' });
+                    const channelId = rawValue.trim();
                     if (channelId) {
                         const channel = guild.channels.cache.get(channelId);
                         if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') {
@@ -1797,77 +1954,123 @@ function setupDashboardRoutes(app, client) {
     // Payment approval and key-generation endpoints have been removed.
     // Premium entitlements will only be granted by verified provider webhooks.
 
-    // GET /api/spotify/login - Initiate Spotify OAuth2 Authorization
-    app.get('/api/spotify/login', (req, res) => {
-        const userId = req.query.userId;
-        if (!userId) return res.status(400).send('<h1>❌ Missing userId parameter</h1>');
-        const spotifyManager = require('./spotifyManager');
-        const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
-        const redirectUri = getSpotifyRedirectUri(publicUrl);
-        const authUrl = spotifyManager.getOAuthUrl(userId, redirectUri);
-        res.redirect(authUrl);
+    // Spotify account linking is tied to the authenticated Discord session.
+    // The user ID is never accepted from a query parameter; state is signed and
+    // bound to an HttpOnly, Secure, SameSite=Lax browser cookie.
+    const getSpotifyStateSecret = () => process.env.SPOTIFY_OAUTH_STATE_SECRET ||
+        process.env.SESSION_ENCRYPTION_KEY || process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET || '';
+
+    const getSpotifyFrontendUrl = () => (process.env.FRONTEND_URL || process.env.PUBLIC_URL ||
+        'https://manager-bot-96c07.web.app').replace(/\/+$/, '');
+
+    const getSpotifyCookie = (req) => {
+        const cookieHeader = String(req.headers.cookie || '');
+        const part = cookieHeader.split(';').map(value => value.trim()).find(value => value.startsWith('starry_spotify_state='));
+        return part ? part.slice('starry_spotify_state='.length) : '';
+    };
+
+    const clearSpotifyStateCookie = (res) => {
+        res.setHeader('Set-Cookie', 'starry_spotify_state=; Max-Age=0; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
+    };
+
+    app.post('/api/spotify/login', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: 'Spotify account linking is temporarily unavailable because secure session storage is offline.' });
+            const userId = String(req.session?.user?.id || '');
+            const secret = getSpotifyStateSecret();
+            const state = createSpotifyOAuthState(userId, secret);
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || ('https://' + req.get('host'));
+            const redirectUri = getSpotifyRedirectUri(publicUrl);
+            const spotifyManager = require('./spotifyManager');
+            const authorizationUrl = spotifyManager.getOAuthUrl(state, redirectUri);
+            const stateHash = crypto.createHash('sha256').update(state).digest('hex');
+            await SpotifyOAuthState.create({ stateHash, userId, expiresAt: new Date(Date.now() + 10 * 60 * 1000) });
+            res.setHeader('Cache-Control', 'no-store');
+            res.setHeader('Set-Cookie', 'starry_spotify_state=' + state + '; Max-Age=600; Path=/api/spotify; HttpOnly; Secure; SameSite=Lax');
+            return res.json({ success: true, authorizationUrl });
+        } catch (error) {
+            console.error('Spotify OAuth initiation failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Spotify account linking is not configured. Verify the Spotify credentials, secure storage and callback URL.' });
+        }
     });
 
-    // GET /api/spotify/callback - Handle Spotify OAuth2 Redirect
-    app.get('/api/spotify/callback', async (req, res) => {
+    app.get('/api/spotify/callback', actionLimiter, async (req, res) => {
         const { code, state, error } = req.query;
-        if (error) {
-            return res.send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Spotify Authorization Denied</h2>
-            <p>${error}</p><p>You can close this tab and return to Discord.</p>
-            </body></html>`);
+        const cookieState = getSpotifyCookie(req);
+        clearSpotifyStateCookie(res);
+        res.setHeader('Cache-Control', 'no-store');
+        const frontend = getSpotifyFrontendUrl();
+        if (error) return res.redirect(302, frontend + '/music.html?spotify=denied');
+        if (typeof code !== 'string' || !code || typeof state !== 'string' || !state) {
+            return res.status(400).send('Spotify authorization response is incomplete. Return to Starry and reconnect.');
         }
 
-        if (!code || !state) {
-            return res.status(400).send('<h1>❌ Missing code or state from Spotify</h1>');
-        }
+        const userId = verifySpotifyOAuthState(state, cookieState, getSpotifyStateSecret());
+        if (!userId || mongoose.connection.readyState !== 1) return res.status(403).send('Spotify authorization state expired or did not match this browser. Return to Starry and reconnect.');
 
         try {
+            const stateHash = crypto.createHash('sha256').update(state).digest('hex');
+            const consumedState = await SpotifyOAuthState.findOneAndDelete({
+                stateHash,
+                userId,
+                expiresAt: { $gt: new Date() }
+            }).lean();
+            if (!consumedState) return res.status(403).send('Spotify authorization state was already used or has expired. Return to Starry and reconnect.');
             const spotifyManager = require('./spotifyManager');
-            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || `http://${req.headers.host}`;
+            const publicUrl = process.env.RENDER_EXTERNAL_URL || getPublicUrl() || ('https://' + req.get('host'));
             const redirectUri = getSpotifyRedirectUri(publicUrl);
-            const { profile } = await spotifyManager.handleOAuthCallback(code, redirectUri, state);
-
-            res.send(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Spotify Connected • Starry</title>
-                <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
-                <style>
-                    body { background: #080A10; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; background-image: radial-gradient(circle at 50% 50%, rgba(29, 185, 84, 0.15), transparent 60%); }
-                    .card { background: rgba(18, 24, 38, 0.95); border: 1px solid rgba(29, 185, 84, 0.3); border-radius: 20px; padding: 40px; text-align: center; max-width: 440px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-                    .sp-icon { width: 70px; height: 70px; margin-bottom: 20px; }
-                    h2 { margin: 0 0 10px; font-weight: 800; color: #1DB954; font-size: 1.6rem; }
-                    p { color: #9CA3AF; line-height: 1.6; margin-bottom: 25px; }
-                    .user-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(29, 185, 84, 0.1); border: 1px solid rgba(29, 185, 84, 0.3); padding: 8px 16px; border-radius: 30px; font-weight: 700; color: #1DB954; margin-bottom: 20px; }
-                    .btn { display: inline-block; padding: 12px 28px; background: #1DB954; color: #fff; font-weight: 700; text-decoration: none; border-radius: 12px; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <img src="https://cdn-icons-png.flaticon.com/512/174/174872.png" class="sp-icon" alt="Spotify">
-                    <div class="user-badge">🟢 Connected as ${profile.display_name || profile.id}</div>
-                    <h2>Spotify Connected!</h2>
-                    <p>Starry has successfully authorized your Spotify account. You can now use <strong>,spotify myplaylists</strong> or <strong>,spotify play</strong> in Discord!</p>
-                    <p style="color:#6B7280; font-size:0.85rem;">You may now safely close this window and return to Discord.</p>
-                </div>
-            </body>
-            </html>
-            `);
+            await spotifyManager.handleOAuthCallback(code, redirectUri, userId);
+            return res.redirect(302, frontend + '/music.html?spotify=connected');
         } catch (err) {
-            res.status(500).send(`
-            <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
-            </head><body>
-            <h2>❌ Connection Error</h2>
-            <p>${err.message}</p>
-            </body></html>`);
+            console.error('Spotify OAuth callback failed:', err.message);
+            return res.redirect(302, frontend + '/music.html?spotify=error');
+        }
+    });
+
+    app.get('/api/spotify/status', requireAuth, async (req, res) => {
+        try {
+            const record = await UserSpotify.findOne({ userId: req.session.user.id })
+                .select('spotifyId displayName profileUrl avatarUrl updatedAt').lean();
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({
+                success: true,
+                connected: Boolean(record?.spotifyId),
+                account: record ? {
+                    id: record.spotifyId,
+                    displayName: record.displayName,
+                    profileUrl: record.profileUrl,
+                    avatarUrl: record.avatarUrl,
+                    updatedAt: record.updatedAt
+                } : null
+            });
+        } catch (error) {
+            console.error('Spotify status lookup failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Spotify connection status is temporarily unavailable.' });
+        }
+    });
+
+    app.get('/api/spotify/playlists', requireAuth, async (req, res) => {
+        try {
+            const spotifyManager = require('./spotifyManager');
+            const data = await spotifyManager.getUserPlaylists(req.session.user.id);
+            res.set('Cache-Control', 'no-store, private');
+            return res.json({ success: true, playlists: data.oauthPlaylists || [], savedPlaylists: data.savedPlaylists || [] });
+        } catch (error) {
+            console.error('Spotify playlist lookup failed:', error.message);
+            return res.status(502).json({ success: false, error: 'Could not load Spotify playlists. Reconnect your account and retry.' });
+        }
+    });
+
+    app.delete('/api/spotify/connection', actionLimiter, requireAuth, async (req, res) => {
+        try {
+            await UserSpotify.updateOne(
+                { userId: req.session.user.id },
+                { $set: { spotifyId: '', displayName: '', profileUrl: '', avatarUrl: '', accessToken: '', refreshToken: '', tokenExpiresAt: null } }
+            );
+            return res.json({ success: true, connected: false });
+        } catch (error) {
+            console.error('Spotify disconnect failed:', error.message);
+            return res.status(503).json({ success: false, error: 'Could not disconnect Spotify right now.' });
         }
     });
 
