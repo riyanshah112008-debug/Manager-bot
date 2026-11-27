@@ -73,7 +73,7 @@ test('idle Kazagumo players with stale current tracks are rebuilt before the new
   assert.ok(commands.includes('const staleIdleTrack = Boolean('));
   assert.ok(commands.includes('await player.destroy()'));
   assert.ok(commands.includes('player = await manager.createPlayer({'));
-  assert.ok(commands.includes('for (const queuedTrack of waitingTracks) player.queue.add(queuedTrack)'));
+  assert.ok(commands.includes('for (const queuedTrack of preservedQueue) player.queue.add(queuedTrack)'));
   assert.ok(commands.includes('Your existing queue was kept; retry after the node reconnects'));
 });
 
