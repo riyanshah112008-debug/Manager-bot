@@ -24,6 +24,16 @@ const levelingModule = require('../../modules/leveling');
 const ServerSettings = require('../../models/ServerSettings');
 const automodHelper = require('../../utils/automodHelper');
 
+function getValidatedGuildId(guild) {
+    const rawGuildId = guild?.id;
+    if (typeof rawGuildId !== 'string' || !/^\\d{17,20}$/.test(rawGuildId)) return null;
+    try {
+        return BigInt(rawGuildId).toString(10);
+    } catch (_) {
+        return null;
+    }
+}
+
 function hasManagePerms(ctx) {
     if (!ctx.guild) return false;
     if (config.BOT_OWNERS && config.BOT_OWNERS.includes(ctx.user.id)) return true;
@@ -48,7 +58,7 @@ const loggingPanelCommand = {
         const labels = { ai: 'AI activity', moderate: 'Moderation', messages: 'Messages', members: 'Members & roles', voice: 'Voice', channels: 'Server & channels' };
         let selectedCategory = 'ai';
         const load = async () => {
-            const rows = await ServerSettings.find({ guildId }).select('logging').limit(1).lean();
+            const rows = await ServerSettings.find().where('guildId').equals(guildId).select('logging').limit(1).lean();
             return rows[0]?.logging || {};
         };
         const save = async patch => {
@@ -188,7 +198,7 @@ const modulesPanelCommand = {
             ai: 'AI activity logs'
         };
         const loadLogging = async () => {
-            const row = await ServerSettings.findOne({ guildId }).select('logging').lean();
+            const row = await ServerSettings.findOne().where('guildId').equals(guildId).select('logging').lean();
             return row?.logging || {};
         };
         const saveLogging = async patch => {
