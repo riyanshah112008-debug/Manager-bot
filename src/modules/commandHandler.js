@@ -307,8 +307,13 @@ class CommandRegistry {
         client.on(Events.MessageCreate, async (message) => {
             if (!message || message.author?.bot || !message.content) return;
 
-            // Instant in-memory check to discard rapid re-delivery within the same process
+            // Atomically claim the Discord message before any asynchronous work.
+            // This prevents two dispatcher instances from both passing the guard while
+            // awaiting prefix/database lookups and emitting duplicate command responses.
             if (executedMessageIds.has(message.id)) return;
+            executedMessageIds.add(message.id);
+            const claimTimer = setTimeout(() => executedMessageIds.delete(message.id), 20000);
+            if (typeof claimTimer.unref === 'function') claimTimer.unref();
 
             const isPrimary = isPrimaryBotClient(client);
 
@@ -460,10 +465,6 @@ class CommandRegistry {
             if (!isExecutableCommand(command)) return;
 
 NaN
-            if (executedMessageIds.has(message.id)) return;
-            executedMessageIds.add(message.id);
-            setTimeout(() => executedMessageIds.delete(message.id), 20000);
-
             const isPrefixInvocation = matchedPrefix !== '@' && matchedPrefix !== '';
 
             // Prefix commands are available to all server members.
