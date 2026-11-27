@@ -726,7 +726,7 @@ class StarryGuildPlayer {
                         '-b:a', `${this.audioBitrateKbps || 128}k`,
                         '-vbr', 'on',
                         '-application', 'audio',
-                        '-compression_level', '10',
+                        '-compression_level', '5',
                         '-frame_duration', '20',
                         '-f', 'opus'
                     ]
