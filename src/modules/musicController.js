@@ -576,26 +576,18 @@ class MusicControllerEngine {
                 }
 
                 if (player.voiceId !== voiceChannel.id) {
-                    player.setVoiceChannel(voiceChannel.id);
+                    await player.setVoiceChannel(voiceChannel.id);
                 }
 
                 if (res.loadType === 'playlist') {
-                    for (const t of res.tracks) player.queue.add(t);
-                    if (!player.playing && !player.paused) player.play();
-                    const temp = await message.channel.send({
-                        content: `📚 **Enqueued Playlist:** \`${(res.playlist?.name || 'Playlist').substring(0, 45)}\` (**${res.tracks.length}** tracks) • ${message.author}`
-                    }).catch(() => null);
-                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 4000);
+                    for (const track of res.tracks) player.queue.add(track);
                 } else {
-                    const track = res.tracks[0];
-                    player.queue.add(track);
-                    if (!player.playing && !player.paused) player.play();
-                    const temp = await message.channel.send({
-                        content: `🎵 **Added to Queue:** \`${track.title.substring(0, 55)}\` • ${message.author}`
-                    }).catch(() => null);
-                    if (temp) setTimeout(() => temp.delete().catch(() => {}), 3500);
+                    player.queue.add(res.tracks[0]);
                 }
+                if (!player.playing && !player.paused) await player.play();
 
+                // The persistent request controller is the single success surface.
+                // Avoid an extra temporary confirmation for every song request.
                 await this.update(message.guild.id, client);
                 return;
             } catch (kErr) {
