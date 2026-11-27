@@ -84,3 +84,11 @@ test('server ID validation accepts Discord snowflakes only', () => {
     assert.equal(_internals.isValidDiscordSnowflake('1234567890123456x'), false);
     assert.equal(_internals.isValidDiscordSnowflake({ $ne: null }), false);
 });
+
+test('suspicious-account settings upserts are isolated by guild ID', () => {
+    const first = _internals.buildSettingsFilter('12345678901234567');
+    const second = _internals.buildSettingsFilter('12345678901234568');
+    assert.deepEqual(first, { guildId: '12345678901234567' });
+    assert.deepEqual(second, { guildId: '12345678901234568' });
+    assert.notDeepEqual(first, second);
+});
