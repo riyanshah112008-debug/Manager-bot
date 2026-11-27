@@ -48,12 +48,12 @@ const loggingPanelCommand = {
         const labels = { ai: 'AI activity', moderate: 'Moderation', messages: 'Messages', members: 'Members & roles', voice: 'Voice', channels: 'Server & channels' };
         let selectedCategory = 'ai';
         const load = async () => {
-            const rows = await ServerSettings.find({ guildId: { $eq: guildId } }).select('logging').limit(1).lean();
+            const rows = await ServerSettings.find({ guildId }).select('logging').limit(1).lean();
             return rows[0]?.logging || {};
         };
         const save = async patch => {
             const set = Object.fromEntries(Object.entries(patch).map(([key, value]) => ['logging.' + key, value]));
-            await ServerSettings.updateOne({ guildId: { $eq: guildId } }, { $set: set, $setOnInsert: { guildId } }, { upsert: true, setDefaultsOnInsert: true });
+            await ServerSettings.updateOne({ guildId }, { $set: set, $setOnInsert: { guildId } }, { upsert: true, setDefaultsOnInsert: true });
             ctx.client.invalidateLogSettings?.(guild.id);
         };
         const render = async () => {
@@ -162,9 +162,9 @@ const modulesPanelCommand = {
     async execute(ctx) {
         if (!ctx.guild) return ctx.reply('❌ Use this panel inside a server.');
         if (!hasManagePerms(ctx)) return ctx.reply('❌ You need Manage Server or Administrator permission.');
-        const guildId = String(ctx.guild.id);
+        const guildId = ctx.guild.id;
         const ownerId = ctx.user.id;
-        if (!/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
+        if (typeof guildId !== 'string' || !/^\d{17,20}$/.test(guildId)) return ctx.reply('❌ Could not validate this server ID.');
 
         const loggingKeys = {
             moderation: 'moderationEnabled',
@@ -183,7 +183,7 @@ const modulesPanelCommand = {
             ai: 'AI activity logs'
         };
         const loadLogging = async () => {
-            const row = await ServerSettings.findOne({ guildId: { $eq: guildId } }).select('logging').lean();
+            const row = await ServerSettings.findOne({ guildId }).select('logging').lean();
             return row?.logging || {};
         };
         const saveLogging = async patch => {
