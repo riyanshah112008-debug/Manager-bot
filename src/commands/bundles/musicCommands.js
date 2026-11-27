@@ -89,8 +89,7 @@ async function searchWithTimeout(searchPromise, timeoutMs = 2600) {
         return await Promise.race([
             Promise.resolve(searchPromise),
             new Promise((_, reject) => {
-                timeoutId = setTimeout(() => reject(new Error('Music search exceeded the 2.6 second resolution budget.')), timeoutMs);
-                timeoutId.unref?.();
+                timeoutId = setTimeout(() => reject(new Error(`Music search exceeded ${timeoutMs}ms resolution budget.`)), timeoutMs);
             })
         ]);
     } finally {
