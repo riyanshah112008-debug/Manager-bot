@@ -51,7 +51,7 @@ async function startKazagumoPlayback(player, track = null) {
     if (player.playing || player.paused) return false;
 
     const pendingSince = Number(player.data?.get('starryPlaybackStartPending') || 0);
-    if (pendingSince && Date.now() - pendingSince < 20000) return false;
+    if (pendingSince && Date.now() - pendingSince < 8000) return false;
     player.data?.delete('starryPlaybackStartPending');
     player.data?.set('starryPlaybackStartPending', Date.now());
 
@@ -230,7 +230,16 @@ const commands = [
                             playlist: { name: 'Spotify track match' }
                         };
                     } else {
-                        res = await searchWithTimeout(manager.search(query, { requester: ctx.user }));
+                        // Search YouTube Music and YouTube in parallel: provider-specific
+                        // prefixes are more reliable than relying on a node's default engine.
+                        // Keep the entire Lavalink lookup within a bounded startup budget.
+                        const candidates = await searchWithTimeout(Promise.all([
+                            manager.search(`ytmsearch:${query}`, { requester: ctx.user }).catch(() => null),
+                            manager.search(`ytsearch:${query}`, { requester: ctx.user }).catch(() => null)
+                        ]), 2200);
+                        res = candidates.find(candidate =>
+                            candidate?.tracks?.length && candidate.loadType !== 'empty' && candidate.loadType !== 'error'
+                        ) || null;
                     }
                     if (!res || !res.tracks || res.tracks.length === 0 || res.loadType === 'empty' || res.loadType === 'error') {
                         throw new Error(`Lavalink could not resolve "${query}". Falling back to Native Audio Engine.`);
@@ -259,10 +268,10 @@ const commands = [
 
                     let preservedQueue = [];
                     const pendingStartAt = Number(player.data?.get('starryPlaybackStartPending') || 0);
-                    if (pendingStartAt && Date.now() - pendingStartAt >= 20000) player.data.delete('starryPlaybackStartPending');
+                    if (pendingStartAt && Date.now() - pendingStartAt >= 8000) player.data.delete('starryPlaybackStartPending');
                     const staleIdleTrack = Boolean(
                         !player.playing && !player.paused && player.queue.current &&
-                        (!pendingStartAt || Date.now() - pendingStartAt >= 20000)
+                        (!pendingStartAt || Date.now() - pendingStartAt >= 8000)
                     );
                     if (staleIdleTrack) {
                         preservedQueue = Array.from(player.queue || []);
