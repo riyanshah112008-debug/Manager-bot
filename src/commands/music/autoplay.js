@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { StarryAudioEngine } = require('../../utils/nativeAudioEngine');
+const { isLavalinkRequired } = require('../../utils/audioBackendPolicy');
 
 const EPHEMERAL_FLAG = (MessageFlags && MessageFlags.Ephemeral) ? MessageFlags.Ephemeral : 64;
 
@@ -43,6 +44,12 @@ module.exports = {
                 nowMsg.edit({ components: buildNowPlayingComponents(interaction.guild.id, newState, Boolean(kPlayer.data?.get('stayConnected'))) }).catch(() => {});
             }
         } else {
+            if (isLavalinkRequired()) {
+                return interaction.reply({
+                    content: '⚠️ Starry’s dedicated Render audio node is offline. Autoplay cannot be enabled until Lavalink reconnects.',
+                    flags: [EPHEMERAL_FLAG]
+                });
+            }
             const player = StarryAudioEngine.getOrCreatePlayer(client, interaction.guild.id, voiceChannel, interaction.channel);
             player.autoplay = !player.autoplay;
             newState = player.autoplay;
