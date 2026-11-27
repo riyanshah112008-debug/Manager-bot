@@ -259,7 +259,7 @@ function createPremiumLockPayload(featureName, prefix = ',') {
 }
 
 /**
- * Constructs the detailed perks breakdown embed for all 12 premium features.
+ * Constructs the detailed perks breakdown embed for all 11 premium features.
  * @param {string} prefix Server prefix
  * @returns {{ embeds: EmbedBuilder[], components: ActionRowBuilder[] }}
  */
