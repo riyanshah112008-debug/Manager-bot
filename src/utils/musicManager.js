@@ -1133,7 +1133,7 @@ function createMusicManager(client) {
                 if (searchRes && searchRes.tracks && searchRes.tracks.length > 0) {
                     const ranked = rankAndFilterCanonicalTracks(searchRes.tracks, query);
                     const found = ranked[0] || searchRes.tracks[0];
-                    this.track = found;
+                    this.track = found.track;
                     this.realUri = found.realUri || found.uri;
                     if (!this.thumbnail && found.thumbnail) this.thumbnail = found.thumbnail;
                     return true;
