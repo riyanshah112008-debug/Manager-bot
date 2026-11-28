@@ -16,8 +16,7 @@ function readPublic(rel) {
     return execFileSync('cat', [rel], { cwd: REPO_ROOT, encoding: 'utf8' });
 }
 
-const SINK_PATTERN = /\.innerHTML\s*=|\.outerHTML\s*=|document\.write\s*\(|insertAdjacentHTML\s*\(/;
-const HIGH_RISK_PATTERN = /\.outerHTML\s*=|document\.write\s*\(|insertAdjacentHTML\s*\(/;
+const SINK_PATTERN = /\\.innerHTML\\s*=|\\.outerHTML\\s*=|document\\.write\\s*\\(|insertAdjacentHTML\\s*\\(/;
 
 // Reviewed safe call sites. Every entry is either a fully static template or a
 // renderer whose interpolations are wrapped in esc()/httpsUrl()/Number()/String().
@@ -48,28 +47,7 @@ test('public scripts contain no high-risk DOM sinks', () => {
     }
 });
 
-test('innerHTML only appears at reviewed safe call sites', () => {
-    for (const file of listPublicFiles('public/*.js')) {
-        const content = readPublic(file);
-        const allowlist = SAFE_SITES[file] || [];
-        for (const allowlisted of allowlist) {
-            assert.ok(
-                content.includes(allowlisted),
-                `${file}: allowlisted site no longer matches (stale entry, remove it): ${allowlisted}`
-            );
-        }
-        for (const line of content.split('\n')) {
-            if (!SINK_PATTERN.test(line)) continue;
-            if (HIGH_RISK_PATTERN.test(line)) continue;
-            const covered = allowlist.some(site => line.includes(site));
-            assert.ok(
-                covered,
-                `${file}: unreviewed dynamic innerHTML sink: ${line.slice(0, 160)}\nConvert it to createElement + textContent or add it to the reviewed allowlist in tests/frontendDomPolicy.test.js.`
-            );
-        }
-    }
-});
-
+test('public scripts do not write HTML through executable DOM sinks', () => {\n    for (const file of listPublicFiles('public/*.js')) {\n        const content = readPublic(file);\n        assert.ok(!SINK_PATTERN.test(content), `${file} must use createElement/textContent or the sanitized mountMarkup helper instead of HTML string sinks.`);\n    }\n});\n
 test('every dashboard page loads security-utils.js before workspace.js', () => {
     const pages = listPublicFiles('public/*.html');
     assert.ok(pages.length > 20, 'Expected to scan the dashboard HTML pages.');
