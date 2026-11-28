@@ -5,7 +5,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 // 生成邀请机器人链接
 const getInviteUrl = (guildId) => {
     const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
-    return `https://discord.com/api/oauth2/authorize?client_id=${BOT_CLIENT_ID}&permissions=8&scope=bot%20applications.commands&guild_id=${guildId}&redirect_uri=${redirectUri}&response_type=code`;
+    return `https://discord.com/api/oauth2/authorize?client_id=${BOT_CLIENT_ID}&permissions=0&scope=bot%20applications.commands&guild_id=${guildId}&redirect_uri=${redirectUri}&response_type=code`;
 };
 
 document.addEventListener('DOMContentLoaded', () => {
