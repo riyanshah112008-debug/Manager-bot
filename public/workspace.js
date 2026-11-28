@@ -253,6 +253,26 @@ async function loadAudit(){
       box.append(title,meta);
       if(e.summary){const note=document.createElement("small");note.textContent=e.summary;box.append(note);}
       if(changeText){const fields=document.createElement("small");fields.textContent="Fields: "+changeText;box.append(fields);}
+      if(e.targetType||e.targetId||e.changes){
+        const disclosure=document.createElement("details");
+        disclosure.className="audit-details";
+        const summary=document.createElement("summary");
+        summary.textContent="View change details";
+        disclosure.append(summary);
+        if(e.targetType||e.targetId){
+          const target=document.createElement("small");
+          target.textContent="Target: "+[e.targetType,e.targetId].filter(Boolean).join(" · ");
+          disclosure.append(target);
+        }
+        if(e.changes){
+          const values=document.createElement("pre");
+          values.className="audit-change-values";
+          try{values.textContent=JSON.stringify(e.changes,null,2).slice(0,12000);}
+          catch(_){values.textContent="Change details unavailable.";}
+          disclosure.append(values);
+        }
+        box.append(disclosure);
+      }
       const pill=document.createElement("span");
       pill.className="pill";
       pill.textContent=e.success?"OK":"FAILED";
