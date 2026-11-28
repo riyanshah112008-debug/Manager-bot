@@ -132,3 +132,27 @@ test('feedback and status messages render through textContent, not HTML', () => 
         'Status/feedback messages must not be injected via insertAdjacentHTML.'
     );
 });
+
+test('dynamic URLs in the dashboard shell are scheme-validated', () => {
+    assert.ok(
+        grepRepo(['-F', 'const httpsUrl=', '--', WORKSPACE_JS]),
+        'A shared httpsUrl validator must exist at the top of workspace.js.'
+    );
+    assert.ok(
+        grepRepo(['-F', 'httpsUrl(t.artwork,', '--', WORKSPACE_JS]),
+        'Remote artwork must pass the https validator before reaching src attributes.'
+    );
+    assert.ok(
+        grepRepo(['-F', 'httpsUrl(user.avatar,', '--', WORKSPACE_JS]),
+        'Discord avatars must pass the https validator before reaching src attributes.'
+    );
+    assert.ok(
+        grepRepo(['-F', 'const invite=discordInviteUrl(server.inviteUrl);', '--', WORKSPACE_JS]),
+        'Invite links must pass the strict Discord allowlist before reaching href attributes.'
+    );
+    assert.equal(
+        grepRepo(['-E', "href=\"'\\\\\\+esc\\(invite\\)", '--', WORKSPACE_JS]),
+        '',
+        'Unvalidated invite URLs must never be interpolated into href attributes.'
+    );
+});
