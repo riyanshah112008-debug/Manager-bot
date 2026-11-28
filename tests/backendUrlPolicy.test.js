@@ -119,3 +119,16 @@ test('dashboard renderers touched by this PR never assign raw HTML', () => {
         'Markup must be mounted through the inert DOMParser helper.'
     );
 });
+
+test('feedback and status messages render through textContent, not HTML', () => {
+    assert.equal(
+        grepRepo(['-F', '.innerHTML=status(', '--', WORKSPACE_JS]),
+        '',
+        'Status/feedback messages must use writeStatus/prependStatus/appendStatus (textContent), never innerHTML.'
+    );
+    assert.equal(
+        grepRepo(['-F', 'insertAdjacentHTML', '--', WORKSPACE_JS]),
+        '',
+        'Status/feedback messages must not be injected via insertAdjacentHTML.'
+    );
+});
