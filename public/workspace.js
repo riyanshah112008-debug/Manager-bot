@@ -3,9 +3,8 @@
 function storageGet(key){try{const v=localStorage.getItem(key);if(v)return v}catch(_){}try{return sessionStorage.getItem(key)}catch(_){return null}}
 function storageSet(key,value){try{localStorage.setItem(key,value);return}catch(_){}try{sessionStorage.setItem(key,value)}catch(_){}}
 function storageRemove(key){try{localStorage.removeItem(key)}catch(_){}try{sessionStorage.removeItem(key)}catch(_){}}
-const $=s=>document.querySelector(s), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const httpsUrl=(value,fallback="")=>{const v=String(value??"").trim();return /^https:\/\//i.test(v)?v:fallback};
-const discordInviteUrl=value=>{const v=String(value??"").trim();return /^https:\/\/([\w-]+\.)*(discord\.gg|discord(app)?\.com)(\/|$)/.test(v)?v:""};
+const $=s=>document.querySelector(s);
+const { escapeHtml: esc, httpsUrl, discordInviteUrl } = window.StarrySecurity;
 const page=document.body.dataset.page||"overview", labels={overview:"Overview",multibot:"Multi-Bot",security:"Security",verification:"Verification",automod:"AutoMod",moderation:"Moderation",music:"Music",embeds:"Embed Studio",tickets:"Tickets",giveaways:"Giveaways",booster:"Booster Studio",settings:"Server Settings",welcome:"Welcome",logging:"Logging",audit:"Audit Log",roles:"Roles",utility:"Utilities",economy:"Economy",leveling:"Leveling",events:"Events",birthdays:"Birthdays",notifications:"Notifications",botinfo:"Bot Information",commands:"Commands",docs:"Documentation",support:"Support",premium:"Premium"};
 const nav=[["overview","Overview","⌂","dashboard.html"],["multibot","Multi-Bot","♧","multibot.html"],["security","Security","◇","security.html"],["verification","Verification","✓","verification.html"],["automod","AutoMod","◎","automod.html"],["moderation","Moderation","≋","moderation.html"],["tickets","Tickets","▤","tickets.html"],["giveaways","Giveaways","✳","giveaways.html"],["music","Music","♫","music.html"],["embeds","Embed Studio","▧","embeds.html"],["booster","Booster Studio","✦","booster.html"],["settings","Settings","⚙","settings.html"],["welcome","Welcome","✧","welcome.html"],["logging","Logging","▥","logging.html"],["audit","Audit Log","⌘","audit.html"],["roles","Roles","♙","roles.html"],["utility","Utilities","⌘","utility.html"],["economy","Economy","◉","economy.html"],["leveling","Leveling","↗","leveling.html"],["events","Events","◷","events.html"],["birthdays","Birthdays","🎂","birthdays.html"],["notifications","Notifications","♧","notifications.html"],["botinfo","Bot info","ⓘ","botinfo.html"],["commands","Commands","⌘","commands.html"],["docs","Documentation","▤","docs.html"],["support","Support","♡","support.html"],["premium","Premium","✦","premium.html"]];
 let user=null,guilds=[],guildId=storageGet("starry_selected_guild")||"",guild=null,settings={},commandCatalog=[],supportView="mine",supportCurrentId="",supportIsAgent=false,supportPoll=null;
@@ -150,7 +149,58 @@ function renderLeveling(){const s=settings.leveling||{},channelOpts=channels("te
 function renderEconomy(){return pageHeader("Economy overview","Live member balances and progression from Starry’s existing economy database.")+'<div class="grid">'+card("Server economy","Current totals stored for this server.",'<div id="economyStats" class="tiles"><div class="empty">Loading economy data…</div></div>',"full")+card("Top member balances","The ten highest credit balances in this server.",'<div id="economyLeaderboard" class="muted">Loading leaderboard…</div>',"full")+'</div>'}
 async function loadEvents(){const list=$("#eventList");try{const d=await request("/api/guild/"+guildId+"/events");if(!d.events?.length){list.innerHTML='<div class="empty">No scheduled events yet.</div>';return}list.innerHTML=d.events.map(e=>'<div class="check-row"><div><strong>'+esc(e.name)+'</strong><small>'+esc(e.description||"No description")+' · '+(e.entityType===2?"Voice event": "External event")+'</small><small>'+esc(e.start?new Date(e.start).toLocaleString():"Time unavailable")+' → '+esc(e.end?new Date(e.end).toLocaleString():"")+(e.location?" · "+esc(e.location):"")+'</small></div><button class="btn danger" data-cancel-event="'+esc(e.id)+'">Cancel</button></div>').join("");list.querySelectorAll("[data-cancel-event]").forEach(button=>button.addEventListener("click",async()=>{if(!confirm("Cancel this Discord scheduled event?"))return;try{const result=await request("/api/guild/"+guildId+"/events/"+encodeURIComponent(button.dataset.cancelEvent),{method:"DELETE"});writeStatus($("#eventFeedback"),result.message,"good");loadEvents()}catch(error){writeStatus($("#eventFeedback"),error.message,"bad")}}))}catch(e){writeStatus(list,e.message,"bad")}}
 async function loadWelcome(){try{const d=await request("/api/guild/"+guildId+"/welcome");settings.welcome=d.settings||{};const w=d.settings||{};const set=(id,value)=>{const el=$("#"+id);if(el)el.value=value??""};set("welcomeChannel",w.channelId||"");set("welcomeTitle",w.title||"");set("welcomeDescription",w.description||"");set("welcomePing",w.pingContent||"");set("welcomeColor",w.color||"#FF73FA");set("welcomeFooter",w.footer||"");set("welcomeImage",w.image||"");set("welcomeThumbnail",w.thumbnail||"avatar")}catch(e){const el=$("#welcomeFeedback");if(el)writeStatus(el,e.message,"bad")}}
-function renderLevelRewardRows(rewards=[]){const host=$("#levelRewardRows");if(!host)return;const opts=(guild?.roles||[]).filter(r=>!r.managed&&r.id!==guild?.id).map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+'</option>').join('');host.innerHTML=rewards.map((r,i)=>'<div class="form-grid level-reward-row" data-reward-row><div class="field"><label>Required level</label><input type="number" min="1" max="10000" step="1" data-reward-level value="'+Number(r.level||1)+'"></div><div class="field"><label>Reward role</label><select data-reward-role><option value="">Select a role</option>'+opts+'</select></div><div class="field"><label> </label><button class="btn" type="button" data-remove-reward>Remove</button></div></div>').join('')||'<div class="empty">No level rewards configured yet.</div>';[...host.querySelectorAll('[data-reward-row]')].forEach((row,i)=>{row.querySelector('[data-reward-role]').value=rewards[i]?.roleId||'';row.querySelector('[data-remove-reward]').addEventListener('click',()=>{const next=[...host.querySelectorAll('[data-reward-row]')].filter(x=>x!==row).map(x=>({level:Number(x.querySelector('[data-reward-level]').value),roleId:x.querySelector('[data-reward-role]').value}));renderLevelRewardRows(next)})})}
+function renderLevelRewardRows(rewards=[]){
+  const host=$("#levelRewardRows");
+  if(!host)return;
+  const roles=(guild?.roles||[]).filter(r=>!r.managed&&r.id!==guild?.id);
+  const rows=rewards.length?rewards.map((r,i)=>{
+    const row=document.createElement("div");
+    row.setAttribute("data-reward-row","");
+    row.className="form-grid level-reward-row";
+    const levelField=document.createElement("div");
+    levelField.className="field";
+    const levelLabel=document.createElement("label");
+    levelLabel.textContent="Required level";
+    const levelInput=document.createElement("input");
+    levelInput.type="number";
+    levelInput.min="1";
+    levelInput.max="10000";
+    levelInput.step="1";
+    levelInput.setAttribute("data-reward-level","");
+    levelInput.value=Number(r.level||1);
+    levelField.append(levelLabel,levelInput);
+    const roleField=document.createElement("div");
+    roleField.className="field";
+    const roleLabel=document.createElement("label");
+    roleLabel.textContent="Reward role";
+    const roleSelect=document.createElement("select");
+    roleSelect.setAttribute("data-reward-role","");
+    const placeholder=document.createElement("option");
+    placeholder.value="";
+    placeholder.textContent="Select a role";
+    roleSelect.append(placeholder);
+    roles.forEach(role=>{const opt=document.createElement("option");opt.value=role.id;opt.textContent=role.name;roleSelect.append(opt)});
+    roleSelect.value=rewards[i]?.roleId||"";
+    roleField.append(roleLabel,roleSelect);
+    const removeField=document.createElement("div");
+    removeField.className="field";
+    const removeLabel=document.createElement("label");
+    removeLabel.textContent="\u00a0";
+    const removeButton=document.createElement("button");
+    removeButton.className="btn";
+    removeButton.type="button";
+    removeButton.setAttribute("data-remove-reward","");
+    removeButton.textContent="Remove";
+    removeField.append(removeLabel,removeButton);
+    removeButton.addEventListener("click",()=>{
+      const next=[...host.querySelectorAll("[data-reward-row]")].filter(x=>x!==row).map(x=>({level:Number(x.querySelector("[data-reward-level]").value),roleId:x.querySelector("[data-reward-role]").value}));
+      renderLevelRewardRows(next);
+    });
+    row.append(levelField,roleField,removeField);
+    return row;
+  }):[(() => {const empty=document.createElement("div");empty.className="empty";empty.textContent="No level rewards configured yet.";return empty})()];
+  host.replaceChildren(...rows);
+}
 async function loadLeveling(){try{const d=await request("/api/guild/"+guildId+"/leveling");settings.leveling=d.settings||{};const enabled=$("#levelEnabled");if(enabled)enabled.checked=d.settings?.enabled!==false;const embedEnabled=$("#levelEmbedEnabled");if(embedEnabled)embedEnabled.checked=d.settings?.embedEnabled===true;const channel=$("#levelAnnouncementChannel");if(channel)channel.value=d.settings?.announcementChannelId||d.settings?.logChannelId||"";const title=$("#levelTitle");if(title)title.value=d.settings?.title||"Congratulations {user}!";const color=$("#levelColor");if(color)color.value=d.settings?.color||"#5865F2";const desc=$("#levelDescription");if(desc)desc.value=d.settings?.description||"";const rewards=d.settings?.roleRewards||[];renderLevelRewardRows(rewards);for(const [id,values] of [["ignoredLevelChannels",d.settings?.ignoredChannelIds||[]],["ignoredLevelRoles",d.settings?.ignoredRoleIds||[]]]){const el=$("#"+id);if(el)[...el.options].forEach(o=>o.selected=values.includes(o.value))}for(const [id,value] of Object.entries({messageXpMin:d.settings?.messageXpMin??15,messageXpMax:d.settings?.messageXpMax??25,messageCooldownSeconds:d.settings?.messageCooldownSeconds??60,voiceXpPerMinute:d.settings?.voiceXpPerMinute??5,levelPingContent:d.settings?.pingContent||"",levelFooter:d.settings?.footer||"",levelAuthor:d.settings?.authorName||"",levelImage:d.settings?.image||"",levelThumbnail:d.settings?.thumbnail||"avatar"})){const el=$("#"+id);if(el)el.value=value}const st=d.stats||{};$("#levelStats").innerHTML=[["Members tracked",st.membersTracked||0],["Total XP",Number(st.totalXp||0).toLocaleString()],["Messages",Number(st.totalMessages||0).toLocaleString()],["Highest level",st.highestLevel||0]].map(([k,v])=>'<div class="tile"><span><small>'+k+'</small><strong>'+v+'</strong></span></div>').join("");$("#levelLeaderboard").innerHTML='<h3>Top XP members</h3>'+(d.leaderboard||[]).map((u,i)=>'<div class="check-row"><strong>#'+(i+1)+' · '+esc(u.userId)+'</strong><span>Level '+Number(u.level||0)+' · '+Number(u.xp||0).toLocaleString()+' XP</span></div>').join("")||'<div class="empty">No XP records yet.</div>'}catch(e){writeStatus($("#levelStats"),e.message,"bad")}}
 async function loadEconomy(){try{const d=await request("/api/guild/"+guildId+"/economy");const st=d.stats||{};$("#economyStats").innerHTML=[["Members tracked",st.membersTracked||0],["Total credits",Number(st.totalCredits||0).toLocaleString()],["Total XP",Number(st.totalXp||0).toLocaleString()],["Prestige levels",st.totalPrestige||0]].map(([k,v])=>'<div class="tile"><span><small>'+k+'</small><strong>'+v+'</strong></span></div>').join("");$("#economyLeaderboard").innerHTML=(d.leaderboard||[]).map((u,i)=>'<div class="check-row"><strong>#'+(i+1)+' · '+esc(u.userId)+'</strong><span>'+Number(u.credits||0).toLocaleString()+' credits</span></div>').join("")||'<div class="empty">No economy records yet.</div>'}catch(e){writeStatus($("#economyStats"),e.message,"bad");$("#economyLeaderboard").textContent=e.message}}
 function setPremiumFeedback(message,type=""){

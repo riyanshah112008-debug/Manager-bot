@@ -135,8 +135,8 @@ test('feedback and status messages render through textContent, not HTML', () => 
 
 test('dynamic URLs in the dashboard shell are scheme-validated', () => {
     assert.ok(
-        grepRepo(['-F', 'const httpsUrl=', '--', WORKSPACE_JS]),
-        'A shared httpsUrl validator must exist at the top of workspace.js.'
+        grepRepo(['-F', 'httpsUrl, discordInviteUrl } = window.StarrySecurity', '--', WORKSPACE_JS]),
+        'The dashboard shell must take URL validators from the shared security module.'
     );
     assert.ok(
         grepRepo(['-F', 'httpsUrl(t.artwork,', '--', WORKSPACE_JS]),

@@ -50,6 +50,7 @@ const suites = [
   ['Suspicious-account monitor syntax', '--check', 'src/modules/susAccount.js'],
   ['Dashboard audit trail', '--test', 'tests/auditTrail.test.js'],
   ['Backend URL policy', '--test', 'tests/backendUrlPolicy.test.js'],
+  ['Frontend DOM policy', '--test', 'tests/frontendDomPolicy.test.js'],
   ['Audit trail util syntax', '--check', 'src/utils/auditTrail.js'],
   ['Audit event model syntax', '--check', 'src/models/AuditEvent.js'],
   ['Dashboard server syntax', '--check', 'src/modules/dashboardServer.js'],
