@@ -44,3 +44,14 @@ test('music source selector builds interactive source choices', () => {
     assert.ok(ids.some(id => id.startsWith('search_src_am:')));
     assert.ok(ids.some(id => id.startsWith('search_src_dz:')));
 });
+test('Only the initiating user can cancel an interactive search', () => {
+  const cancelBranch = search.indexOf("if (action === 'search_cancel')");
+  const expiredGuard = search.indexOf('if (!session)', cancelBranch);
+  const ownerGuard = search.indexOf('if (interaction.user.id !== session.userId)', cancelBranch);
+  const deleteSession = search.indexOf('searchSessions.delete(searchId)', cancelBranch);
+  const deleteMessage = search.indexOf('interaction.message.delete()', cancelBranch);
+  assert.ok(cancelBranch >= 0);
+  assert.ok(expiredGuard > cancelBranch && expiredGuard < ownerGuard);
+  assert.ok(ownerGuard > expiredGuard && ownerGuard < deleteSession);
+  assert.ok(deleteSession > ownerGuard && deleteSession < deleteMessage);
+});
