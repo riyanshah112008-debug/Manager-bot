@@ -64,6 +64,8 @@ const commandRegistry = require('./modules/commandHandler');
 const { ONE_YEAR_MS, EPHEMERAL_FLAG } = require('./utils/contextHelper');
 
 const app = express();
+// Render terminates TLS through one trusted ingress proxy; do not trust arbitrary forwarded chains.
+app.set('trust proxy', process.env.RENDER === 'true' || process.env.RENDER === '1' ? 1 : false);
 const port = process.env.PORT || 10000;
 
 const allowedOrigins = getDashboardOrigins();
