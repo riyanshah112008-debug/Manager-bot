@@ -5,7 +5,7 @@
 const localtunnel = require('localtunnel');
 
 let activeTunnel = null;
-let publicDomainUrl = (process.env.PUBLIC_WEB_URL || process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '') || null;
+let publicDomainUrl = (process.env.PUBLIC_WEB_URL || '').trim().replace(/\/+$/, '') || null;
 let isConnecting = false;
 let reconnectTimer = null;
 
@@ -125,7 +125,10 @@ function getPublicUrl() {
         return process.env.PUBLIC_WEB_URL.trim().replace(/\/+$/, '');
     }
 
-    return publicDomainUrl;
+    if (publicDomainUrl && !publicDomainUrl.includes('localhost') && !publicDomainUrl.includes('127.0.0.1')) {
+        return publicDomainUrl;
+    }
+    return null;
 }
 
 module.exports = {
