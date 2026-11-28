@@ -115,7 +115,7 @@ test('dashboard renderers touched by this PR never assign raw HTML', () => {
         'Audit log, auth error and page renderers must not write innerHTML; use textContent or the inert DOMParser mount.'
     );
     assert.ok(
-        grepRepo(['-F', 'host.replaceChildren(...parsed.body.childNodes)', '--', WORKSPACE_JS]),
+        grepRepo(['-F', 'host.replaceChildren(...Array.from(parsed.body.childNodes))', '--', WORKSPACE_JS]),
         'Markup must be mounted through the inert DOMParser helper.'
     );
 });
