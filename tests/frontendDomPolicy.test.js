@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const vm = require('node:vm');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -45,10 +46,19 @@ test('every dashboard page loads security-utils.js before workspace.js', () => {
     }
 });
 
-test('security-utils exposes the shared sanitizers', () => {
+test('shared security sanitizers enforce escaping, URL schemes and attribute allowlist', () => {
     const source = readPublic('public/security-utils.js');
-    for (const symbol of ['escapeHtml', 'safeSetAttr', 'httpsUrl', 'discordInviteUrl', 'window.StarrySecurity']) {
-        assert.ok(source.includes(symbol), `security-utils.js must export ${symbol}.`);
-    }
-    assert.ok(source.includes('SAFE_ATTRS'), 'safeSetAttr must enforce an attribute whitelist.');
+    const window = {};
+    vm.runInNewContext(source, { window });
+    const security = window.StarrySecurity;
+    assert.equal(security.escapeHtml('<img src=x onerror="alert(1)"> & \'x\''), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;x&#39;');
+    assert.equal(security.httpsUrl('https://example.com/image.png'), 'https://example.com/image.png');
+    assert.equal(security.httpsUrl('javascript:alert(1)', '/fallback.png'), '/fallback.png');
+    assert.equal(security.discordInviteUrl('https://discord.gg/starry'), 'https://discord.gg/starry');
+    assert.equal(security.discordInviteUrl('javascript:alert(1)'), '');
+    const attributes = {};
+    const element = { setAttribute(name, value) { attributes[name] = value; } };
+    assert.equal(security.safeSetAttr(element, 'href', 'javascript:alert(1)'), element);
+    assert.equal(attributes.href, '');
+    assert.throws(() => security.safeSetAttr(element, 'onclick', 'alert(1)'), /not allowed/);
 });
