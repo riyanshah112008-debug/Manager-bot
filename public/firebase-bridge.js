@@ -4,7 +4,7 @@
 const RENDER_BACKEND=(window.STARRY_BACKEND_URL||"https://starry-il8g.onrender.com").replace(/\/+$/,"");
 const isRenderBackend=/(^|\.)onrender\.com$/i.test(location.hostname);
 // Use the Render API from Firebase Hosting and all Firebase custom domains.
-const backendOrigin=isRenderBackend?location.origin:RENDER_BACKEND;
+const backendOrigin=isRenderBackend&&!window.STARRY_BACKEND_URL?location.origin:RENDER_BACKEND;
 const sessionKey="starry_dashboard_session";
 function safeGet(storageName,key){try{return window[storageName].getItem(key)}catch(_){return null}}
 function safeSet(storageName,key,value){try{window[storageName].setItem(key,value);return true}catch(_){return false}}
