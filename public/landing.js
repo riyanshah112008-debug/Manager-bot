@@ -68,7 +68,7 @@
       if (!status.oauthConfigured) {
         showAuthMessage("Discord sign-in is not fully configured on the Starry backend. The site owner must check the OAuth client ID, client secret and callback URL in Render.");
       } else if (status.redirectUriMismatch) {
-        showAuthMessage("Starry's Discord callback URL points to a different website host, which breaks sign-in. The site owner must update DISCORD_REDIRECT_URI in Render and the Discord OAuth redirect list to this website's address.");
+        showAuthMessage("Starry's Discord callback URL does not match the backend. The site owner must set DISCORD_REDIRECT_URI to the Render backend's /auth/callback URL and add that exact same Render URL to the Discord OAuth redirect list.");
       } else if (!status.mongoConfigured || !status.mongoConnected) {
         showAuthMessage("Discord sign-in is configured, but Starry's session database is not connected. The backend needs its MongoDB connection restored.");
       }
