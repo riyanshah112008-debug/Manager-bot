@@ -1351,7 +1351,26 @@ function setupDashboardRoutes(app, client) {
                 setCachedTheme(guild.id, settings.embedTheme?.toObject?.() || settings.embedTheme);
             }
             if (payload.logging && typeof client.invalidateLogSettings === 'function') client.invalidateLogSettings(guild.id);
-            await auditWrite(req, 'settings.update', { targetType: 'settings', summary: 'Updated server settings', changes: Object.fromEntries(Object.keys(payload).map(key => [key, payload[key]])) });
+            const auditChanges = {};
+            const auditFields = [
+                ['prefix', () => settings.prefix],
+                ['triggerWord', () => settings.triggerWord],
+                ['embedTheme', () => settings.embedTheme?.toObject?.() || settings.embedTheme],
+                ['antinuke', () => settings.antinuke?.toObject?.() || settings.antinuke],
+                ['automod', () => settings.automod?.toObject?.() || settings.automod],
+                ['verification', () => settings.verification?.toObject?.() || settings.verification],
+                ['autorole', () => settings.autorole?.toObject?.() || settings.autorole],
+                ['logging', () => settings.logging?.toObject?.() || settings.logging],
+                ['boosterRoleSystem', () => settings.boosterRoleSystem?.toObject?.() || settings.boosterRoleSystem],
+                ['music', () => settings.music?.toObject?.() || settings.music],
+                ['tickets', () => settings.tickets?.toObject?.() || settings.tickets],
+                ['birthdays', () => settings.birthdays?.toObject?.() || settings.birthdays],
+                ['mediaPerms', () => settings.mediaPerms?.toObject?.() || settings.mediaPerms]
+            ];
+            for (const [key, getValue] of auditFields) {
+                if (Object.prototype.hasOwnProperty.call(payload, key)) auditChanges[key] = getValue();
+            }
+            await auditWrite(req, 'settings.update', { targetType: 'settings', summary: 'Updated server settings', changes: auditChanges });
             res.json({ success: true, message: 'Settings saved successfully!', settings });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
