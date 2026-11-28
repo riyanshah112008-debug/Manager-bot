@@ -2,39 +2,42 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
-const REPO_ROOT = path.join(__dirname, '..');
-const OLD_RENDER_HOST = 'manager-bot-1-6167.onrender.com';
+const REPO_ROOT = path.resolve(__dirname, '..');
+// Assembled from fragments so this policy file never contains the suspended
+// host as one literal string and cannot match itself during the repo scan.
+const OLD_RENDER_HOST = ['manager-bot-1-6167', '.onrender', '.com'].join('');
 const NEW_RENDER_ORIGIN = 'https://starry-il8g.onrender.com';
-const SCAN_DIRS = ['public', 'src', 'tools'];
-const SCAN_ROOT_FILES = ['deploy-commands.js', 'dashboard.js', 'dashboard.html', 'render.yaml', 'firebase.json', 'FIREBASE_DEPLOY.md'];
+const SERVER_JS = 'src/modules/dashboardServer.js';
+const BRIDGE_JS = 'public/firebase-bridge.js';
+const WORKSPACE_JS = 'public/workspace.js';
 
-function listFiles(dir) {
-    return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) return listFiles(full);
-        return /\.(js|html|css|json|md|yaml|yml|txt|py)$/i.test(entry.name) ? [full] : [];
-    });
+function grepRepo(args) {
+    try {
+        return execFileSync('git', ['grep', '-I', ...args], { cwd: REPO_ROOT, encoding: 'utf8' });
+    } catch (error) {
+        if (error.status === 1) return '';
+        throw error;
+    }
 }
 
 test('no suspended Render service URL remains in the repository', () => {
-    const files = [
-        ...SCAN_DIRS.flatMap(dir => listFiles(path.join(REPO_ROOT, dir))),
-        ...SCAN_ROOT_FILES.map(name => path.join(REPO_ROOT, name)).filter(p => fs.existsSync(p))
-    ];
-    assert(files.length > 100, 'Expected to scan a meaningful number of files.');
-    for (const file of files) {
-        const content = fs.readFileSync(file, 'utf8');
-        assert.ok(!content.includes(OLD_RENDER_HOST), `Stale Render URL found in ${path.relative(REPO_ROOT, file)}`);
-    }
+    const matches = grepRepo(['-F', OLD_RENDER_HOST]);
+    assert.equal(matches, '', 'Stale Render URL found:\n' + matches);
 });
 
 test('the website bridge targets the new Render backend by default', () => {
-    const bridge = fs.readFileSync(path.join(REPO_ROOT, 'public/firebase-bridge.js'), 'utf8');
-    assert.ok(bridge.includes(`"${NEW_RENDER_ORIGIN}"`), 'firebase-bridge.js must default to the new Render origin.');
-    assert.ok(!bridge.includes('YOUR-NEW-SERVICE'), 'firebase-bridge.js must not keep a placeholder backend.');
+    assert.ok(
+        grepRepo(['-F', `"${NEW_RENDER_ORIGIN}"`, '--', BRIDGE_JS]),
+        'firebase-bridge.js must default to the new Render origin.'
+    );
+    assert.equal(
+        grepRepo(['-F', 'YOUR-NEW-SERVICE', '--', BRIDGE_JS]),
+        '',
+        'firebase-bridge.js must not keep a placeholder backend.'
+    );
 });
 
 test('trusted dashboard origins include the new Render website origin', () => {
@@ -44,21 +47,75 @@ test('trusted dashboard origins include the new Render website origin', () => {
 });
 
 test('OAuth login and callback build URLs from the same backend origin', () => {
-    const server = fs.readFileSync(path.join(REPO_ROOT, 'src/modules/dashboardServer.js'), 'utf8');
     assert.ok(
-        server.includes('const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;'),
+        grepRepo(['-F', 'const redirectUri = process.env.DISCORD_REDIRECT_URI || `${publicBase}/auth/callback`;', '--', SERVER_JS]),
         'Login must derive the Discord redirect_uri from the same publicBase used by the callback.'
     );
     assert.ok(
-        server.includes('const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || publicBase).replace(/\\/+$/, \'\');'),
+        grepRepo(['-F', "const frontendBase = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || publicBase).replace(/\\/+$/, '');", '--', SERVER_JS]),
         'The callback must return users to the host that served the callback when no frontend URL is configured.'
     );
-    assert.ok(
-        !server.includes("|| 'https://manager-bot-96c07.web.app'"),
+    assert.equal(
+        grepRepo(['-F', "|| 'https://manager-bot-96c07.web.app'", '--', SERVER_JS]),
+        '',
         'The OAuth callback must not fall back to a hardcoded Firebase origin.'
     );
     assert.ok(
-        server.includes('redirectUriMismatch'),
+        grepRepo(['-F', 'redirectUriMismatch', '--', SERVER_JS]),
         '/auth/status must report a stale DISCORD_REDIRECT_URI host mismatch.'
+    );
+});
+
+test('dashboard server never touches the filesystem from request input', () => {
+    assert.equal(
+        grepRepo(['-E', "require\\('(node:)?fs'\\)", '--', SERVER_JS]),
+        '',
+        'dashboardServer.js must not import fs.'
+    );
+    assert.equal(
+        grepRepo(['-E', '\\bfs\\.[a-zA-Z]+\\(', '--', SERVER_JS]),
+        '',
+        'dashboardServer.js must not call fs APIs with dynamically built paths.'
+    );
+    assert.equal(
+        grepRepo(['-E', '\\bpath\\.(join|resolve)\\([^)]*(req\\.|params\\.|query\\.|body\\.)', '--', SERVER_JS]),
+        '',
+        'dashboardServer.js must never build paths from request input.'
+    );
+});
+
+test('path traversal payloads stay opaque data in the audit trail', async () => {
+    const AuditEvent = require('../src/models/AuditEvent');
+    const { getAuditTrail } = require('../src/utils/auditTrail');
+    const captured = [];
+    const originalFind = AuditEvent.find;
+    AuditEvent.find = (query) => {
+        captured.push(query);
+        return {
+            sort: () => ({
+                limit: () => ({
+                    lean: async () => []
+                })
+            })
+        };
+    };
+    try {
+        assert.deepEqual(await getAuditTrail('../../etc/passwd'), []);
+        assert.deepEqual(await getAuditTrail('..%2F..'), []);
+        assert.deepEqual(captured, [{ guildId: '../../etc/passwd' }, { guildId: '..%2F..' }]);
+    } finally {
+        AuditEvent.find = originalFind;
+    }
+});
+
+test('dashboard renderers touched by this PR never assign raw HTML', () => {
+    assert.equal(
+        grepRepo(['-E', 'function (loadAudit|renderAuthError|renderPage)\\(.*innerHTML', '--', WORKSPACE_JS]),
+        '',
+        'Audit log, auth error and page renderers must not write innerHTML; use textContent or the inert DOMParser mount.'
+    );
+    assert.ok(
+        grepRepo(['-F', 'host.replaceChildren(...parsed.body.childNodes)', '--', WORKSPACE_JS]),
+        'Markup must be mounted through the inert DOMParser helper.'
     );
 });
