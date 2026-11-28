@@ -29,6 +29,7 @@ const { rankAndFilterCanonicalTracks, scoreTrack } = require('../utils/musicMana
 const { setupSupportDeskRoutes } = require('./supportDesk');
 const { setupPhoneSyncRoutes } = require('./phoneSync');
 const { recordAuditEvent, getAuditTrail } = require('../utils/auditTrail');
+const { escapeHtml, safeHttpsUrl } = require('../utils/htmlSecurity');
 
 // Short-lived cache backed by MongoDB so sessions survive Render restarts.
 const userSessions = new Map();
@@ -1888,7 +1889,7 @@ function setupDashboardRoutes(app, client) {
             <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
             </head><body>
             <h2>❌ Spotify Authorization Denied</h2>
-            <p>${error}</p><p>You can close this tab and return to Discord.</p>
+            <p>${escapeHtml(error)}</p><p>You can close this tab and return to Discord.</p>
             </body></html>`);
         }
 
@@ -1923,7 +1924,7 @@ function setupDashboardRoutes(app, client) {
             <body>
                 <div class="card">
                     <img src="https://cdn-icons-png.flaticon.com/512/174/174872.png" class="sp-icon" alt="Spotify">
-                    <div class="user-badge">🟢 Connected as ${profile.display_name || profile.id}</div>
+                    <div class="user-badge">🟢 Connected as ${escapeHtml(profile?.display_name || profile?.id || 'Spotify user')}</div>
                     <h2>Spotify Connected!</h2>
                     <p>Starry has successfully authorized your Spotify account. You can now use <strong>,spotify myplaylists</strong> or <strong>,spotify play</strong> in Discord!</p>
                     <p style="color:#6B7280; font-size:0.85rem;">You may now safely close this window and return to Discord.</p>
@@ -1937,7 +1938,7 @@ function setupDashboardRoutes(app, client) {
             <style>body{background:#121212;color:#fff;font-family:sans-serif;text-align:center;padding:10vh 20px;}h2{color:#e74c3c;}</style>
             </head><body>
             <h2>❌ Connection Error</h2>
-            <p>${err.message}</p>
+            <p>${escapeHtml(err?.message || 'An unexpected connection error occurred.')}</p>
             </body></html>`);
         }
     });
@@ -1945,8 +1946,8 @@ function setupDashboardRoutes(app, client) {
     // GET /verify/:guildId - External Web Captcha Verification Portal
     app.get('/verify/:guildId', async (req, res) => {
         const guild = client.guilds.cache.get(req.params.guildId);
-        const guildName = guild ? guild.name : 'Discord Server';
-        const guildIcon = guild?.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png';
+        const guildName = escapeHtml(guild ? guild.name : 'Discord Server');
+        const guildIcon = escapeHtml(safeHttpsUrl(guild?.iconURL({ dynamic: true }), 'https://cdn.discordapp.com/embed/avatars/0.png', ['cdn.discordapp.com', 'media.discordapp.net']));
 
         res.send(`
         <!DOCTYPE html>
@@ -1980,9 +1981,9 @@ function setupDashboardRoutes(app, client) {
             <script>
                 function completeVerification() {
                     const s = document.getElementById('status');
-                    s.innerHTML = '<span style="color:#00F2FE;">Verifying Cloudflare Token...</span>';
+                    s.textContent = 'Verifying Cloudflare Token...';
                     setTimeout(() => {
-                        s.innerHTML = '<span style="color:#10B981;">✅ Verification Complete! You may return to Discord.</span>';
+                        s.textContent = '✅ Verification Complete! You may return to Discord.';
                     }, 1200);
                 }
             </script>
