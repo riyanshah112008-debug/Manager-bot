@@ -50,7 +50,15 @@
   };
 
   const queryError = new URLSearchParams(window.location.search).get("error");
-  if (queryError) showAuthMessage(authErrors[queryError] || "Sign-in could not be completed. Please try again.");
+  if (queryError) {
+    showAuthMessage(authErrors[queryError] || "Sign-in could not be completed. Please try again.");
+    const retry = document.createElement("a");
+    retry.href = "/auth/login";
+    retry.className = "button button-primary button-small";
+    retry.textContent = "Retry Discord sign-in";
+    const panel = document.querySelector("#landing-auth-message");
+    if (panel) panel.after(retry);
+  }
 
   async function checkAuthService() {
     try {
@@ -59,6 +67,8 @@
       const status = await response.json();
       if (!status.oauthConfigured) {
         showAuthMessage("Discord sign-in is not fully configured on the Starry backend. The site owner must check the OAuth client ID, client secret and callback URL in Render.");
+      } else if (status.redirectUriMismatch) {
+        showAuthMessage("Starry's Discord callback URL does not match the backend. The site owner must set DISCORD_REDIRECT_URI to the Render backend's /auth/callback URL and add that exact same Render URL to the Discord OAuth redirect list.");
       } else if (!status.mongoConfigured || !status.mongoConnected) {
         showAuthMessage("Discord sign-in is configured, but Starry's session database is not connected. The backend needs its MongoDB connection restored.");
       }

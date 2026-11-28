@@ -6,6 +6,7 @@ const { getDashboardOrigins } = require('../src/utils/dashboardOrigins');
 const defaults = getDashboardOrigins({});
 assert(defaults.has('https://manager-bot-96c07.web.app'));
 assert(defaults.has('https://manager-bot-96c07.firebaseapp.com'));
+assert(defaults.has('https://starry-il8g.onrender.com'));
 
 const configured = getDashboardOrigins({
     CORS_ORIGINS: 'https://custom.example, https://admin.example/',

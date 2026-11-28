@@ -2,7 +2,8 @@
 
 const DEFAULT_DASHBOARD_ORIGINS = Object.freeze([
     'https://manager-bot-96c07.web.app',
-    'https://manager-bot-96c07.firebaseapp.com'
+    'https://manager-bot-96c07.firebaseapp.com',
+    'https://starry-il8g.onrender.com'
 ]);
 
 function getDashboardOrigins(env = process.env) {

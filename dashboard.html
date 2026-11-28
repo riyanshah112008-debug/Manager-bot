@@ -178,40 +178,6 @@
         .status-dot.installed { background-color: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
         .status-dot.uninstalled { background-color: #f59e0b; }
 
-        /* Bump 倒计时核心区域 */
-        .bump-status-box {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            border-radius: 12px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .bump-label {
-            font-size: 13px;
-            color: var(--text-muted);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .bump-time {
-            font-family: 'JetBrains Mono', monospace, monospace;
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .bump-time.ready {
-            color: var(--accent-green);
-        }
-
-        .bump-time.cooldown {
-            color: #64748b;
-        }
-
         /* 操作按钮组 */
         .card-actions {
             display: flex;
@@ -278,7 +244,7 @@
     <div class="dashboard-header">
         <div class="dashboard-title">
             <h1>Servers</h1>
-            <p>Select a Discord server to configure or bump</p>
+            <p>Select a Discord server to configure</p>
         </div>
 
         <!-- 动态渲染用户信息 -->

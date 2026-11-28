@@ -692,7 +692,6 @@
             <button class="nav-tab active" onclick="switchNav('overview')">🏠 Overview</button>
             <button class="nav-tab" onclick="switchNav('setup')">🛡️ Server Setup & Studio</button>
             <button class="nav-tab" onclick="switchNav('premium')">💎 Premium & Store</button>
-            <button class="nav-tab" onclick="switchNav('directory')">🚀 Starryboard Directory</button>
         </div>
 
         <div class="nav-actions">
@@ -1180,19 +1179,6 @@
             </div>
         </section>
 
-        <!-- TAB 4: PUBLIC DIRECTORY -->
-        <section id="tab-directory" class="tab-pane">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-                <div>
-                    <h2 class="section-title">🚀 Starryboard Public Server Directory</h2>
-                    <p style="color: var(--text-muted);">Explore top community servers or run <code>,bump</code> to promote yours.</p>
-                </div>
-                <input type="text" id="dir-search" class="input-text" style="max-width: 300px;" placeholder="🔍 Search servers..." oninput="filterDirectory()">
-            </div>
-            <div class="settings-grid" id="directory-container">
-                <p style="color: var(--text-muted);">Loading servers...</p>
-            </div>
-        </section>
 
     </div>
 
@@ -1234,7 +1220,6 @@
                 loadGuilds();
                 populateConsoleCommands('moderation');
             }
-            if (tabId === 'directory') loadDirectory();
         }
 
         function switchModule(modId) {
@@ -1582,30 +1567,6 @@
             else alert(d.error || 'Failed to dispatch embed');
         }
 
-        async function loadDirectory() {
-            try {
-                const res = await fetch('/api/servers', { headers: { 'bypass-tunnel-reminder': 'true' } });
-                const servers = await res.json();
-                const container = document.getElementById('directory-container');
-                container.innerHTML = '';
-                if (!servers || servers.length === 0) {
-                    container.innerHTML = '<p style="color: var(--text-muted);">No servers bumped yet. Run ,bump in your server!</p>';
-                    return;
-                }
-                servers.forEach(s => {
-                    container.innerHTML += `
-                        <div class="stat-card">
-                            <h4 style="font-size: 1.05rem; color: #fff; margin-bottom: 6px;">${s.name}</h4>
-                            <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 12px;">${s.description || 'Community Discord Server'}</p>
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 0.78rem; color: var(--gold); font-weight: 700;">🔥 ${s.totalBumps || s.bumps || 1} Bumps</span>
-                                <a href="${s.inviteLink || s.inviteUrl || '#'}" target="_blank" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;">Join</a>
-                            </div>
-                        </div>
-                    `;
-                });
-            } catch (e) {}
-        }
 
         function showToast(msg) {
             const t = document.getElementById('toast');
