@@ -10,6 +10,8 @@ const SENSITIVE_KEY_PATTERN = /(token|secret|password|passwd|authorization|cooki
 const MAX_SUMMARY_LENGTH = 500;
 const MAX_METADATA_KEYS = 24;
 const MAX_TEXT_LENGTH = 200;
+const MAX_NESTED_DEPTH = 3;
+const MAX_ARRAY_ENTRIES = 12;
 const DISCORD_AVATAR_BASE = 'https://cdn.discordapp.com/avatars/';
 
 const emptyActor = () => ({ actorId: null, actorUsername: null, actorGlobalName: null, actorAvatar: null });
@@ -35,12 +37,30 @@ const normalizeActor = (actor) => {
     };
 };
 
-const redactValue = (value) => {
+const redactValue = (value, depth = 0, seen = new WeakSet()) => {
     if (typeof value === 'string') return value.length > MAX_TEXT_LENGTH ? value.slice(0, MAX_TEXT_LENGTH) + '…' : value;
     if (value === null || value === undefined) return value;
-    if (typeof value === 'object') return Array.isArray(value) ? `[${value.length} items]` : '[object]';
     if (typeof value === 'number' || typeof value === 'boolean') return value;
-    return String(value).slice(0, MAX_TEXT_LENGTH);
+    if (typeof value !== 'object') return String(value).slice(0, MAX_TEXT_LENGTH);
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+    if (depth >= MAX_NESTED_DEPTH) return '[max depth]';
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        const items = value.slice(0, MAX_ARRAY_ENTRIES).map(item => redactValue(item, depth + 1, seen));
+        if (value.length > MAX_ARRAY_ENTRIES) items.push('[truncated]');
+        seen.delete(value);
+        return items;
+    }
+    const clean = {};
+    let kept = 0;
+    for (const [key, nested] of Object.entries(value)) {
+        if (kept >= MAX_METADATA_KEYS) { clean.__truncated = true; break; }
+        clean[key] = SENSITIVE_KEY_PATTERN.test(key) ? '[redacted]' : redactValue(nested, depth + 1, seen);
+        kept += 1;
+    }
+    seen.delete(value);
+    return clean;
 };
 
 const sanitizeChanges = (changes) => {
@@ -62,10 +82,7 @@ const sanitizeChanges = (changes) => {
 
 const normalizeIp = (req) => {
     if (!req || typeof req !== 'object') return null;
-    const forwarded = req.headers && req.headers['x-forwarded-for'];
-    const raw = typeof forwarded === 'string' && forwarded.length
-        ? forwarded.split(',')[0].trim()
-        : (req.ip || req.socket?.remoteAddress || null);
+    const raw = req.ip || req.socket?.remoteAddress || null;
     return raw ? String(raw).slice(0, 64) : null;
 };
 
@@ -108,5 +125,6 @@ module.exports = {
     getAuditTrail,
     sanitizeChanges,
     normalizeActor,
-    SENSITIVE_KEY_PATTERN
+    SENSITIVE_KEY_PATTERN,
+    normalizeIp
 };
